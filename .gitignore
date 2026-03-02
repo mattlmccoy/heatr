@@ -1,3 +1,6 @@
 .mplconfig/
 .ocr_comp/
 page-*.png
+**/_archive_old/
+**/_archive*/
+archive/
