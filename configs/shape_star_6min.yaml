@@ -1,0 +1,173 @@
+# shape_star_6min.yaml — star geometry, 6 min
+#
+# XZ cross-section — EQS with PHYSICALLY CORRECT uniform-sigma model
+#
+# ──────────────────────────────────────────────────────────────────────
+# RF PHYSICS (correct model):
+#   Uniform sigma throughout the doped region. The EQS solve then
+#   naturally produces the correct Q_rf distribution:
+#     • Faces PERPENDICULAR to E-field (top/bottom, parallel to electrodes)
+#       → highest coupling, highest Q_rf
+#     • Faces PARALLEL to E-field (left/right sides)
+#       → lower coupling, lower Q_rf
+#     • CORNERS → E-field concentration → highest Q_rf of all
+#
+#   The Q_rf pattern everywhere inside the part equals 0.5·σ·|E|².
+#   Since σ is UNIFORM, Q_rf variation is ENTIRELY due to |E|² variation
+#   computed by the EQS solve. The center may be lower than the faces
+#   because the high-permittivity/conducting block partially deflects
+#   E-field lines inward (standard electrostatic shielding for lossy
+#   dielectrics), but this is driven by the physics — NOT assumed.
+#
+#   Resulting temperature pattern: "square with concave side-faces and
+#   rounded corners" — corners heat fastest, top/bottom next, side
+#   midpoints lag, interior heats by conduction and lateral Q_rf.
+#
+# GEOMETRY (x = lateral, y = electrode direction):
+#   chamber:  60 mm × 60 mm  (large gaps, 20 mm on every side of part)
+#   Part:     20 mm wide × 20 mm tall (square cross-section), CENTERED
+#   effective_depth_m = 0.020 m (20 mm deep into page)
+#   NOTE: 5 mm depth would give ~4× higher Q_rf density → sub-second melt
+#         (thermally correct but needs dt < 0.005 s for accuracy).
+#         20 mm gives ~4 s melt time, adequate resolution with dt=0.5 s.
+#   Bottom electrode: V = 860 V  |  Top electrode: V = 0 V
+#
+# THERMAL MODEL (correct physical setup):
+#   • Full 60×60 mm powder volume (undoped + doped regions)
+#   • Doped region heats from RF; heat diffuses outward into undoped powder
+#   • TOP surface: open — natural convection (h = 5 W/m²K)
+#   • 4 walls + bottom: adiabatic (insulative powder walls)
+#
+# POWER:
+#   RF generator = 500 W, enforce_generator_power = true
+#   EQS Q_rf shape (from uniform σ) scaled to ∫Q_rf dV = 500 W
+#   power_factor = 1.0 → correct COMSOL formula: Q = 0.5·σ·|E_peak|²
+#   (the 0.5 time-averaging is already in compute_electric_fields line 339)
+#
+# EXPOSURE SWEEP:
+#   dt = 0.5 s, n_steps = 120  →  60 s total
+#   Full melt at ~4 s; 60 s shows densification/heat spreading afterward.
+#   time_series.json captures T_mean, T_max, phi at every step.
+#
+# MELT: Nylon 12, T_pc = 180 °C
+# ──────────────────────────────────────────────────────────────────────
+
+geometry:
+  chamber_x: 0.060    # 60 mm — 20 mm gap on each side of 20 mm part
+  chamber_y: 0.060    # 60 mm — 20 mm gap above and below 20 mm part
+  grid_nx: 120        # 0.5 mm resolution
+  grid_ny: 120        # 0.5 mm resolution
+  part:
+    shape: star
+    width:  0.022
+    height: 0.022
+    center_x: 0.0
+    center_y: 0.0     # centered: part occupies x=[-10,+10mm], y=[-10,+10mm]
+    rotation_deg: 0.0
+
+electrodes:
+  mode: boundary
+  hi_boundary: top     # y = +30 mm → V = 0
+  lo_boundary: bottom  # y = -30 mm → V = 860 V
+  boundary_cells: 1
+
+electric:
+  frequency_hz: 27120000.0
+  voltage_v: 860.0
+  voltage_mode: grounded   # hi = 0 V, lo = 860 V
+  solver_steps: 3000
+  solver_tol: 1.0e-9
+  update_interval: 20      # re-solve EQS every 20 thermal steps (10 s at dt=0.5)
+  power_factor: 1.0        # correct: code already has 0.5× built in → Q = 0.5·σ·|E|²
+  max_qrf_w_per_m3: 1.0e11 # high cap — enforce_generator_power controls magnitude
+  zero_qrf_outside_doped: true
+
+  # 500 W generator — scales EQS Q_rf to this absorbed power in part
+  enforce_generator_power: true
+  generator_power_w: 500.0
+  generator_transfer_efficiency: 0.020  # ~2% — calibrated for corners ~200°C at 6 min
+  # WHY 1%: Generator outputs 500W but the doped nylon sigma is very small (~0.002-0.01 S/m),
+  # so the part only absorbs ~5W of the 500W. This is why COMSOL takes 6 minutes to melt —
+  # most RF power is reflected / stays in the resonant circuit. The Q_rf SHAPE comes from
+  # the EQS solve (correct); only the magnitude is scaled to match the 6-min timescale.
+  effective_depth_m: 0.020             # 20 mm part depth into page
+
+thermal:
+  ambient_c: 23.0
+  convection_h_w_per_m2k: 5.0         # natural convection on open top surface only
+  convective_boundaries:
+    - top                              # ONLY the top surface is open to air
+  # Bottom and 4 walls: adiabatic (insulative powder walls)
+
+  dt_s: 0.5
+  n_steps: 720          # 360 s = 6 min — matches COMSOL reference timescale
+  max_deltaT_per_step_c: 10.0   # ~2°C/substep at corners — smooth, no clipping
+  min_temp_c: -50.0
+  max_temp_c: 600.0
+
+  phase_change:
+    model: comsol_heaviside
+    t_pc_c: 180.0         # Nylon 12 melt temperature
+    dt_pc_c: 10.0
+    latent_heat_j_per_kg: 96700.0
+    smooth_shape: linear
+
+  depth_correction:
+    enabled: false        # electrode axis IS the simulation Y-axis — no correction needed
+
+densification:
+  rho_rel_initial: 0.55
+  model: physics_dual
+  rho_exponent: 1.0
+  max_delta_per_step: 0.02
+  k0_ss_per_s: 0.005
+  activation_energy_ss_j_per_mol: 48000.0
+  phi_solid_exponent: 0.8
+  k0_liq_per_s: 0.08
+  activation_energy_liq_j_per_mol: 0.0
+  phi_threshold: 0.01
+  phi_liq_exponent: 1.0
+  liquid_rate_mode: viscous_capillary
+  surface_tension_n_per_m: 0.03
+  particle_radius_m: 3.5e-5
+  eta_ref_pa_s: 8.0e3
+  eta_ref_temp_k: 458.15
+  eta_activation_j_per_mol: 6.0e4
+  geom_factor: 0.05
+  k0_per_s: 0.08
+  activation_energy_j_per_mol: 42000.0
+
+materials:
+  virgin:
+    sigma_s_per_m: 0.0
+    eps_r: 2.0
+
+  powder:
+    rho_solid_kg_per_m3: 490.0
+    k_solid_w_per_mk: 0.197
+    cp_solid_j_per_kgk: 1072.0
+
+  doped:
+    # UNIFORM sigma — physically correct RF model.
+    # No surface ring; EQS naturally concentrates Q_rf at corners and
+    # top/bottom faces (perpendicular to E-field). sigma_profile omitted
+    # (defaults to uniform) or explicitly set to "uniform".
+    sigma_s_per_m: 0.04          # uniform conductivity [S/m] — shape only (power scaled to 500W)
+    sigma_profile: uniform       # uniform throughout doped region
+
+    eps_r: 20.0
+    sigma_temp_coeff_per_K: 0.0
+    sigma_density_coeff: 0.0
+    sigma_ref_temp_c: 23.0
+
+    rho_solid_kg_per_m3: 460.0
+    rho_liquid_kg_per_m3: 1010.0
+    k_solid_w_per_mk: 0.10
+    k_liquid_w_per_mk: 0.26
+    cp_solid_j_per_kgk: 2500.0
+    cp_liquid_j_per_kgk: 3279.0
+
+reporting:
+  potential_contours: 18
+  temp_cbar_min_c: 20.0
+  temp_cbar_max_c: 400.0

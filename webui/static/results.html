@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HEATR Results Browser</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/design-b.css" />
+</head>
+<body class="ids-inspired">
+  <header class="topbar topbar-ids">
+    <div>
+      <h1>HEATR Results Browser</h1>
+      <p>Run-centric view with hero previews and expandable details</p>
+    </div>
+    <div class="header-tools">
+      <div class="status-pill" id="serverStatus">API online</div>
+      <details class="settings-menu">
+        <summary>Settings</summary>
+        <div class="settings-grid">
+          <label>Mode
+            <select id="prefMode"><option value="dark">Dark</option><option value="light">Light</option></select>
+          </label>
+          <label>Accent
+            <select id="prefAccent"><option value="blue">Blue</option><option value="green">Green</option><option value="amber">Amber</option><option value="violet">Violet</option></select>
+          </label>
+          <label>Background
+            <select id="prefBackground"><option value="grid">Grid</option><option value="plain">Plain</option><option value="aurora">Aurora</option></select>
+          </label>
+          <label>Layout
+            <select id="prefLayout"><option value="layout-1">Split</option><option value="layout-2">Stacked</option><option value="layout-3">Dual</option></select>
+          </label>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <nav class="tabs-nav">
+    <a class="tab-link" href="/index.html">Operation</a>
+    <a class="tab-link active" href="/results">Results</a>
+    <a class="tab-link" href="/examples">Examples</a>
+    <a class="tab-link" href="/theory">Theory</a>
+  </nav>
+
+  <main class="results-page">
+    <section class="card dash-card accent-cyan">
+      <h2>Runs</h2>
+      <div class="run-toolbar">
+        <input id="runSearch" type="text" placeholder="Search by run path..." />
+        <select id="runGroupFilter">
+          <option value="">All groups</option>
+        </select>
+        <button id="refreshResults" type="button">Refresh</button>
+      </div>
+      <div id="runCards" class="run-cards"></div>
+    </section>
+  </main>
+
+  <dialog id="imageModal" class="image-modal">
+    <div class="image-modal-head">
+      <strong id="imageModalTitle">Image</strong>
+      <button id="imageModalClose" type="button">Close</button>
+    </div>
+    <div class="image-modal-body">
+      <button id="imagePrev" type="button" class="nav-btn">◀</button>
+      <img id="imageModalImg" alt="result" />
+      <button id="imageNext" type="button" class="nav-btn">▶</button>
+    </div>
+  </dialog>
+
+  <script src="/static/settings.js"></script>
+  <script src="/static/results.js"></script>
+</body>
+</html>

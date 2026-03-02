@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HEATR Theory</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/design-b.css" />
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$','$'], ['\\(','\\)']], displayMath: [['$$','$$'], ['\\[','\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body class="ids-inspired">
+  <header class="topbar topbar-ids">
+    <div>
+      <h1>HEATR Theory & Model Notes</h1>
+      <p>From EQS field solve to heat transfer, phase change, and densification</p>
+    </div>
+    <div class="header-tools">
+      <div class="status-pill">LaTeX Rendered</div>
+      <details class="settings-menu">
+        <summary>Settings</summary>
+        <div class="settings-grid">
+          <label>Mode
+            <select id="prefMode"><option value="dark">Dark</option><option value="light">Light</option></select>
+          </label>
+          <label>Accent
+            <select id="prefAccent"><option value="blue">Blue</option><option value="green">Green</option><option value="amber">Amber</option><option value="violet">Violet</option></select>
+          </label>
+          <label>Background
+            <select id="prefBackground"><option value="grid">Grid</option><option value="plain">Plain</option><option value="aurora">Aurora</option></select>
+          </label>
+          <label>Layout
+            <select id="prefLayout"><option value="layout-1">Split</option><option value="layout-2">Stacked</option><option value="layout-3">Dual</option></select>
+          </label>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <nav class="tabs-nav">
+    <a class="tab-link" href="/index.html">Operation</a>
+    <a class="tab-link" href="/results">Results</a>
+    <a class="tab-link" href="/examples">Examples</a>
+    <a class="tab-link active" href="/theory">Theory</a>
+  </nav>
+
+  <main class="results-page">
+    <section class="card dash-card accent-blue theory-doc">
+      <h2>1. Electro-Quasi-Static (EQS) Problem</h2>
+      <p>
+        HEATR solves an RF electro-quasi-static boundary-value problem in the chamber domain with spatially varying
+        conductivity $\sigma(\mathbf{x})$ and permittivity $\epsilon(\mathbf{x})$.
+      </p>
+      <p>
+        The complex potential $V(\mathbf{x})$ satisfies:
+      </p>
+      $$
+      \nabla \cdot \left[\left(\sigma + j\omega\epsilon\right)\nabla V\right] = 0
+      $$
+      <p>
+        with Dirichlet boundary conditions at driven and grounded electrodes. The electric field is
+        $\mathbf{E} = -\nabla V$.
+      </p>
+
+      <h2>2. RF Power Deposition</h2>
+      <p>
+        Volumetric RF heating is computed from the field magnitude in conductive media:
+      </p>
+      $$
+      Q_{\mathrm{rf}}(\mathbf{x}) = \frac{1}{2}\,\sigma(\mathbf{x})\,\left|\mathbf{E}(\mathbf{x})\right|^2
+      $$
+      <p>
+        where the factor $\tfrac{1}{2}$ is the time-average for sinusoidal fields.
+        In generator-enforced mode, the computed pattern is scaled to target absorbed power:
+      </p>
+      $$
+      \int_{\Omega_{\mathrm{part}}} Q_{\mathrm{rf}}\,dV = \eta\,P_{\mathrm{gen}}
+      $$
+      <p>
+        with transfer efficiency $\eta$ and source power $P_{\mathrm{gen}}$.
+      </p>
+
+      <h2>3. Transient Thermal + Phase Model</h2>
+      <p>
+        The temperature field evolves by conduction, RF source, and boundary losses:
+      </p>
+      $$
+      \rho c_p\frac{\partial T}{\partial t} = \nabla\cdot(k\nabla T) + Q_{\mathrm{rf}} - Q_{\mathrm{conv}}
+      $$
+      <p>
+        where convection appears on selected open boundaries as:
+      </p>
+      $$
+      -k\nabla T\cdot\hat{n} = h\,(T - T_{\infty})
+      $$
+      <p>
+        Phase fraction uses a smooth transition around melt temperature $T_{pc}$:
+      </p>
+      $$
+      \phi(T) \in [0,1],\qquad \phi \approx 0 \text{ (solid)},\ \phi \approx 1 \text{ (liquid)}
+      $$
+      <p>
+        Latent heat is included via effective heat-capacity treatment around the phase interval.
+      </p>
+
+      <h2>4. Densification Evolution</h2>
+      <p>
+        Relative density $\rho_{rel}$ evolves with temperature and phase-dependent kinetics.
+        HEATR supports dual-regime formulations (solid-state and liquid-assisted contributions), schematically:
+      </p>
+      $$
+      \frac{d\rho_{rel}}{dt} = R_{ss}(T,\phi,\rho_{rel}) + R_{liq}(T,\phi,\rho_{rel})
+      $$
+      <p>
+        with Arrhenius-like terms, thresholding by melt fraction, and per-step rate limiting for stability.
+      </p>
+
+      <h2>5. Turntable and Optimizer Logic</h2>
+      <p>
+        Turntable mode rotates field orientation in phases when a trigger metric (e.g., mean melt fraction) is reached.
+        Optimizer mode captures snapshots at requested criteria:
+      </p>
+      $$
+      \phi_{mean}(t) \ge \{\phi_1,\phi_2,\ldots\},\qquad T_{max}(t) < T_{ceiling}
+      $$
+      <p>
+        producing recommended exposure windows and report artifacts.
+      </p>
+
+      <h2>6. Numerical Pipeline (per run)</h2>
+      <ol>
+        <li>Build geometry, masks, materials, and electrodes.</li>
+        <li>Solve EQS field and compute $Q_{rf}$.</li>
+        <li>Scale source to generator model (if enabled).</li>
+        <li>March thermal/phase/density state in time.</li>
+        <li>Re-solve EQS periodically (or by phase schedule).</li>
+        <li>Write summaries, plots, and time-series outputs.</li>
+      </ol>
+
+      <h2>7. Notes on Interpretation</h2>
+      <p>
+        The model is a COMSOL-like electrothermal surrogate for rapid iteration. Accuracy depends on geometry fidelity,
+        material calibration, boundary assumptions, and selected numerical settings ($\Delta t$, grid, source constraints).
+      </p>
+    </section>
+  </main>
+
+  <script src="/static/settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+# rfam_eqs_xz_surface_sigma.yaml
+#
+# XZ cross-section — EQS running with surface-sigma shell-heating model
+#
+# GEOMETRY (x = lateral, y = COMSOL z = electrode direction):
+#   chamber_x = 42 mm (full mirrored from COMSOL quadrant 21 mm)
+#   chamber_y = 22 mm (electrode spacing: z = -2 mm → +20 mm)
+#   Part: 20 mm wide × 10 mm tall, CENTERED at (0,0) → y = -5 mm to +5 mm
+#   Gap above part to hi electrode: 6 mm  |  Gap below part to lo electrode: 6 mm
+#   Bottom electrode: V = 860 V  |  Top electrode: V = 0 V
+#
+# SURFACE SIGMA MODEL:
+#   COMSOL's Tuned_Sigma(x,y,z) is highest at the part's outer faces.
+#   We approximate this with a 2-cell (~1 mm) surface ring at sigma_s_per_m, and a
+#   near-zero interior (sigma_interior_s_per_m).
+#   → EQS concentrates Q_rf in the surface ring → shell-heating pattern.
+#
+# POWER CALIBRATION:
+#   Target: full part melt in ~6 min at COMSOL's 860 V / 27.12 MHz.
+#   With CENTERED part (6 mm gaps on all sides), ALL 4 surface faces contribute
+#   to Q_rf, so σ must be ~5.7× lower than for the touching-electrode geometry.
+#   sigma_s_per_m = 0.009 S/m  (estimated from centered power measurement)
+#   sigma_surface_layers = 2   (1 mm ring; spreads heat, reduces peak T)
+#   power_factor = 0.5 (time-averaging: COMSOL uses 0.5·σ·|E_peak|²).
+#
+# MELT:  Nylon 12  T_pc = 180 °C
+#
+# DEPTH CORRECTION: DISABLED — the electrode axis (Z) IS the model's Y-axis,
+#   so all electrode-direction physics are already captured in the 2D solve.
+#   Out-of-plane Y_physical direction is treated as infinite (conservative).
+
+geometry:
+  chamber_x: 0.042    # 42 mm full mirrored width (2 × 21 mm)
+  chamber_y: 0.022    # 22 mm electrode spacing  (z: -2 mm to +20 mm)
+  grid_nx: 85         # 0.5 mm resolution (quick; use 210 for final)
+  grid_ny: 45         # 0.5 mm resolution
+  part:
+    shape: square
+    width:  0.020     # 20 mm wide in x
+    height: 0.010     # 10 mm tall in y (electrode direction)
+    center_x: 0.0
+    center_y: 0.0     # centered: part occupies y = -5 mm to +5 mm
+    rotation_deg: 0.0
+
+electrodes:
+  mode: boundary
+  hi_boundary: top     # y = +11 mm → V = 0
+  lo_boundary: bottom  # y = -11 mm → V = 860 V
+  boundary_cells: 1
+
+electric:
+  frequency_hz: 27120000.0
+  voltage_v: 860.0
+  voltage_mode: grounded   # hi = 0 V, lo = 860 V
+  solver_steps: 3000
+  solver_tol: 1.0e-9
+  update_interval: 20      # re-solve EQS every 20 thermal steps (~10 s at dt=0.5)
+  power_factor: 0.5        # 1/2 time-averaging (COMSOL uses 0.5·σ·|E_peak|²)
+  max_qrf_w_per_m3: 5.0e9
+  zero_qrf_outside_doped: true
+
+thermal:
+  ambient_c: 23.0
+  convection_h_w_per_m2k: 0.0
+  convective_boundaries: []
+
+  dt_s: 0.5
+  n_steps: 720          # 360 s = 6 min  (99% melt at ~5.85 min confirmed)
+  max_deltaT_per_step_c: 3.0
+  min_temp_c: -50.0
+  max_temp_c: 450.0
+
+  phase_change:
+    model: comsol_heaviside
+    t_pc_c: 180.0         # Nylon 12 melt temperature
+    dt_pc_c: 10.0
+    latent_heat_j_per_kg: 96700.0
+    smooth_shape: linear
+
+  # Depth correction DISABLED: z-direction (electrode axis) is already the
+  # model's Y-axis, so no out-of-plane electrode correction is needed.
+  depth_correction:
+    enabled: false
+
+densification:
+  rho_rel_initial: 0.55
+  model: physics_dual
+  rho_exponent: 1.0
+  max_delta_per_step: 0.02
+  k0_ss_per_s: 0.005
+  activation_energy_ss_j_per_mol: 48000.0
+  phi_solid_exponent: 0.8
+  k0_liq_per_s: 0.08
+  activation_energy_liq_j_per_mol: 0.0
+  phi_threshold: 0.01
+  phi_liq_exponent: 1.0
+  liquid_rate_mode: viscous_capillary
+  surface_tension_n_per_m: 0.03
+  particle_radius_m: 3.5e-5
+  eta_ref_pa_s: 8.0e3
+  eta_ref_temp_k: 458.15
+  eta_activation_j_per_mol: 6.0e4
+  geom_factor: 0.05
+  k0_per_s: 0.08
+  activation_energy_j_per_mol: 42000.0
+
+materials:
+  virgin:
+    sigma_s_per_m: 0.0
+    eps_r: 2.0
+
+  powder:
+    rho_solid_kg_per_m3: 490.0
+    k_solid_w_per_mk: 0.197
+    cp_solid_j_per_kgk: 1072.0
+
+  doped:
+    # Surface sigma model — concentrates conductivity in the outer ring of
+    # part cells so the EQS naturally produces shell-heating Q_rf.
+    sigma_s_per_m: 0.008         # conductivity of surface-layer cells [S/m] (calibrated for 6-min melt)
+    sigma_profile: surface        # "surface" or "uniform"
+    sigma_surface_layers: 2       # 2-cell-wide shell (~1 mm at 0.5 mm grid)
+    sigma_interior_s_per_m: 0.001 # near-zero interior conductivity
+
+    eps_r: 20.0
+    sigma_temp_coeff_per_K: 0.0
+    sigma_density_coeff: 0.0
+    sigma_ref_temp_c: 23.0
+
+    rho_solid_kg_per_m3: 460.0
+    rho_liquid_kg_per_m3: 1010.0
+    k_solid_w_per_mk: 0.10
+    k_liquid_w_per_mk: 0.26
+    cp_solid_j_per_kgk: 2500.0
+    cp_liquid_j_per_kgk: 3279.0
+
+reporting:
+  potential_contours: 18
+  temp_cbar_min_c: 20.0
+  temp_cbar_max_c: 300.0

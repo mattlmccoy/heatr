@@ -1,0 +1,83 @@
+# rfam_eqs_comsol_qrf_driven_quick.yaml
+# Quick test: 6 min at 0.5mm grid to verify the XY cross-section
+# looks like the reference image (symmetric, shell-heating pattern).
+# Based on rfam_eqs_comsol_qrf_driven.yaml — same geometry, coarser grid.
+
+geometry:
+  chamber_x: 0.042
+  chamber_y: 0.032
+  grid_nx: 85               # ~0.5mm spacing
+  grid_ny: 65
+  part:
+    shape: square
+    width:  0.020
+    height: 0.020
+    center_x: 0.0
+    center_y: 0.0
+    rotation_deg: 0.0
+
+electrodes:
+  mode: boundary
+  hi_boundary: top
+  lo_boundary: bottom
+  boundary_cells: 1
+
+electric:
+  frequency_hz: 27120000.0
+  voltage_v: 860.0
+  voltage_mode: grounded
+  solver_steps: 1
+  solver_tol: 1.0e-9
+  update_interval: 0
+  power_factor: 1.0
+  max_qrf_w_per_m3: 2.0e9
+  zero_qrf_outside_doped: true
+  qrf_file_npy: "outputs_eqs/comsol_exports/qrf_2d_map.npy"
+
+thermal:
+  ambient_c: 23.0
+  convection_h_w_per_m2k: 0.0
+  convective_boundaries: []
+  dt_s: 5.0
+  n_steps: 720              # 60 min (720 × 5s)
+  max_deltaT_per_step_c: 3.0
+  min_temp_c: -50.0
+  max_temp_c: 500.0
+  phase_change:
+    model: comsol_heaviside
+    t_pc_c: 185.0
+    dt_pc_c: 10.0
+    latent_heat_j_per_kg: 96700.0
+    smooth_shape: linear
+  depth_correction:
+    enabled: true
+    part_depth_m: 0.010
+    chamber_depth_m: 0.022
+
+densification:
+  rho_rel_initial: 0.55
+  k0_per_s: 0.08
+  activation_energy_j_per_mol: 42000.0
+
+materials:
+  virgin:
+    sigma_s_per_m: 0.0
+    eps_r: 2.0
+
+  powder:
+    rho_solid_kg_per_m3: 490.0
+    k_solid_w_per_mk: 0.197
+    cp_solid_j_per_kgk: 1072.0
+
+  doped:
+    sigma_s_per_m: 0.04
+    eps_r: 20.0
+    sigma_temp_coeff_per_K: 0.0
+    sigma_density_coeff: 0.0
+    sigma_ref_temp_c: 23.0
+    rho_solid_kg_per_m3: 460.0
+    rho_liquid_kg_per_m3: 1010.0
+    k_solid_w_per_mk: 0.10
+    k_liquid_w_per_mk: 0.26
+    cp_solid_j_per_kgk: 2500.0
+    cp_liquid_j_per_kgk: 3279.0

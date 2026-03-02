@@ -1,0 +1,125 @@
+# COMSOL 3D-matched 2D cross-section config
+# Cross-section: x-z plane (width × height), electrodes on depth (16mm) faces
+# COMSOL geometry: chamber 21×16×22mm, part 10×10×10mm cube
+# This 2D slice: chamber_x = 21mm (width), chamber_y = 16mm (depth/electrode spacing)
+
+geometry:
+  chamber_x: 0.021    # 21mm COMSOL width
+  chamber_y: 0.016    # 16mm COMSOL depth (electrode-to-electrode)
+  grid_nx: 210        # ~0.1mm resolution
+  grid_ny: 160        # ~0.1mm resolution
+  part:
+    shape: square
+    width: 0.010       # 10mm part
+    height: 0.010      # 10mm part
+    center_x: 0.0
+    center_y: 0.0
+    rotation_deg: 0.0
+    n_circle_pts: 260
+
+electrodes:
+  mode: boundary
+  hi_boundary: top     # electrode on +y face (Vzero = 860V)
+  lo_boundary: bottom  # electrode on -y face (ground)
+  boundary_cells: 1
+
+electric:
+  frequency_hz: 27120000.0
+  # COMSOL report: Vzero = 860 V (peak)
+  voltage_v: 860.0
+  voltage_mode: grounded
+  solver_steps: 1200
+  solver_tol: 1.0e-9
+  update_interval: 1
+  # NO power_factor hack - physics-based heating only
+  power_factor: 1.0
+  max_qrf_w_per_m3: 5.0e9
+
+thermal:
+  # COMSOL report: Tzero = 23 C (296.15 K)
+  ambient_c: 23.0
+  # COMSOL report: Internal natural convection, narrow chimney, parallel plates
+  convection_model: natural_chimney_parallel_plates
+  conv_plate_distance_m: 0.01
+  conv_chimney_height_m: 0.01
+  conv_pressure_pa: 101330.0
+  conv_external_temp_k: 293.15
+  convection_h_w_per_m2k: 25.0   # fallback for constant mode
+  # COMSOL: convection on Boundary 7 only, all others insulated
+  convective_boundaries: ["top"]
+  dt_s: 0.5
+  n_steps: 720          # 6 min = 360 s
+  max_deltaT_per_step_c: 3.0
+  min_temp_c: -50.0
+  max_temp_c: 450.0
+  phase_change:
+    model: comsol_heaviside
+    # COMSOL report: T_pc = 458.15 K = 185 C
+    t_pc_c: 185.0
+    # COMSOL report: transition interval ~ 10 C
+    dt_pc_c: 10.0
+    smooth_shape: linear
+    latent_heat_j_per_kg: 96700.0
+  # Depth correction for 2D -> 3D thermal losses
+  depth_correction:
+    enabled: true
+    part_depth_m: 0.010
+    chamber_depth_m: 0.016
+
+densification:
+  rho_rel_initial: 0.55
+  model: physics_dual
+  rho_exponent: 1.0
+  max_delta_per_step: 0.02
+  k0_ss_per_s: 0.005
+  activation_energy_ss_j_per_mol: 48000.0
+  phi_solid_exponent: 0.8
+  k0_liq_per_s: 0.08
+  activation_energy_liq_j_per_mol: 0.0
+  phi_threshold: 0.01
+  phi_liq_exponent: 1.0
+  liquid_rate_mode: viscous_capillary
+  surface_tension_n_per_m: 0.03
+  particle_radius_m: 3.5e-5
+  eta_ref_pa_s: 8.0e3
+  eta_ref_temp_k: 458.15
+  eta_activation_j_per_mol: 6.0e4
+  geom_factor: 0.05
+  k0_per_s: 0.08
+  activation_energy_j_per_mol: 42000.0
+
+materials:
+  virgin:
+    sigma_s_per_m: 0.0
+    eps_r: 2.0
+
+  powder:
+    # COMSOL report: Heat Transfer in Solids 1 (base domain)
+    rho_solid_kg_per_m3: 490.0     # COMSOL: 490 (was 460)
+    k_solid_w_per_mk: 0.197        # COMSOL: 0.197 (was 0.10)
+    cp_solid_j_per_kgk: 1072.0     # COMSOL: 1072 (was 1287)
+
+  doped:
+    sigma_s_per_m: 0.04
+    # COMSOL report: eps_r = 20 for doped region
+    eps_r: 20.0
+    sigma_temp_coeff_per_K: 0.0
+    sigma_density_coeff: 0.0
+    sigma_ref_temp_c: 23.0
+    # COMSOL Phase 1 (solid)
+    rho_solid_kg_per_m3: 460.0
+    # COMSOL Phase 2 (liquid)
+    rho_liquid_kg_per_m3: 1010.0
+    # COMSOL Phase 1
+    k_solid_w_per_mk: 0.10
+    # COMSOL Phase 2
+    k_liquid_w_per_mk: 0.26
+    # COMSOL Phase 1
+    cp_solid_j_per_kgk: 2500.0
+    # COMSOL Phase 2
+    cp_liquid_j_per_kgk: 3279.0
+
+reporting:
+  potential_contours: 18
+  temp_cbar_min_c: 20.0
+  temp_cbar_max_c: 300.0

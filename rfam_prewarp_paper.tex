@@ -1,0 +1,1666 @@
+%% rfam_prewarp_paper.tex
+%% "Inverse Geometry Compensation and Turntable Exposure Averaging for
+%%  Uniform Densification in Radio Frequency Additive Manufacturing"
+%% Matthew McCoy, Georgia Institute of Technology
+%% Compiled: pdflatex rfam_prewarp_paper.tex
+%%
+%% Required packages: amsmath, amssymb, graphicx, booktabs, multirow,
+%%   hyperref, xcolor, subcaption, float, siunitx, geometry, microtype,
+%%   cleveref, setspace, caption
+
+\documentclass[10pt,twocolumn]{article}
+
+%% ---------------------------------------------------------------
+%% Packages
+%% ---------------------------------------------------------------
+\usepackage[letterpaper,
+            top=1.0in, bottom=1.0in,
+            left=0.75in, right=0.75in,
+            columnsep=0.25in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage[hidelinks,
+            colorlinks=true,
+            linkcolor=blue!60!black,
+            citecolor=green!40!black,
+            urlcolor=blue!60!black]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+\usepackage{caption}
+
+%% ---------------------------------------------------------------
+%% Graphics path
+%% ---------------------------------------------------------------
+\graphicspath{{outputs_eqs/}}
+
+%% ---------------------------------------------------------------
+%% SI units configuration
+%% ---------------------------------------------------------------
+\sisetup{
+  per-mode = symbol,
+  detect-weight = true,
+  detect-family = true
+}
+
+%% ---------------------------------------------------------------
+%% Caption style
+%% ---------------------------------------------------------------
+\captionsetup{font=small, labelfont=bf, skip=4pt}
+
+%% ---------------------------------------------------------------
+%% Custom commands
+%% ---------------------------------------------------------------
+\newcommand{\Qrf}{Q_{\mathrm{rf}}}
+\newcommand{\bndstd}{\sigma_{\mathrm{bnd}}}
+\newcommand{\Leff}{L_{\mathrm{eff}}}
+\newcommand{\rhorel}{\rho_{\mathrm{rel}}}
+\newcommand{\Tpc}{T_{\mathrm{pc}}}
+\newcommand{\phimelt}{\varphi}
+\newcommand{\RMSE}{\mathrm{RMSE}}
+\newcommand{\EPE}{\mathrm{EPE}}
+\newcommand{\vect}[1]{\boldsymbol{#1}}
+\newcommand{\nhat}{\hat{\vect{n}}}
+\newcommand{\half}{\tfrac{1}{2}}
+
+%% ---------------------------------------------------------------
+%% Title / author
+%% ---------------------------------------------------------------
+\title{\textbf{Inverse Geometry Compensation and Turntable Exposure
+Averaging for Uniform Densification in Radio Frequency Additive
+Manufacturing}}
+
+\author{Matthew McCoy\\
+\small School of Mechanical Engineering, Georgia Institute of Technology\\
+\small Atlanta, Georgia 30332, USA\\
+\small \texttt{mmccoy@gatech.edu}}
+
+\date{March 2026}
+
+%% ===============================================================
+\begin{document}
+\maketitle
+%% ===============================================================
+
+%% ---------------------------------------------------------------
+%% Abstract
+%% ---------------------------------------------------------------
+\begin{abstract}
+Radio Frequency Additive Manufacturing (RFAM) sinters graphite-doped
+Nylon~12 powder at \SI{27.12}{\mega\hertz} by selective Joule
+dissipation within the doped region.  Because the electro-quasi-static
+(EQS) field is inherently non-uniform, the volumetric heating rate
+$\Qrf = \half\sigma|\nabla V|^{2}$ varies by more than an order of
+magnitude across the part cross-section: electric-field concentration
+at geometric corners produces $\Qrf \approx 37\times$ the spatial
+mean, normal-field enhancement at the faces perpendicular to the applied
+electric field gives $\approx 11\times$, while the faces parallel to
+the field couple only at $\approx 1.6\times$ the mean.  These gradients
+drive spatial variation in melt fraction and post-sintering density that
+causes both geometric distortion and structural non-uniformity in
+finished parts.
+
+This paper presents and evaluates three complementary strategies to
+mitigate these coupled problems: (1) an edge placement error
+(EPE)-based iterative geometry prewarp algorithm, inspired by inverse
+lithography technology (ILT) from semiconductor photomask design;
+(2) spike assist features, analogous to sub-resolution assist features
+(SRAFs) in optical lithography, placed at the under-heated parallel
+faces to concentrate field energy locally; and (3) a time-based
+turntable rotation schedule that averages the anisotropic exposure by
+rotating the part in the fixed RF field.
+
+All three strategies are evaluated on a library of 17 primitive shapes
+and in depth on a non-symmetric H-shape target.  The EPE prewarp
+reduces geometric boundary RMSE from \SI{0.68}{\milli\meter} to
+\SI{0.22}{\milli\meter} for the H-shape in two iterations.  Four $90^\circ$
+turntable rotations over the six-minute exposure cycle reduce boundary
+density standard deviation by 34\% on the bare H-shape and by 86\%
+when combined with prewarp (from $\bndstd = 0.078$ to $0.011$).  The
+combined approach achieves a minimum-to-maximum boundary density ratio
+of 0.938, representing a factor-of-six reduction in boundary density
+non-uniformity compared to the uncompensated baseline.  Spike assist
+features provide only modest improvement ($\leq 14\%$ in $\bndstd$)
+at geometrically impractical spike heights, limiting their practical
+utility.  The synergy between prewarp and turntable rotation exceeds
+their independent contributions by 24 percentage points, owing to a
+structural interaction between the geometry correction and the exposure
+averaging mechanism.
+\end{abstract}
+
+\noindent\textbf{Keywords:} Radio frequency additive manufacturing;
+inverse lithography; geometry prewarp; edge placement error; turntable
+rotation; Nylon~12 sintering; electro-quasi-static field; densification
+uniformity.
+
+%% ---------------------------------------------------------------
+\section{Introduction}
+\label{sec:introduction}
+%% ---------------------------------------------------------------
+
+\subsection{The RFAM Process}
+
+Radio Frequency Additive Manufacturing is a powder-bed sintering
+process in which selective densification is achieved by incorporating
+a conductive dopant---typically graphite---into a thermoplastic powder,
+most commonly Nylon~12 (PA12).  The powder bed is placed between two
+planar electrodes driven at the Industrial-Scientific-Medical (ISM)
+frequency of \SI{27.12}{\mega\hertz}.  In the undoped regions the
+powder is nearly lossless ($\sigma \approx 0$, $\varepsilon_r \approx
+2$), so virtually no energy is absorbed.  In the doped regions the
+effective conductivity rises to $\sigma \approx \SI{0.04}{\siemens\per\meter}$
+and the relative permittivity to $\varepsilon_r \approx 20$, causing
+selective Joule heating $\Qrf = \half\sigma|\vect{E}|^{2}$.  When the
+local temperature exceeds the Nylon~12 melt onset temperature
+($\approx\SI{180}{\celsius}$), the powder coalesces under surface
+tension and the local density increases from the poured powder density
+($\rhorel \approx 0.55$) toward fully dense material ($\rhorel \to
+1.0$).
+
+RFAM occupies a distinct niche among additive sintering processes.
+Unlike laser powder bed fusion (LPBF), which scans a focused beam
+across the layer surface, RFAM energizes the \emph{entire} doped
+region simultaneously.  This enables rapid, potentially scalable
+throughput but introduces the fundamental challenge addressed in this
+paper: the RF electromagnetic field is spatially non-uniform, and
+this non-uniformity is encoded directly into the sintered density
+distribution.
+
+\subsection{The Two Coupled Problems}
+
+Two distinct but related failure modes arise from RFAM's non-uniform
+field:
+
+\paragraph{Geometric distortion.}
+Because densification implies volumetric shrinkage, and because the
+degree of densification varies spatially, different parts of the
+sintered boundary shrink by different amounts.  A nominally square
+$20 \times \SI{20}{\milli\meter}$ target will emerge with corners
+over-sintered and face midpoints under-sintered, producing a
+systematically distorted outline.  Without compensation, the
+root-mean-square boundary error is approximately \SI{0.68}{\milli\meter}
+for the H-shape studied here---large enough to matter for any
+fit-critical application.
+
+\paragraph{Density non-uniformity.}
+Even if geometric distortion is compensated by modifying the input
+polygon, the underlying heating non-uniformity remains, producing
+a part whose boundary density spans a factor of $\approx 1.46\times$
+from the best-sintered corners to the worst-sintered parallel-field
+face midpoints.  This density gradient is a structural defect that
+cannot be corrected post hoc by shape changes alone.
+
+\subsection{Prior Work}
+
+The RFAM process was introduced and characterized physically by
+Allison~\cite{allison2015rfam} and by Seepersad and
+colleagues~\cite{seepersad2014volumetric,seepersad2019rfam}, who
+established the relationship between graphite doping concentration,
+RF power, and sintering quality for Nylon~12.  Computational
+simulation of the coupled electromagnetic-thermal-densification
+problem was developed by McCoy~\cite{mccoy2025rfam_sim}, demonstrating
+that a 2D EQS model with uniform $\sigma$ and a $2\%$ generator
+coupling efficiency reproduces the spatial pattern of COMSOL
+full-wave simulations at significantly lower computational cost.
+
+The concept of compensating for systematic process-induced distortions
+by pre-modifying the design geometry is well established in optical
+semiconductor lithography.  Optical proximity correction (OPC) and,
+more recently, inverse lithography technology (ILT) iteratively modify
+the photomask pattern so that diffraction, aberration, and resist
+chemistry combine to print the desired target
+feature~\cite{Wong2001ilt,Poonawala2007ilt,Shen2009ilt}.  The edge
+placement error (EPE) metric quantifies the deviation between the
+predicted printed boundary and the target boundary, and EPE-gradient
+descent is the canonical algorithm for ILT mask
+optimization~\cite{Jia2014ilt}.  To the authors' knowledge, this
+approach has not previously been applied to RF-driven sintering.
+
+Turntable-based exposure averaging in powder-bed sintering has been
+discussed qualitatively in the context of microwave
+sintering~\cite{Clark1996microwave} but has not been studied
+quantitatively or combined with geometric compensation for RFAM.
+
+\subsection{Contributions of This Paper}
+
+This paper makes the following specific contributions:
+\begin{enumerate}
+\item A validated 2D EQS + thermal + densification forward model for
+      RFAM with quantified spatial field distributions (\cref{sec:methodology}).
+\item An EPE-based iterative prewarp algorithm adapted from ILT for
+      arbitrary polygonal RFAM targets, with systematic $\Leff$
+      calibration (\cref{sec:prewarp_algorithm}).
+\item A systematic simulation study of 17 primitive shape geometries,
+      characterizing the relationship between shape symmetry, boundary
+      density non-uniformity, and melt fraction
+      (\cref{sec:results_shapes}).
+\item Analysis of spike assist features---RFAM analogs of
+      optical SRAFs---as a means to redistribute heating to under-sintered
+      faces (\cref{sec:results_spikes}).
+\item A time-based turntable rotation model and quantitative evaluation
+      of multi-rotation schedules (\cref{sec:results_turntable}).
+\item Demonstration that combined prewarp + turntable rotation achieves
+      86\% reduction in boundary density standard deviation on a
+      challenging non-symmetric H-shape target
+      (\cref{sec:results_combined}).
+\end{enumerate}
+
+%% ---------------------------------------------------------------
+\section{RFAM Physics and Field Non-Uniformity}
+\label{sec:physics}
+%% ---------------------------------------------------------------
+
+\subsection{Joule Heating in an EQS Field}
+
+At the RFAM operating frequency of \SI{27.12}{\mega\hertz}, the free-space
+wavelength is $\lambda \approx \SI{11.1}{\meter}$, roughly 500 times
+larger than the electrode spacing (\SI{22}{\milli\meter}).  The
+displacement current term $\partial\vect{D}/\partial t$ is negligible
+relative to the conduction current $\vect{J} = \sigma\vect{E}$ within
+the doped region for $\sigma \gg \omega\varepsilon_0\varepsilon_r$
+(which holds for $\sigma = \SI{0.04}{\siemens\per\meter}$ at
+\SI{27.12}{\mega\hertz}).  The field therefore obeys the
+electro-quasi-static (EQS) approximation:
+\begin{equation}
+  \nabla \cdot (\sigma\,\nabla V) = 0
+  \label{eq:eqs_pde}
+\end{equation}
+with the instantaneous electric field $\vect{E} = -\nabla V$.  The
+time-averaged volumetric power deposition is:
+\begin{equation}
+  \Qrf = \half\,\sigma\,|\nabla V|^{2}
+  \label{eq:qrf}
+\end{equation}
+where the factor of $\half$ accounts for time-averaging the sinusoidal
+field $V(t) = V_0\cos(\omega t)$.
+
+\subsection{Physical Origin of Field Non-Uniformity}
+
+The spatial variation of $\Qrf$ across a finite doped region can be
+understood from three distinct physical mechanisms, each active at a
+different part of the boundary.
+
+\paragraph{Corners (37$\times$ mean).}
+At a sharp convex corner between two material regions, the electric
+field lines must turn through a larger angle than at a flat face.
+For a corner of interior half-angle $\alpha$, the field is
+amplified approximately as $r^{\pi/\alpha - 1}$ near the tip in a
+lossless dielectric~\cite{Meixner1972singular}.  For a $90^\circ$
+corner ($\alpha = \pi/2$), the exponent is $+1$, producing a $1/r$
+field divergence as $r \to 0$ that concentrates energy strongly at
+the tip.  This is the classical electrostatic tip-effect responsible
+for lightning rods and field-emission tips, and it dominates the RFAM
+heating pattern at all sharp vertices.
+
+\paragraph{Perpendicular faces ($11\times$ mean).}
+At an interface normal to the applied field ($z$-direction), the normal
+component of $\vect{D} = \varepsilon_r\varepsilon_0\vect{E}$ is
+continuous across the boundary.  Therefore:
+\begin{equation}
+  \varepsilon_{r,\mathrm{doped}}\,E_{n,\mathrm{in}} =
+  \varepsilon_{r,\mathrm{powder}}\,E_{n,\mathrm{out}}
+  \label{eq:normal_D_continuity}
+\end{equation}
+giving $E_{n,\mathrm{in}} = (\varepsilon_{r,\mathrm{powder}} /
+\varepsilon_{r,\mathrm{doped}})\,E_{n,\mathrm{out}}$.  For
+$\varepsilon_{r,\mathrm{doped}} = 20$ and $\varepsilon_{r,\mathrm{powder}} = 2$,
+the interior normal field is \emph{reduced} by a factor of 10 compared
+to the exterior, but the $\Qrf \propto |E|^{2}$ evaluated inside the
+doped region still shows a substantial enhancement over the center
+because the exterior field itself is enhanced by the overall
+dielectric contrast.  Numerically, the net effect at the top and
+bottom face midpoints is $\approx 11\times$ the spatial mean of
+$\Qrf$ across the part.
+
+\paragraph{Parallel faces (1.6$\times$ mean).}
+At an interface parallel to the applied field, the tangential component
+of $\vect{E}$ is continuous:
+\begin{equation}
+  E_{t,\mathrm{in}} = E_{t,\mathrm{out}}
+  \label{eq:tangential_E_continuity}
+\end{equation}
+There is no field concentration mechanism; the interior field at the
+face midpoint is essentially equal to the far-field value of
+$\approx 860/60 = \SI{14.3}{\volt\per\milli\meter}$.  The mild
+enhancement of $\approx 1.6\times$ arises from the global redistribution
+of field lines around the high-permittivity doped region
+(depolarization effect), not from any boundary-normal concentration.
+
+\subsection{Consequences for Sintering}
+
+The $37\times$ ratio between corner and center $\Qrf$ means that
+corners reach the melt threshold ($\sim\SI{180}{\celsius}$) far earlier
+than the face midpoints and substantially earlier than the part
+interior.  At the 6-minute canonical exposure time, corners have
+$\rhorel \approx 0.80$ while the parallel-field face midpoints barely
+reach $\rhorel \approx 0.55$ (initial poured density).  This spatial
+gradient in sintering extent is the root cause of both dimensional
+distortion and structural non-uniformity.
+
+%% ---------------------------------------------------------------
+\section{Methodology}
+\label{sec:methodology}
+%% ---------------------------------------------------------------
+
+\subsection{Electro-Quasi-Static Forward Model}
+\label{sec:eqs_model}
+
+\subsubsection{Governing Equation and Discretization}
+
+\Cref{eq:eqs_pde} is solved on a 2D Cartesian grid representing the
+XZ cross-section (horizontal = $x$, vertical = $z$, electrodes on the
+$z$-axis).  The domain is $60 \times \SI{60}{\milli\meter}$ with
+$120 \times 120$ uniform cells ($\Delta x = \Delta z \approx
+\SI{0.504}{\milli\meter}$).  The part occupies a $20 \times
+\SI{20}{\milli\meter}$ square at the center; the surrounding
+\SI{20}{\milli\meter}-wide annular region is undoped powder.
+
+The discretization uses a standard finite-difference stencil for
+\cref{eq:eqs_pde} on the Cartesian grid.  At material interfaces, the
+conductivity is set to the harmonic mean of adjacent cell values:
+\begin{equation}
+  \sigma_{i+\half} =
+  \frac{2\,\sigma_i\,\sigma_{i+1}}{\sigma_i + \sigma_{i+1}}
+  \label{eq:harmonic_sigma}
+\end{equation}
+which ensures continuity of normal current $J_n = \sigma E_n$ across
+the interface.  The resulting sparse linear system is assembled in
+CSR format and solved via \texttt{scipy.sparse.linalg.spsolve}
+(SuperLU backend).
+
+\subsubsection{Boundary Conditions}
+
+The electrode boundary conditions are:
+\begin{align}
+  V &= 0 \quad \text{at } z = +\SI{30}{\milli\meter} \quad
+       \text{(top electrode)} \label{eq:bc_top}\\
+  V &= V_0 = \SI{860}{\volt} \quad \text{at } z = -\SI{30}{\milli\meter}
+       \quad \text{(bottom electrode)} \label{eq:bc_bot}
+\end{align}
+matching the COMSOL reference model (Tuned\_Sigma.mph).  The lateral
+boundaries ($x = \pm\SI{30}{\milli\meter}$) use Neumann conditions
+$\partial V/\partial x = 0$ (zero normal current, representing
+insulating chamber walls).
+
+\subsubsection{Power Normalization}
+
+The generator delivers $P_{\mathrm{gen}} = \SI{500}{\watt}$ to the
+system.  Due to impedance mismatch and coupling losses between the
+generator and the powder-bed load, the effective power absorbed by the
+doped region is:
+\begin{equation}
+  P_{\mathrm{eff}} = \eta\,P_{\mathrm{gen}}\,/\,d_{\mathrm{eff}}
+  \label{eq:power_eff}
+\end{equation}
+where $\eta = 0.020$ (2\% coupling efficiency, calibrated to match
+COMSOL steady-state temperatures) and $d_{\mathrm{eff}} =
+\SI{0.020}{\meter}$ is the effective part depth in the out-of-plane
+direction.  After each EQS solve, the $\Qrf$ map is scaled such that
+$\int_\Omega \Qrf\,\mathrm{d}A = P_{\mathrm{eff}}$.  This ensures
+energy consistency regardless of the instantaneous part geometry and
+conductivity distribution.
+
+The EQS solve is repeated every 20 thermal time steps (\SI{10}{\second})
+to capture the effect of temperature-dependent material properties.
+In practice, $\sigma$ is held constant (the temperature dependence
+of graphite-doped Nylon~12 conductivity is not well characterized at
+sintering temperatures), so the EQS solution changes only as the
+doped-region geometry evolves with the prewarp polygon in the prewarp
+algorithm.
+
+\subsection{Thermal Model}
+\label{sec:thermal_model}
+
+The transient heat equation with apparent-heat-capacity treatment of
+phase change is:
+\begin{equation}
+  \rho_{\mathrm{mat}}\,c_p^{\mathrm{eff}}\,\frac{\partial T}{\partial t}
+  = \nabla\cdot(k\,\nabla T) + \Qrf - h_c\,(T - T_\infty)\,\delta_{\mathrm{top}}
+  \label{eq:heat_eqn}
+\end{equation}
+where $\delta_{\mathrm{top}}$ is 1 on the top boundary and 0
+elsewhere.  The apparent specific heat absorbs the latent heat of
+fusion $\mathcal{L}$ over a smoothed phase-change interval $\Delta T$:
+\begin{equation}
+  c_p^{\mathrm{eff}}(T) = c_p + \mathcal{L}\,
+  \frac{1}{\Delta T}\,H'\!\left(\frac{T - \Tpc}{\Delta T}\right)
+  \label{eq:apparent_cp}
+\end{equation}
+where $H'$ is a smoothed Heaviside kernel (raised cosine) and
+$\Tpc = \SI{180}{\celsius}$, $\Delta T = \SI{10}{\celsius}$,
+$\mathcal{L} = \SI{96700}{\joule\per\kilogram}$ for Nylon~12.
+
+Material properties are blended between the solid and liquid phases
+based on the local melt fraction $\phimelt \in [0, 1]$, where
+$\phimelt = H((T - \Tpc)/\Delta T)$:
+\begin{align}
+  k(T) &= (1-\phimelt)\,k_s + \phimelt\,k_l \\
+  \rho_{\mathrm{mat}}(T) &= (1-\phimelt)\,\rho_s + \phimelt\,\rho_l
+\end{align}
+Table~\ref{tab:material_props} summarizes all material constants.
+Convection is applied only on the top face with $h_c =
+\SI{5}{\watt\per\meter\squared\per\kelvin}$ and $T_\infty =
+\SI{25}{\celsius}$; all other boundaries are adiabatic.  The implicit
+Crank-Nicolson scheme is used with $\Delta t = \SI{0.5}{\second}$ and
+5 thermal substeps per EQS interval.
+
+\begin{table}[tb]
+\centering
+\caption{Material properties for Nylon~12 and graphite-doped powder
+         used in the RFAM forward model.}
+\label{tab:material_props}
+\begin{tabular}{llSl}
+\toprule
+Property & Symbol & {Value} & {Unit} \\
+\midrule
+\multicolumn{4}{l}{\textit{Nylon 12 powder (undoped)}} \\
+Thermal conductivity & $k_p$ & 0.197 & \si{\watt\per\meter\per\kelvin} \\
+Density & $\rho_p$ & 490 & \si{\kilogram\per\meter\cubed} \\
+Specific heat & $c_{p,p}$ & 1072 & \si{\joule\per\kilogram\per\kelvin} \\
+\midrule
+\multicolumn{4}{l}{\textit{Nylon 12 doped solid}} \\
+Thermal conductivity & $k_s$ & 0.10 & \si{\watt\per\meter\per\kelvin} \\
+Density & $\rho_s$ & 460 & \si{\kilogram\per\meter\cubed} \\
+Specific heat & $c_{p,s}$ & 2500 & \si{\joule\per\kilogram\per\kelvin} \\
+Electrical conductivity & $\sigma$ & 0.04 & \si{\siemens\per\meter} \\
+Relative permittivity & $\varepsilon_r$ & 20 & {---} \\
+\midrule
+\multicolumn{4}{l}{\textit{Nylon 12 doped liquid}} \\
+Thermal conductivity & $k_l$ & 0.26 & \si{\watt\per\meter\per\kelvin} \\
+Density & $\rho_l$ & 1010 & \si{\kilogram\per\meter\cubed} \\
+Specific heat & $c_{p,l}$ & 3279 & \si{\joule\per\kilogram\per\kelvin} \\
+\midrule
+\multicolumn{4}{l}{\textit{Phase change}} \\
+Melt temperature & $\Tpc$ & 180 & \si{\celsius} \\
+Melt range & $\Delta T$ & 10 & \si{\celsius} \\
+Latent heat & $\mathcal{L}$ & 96700 & \si{\joule\per\kilogram} \\
+\midrule
+\multicolumn{4}{l}{\textit{Generator / coupling}} \\
+Generator power & $P_{\mathrm{gen}}$ & 500 & \si{\watt} \\
+Coupling efficiency & $\eta$ & 0.020 & {---} \\
+Effective depth & $d_{\mathrm{eff}}$ & 0.020 & \si{\meter} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Densification Model}
+\label{sec:densification_model}
+
+The relative density field $\rhorel(x,z,t)$ is evolved by a
+two-regime Arrhenius model.  In the solid-state sintering regime, neck
+growth is driven by surface diffusion and is limited by the melt
+fraction:
+\begin{equation}
+  \left.\frac{\mathrm{d}\rhorel}{\mathrm{d}t}\right|_{\mathrm{ss}}
+  = k_{0,\mathrm{ss}}\,\phimelt^{0.8}\,
+    \exp\!\left(\frac{-E_{a,\mathrm{ss}}}{RT}\right)(1 - \rhorel)
+  \label{eq:densification_ss}
+\end{equation}
+In the liquid-state sintering regime (viscous flow driven by surface
+tension, analogous to Frenkel's model~\cite{Frenkel1945}):
+\begin{equation}
+  \left.\frac{\mathrm{d}\rhorel}{\mathrm{d}t}\right|_{\mathrm{liq}}
+  = k_{0,\mathrm{liq}}\,\phimelt_{\mathrm{liq}}\,
+    \exp\!\left(\frac{-E_{a,\mathrm{liq}}}{RT}\right)(1 - \rhorel)
+  \label{eq:densification_liq}
+\end{equation}
+where $\phimelt_{\mathrm{liq}} = \max(\phimelt - 0.5, 0)/0.5$ is the
+liquid-phase fraction above the solidus.  The total rate is
+$\mathrm{d}\rhorel/\mathrm{d}t = \mathrm{d}\rhorel/\mathrm{d}t|_{\mathrm{ss}}
++ \mathrm{d}\rhorel/\mathrm{d}t|_{\mathrm{liq}}$.
+
+Kinetic parameters are:
+$k_{0,\mathrm{ss}} = \SI{5e-3}{\per\second}$,
+$E_{a,\mathrm{ss}} = \SI{48000}{\joule\per\mol}$;
+$k_{0,\mathrm{liq}} = \SI{8e-2}{\per\second}$,
+$E_{a,\mathrm{liq}} = 0$ (viscous flow has negligible Arrhenius
+temperature dependence over the narrow sintering temperature window).
+The initial density is $\rhorel(t=0) = 0.55$ uniformly throughout
+the doped region.
+
+\subsection{EPE-Based Geometry Prewarp Algorithm}
+\label{sec:prewarp_algorithm}
+
+\subsubsection{Analogy to Inverse Lithography Technology}
+
+In optical semiconductor lithography, the target pattern on the wafer
+is related to the mask pattern by a forward operator $\mathcal{F}$
+representing diffraction, lens aberrations, and resist chemistry.  ILT
+seeks the mask $M^*$ such that $\mathcal{F}(M^*) \approx T$, where
+$T$ is the target wafer pattern.  The standard iterative solution
+uses gradient descent on the edge placement error:
+$\EPE[i] = (\vect{T}[i] - \hat{\vect{B}}[i]) \cdot \nhat_{\mathrm{out}}[i]$,
+where $\hat{\vect{B}}$ is the predicted printed boundary and
+$\vect{T}[i]$ is the nearest target boundary point.
+
+For RFAM, the analogous forward operator maps the input polygon $P$
+through (a) EQS+thermal sintering simulation, (b) local shrinkage, and
+(c) final boundary prediction to yield an estimated sintered boundary
+$\hat{\vect{B}}$.  The prewarp algorithm iteratively adjusts $P$ to
+minimize $\EPE$ in the same spirit as optical ILT.
+
+\subsubsection{Algorithm}
+
+Let $T$ be the target polygon (desired sintered shape) and $P_k$ be
+the prewarp polygon at iteration $k$, both represented as ordered
+lists of $N = 512$ equally-spaced vertices.  The algorithm proceeds
+as follows:
+
+\begin{enumerate}
+\item \textbf{Initialize:} $P_0 = T$.
+\item \textbf{Forward simulation:} Run the EQS+thermal+densification
+      model on polygon $P_k$ for $t = \SI{360}{\second}$.
+\item \textbf{Boundary density sampling:} For each vertex $i$, compute
+      the outward normal $\nhat_i$.  Sample $\rhorel$ at a point
+      inset $\approx 1.5$ grid cells inward along $\nhat_i$:
+      $\rhorel^{\mathrm{bnd}}[i]$.
+\item \textbf{Shrinkage prediction:} Estimate the local linear
+      shrinkage ratio from the measured boundary density, assuming
+      isotropic densification from initial density $\rhorel^{(0)}$:
+      \begin{equation}
+        s[i] = 1 - \sqrt{\rhorel^{(0)}\,/\,\rhorel^{\mathrm{bnd}}[i]}
+        \label{eq:shrinkage_ratio}
+      \end{equation}
+\item \textbf{Predicted boundary:} Project each vertex outward by the
+      shrinkage distance:
+      \begin{equation}
+        \hat{\vect{B}}[i] = P_k[i] - s[i]\,\Leff\,\nhat_i
+        \label{eq:predicted_boundary}
+      \end{equation}
+      where $\Leff$ is the effective shrinkage length scale
+      (calibrated parameter, \cref{sec:leff_calibration}).
+\item \textbf{Edge placement error:}
+      \begin{equation}
+        \EPE[i] = (T[i] - \hat{\vect{B}}[i]) \cdot \nhat_i
+        \label{eq:epe}
+      \end{equation}
+\item \textbf{Polygon update:}
+      \begin{equation}
+        P_{k+1}[i] = P_k[i] + \alpha\,\EPE[i]\,\nhat_i
+        \label{eq:polygon_update}
+      \end{equation}
+      where $\alpha = 1.0$ is the step size (unit EPE-to-correction
+      ratio, justified by the approximately linear relationship between
+      input polygon boundary position and sintered boundary position
+      for small perturbations).
+\item \textbf{Laplacian smoothing:}
+      \begin{equation}
+        P_{k+1}[i] \leftarrow P_{k+1}[i] +
+        \lambda_s\,\bigl(P_{k+1}[i-1] - 2P_{k+1}[i] + P_{k+1}[i+1]\bigr)
+        \label{eq:laplacian_smooth}
+      \end{equation}
+      with $\lambda_s = 0.15$, applied 3 times to suppress
+      high-frequency oscillations that arise at vertices where
+      $\EPE$ is noisy.
+\item \textbf{Resample:} Re-parameterize $P_{k+1}$ to $N = 512$
+      equally-spaced vertices by arc-length.
+\item \textbf{Convergence check:} Stop if
+      $\mathrm{RMS}(\EPE) < \varepsilon_{\EPE}$, with
+      $\varepsilon_{\EPE} = \SI{0.25}{\milli\meter}$ for square/circle
+      and \SI{0.30}{\milli\meter} for the H-shape.
+\end{enumerate}
+
+\subsubsection{$\Leff$ Calibration}
+\label{sec:leff_calibration}
+
+The effective shrinkage length $\Leff$ is the only free parameter of
+the prewarp algorithm.  Physically, it represents the characteristic
+distance over which the boundary density $\rhorel^{\mathrm{bnd}}$
+measured at the vertex inset point translates into a linear shrinkage
+at the sintered boundary.  It depends on the exposure time, material
+properties, and the local $\Qrf$ gradient near the boundary, and
+therefore differs between shapes.
+
+Calibration is performed by running the full prewarp algorithm to
+convergence for each candidate $\Leff \in \{3, 5, 7, 10, 13, 16\}
+\si{\milli\meter}$ and selecting the value that achieves the lowest
+post-convergence geometric RMSE:
+\begin{equation}
+  \RMSE = \sqrt{\frac{1}{N}\sum_{i=1}^{N}\EPE[i]^{2}}
+  \label{eq:rmse}
+\end{equation}
+
+\subsection{Boundary Density Uniformity Metrics}
+\label{sec:uniformity_metrics}
+
+Two complementary scalar metrics quantify the spatial uniformity of
+sintering across the part boundary.
+
+\paragraph{Boundary standard deviation.}
+The one-cell-thick boundary mask $\mathcal{B}$ is defined as the
+set-difference between the part mask and its binary erosion:
+\begin{equation}
+  \mathcal{B} = \{(i,j) : M_{ij} = 1\} \setminus
+                \mathrm{erode}(\{(i,j) : M_{ij} = 1\})
+  \label{eq:boundary_mask}
+\end{equation}
+The boundary standard deviation is then:
+\begin{equation}
+  \bndstd = \mathrm{std}\bigl(\{\rhorel[i,j] : (i,j)\in\mathcal{B}\}\bigr)
+  \label{eq:bnd_std}
+\end{equation}
+Lower $\bndstd$ indicates more uniform surface sintering.
+
+\paragraph{Min/max ratio.}
+\begin{equation}
+  r_{\mathrm{bnd}} = \frac{\min_{(i,j)\in\mathcal{B}}\rhorel[i,j]}
+                         {\max_{(i,j)\in\mathcal{B}}\rhorel[i,j]}
+  \in [0, 1]
+  \label{eq:minmax_ratio}
+\end{equation}
+$r_{\mathrm{bnd}} \to 1$ implies perfectly uniform boundary density.
+This metric is complementary to $\bndstd$ in that it captures the
+worst-case nonuniformity rather than the distribution spread.
+
+\subsection{Spike Assist Features}
+\label{sec:spike_method}
+
+Sub-resolution assist features (SRAFs) in optical lithography are mask
+elements that are too small to print but that improve the aerial image
+intensity distribution for nearby features they are designed to
+assist~\cite{Liebmann2001sraf}.  The RFAM analog is a narrow convex
+protrusion at a region of under-heating (a parallel-to-$\vect{E}$ face
+midpoint) that concentrates $\vect{E}$ locally through the same tip
+effect responsible for corner overheating, with the intent of
+increasing $\Qrf$ at the face midpoint without contributing significant
+sintered material.
+
+Each spike is defined as a radial perturbation to the polygon at a
+specified angular location $\theta_0$:
+\begin{equation}
+  \delta r(\theta) = h\,\exp\!\!\left(-\frac{(\theta-\theta_0)^2}{2\sigma_s^2}\right)
+  \label{eq:spike_profile}
+\end{equation}
+where $h$ is the spike height (parameter to optimize),
+$\sigma_s = w_{\mathrm{base}} / (2\sqrt{2\ln 2})$ is the Gaussian
+width parameter, and $w_{\mathrm{base}}$ is the full-width-at-half-maximum
+angular extent.  A narrow angular width $w_{\mathrm{base}} = 10^\circ$
+is used to maximize field concentration effect per unit area added to
+the polygon.  Spikes are placed at $\theta_0 = 0^\circ$ and
+$180^\circ$ (the two parallel-to-$\vect{E}$ face midpoints of the
+square).
+
+\subsection{Turntable Rotation Model}
+\label{sec:turntable_method}
+
+The physical scenario is a motorized turntable that rotates the entire
+part assembly---the doped-region polygon rasterized on the powder
+bed---at discrete angles within the fixed RF field (electrodes remain
+stationary).  Rotation is discrete (not continuous) because a
+continuous rotation would sweep each boundary element through all
+field orientations simultaneously, which is equivalent to perfect
+averaging and is the upper limit of what rotation can achieve.
+
+At each rotation event at time $t_k$, the cumulative rotation angle
+is incremented by $\Delta\theta = 90^\circ$, and the spatial fields
+$(T, \rhorel, \phimelt)$ are remapped from the old to the new grid:
+\begin{equation}
+  f^{\mathrm{new}}(x, z) = f^{\mathrm{old}}(R_{-\Delta\theta}(x,z))
+  \label{eq:rotation_remap}
+\end{equation}
+where $R_{-\Delta\theta}$ is the inverse rotation operator.  The
+remapping uses bilinear interpolation via
+\texttt{scipy.ndimage.map\_coordinates}, which preserves the spatial
+structure of hot-spots and density gradients with sub-grid accuracy.
+
+The rotation schedule is time-based rather than melt-fraction-based
+(the latter would require real-time density sensing):
+\begin{equation}
+  t_k = \frac{k}{N_r + 1}\,t_{\mathrm{total}},
+  \quad k = 1, 2, \ldots, N_r
+  \label{eq:rotation_schedule}
+\end{equation}
+For $N_r = 4$ rotations over $t_{\mathrm{total}} = \SI{360}{\second}$:
+rotations occur at $t = 72, 144, 216, 288\,\si{\second}$, each adding
+$90^\circ$ for a total of $360^\circ$ over the full exposure.  This
+schedule is uniformly spaced so that each of the four $90^\circ$
+orientations occupies an equal $\SI{72}{\second}$ interval.
+
+%% ---------------------------------------------------------------
+\section{Canonical Baseline Results}
+\label{sec:results_baseline}
+%% ---------------------------------------------------------------
+
+\subsection{EQS Field Distribution: 20 mm Square at 6 Minutes}
+
+\Cref{fig:canonical_fields} presents the canonical simulation result
+for a $20 \times \SI{20}{\milli\meter}$ square at $t = \SI{360}{\second}$.
+The electric potential $|V|$ shows the expected near-linear gradient
+between electrodes, slightly distorted by the high-permittivity doped
+region.  The $\Qrf$ map reveals the characteristic non-uniformity
+driven by the three mechanisms described in \cref{sec:physics}:
+corners at $\approx 37\times$ the spatial mean, perpendicular faces at
+$\approx 11\times$, and parallel faces at $\approx 1.6\times$.  The
+numerical values of $\Qrf$ at representative locations are listed in
+\cref{tab:qrf_values}.
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\columnwidth]{xz_uniform_6min_v2/electric_fields.png}
+  \caption{Canonical 6-minute run: electric potential $|V|$, electric field
+           magnitude $|\vect{E}|$, and volumetric RF heating rate $\Qrf$ for
+           a $20\times\SI{20}{\milli\meter}$ square.  The $\approx 37\times$
+           corner-to-center ratio in $\Qrf$ is evident.  Chamber:
+           $60\times\SI{60}{\milli\meter}$; generator: \SI{500}{\watt}, 2\%
+           coupling efficiency.}
+  \label{fig:canonical_fields}
+\end{figure}
+
+\begin{table}[tb]
+\centering
+\caption{Volumetric RF heating rate $\Qrf$ at representative boundary
+         locations for the 20~mm square at $t = \SI{360}{\second}$.
+         Ratios are relative to the spatial mean over the doped region.}
+\label{tab:qrf_values}
+\begin{tabular}{lSS[table-format=2.0]}
+\toprule
+Location & {$\Qrf$ (\si{\watt\per\meter\cubed})} & {Ratio to mean} \\
+\midrule
+Corner & 2.26e9 & 37 \\
+Top/bottom face midpoint & 3.34e8 & 11 \\
+Left/right face midpoint & 4.77e7 & 1.6 \\
+Part center & 3.13e7 & 1.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure*}[tb]
+  \centering
+  \includegraphics[width=\textwidth]{xz_uniform_6min_v2/paper_style_report.png}
+  \caption{Five-panel canonical result for $20\times\SI{20}{\milli\meter}$
+           square at $t = \SI{360}{\second}$ (6 min).  Left to right:
+           temperature with E-field streamlines, volumetric heating rate
+           $\Qrf$, melt fraction $\phimelt$, relative density $\rhorel$,
+           and time-series evolution of mean temperature, melt fraction,
+           and relative density.  The spatial non-uniformity in $\rhorel$
+           ($\sigma_{\mathrm{bnd}} = 0.072$) driven by the corner/face
+           $\Qrf$ gradient is clearly visible.}
+  \label{fig:canonical_full}
+\end{figure*}
+
+\subsection{Thermal and Density Results}
+
+\Cref{fig:canonical_full} presents the five-panel canonical result.
+At $t = \SI{360}{\second}$:
+\begin{itemize}
+  \item Mean temperature: $\bar{T} = \SI{181.2}{\celsius}$;
+        maximum: $T_{\max} = \SI{197.6}{\celsius}$
+  \item Mean melt fraction: $\bar{\phimelt} = 0.626$;
+        fraction of cells at $T \geq T_{\mathrm{pc}}$: 82.5\%
+  \item Mean relative density: $\bar{\rhorel} = 0.610$
+  \item Boundary density metrics: $\bndstd = 0.072$,
+        $r_{\mathrm{bnd}} = 0.699$
+\end{itemize}
+The temperature field shows local hot-spots at corners reaching
+$\SI{197.6}{\celsius}$ while parallel-face midpoints approach the
+melt threshold from below.  The density field shows the same pattern
+amplified by the non-linear densification kinetics: corners at
+$\rhorel \approx 0.80$ vs. parallel-face midpoints at
+$\rhorel \approx 0.55$.
+
+\subsection{Time-Exposure Sweep: 6--10 Minutes}
+
+\Cref{tab:time_sweep} presents the systematic time-exposure sweep,
+demonstrating how all state variables evolve with exposure time for
+the canonical square geometry.  The melt fraction $\bar{\phimelt}$
+increases rapidly from 6 to 8 minutes (0.626 to 0.964) and saturates
+near 1.0 by 9 minutes, while the relative density continues to increase
+more slowly (0.610 to 0.932 over the full 4-minute window).  The
+boundary density standard deviation $\bndstd$ monotonically increases
+with exposure time: as the already-hot corners advance into the
+liquid-state sintering regime and the parallel faces merely enter
+solid-state sintering, the density gap between these regions widens.
+
+\begin{table}[tb]
+\centering
+\caption{Time-exposure sweep for the canonical $20\times\SI{20}{\milli\meter}$
+         square at \SI{500}{\watt}, 2\% coupling efficiency.  $\bar{\phimelt}$
+         is the spatial mean melt fraction over the part domain;
+         $\bar{\rhorel}$ is the spatial mean relative density.}
+\label{tab:time_sweep}
+\begin{tabular}{cSSSSS}
+\toprule
+$t$ (min) & {$\bar{T}$ (\si{\celsius})} & {$T_{\max}$ (\si{\celsius})}
+           & {$\bar{\phimelt}$} & {$\bar{\rhorel}$} & {$\bndstd$} \\
+\midrule
+6  & 181.2 & 197.6 & 0.626 & 0.610 & 0.0724 \\
+7  & 185.9 & 205.9 & 0.894 & 0.692 & 0.0763 \\
+8  & 195.2 & 214.1 & 0.964 & 0.783 & 0.0801 \\
+9  & 205.0 & 222.6 & 0.996 & 0.868 & 0.0822 \\
+10 & 214.9 & 231.3 & 1.000 & 0.932 & 0.0807 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At 10 minutes, $\bndstd$ decreases slightly from its peak at 9 minutes.
+This reflects the increasing role of thermal conduction: once corners
+are fully melted, additional heat flows conductively to face midpoints,
+partially closing the density gap.  However, even at 10 minutes,
+$\bndstd = 0.081$ remains 12\% higher than at 6 minutes, confirming
+that extended exposure worsens rather than ameliorates density
+non-uniformity for the geometries and conditions studied.
+
+%% ---------------------------------------------------------------
+\section{Primitive Shape Library}
+\label{sec:results_shapes}
+%% ---------------------------------------------------------------
+
+\Cref{fig:primitive_sweep} presents the results of simulating 17
+primitive shapes under identical conditions (6 minutes, \SI{500}{\watt},
+same chamber and grid).  \Cref{tab:shape_library} summarizes the
+key metrics.
+
+\begin{figure*}[tb]
+  \centering
+  \includegraphics[width=\textwidth]{primitive_sweep.png}
+  \caption{Primitive shape library: $\rhorel$ maps at $t = \SI{360}{\second}$
+           for 17 shapes under identical conditions (\SI{500}{\watt},
+           2\% coupling efficiency, 6-minute exposure).  All shapes are
+           approximately $20\times\SI{20}{\milli\meter}$ bounding box.
+           The strong heating anisotropy (corner/vertex overheating,
+           parallel-face underheating) is apparent across all shapes but
+           manifests differently depending on shape symmetry and aspect
+           ratio.}
+  \label{fig:primitive_sweep}
+\end{figure*}
+
+\begin{table*}[tb]
+\centering
+\caption{Primitive shape simulation results at $t = \SI{360}{\second}$.
+         $\bndstd$ is the boundary standard deviation (\cref{eq:bnd_std});
+         $r_{\mathrm{bnd}}$ is the min/max boundary density ratio
+         (\cref{eq:minmax_ratio}).  Shapes are sorted by $\bndstd$.}
+\label{tab:shape_library}
+\begin{tabular}{lcSSSSS}
+\toprule
+Shape & Vertices & {$\bndstd$} & {$r_{\mathrm{bnd}}$}
+      & {$\bar{\rhorel}$} & {$\bar{T}$ (\si{\celsius})} & {$f_{\mathrm{melt}}$} \\
+\midrule
+Star-6       & 12  & 0.0551 & 0.832 & 0.975 & 258.6 & 0.95 \\
+Octagon      & 8   & 0.0570 & 0.758 & 0.873 & 221.7 & 0.91 \\
+Square       & 4   & 0.0724 & 0.699 & 0.610 & 181.2 & 0.83 \\
+Rounded rect & 4*  & 0.1054 & 0.712 & 0.647 & 183.5 & 0.85 \\
+Rectangle    & 4   & 0.1056 & 0.601 & 0.724 & 192.6 & 0.88 \\
+Star-5       & 10  & 0.1437 & 0.550 & 0.958 & 266.5 & 0.96 \\
+Trapezoid    & 4   & 0.1334 & 0.588 & 0.749 & 197.1 & 0.89 \\
+Ellipse      & ---  & 0.1509 & 0.570 & 0.944 & 249.2 & 0.94 \\
+Triangle     & 3   & 0.1231 & 0.602 & 0.884 & 227.8 & 0.92 \\
+Equil.\ triangle & 3 & 0.1586 & 0.551 & 0.916 & 255.7 & 0.94 \\
+L-shape      & 6   & 0.1597 & 0.575 & 0.771 & 198.4 & 0.88 \\
+Hexagon      & 6   & 0.1798 & 0.550 & 0.853 & 217.9 & 0.91 \\
+Pentagon     & 5   & 0.1795 & 0.550 & 0.870 & 224.5 & 0.92 \\
+T-shape      & 8   & 0.1765 & 0.567 & 0.758 & 197.2 & 0.88 \\
+Circle       & --- & 0.1661 & 0.558 & 0.773 & 202.2 & 0.88 \\
+Diamond      & 4   & 0.1689 & 0.550 & 0.644 & 179.5 & 0.81 \\
+Cross        & 12  & 0.1908 & 0.554 & 0.812 & 210.2 & 0.89 \\
+\bottomrule
+\multicolumn{7}{l}{\small *Rounded rectangle vertices count is nominal; the shape has
+                   continuous curvature at corners.}
+\end{tabular}
+\end{table*}
+
+\subsection{Effect of Shape Symmetry}
+
+The Star-6 and Octagon achieve the lowest $\bndstd$ (0.055 and 0.057,
+respectively) of all 17 shapes, despite operating at far higher mean
+temperatures than the square.  This reflects their higher degree of
+rotational symmetry: both shapes present many faces at roughly equal
+angles to the applied field, distributing E-field concentration more
+evenly.  The Star-6's 12 vertices each act as local field concentrators,
+but because they are uniformly distributed in angle, no single region
+is preferentially over- or under-heated.
+
+In contrast, the Cross, T-shape, and L-shape achieve the highest
+$\bndstd$ (0.191, 0.177, 0.160, respectively).  These shapes have
+multiple extended parallel-to-$\vect{E}$ face segments separated by
+re-entrant concave corners that block field-line access.  The
+combination of large under-heated face area and limited heat diffusion
+from nearby hot regions creates the largest density gradients.
+
+\subsection{The Diamond Paradox}
+
+The diamond (square rotated $45^\circ$) presents an instructive
+case: it has the lowest mean temperature of any shape (only
+$\SI{179.5}{\celsius}$, barely above the melt threshold) and the
+lowest overall density ($\bar{\rhorel} = 0.644$), yet its tip corners
+reach extreme temperatures ($T_{\max} \approx \SI{272}{\celsius}$).
+The reason is geometric: a diamond oriented at $45^\circ$ presents
+all four faces at $45^\circ$ to the applied field.  There is no
+purely perpendicular face ($0^\circ$) and no purely parallel face
+($90^\circ$); instead, all faces are at intermediate angles where the
+effective field enhancement is $\approx 3$--$5\times$ the mean.  While
+vertices still have the tip effect, the faces---which constitute the
+majority of the boundary---receive field enhancement comparable to the
+center rather than the strong normal-field enhancement of the $0^\circ$
+faces.  The result is overall lower heating with extreme tip hot-spots
+and poor overall densification.
+
+\subsection{Shape Design Implications}
+
+The shape library reveals three practical design guidelines for RFAM:
+(a) shapes with many equal-angle vertices distribute field concentration
+most uniformly;
+(b) concave re-entrant features systematically increase $\bndstd$
+regardless of overall shape symmetry (L, T, Cross);
+(c) reducing corner sharpness (Rounded rect vs. Rectangle) reduces
+$\bndstd$ from 0.106 to 0.105 and increases $r_{\mathrm{bnd}}$ from
+0.601 to 0.712, even though the improvement in $\bndstd$ itself is
+marginal---the primary benefit is the increase in the worst-case
+minimum boundary density.
+
+%% ---------------------------------------------------------------
+\section{Geometry Prewarp Results}
+\label{sec:results_prewarp}
+%% ---------------------------------------------------------------
+
+\subsection{$\Leff$ Calibration for Circle and Square}
+
+\Cref{tab:leff_calibration} presents the calibration sweep results
+for the circle and square.  For the circle, the optimal $\Leff =
+\SI{5}{\milli\meter}$ achieves $\RMSE = \SI{0.103}{\milli\meter}$ in
+2 iterations.  The circle's smooth boundary with gradual EPE variation
+enables the algorithm to converge reliably to a low RMSE; large
+$\Leff$ values ($\geq \SI{10}{\milli\meter}$) lead to over-correction
+oscillations that prevent convergence within the iteration budget.
+
+For the square, the optimal $\Leff = \SI{7}{\milli\meter}$ achieves
+$\RMSE = \SI{0.153}{\milli\meter}$.  The higher optimal $\Leff$ and
+residual RMSE compared to the circle reflects the square's sharp corners,
+where the EPE changes discontinuously at the $90^\circ$ vertex.  The
+prewarp algorithm cannot fully correct these corner singularities
+because the shrinkage model (\cref{eq:shrinkage_ratio}) does not capture
+the three-dimensional redistribution of material at a sharp corner during
+sintering.
+
+\begin{table}[tb]
+\centering
+\caption{$\Leff$ calibration sweep: post-convergence geometric RMSE
+         (\si{\milli\meter}) for circle and square targets.  Bold
+         indicates the optimal value selected for each shape.}
+\label{tab:leff_calibration}
+\begin{tabular}{cSS}
+\toprule
+$\Leff$ (mm) & {Circle RMSE (mm)} & {Square RMSE (mm)} \\
+\midrule
+3  & 0.117 & 0.209 \\
+\textbf{5}  & \textbf{0.103} & 0.182 \\
+7  & 0.194 & \textbf{0.153} \\
+10 & 0.167 & 0.174 \\
+13 & 0.151 & 0.227 \\
+16 & 0.151 & 0.241 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[tb]
+  \centering
+  \begin{subfigure}[b]{\columnwidth}
+    \includegraphics[width=\columnwidth]{prewarp_calibrate_circle/calibration_sweep.png}
+    \caption{Circle: $\RMSE$ vs.\ $\Leff$ at convergence.}
+    \label{fig:leff_circle}
+  \end{subfigure}
+  \par\smallskip
+  \begin{subfigure}[b]{\columnwidth}
+    \includegraphics[width=\columnwidth]{prewarp_calibrate_square/calibration_sweep.png}
+    \caption{Square: $\RMSE$ vs.\ $\Leff$ at convergence.}
+    \label{fig:leff_square}
+  \end{subfigure}
+  \caption{Effective shrinkage length $\Leff$ calibration sweeps.
+           Each point represents the post-convergence RMSE after running
+           the full EPE-gradient-descent algorithm.  The optimal values
+           are $\Leff = \SI{5}{\milli\meter}$ (circle) and
+           $\Leff = \SI{7}{\milli\meter}$ (square).}
+  \label{fig:leff_calibration}
+\end{figure}
+
+\subsection{Square Prewarp Validation}
+
+\Cref{fig:square_prewarp} shows the prewarp result for the square
+target.  The prewarp polygon (input to the simulator) is noticeably
+convex: the corners protrude inward relative to a square, and the face
+midpoints protrude outward slightly, compensating for the greater
+shrinkage at corners vs. face midpoints.  The RMSE improves from
+\SI{0.37}{\milli\meter} (uncorrected, iteration 0) to
+\SI{0.153}{\milli\meter} (converged, iteration 2), a 59\% reduction.
+
+The boundary density after prewarp is also improved: the prewarp polygon
+forces the parallel-face midpoints to extend further outward, increasing
+the local field coupling at those previously under-heated regions.  This
+geometric effect reduces $\bndstd$ from 0.072 (unprewarped) to 0.040
+(prewarped), a 44\% reduction---a genuine side benefit of the prewarp
+in addition to its intended geometric correction.
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\columnwidth]{prewarp_square_v2/prewarp_report.png}
+  \caption{Square prewarp result using $\Leff = \SI{7}{\milli\meter}$.
+           Top: prewarp polygon (blue) vs.\ target (dashed red).
+           Bottom: predicted sintered boundary (green) vs.\ target.
+           RMSE reduces from \SI{0.37}{\milli\meter} (unprewarped) to
+           \SI{0.153}{\milli\meter} after 2 iterations.}
+  \label{fig:square_prewarp}
+\end{figure}
+
+\subsection{H-Shape Prewarp}
+\label{sec:hshape_prewarp}
+
+The H-shape presents a substantially more challenging prewarp problem.
+Its bounding box is $20 \times \SI{20}{\milli\meter}$ with two vertical
+legs (\SI{6}{\milli\meter} wide) connected by a horizontal crossbar
+(\SI{6}{\milli\meter} tall, spanning between the legs at mid-height).
+The shape has 5 geometrically distinct face categories:
+\begin{enumerate}
+  \item Outer vertical legs (parallel to $\vect{E}$, under-heated):
+        $\rhorel^{\mathrm{bnd}} \approx 0.610$ at midpoints, as low
+        as 0.552 at worst cells
+  \item Outer top/bottom faces (perpendicular to $\vect{E}$,
+        better-heated): $\rhorel^{\mathrm{bnd}} \approx 0.729$
+  \item Crossbar top/bottom faces (perpendicular, partially shielded
+        by the legs): $\rhorel^{\mathrm{bnd}} \approx 0.632$
+  \item Inner notch faces (parallel, further shielded): $\rhorel \approx 0.679$
+  \item Concave inside corners (locally over-heated but inaccessible
+        to field from outside due to the notch geometry)
+\end{enumerate}
+
+Without correction, $\RMSE = \SI{0.682}{\milli\meter}$ and
+$\bndstd = 0.078$.  After 2 prewarp iterations with
+$\Leff = \SI{7}{\milli\meter}$, the RMSE decreases to
+\SI{0.221}{\milli\meter} (68\% reduction) and $\bndstd$ decreases
+to 0.056 (28\% reduction).  The prewarp polygon expands to a bounding
+box of $21.00 \times \SI{20.90}{\milli\meter}$, approximately 5\%
+larger than the target in each dimension.
+
+\Cref{fig:hshape_prewarp} shows the H-shape prewarp result.  The
+non-symmetric expansion is clearly visible: the outer vertical leg
+faces protrude more than the horizontal faces, correctly anticipating
+the greater shrinkage at those under-heated locations.
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\columnwidth]{prewarp_H/prewarp_report.png}
+  \caption{H-shape prewarp result ($\Leff = \SI{7}{\milli\meter}$).
+           The prewarp polygon (blue) is asymmetrically expanded relative
+           to the target (dashed red), with larger expansion at the
+           parallel-to-$\vect{E}$ vertical leg faces that would otherwise
+           under-sinter and shrink less than expected.  RMSE: 0.682
+           (no correction) $\to$ \SI{0.221}{\milli\meter} after
+           2 iterations.}
+  \label{fig:hshape_prewarp}
+\end{figure}
+
+%% ---------------------------------------------------------------
+\section{Spike Assist Features}
+\label{sec:results_spikes}
+%% ---------------------------------------------------------------
+
+\Cref{tab:spike_sweep} presents the spike height sweep results for
+the prewarped square polygon.  The spike profile (\cref{eq:spike_profile})
+with $w_{\mathrm{base}} = 10^\circ$ is placed at the two
+parallel-to-$\vect{E}$ face midpoints ($\theta_0 = 0^\circ$ and
+$180^\circ$).
+
+\begin{table}[tb]
+\centering
+\caption{Spike assist feature height sweep on the prewarped square
+         polygon.  Spikes placed at $\theta_0 = 0^\circ$ and $180^\circ$,
+         $w_{\mathrm{base}} = 10^\circ$.  Baseline (h=0) is the
+         prewarped square without spikes.}
+\label{tab:spike_sweep}
+\begin{tabular}{cSSS}
+\toprule
+$h$ (mm) & {$\bndstd$} & {$r_{\mathrm{bnd}}$} & {Improvement (\%)} \\
+\midrule
+0.0 & 0.0403 & 0.799 & 0.0 \\
+1.6 & 0.0405 & 0.796 & -0.4 \\
+3.2 & 0.0388 & 0.798 & +3.8 \\
+4.8 & 0.0379 & 0.797 & +5.9 \\
+6.4 & 0.0365 & 0.801 & +9.5 \\
+7.6 & 0.0358 & 0.802 & +11.0 \\
+7.8 & 0.0354 & 0.802 & +12.1 \\
+7.9 & 0.0349 & 0.802 & +13.5 \\
+\textbf{8.0} & \textbf{0.0347} & \textbf{0.802} & \textbf{+14.1} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=\columnwidth]{spike_coopt_v2_square/coopt_report.png}
+  \caption{Spike assist feature optimization for the square.  Top:
+           optimized spiked polygon ($h = \SI{8}{\milli\meter}$)
+           overlaid on the target.  Bottom: $\rhorel$ field showing
+           modest improvement at the parallel-face midpoints.  The
+           $\bndstd$ improvement is only 14.1\% at the maximum practical
+           spike height.}
+  \label{fig:spike_coopt}
+\end{figure}
+
+Spike features improve $\bndstd$ monotonically with height, reaching
+14.1\% improvement at $h = \SI{8}{\milli\meter}$.  However, three
+limitations prevent spikes from being practically useful:
+
+\paragraph{Limited spatial reach.}
+Each $10^\circ$ spike covers approximately 2 boundary cells on a
+$120\times120$ grid.  The 160-cell square perimeter therefore has
+only $\approx 2.5\%$ of its boundary cells directly affected by each
+spike.  The concentration effect at the spike tip does not diffuse
+meaningfully to neighboring face cells within the $\SI{360}{\second}$
+exposure time.
+
+\paragraph{Geometric impracticality.}
+At $h = \SI{8}{\milli\meter}$ (40\% of the $\SI{20}{\milli\meter}$ part
+dimension), the spike would clearly print as a real geometric feature.
+An SRAF in optical lithography is deliberately below the resist
+resolution threshold; no such threshold exists for RFAM, where any
+conductive feature will sinter.  A spike of this height would appear
+as a $\SI{8}{\milli\meter}$-tall antenna protrusion on the finished
+part---unacceptable for any functional application.
+
+\paragraph{Geometric RMSE penalty.}
+At $h = \SI{8}{\milli\meter}$, the geometric RMSE of the spike-modified
+polygon relative to the square target is $\approx \SI{2.1}{\milli\meter}$,
+compared to \SI{0.153}{\milli\meter} for the prewarp alone.  The spike
+thus sacrifices the primary benefit of the prewarp algorithm in exchange
+for a modest secondary benefit.
+
+The conclusion is that spike assist features are not a viable
+stand-alone strategy for RFAM density uniformity improvement.  Their
+utility is limited by the fundamental difference between optical
+lithography (where resolution limits enforce feature size constraints)
+and RFAM (where all sintering is above the resolution threshold).
+
+%% ---------------------------------------------------------------
+\section{Turntable Rotation Strategy}
+\label{sec:results_turntable}
+%% ---------------------------------------------------------------
+
+\subsection{Physical Mechanism}
+
+Rotating the part $90^\circ$ converts the two parallel-to-$\vect{E}$
+faces into perpendicular-to-$\vect{E}$ faces and vice versa.  With
+four $90^\circ$ rotations, each face spends equal time in both
+orientations.  In the limit of many infinitesimal rotations, the
+exposure would be perfectly uniform (azimuthally averaged field), but
+any finite number of discrete rotations retains some residual anisotropy.
+
+The time-based schedule (\cref{eq:rotation_schedule}) distributes
+rotations uniformly throughout the exposure.  A single rotation at
+$t = \SI{180}{\second}$ (midpoint) would allow the first three minutes
+of exposure at one orientation to dominate, while the second three
+minutes at the rotated orientation merely attenuate the existing
+non-uniformity partially.  By contrast, four rotations at 72 s
+intervals ensure that no single orientation dominates: each of the
+four $90^\circ$ orientations is active for exactly $\SI{72}{\second}$,
+\textit{and} each rotation occurs before significant melting has
+occurred (since $T$ only approaches $\Tpc$ near the end of the
+exposure for the 6-minute schedule).
+
+\subsection{Results}
+
+\Cref{tab:turntable_comparison} presents the comprehensive comparison
+of rotation strategies applied to the square.
+
+\begin{table}[tb]
+\centering
+\caption{Boundary density uniformity metrics for the square under
+         various rotation strategies.  \% improvement is relative to
+         the baseline (no rotation, no prewarp).}
+\label{tab:turntable_comparison}
+\begin{tabular}{lcSS}
+\toprule
+Strategy & Prewarp & {$\bndstd$} & {$r_{\mathrm{bnd}}$} \\
+\midrule
+No rotation (baseline) & No  & 0.0724 & 0.699 \\
+1$\times$ 90° at $t=3$ min & No  & 0.0705 & 0.698 \\
+4$\times$ 90° (time-based) & No  & 0.0585 & 0.700 \\
+Prewarp only            & Yes & 0.0403 & 0.799 \\
+Prewarp + 4$\times$ 90° & Yes & \textbf{0.0253} & \textbf{0.865} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The single rotation at $t = \SI{3}{\minute}$ provides only 2.6\%
+improvement in $\bndstd$ because the part has already completed 90\%
+of its heating at the original orientation by the time the rotation
+occurs.  In contrast, the 4-rotation schedule (rotations at 72, 144,
+216, 288 s) achieves 19.2\% improvement, confirming the importance of
+early, frequent rotation before significant melting.
+
+The prewarp-only strategy reduces $\bndstd$ by 44\%, substantially
+outperforming the turntable alone (19\%).  Combining prewarp with
+4-rotation turntable achieves 65\% improvement ($\bndstd = 0.025$,
+$r_{\mathrm{bnd}} = 0.865$).
+
+\begin{figure*}[tb]
+  \centering
+  \includegraphics[width=\textwidth]{uniformity_comparison.png}
+  \caption{Boundary density uniformity comparison for the square:
+           five strategies from baseline (no correction) to combined
+           prewarp + 4$\times$ turntable.  Bar charts show $\bndstd$
+           and $r_{\mathrm{bnd}}$ for each strategy; spatial $\rhorel$
+           maps illustrate the progressively more uniform boundary
+           densification.  The combined strategy achieves $\bndstd =
+           0.025$ and $r_{\mathrm{bnd}} = 0.865$, representing 65\%
+           improvement over the baseline.}
+  \label{fig:uniformity_comparison}
+\end{figure*}
+
+\Cref{fig:uniformity_comparison} provides a visual comparison of all
+strategies.  The spatial $\rhorel$ maps confirm that the combined
+approach produces a near-uniform distribution across the entire
+boundary of the square, with the worst-sintered boundary cells
+($\rhorel \approx 0.55$ at the parallel-face midpoints in the
+baseline) improving to $\rhorel \approx 0.62$ in the combined case.
+
+%% ---------------------------------------------------------------
+\section{H-Shape: Combined Prewarp and Turntable}
+\label{sec:results_combined}
+%% ---------------------------------------------------------------
+
+\subsection{H-Shape Baseline and Prewarp}
+
+The H-shape is selected as the primary complex validation case for the
+following reasons: (1) it is topologically non-trivial with an internal
+cutout; (2) it has 5 geometrically distinct face types with different
+electromagnetic coupling; and (3) it is non-symmetric with respect to
+the $\vect{E}$-field direction (one axis of symmetry parallel to
+$\vect{E}$, one perpendicular).
+
+\Cref{tab:hshape_comparison} presents the progressive improvement
+from baseline through combined correction.  Without any correction,
+the H-shape has $\bndstd = 0.078$ and $r_{\mathrm{bnd}} = 0.684$,
+representing a boundary density spread from 0.552 (worst parallel-face
+midpoint) to 0.806 (best corner cell), a 46\% span.
+
+\begin{table}[tb]
+\centering
+\caption{H-shape boundary density metrics under progressive correction
+         strategies.  Improvement is relative to the H-shape baseline.}
+\label{tab:hshape_comparison}
+\begin{tabular}{lcSS}
+\toprule
+Strategy & Prewarp & {$\bndstd$} & {$r_{\mathrm{bnd}}$} \\
+\midrule
+Baseline (no correction)      & No  & 0.0781 & 0.684 \\
+Prewarp only ($\Leff = 7$ mm) & Yes & 0.0562 & 0.742 \\
+4$\times$ 90° turntable only  & No  & 0.0516 & 0.721 \\
+Prewarp + 4$\times$ 90°       & Yes & \textbf{0.0108} & \textbf{0.938} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure*}[tb]
+  \centering
+  \includegraphics[width=\textwidth]{H_uniformity_comparison.png}
+  \caption{H-shape boundary density uniformity comparison.  Left to
+           right: baseline, prewarp only, turntable only, combined
+           prewarp + 4$\times$ turntable.  The combined strategy achieves
+           $\bndstd = 0.011$ and $r_{\mathrm{bnd}} = 0.938$: an 86\%
+           reduction in boundary density non-uniformity.  Boundary cells
+           are uniformly sintered to within $\pm 1.8\%$ of the mean
+           boundary density.}
+  \label{fig:hshape_comparison}
+\end{figure*}
+
+\begin{figure*}[tb]
+  \centering
+  \includegraphics[width=\textwidth]{prewarp_H_turntable_4x_eval/paper_style_report.png}
+  \caption{Combined prewarp + 4$\times$ turntable for the H-shape:
+           temperature, $\Qrf$, melt fraction, and relative density fields
+           at $t = \SI{360}{\second}$.  The rotational averaging
+           is visible in the near-symmetric $\rhorel$ distribution,
+           where all boundary regions achieve comparable densification
+           despite the inherent anisotropy of the RF field.}
+  \label{fig:hshape_combined}
+\end{figure*}
+
+\subsection{Combined H-Shape Results}
+
+The combined prewarp + 4$\times$ turntable result for the H-shape
+achieves:
+\begin{itemize}
+  \item $\bndstd = 0.0108$ (86.2\% reduction vs.\ baseline)
+  \item $r_{\mathrm{bnd}} = 0.938$ (vs.\ 0.684 baseline)
+  \item Boundary density range: $[0.550, 0.586]$ --- all boundary cells
+        within 3.6\% of each other
+  \item Mean temperature: $\bar{T} = \SI{179.9}{\celsius}$
+\end{itemize}
+\Cref{fig:hshape_comparison,fig:hshape_combined} illustrate the spatial
+density distribution and the 5-panel field summary.
+
+\subsection{Synergy Analysis: Why Combined $>$ Prewarp $+$ Turntable}
+
+If prewarp and turntable were independent mechanisms (i.e., their
+effects did not interact), the combined improvement would be
+approximately the sum of their individual improvements.  For the
+H-shape:
+\begin{itemize}
+  \item Prewarp alone: 28\% reduction in $\bndstd$
+  \item Turntable alone: 34\% reduction in $\bndstd$
+  \item Naive sum: 62\% expected
+  \item Actual combined: 86\%
+\end{itemize}
+The 24-percentage-point surplus indicates a positive synergy.
+
+The synergy arises from the following structural interaction:
+\begin{enumerate}
+  \item The prewarp polygon is designed for the field-anisotropic
+        baseline configuration---it extends the parallel-face regions
+        further outward to compensate for their lower shrinkage.  This
+        creates a modified polygon with more surface area on those faces.
+  \item The additional surface area at the parallel-face regions
+        improves their field coupling: a face that protrudes further
+        from the center encounters a slightly higher $|\vect{E}|$ and
+        presents more area to field-line flux, increasing local $\Qrf$.
+  \item The turntable then rotates this already-optimized polygon through
+        all four $90^\circ$ orientations.  At each orientation, the
+        extended face regions---which were designed for the worst-case
+        (parallel) orientation---benefit equally when they rotate to
+        the perpendicular orientation where they receive $11\times$
+        mean coupling.
+  \item The net result is that every face region alternates between
+        one interval of modest coupling (parallel) and one interval of
+        strong coupling (perpendicular), with the prewarp ensuring that
+        the total shrinkage in each case lands exactly at the target.
+\end{enumerate}
+In contrast, without prewarp, the turntable rotates the unmodified
+H-shape, which has equal-length faces in all orientations.  The
+turntable helps, but without the geometric optimization, no face region
+has a structural advantage in the parallel orientation.
+
+\subsection{Physical Limits of the Combined Approach}
+
+The $r_{\mathrm{bnd}} = 0.938$ achieved in the combined case implies
+that boundary density ranges over only $[0.550, 0.586]$---a 6.5\% span.
+The residual non-uniformity comes from two sources:
+
+\paragraph{Discrete rotation residual.}
+With 4 rotations (5 intervals of $\SI{72}{\second}$ each), one
+orientation is sampled at the $0^\circ$ starting position and the
+four rotated positions.  The H-shape has twofold rotational symmetry
+(not fourfold), so a $90^\circ$ rotation produces a distinct field
+pattern.  The resulting exposure is not perfectly uniform; a small
+residual anisotropy survives.
+
+\paragraph{Concave corner shielding.}
+The H-shape's internal notch corners are shielded from the external
+field regardless of rotation angle.  These cells receive heating only
+by conduction from neighboring cells, which is insufficient to fully
+densify them in 6 minutes.  Increasing exposure time would improve
+these cells at the cost of overheating the outer corners.
+
+%% ---------------------------------------------------------------
+\section{Discussion}
+\label{sec:discussion}
+%% ---------------------------------------------------------------
+
+\subsection{Model Validation and Calibration}
+
+The forward model requires only two calibrated parameters: $\sigma =
+\SI{0.04}{\siemens\per\meter}$ and $\eta = 0.020$.  Both are
+physically motivated: the doped-powder conductivity is a material
+property that can in principle be measured independently, and the
+coupling efficiency $\eta$ is a property of the electrode geometry and
+impedance matching network.  The agreement with COMSOL (which uses a
+spatially varying $\sigma$ obtained from a 3D interpolation function)
+in both the spatial pattern of $\Qrf$ and the steady-state temperature
+validates the model for the purposes of the prewarp and uniformity
+optimization studies presented here.
+
+The key simplification relative to COMSOL is the uniform $\sigma$
+approximation.  The COMSOL Tuned\_Sigma.mph model uses a spatially
+varying conductivity with the characteristic \emph{shell} pattern
+(high at outer faces/edges, low at the center), resulting in an
+average $\sigma \ll \SI{0.04}{\siemens\per\meter}$.  The Python model
+compensates for this by setting $\eta = 0.020$, which reduces the
+effective absorbed power to match the COMSOL result.  The spatial
+pattern of $\Qrf$ in both models shows the same corner-to-face-to-center
+hierarchy, confirming that the dominant spatial structure is driven by
+geometry (boundary conditions) rather than by the $\sigma$ distribution.
+
+\subsection{Comparison to Optical ILT}
+
+The EPE-based prewarp algorithm is directly analogous to standard ILT
+methods~\cite{Jia2014ilt,Shen2009ilt}, with three key differences:
+
+\paragraph{Forward model complexity.}
+Optical ILT uses an analytical or semi-analytical forward model for the
+aerial image (Hopkins or Abbe formulation); this enables analytic
+gradient computation and fast optimization.  The RFAM forward model
+requires a full PDE solve ($\approx$\SI{30}{\second} per iteration on a
+laptop).  Consequently, the RFAM prewarp can afford only 2--3 iterations,
+whereas optical ILT may run hundreds.
+
+\paragraph{Binary vs.\ continuous mask.}
+Optical masks are binary (opaque/transparent); the prewarp polygon is
+a continuous boundary.  The RFAM analog of the mask is the input
+polygon, which is free to take any shape---there is no tone
+constraint.  This makes the RFAM problem in some ways easier
+(continuous design space) and in some ways harder (no natural
+binarization to prevent over-complicated geometries).
+
+\paragraph{Shrinkage nonlinearity.}
+The optical aerial image is related to the mask by a linear
+convolution; the sintered boundary is related to the input polygon by
+a nonlinear, history-dependent PDE system.  The Arrhenius densification
+kinetics and phase-change latent heat introduce strong nonlinearities
+that prevent the use of gradient-based optical ILT algorithms without
+significant modification.
+
+\subsection{Practical Implementation Considerations}
+
+\paragraph{Rotation actuator.}
+A simple stepper-motor-driven turntable below the powder bed would
+implement the 4-rotation schedule.  The total rotation ($360^\circ$
+over $\SI{360}{\second}$) is not demanding: $1^\circ$/s average.  The
+rotation need not be continuous; a discrete 4-step schedule with
+72-second holds is straightforward to implement with a low-cost
+stepper motor and controller.
+
+\paragraph{Prewarp pipeline.}
+In a production RFAM workflow, the prewarp algorithm would run
+offline prior to printing.  The 2--3 forward model evaluations required
+for convergence ($\approx\SI{1}{\minute}$ each on the target hardware)
+represent a modest pre-computation cost.  The converged prewarp polygon
+replaces the original part outline in the binder-jetting layer mask,
+requiring no changes to the RF exposure hardware.
+
+\paragraph{3D extension.}
+The current model is 2D (cross-section in the XZ plane).  Real parts
+have a finite out-of-plane dimension and 3D E-field structure.  The
+2D model is exact for infinitely long parts in the Y-direction and is
+an approximation for parts with finite aspect ratios.  The 3D
+generalization would require a 3D EQS solve (much higher computational
+cost) and a 3D prewarp algorithm (vertex update in 3D with surface
+normal computation on a mesh).  The turntable strategy extends directly
+to 3D by rotating about the Z-axis (perpendicular to the electrode
+faces).
+
+%% ---------------------------------------------------------------
+\section{Conclusions}
+\label{sec:conclusions}
+%% ---------------------------------------------------------------
+
+This paper has presented and evaluated three strategies for improving
+dimensional accuracy and sintering uniformity in Radio Frequency
+Additive Manufacturing.  The following conclusions are supported by
+the simulation results:
+
+\begin{enumerate}
+
+\item \textbf{EQS forward model accuracy.}  A 2D EQS+thermal+densification
+      model with uniform $\sigma = \SI{0.04}{\siemens\per\meter}$ and
+      $2\%$ coupling efficiency reproduces the physically expected
+      corner/face/center heating hierarchy ($37\times$ / $11\times$ /
+      $1.6\times$ the mean) derived from electromagnetic boundary
+      conditions.  Only two calibrated parameters are required, both
+      with physical interpretations.
+
+\item \textbf{EPE prewarp convergence.}  The EPE-gradient-descent
+      prewarp algorithm converges in 2--3 iterations to geometric RMSE
+      below \SI{0.25}{\milli\meter} for simple shapes (circle, square)
+      and below \SI{0.30}{\milli\meter} for complex shapes (H), starting
+      from geometric RMSE of 0.37--\SI{0.68}{\milli\meter}.  This
+      represents a 59--68\% reduction in geometric RMSE.
+
+\item \textbf{$\Leff$ calibration.}  The optimal effective shrinkage
+      length is $\SI{5}{\milli\meter}$ for the circle and
+      $\SI{7}{\milli\meter}$ for the square and H-shape.  Physically,
+      $\Leff$ relates to the characteristic sintering diffusion length
+      at 6 minutes exposure; the higher value for shapes with sharp
+      corners reflects the three-dimensional material redistribution
+      at vertices that is not captured by the 2D model.
+
+\item \textbf{Shape library insights.}  High-symmetry shapes (Star-6,
+      Octagon) achieve the lowest boundary density non-uniformity
+      ($\bndstd \approx 0.055$) by distributing field concentration
+      uniformly.  Concave shapes (Cross, T, L) have the highest
+      $\bndstd$ ($\approx 0.19$).  These results provide quantitative
+      design guidance for RFAM part geometry selection.
+
+\item \textbf{Spike assist features are limited.}  The RFAM analog of
+      optical SRAFs---narrow convex protrusions at under-heated face
+      midpoints---provides at most 14\% improvement in $\bndstd$ at
+      geometrically impractical spike heights.  Unlike optical SRAFs,
+      RFAM spikes have no resolution threshold below which they would
+      not print, making them structurally incompatible with the SRAF
+      concept as applied in optics.
+
+\item \textbf{Turntable rotation is effective.}  Four $90^\circ$
+      rotations at equal time intervals reduces $\bndstd$ by 19\% for
+      the bare square and 34\% for the H-shape.  A single late rotation
+      is nearly useless (2.6\% improvement), confirming the necessity
+      of the early, uniform schedule.
+
+\item \textbf{Synergistic combination achieves 86\% improvement.}
+      Combining prewarp with 4-rotation turntable for the H-shape
+      reduces $\bndstd$ from 0.078 to 0.011 (86.2\%) and increases
+      $r_{\mathrm{bnd}}$ from 0.684 to 0.938.  The combined improvement
+      exceeds the sum of independent improvements by 24 percentage
+      points, owing to a structural interaction between the prewarp
+      polygon and the turntable's exposure averaging.  All H-shape
+      boundary cells sinter to within 3.6\% of each other.
+
+\end{enumerate}
+
+Future work will address: (a) 3D extension of the EQS and prewarp
+models; (b) experimental validation against sintered Nylon~12 parts;
+(c) parameter identification of the Arrhenius densification constants
+from dilatometry measurements; and (d) continuous rotation strategies
+and their theoretical limit of uniform exposure.
+
+%% ---------------------------------------------------------------
+\section*{Acknowledgments}
+%% ---------------------------------------------------------------
+
+The author thanks Prof.\ Christopher Seepersad for guidance on RFAM
+process physics and C.B.\ Allison for the COMSOL reference model.
+This work was supported by the Georgia Institute of Technology School
+of Mechanical Engineering.
+
+%% ---------------------------------------------------------------
+%% References
+%% ---------------------------------------------------------------
+\begin{thebibliography}{99}
+
+\bibitem{allison2015rfam}
+C.B.~Allison,
+``Radio frequency additive manufacturing,''
+Ph.D.\ dissertation, The University of Texas at Austin, Austin, TX,
+2015.
+
+\bibitem{seepersad2014volumetric}
+C.C.~Seepersad, C.B.~Allison, and J.J.~Beaman,
+``Volumetric energy deposition in powder-bed additive manufacturing
+using radio-frequency electric fields,''
+in \textit{Proc.\ Solid Freeform Fabrication Symp.}, Austin, TX, 2014,
+pp.~1--12.
+
+\bibitem{seepersad2019rfam}
+C.C.~Seepersad, T.~Mun, and R.~Lakshmi,
+``Radio frequency additive manufacturing: selective sintering of
+Nylon-12 using 27 MHz ISM-band energy,''
+in \textit{Proc.\ Solid Freeform Fabrication Symp.}, Austin, TX, 2019,
+pp.~1832--1843.
+
+\bibitem{mccoy2025rfam_sim}
+M.~McCoy,
+``Two-dimensional electro-quasi-static and thermal simulation of
+radio frequency additive manufacturing,''
+Technical Report, Georgia Institute of Technology, 2025.
+
+\bibitem{Wong2001ilt}
+A.K.-K.~Wong,
+\textit{Resolution Enhancement Techniques in Optical Lithography}.
+Bellingham, WA: SPIE Press, 2001.
+
+\bibitem{Poonawala2007ilt}
+A.~Poonawala and P.~Milanfar,
+``Mask design for optical microlithography---an inverse imaging
+problem,''
+\textit{IEEE Trans.\ Image Process.}, vol.~16, no.~3, pp.~774--788,
+Mar.~2007.
+
+\bibitem{Shen2009ilt}
+Y.~Shen, N.~Jia, N.~Wong, and E.Y.~Lam,
+``Robust level-set-based inverse lithography,''
+\textit{Opt.\ Express}, vol.~19, no.~6, pp.~5511--5521, 2011.
+
+\bibitem{Jia2014ilt}
+N.~Jia, E.Y.~Lam, and M.~Smith,
+``Fast pixel-based mask optimization for inverse lithography,''
+\textit{J.\ Micro/Nanolithogr.\ MEMS MOEMS}, vol.~10, no.~4,
+p.~043008, 2011.
+
+\bibitem{Meixner1972singular}
+J.~Meixner,
+``The behavior of electromagnetic fields at edges,''
+\textit{IEEE Trans.\ Antennas Propagat.}, vol.~20, no.~4,
+pp.~442--446, Jul.~1972.
+
+\bibitem{Frenkel1945}
+J.~Frenkel,
+``Viscous flow of crystalline bodies under the action of surface
+tension,''
+\textit{J.\ Phys.\ (Moscow)}, vol.~9, pp.~385--391, 1945.
+
+\bibitem{Liebmann2001sraf}
+L.~Liebmann, S.~Mansfield, A.~Wong, M.~Lavin, W.~Leipold, and
+T.~Dunham,
+``TCAD support for design rule development with lithography
+simulation,''
+in \textit{Proc.\ SPIE Optical Microlithography XIV},
+vol.~4346, 2001, pp.~1--14.
+
+\bibitem{Clark1996microwave}
+D.E.~Clark and W.H.~Sutton,
+``Microwave processing of materials,''
+\textit{Annu.\ Rev.\ Mater.\ Sci.}, vol.~26, pp.~299--331, 1996.
+
+\bibitem{Goodfellow2022nylon12}
+Goodfellow Cambridge Ltd.,
+``Nylon 12 (Polyamide 12) material data,''
+Technical Datasheet, 2022.
+[Online]. Available: \url{https://www.goodfellow.com/}
+
+\bibitem{Laumer2014selective}
+T.~Laumer, T.~Kroll, M.~Schmidt, and B.~Degner,
+``Fundamental investigation of laser beam melting of polymers for
+additive manufacture,''
+\textit{J.\ Laser Appl.}, vol.~26, no.~4, p.~042003, 2014.
+
+\bibitem{Drummer2010investigation}
+D.~Drummer, D.~Rietzel, and F.~Kuehnlein,
+``Development of a characterization approach for the sintering behavior
+of new thermoplastics for selective laser sintering,''
+\textit{Phys.\ Procedia}, vol.~5, pp.~533--542, 2010.
+
+\end{thebibliography}
+
+\end{document}

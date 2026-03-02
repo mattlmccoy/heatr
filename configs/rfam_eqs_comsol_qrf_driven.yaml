@@ -1,0 +1,135 @@
+# rfam_eqs_comsol_qrf_driven.yaml
+#
+# 2D RFAM thermal simulation driven directly by COMSOL Q_rf.
+#
+# This config models the XY cross-section of the COMSOL Tuned_Sigma.mph
+# geometry, i.e. the plane PERPENDICULAR to the electrode axis (Z).
+#
+# Electrode axis: Z (out-of-plane), spacing = 22mm.  The 2D domain is
+# the full mirrored XY plane:
+#   x: [-21mm, +21mm] = 42mm  (mirrored from COMSOL quadrant x=[0,21mm])
+#   y: [-16mm, +16mm] = 32mm  (mirrored from COMSOL quadrant y=[0,16mm])
+#   Part: 20×20mm centered at (0, 0)
+#
+# Q_rf is loaded from the COMSOL export (extract_comsol_qrf_2d.py output).
+# This bypasses the in-plane EQS solve entirely; the thermal solver runs
+# on the full XY domain with the real COMSOL shell-heating Q_rf pattern.
+#
+# depth_correction approximates heat loss through the Z-direction electrode
+# faces (top electrode at z=+20mm, bottom at z=-2mm).
+#
+# Usage:
+#   # First extract the Q_rf map from the COMSOL export:
+#   python extract_comsol_qrf_2d.py \
+#       --input "/path/to/vol_fields_single_time-export.txt" \
+#       --out-dir outputs_eqs/comsol_exports
+#
+#   # Then run this simulation:
+#   python rfam_eqs_coupled.py --config configs/rfam_eqs_comsol_qrf_driven.yaml
+
+geometry:
+  # Full mirrored domain (COMSOL quadrant x=[0,21mm] + y=[0,16mm])
+  chamber_x: 0.042          # 42mm = 2 × 21mm
+  chamber_y: 0.032          # 32mm = 2 × 16mm
+  grid_nx: 169              # ~0.25mm spacing in x
+  grid_ny: 129              # ~0.25mm spacing in y
+  part:
+    shape: square
+    width:  0.020           # 20mm  (full mirrored from quadrant 10mm)
+    height: 0.020           # 20mm
+    center_x: 0.0
+    center_y: 0.0
+    rotation_deg: 0.0
+
+electrodes:
+  # Boundary electrodes are defined but not used (EQS solve is skipped
+  # when qrf_file_npy is set).  They are required by make_domain().
+  mode: boundary
+  hi_boundary: top
+  lo_boundary: bottom
+  boundary_cells: 1
+
+electric:
+  frequency_hz: 27120000.0
+  voltage_v: 860.0
+  voltage_mode: grounded
+  solver_steps: 1            # not used — EQS is bypassed
+  solver_tol: 1.0e-9
+  update_interval: 0         # never re-solve (Q_rf is fixed from COMSOL)
+  power_factor: 1.0
+  max_qrf_w_per_m3: 2.0e9
+  zero_qrf_outside_doped: true
+
+  # Path to the 2D Q_rf map produced by extract_comsol_qrf_2d.py.
+  # Set this to the actual path on your machine.
+  qrf_file_npy: "outputs_eqs/comsol_exports/qrf_2d_map.npy"
+
+thermal:
+  # COMSOL initial temperature: Tzero = 23°C
+  ambient_c: 23.0
+
+  # Convection: COMSOL uses natural-chimney parallel-plates on exposed
+  # Z-faces.  In this 2D XY model those faces are represented by
+  # depth_correction.  Side walls (x=±21mm, y=±16mm) are insulated.
+  convection_h_w_per_m2k: 0.0
+  convective_boundaries: []
+
+  # Time stepping: 60 minutes at 1s steps
+  dt_s: 1.0
+  n_steps: 3600
+  max_deltaT_per_step_c: 3.0
+  min_temp_c: -50.0
+  max_temp_c: 500.0
+
+  # Phase change: COMSOL Heaviside model
+  phase_change:
+    model: comsol_heaviside
+    t_pc_c: 185.0           # COMSOL T_pc = 185°C
+    dt_pc_c: 10.0           # COMSOL ΔT_pc = 10°C
+    latent_heat_j_per_kg: 96700.0
+    smooth_shape: linear
+
+  # depth_correction: approximates axial (Z-direction) heat loss.
+  # The part occupies z=[10,20mm] in the COMSOL geometry (10mm thick).
+  # The chamber spans z=[-2,20mm] = 22mm (electrode spacing).
+  depth_correction:
+    enabled: true
+    part_depth_m: 0.010     # part thickness in Z = 10mm
+    chamber_depth_m: 0.022  # electrode spacing in Z = 22mm
+
+densification:
+  rho_rel_initial: 0.55
+  k0_per_s: 0.08
+  activation_energy_j_per_mol: 42000.0
+
+materials:
+  virgin:
+    # COMSOL powder: sigma=0, eps_r=2
+    sigma_s_per_m: 0.0
+    eps_r: 2.0
+
+  powder:
+    # COMSOL Domain 1 (powder) thermal properties
+    rho_solid_kg_per_m3: 490.0
+    k_solid_w_per_mk: 0.197
+    cp_solid_j_per_kgk: 1072.0
+
+  doped:
+    # COMSOL Domain 2 (part / doped) electrical properties.
+    # sigma here is used only for gamma computation (informational);
+    # the actual Q_rf is loaded from qrf_file_npy.
+    sigma_s_per_m: 0.04
+    eps_r: 20.0
+    sigma_temp_coeff_per_K: 0.0
+    sigma_density_coeff: 0.0
+    sigma_ref_temp_c: 23.0
+
+    # COMSOL Domain 2 thermal properties
+    rho_solid_kg_per_m3: 460.0
+    rho_liquid_kg_per_m3: 1010.0
+
+    k_solid_w_per_mk: 0.10
+    k_liquid_w_per_mk: 0.26
+
+    cp_solid_j_per_kgk: 2500.0
+    cp_liquid_j_per_kgk: 3279.0

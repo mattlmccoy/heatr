@@ -1,0 +1,124 @@
+# shape_gt_logo_6min.yaml — GT Yellow Jackets logo, 10mm, 2 min
+#
+# NOTE: The GT logo at 10mm × 6.3mm has ~12× smaller cross-sectional area
+# than the canonical 20mm × 20mm square. At the same 500 W / 2% coupling,
+# the power density is ~12× higher → full melt in ~36 s, full densification
+# by ~2.75 min. This is the correct physics for a small part — geometry
+# directly controls processing speed.
+#
+# To use: copy Georgia_Tech_Yellow_Jackets_logo.svg into the project root,
+# then run:
+#   python3 rfam_eqs_coupled.py \
+#     --config configs/shape_gt_logo_6min.yaml \
+#     --output-dir outputs_eqs/shape_gt_logo
+#
+# The SVG is parsed → all paths rasterised → outer contour extracted →
+# scaled to fit within 10mm × 10mm (aspect ratio preserved).
+# All physics are identical to canonical.
+# ──────────────────────────────────────────────────────────────────────
+
+geometry:
+  chamber_x: 0.030    # 30 mm — 10 mm clearance each side of 10 mm logo
+  chamber_y: 0.030    # 30 mm — 10 mm clearance above and below
+  grid_nx: 120        # 0.25 mm/cell (4× finer than 60mm/120 → 40×25 cells for logo)
+  grid_ny: 120        # 0.25 mm/cell
+  part:
+    shape: from_svg
+    svg_path: "Georgia_Tech_Yellow_Jackets_logo.svg"  # relative to run directory
+    width:  0.010     # 10 mm bounding box width (aspect ratio preserved: ~6.3 mm tall)
+    height: 0.010     # equal to width → aspect ratio preserved in make_shape_from_svg
+    n_circle_pts: 800  # high polygon resolution for the SVG outline
+    curve_pts: 20      # bezier segments per curve
+    path_index: 0      # 0 = largest path (the outer GT shape)
+    center_x: 0.0
+    center_y: 0.0
+    rotation_deg: 0.0
+
+electrodes:
+  mode: boundary
+  hi_boundary: top
+  lo_boundary: bottom
+  boundary_cells: 1
+
+electric:
+  frequency_hz: 27120000.0
+  voltage_v: 860.0
+  voltage_mode: grounded
+  solver_steps: 3000
+  solver_tol: 1.0e-9
+  update_interval: 20
+  power_factor: 1.0
+  max_qrf_w_per_m3: 1.0e11
+  zero_qrf_outside_doped: true
+  enforce_generator_power: true
+  generator_power_w: 500.0
+  generator_transfer_efficiency: 0.020
+  effective_depth_m: 0.020
+
+thermal:
+  ambient_c: 23.0
+  convection_h_w_per_m2k: 5.0
+  convective_boundaries:
+    - top
+  dt_s: 0.5
+  n_steps: 240          # 120 s = 2 min (small part fully densifies by ~2.75 min)
+  max_deltaT_per_step_c: 10.0
+  min_temp_c: -50.0
+  max_temp_c: 600.0
+  phase_change:
+    model: comsol_heaviside
+    t_pc_c: 180.0
+    dt_pc_c: 10.0
+    latent_heat_j_per_kg: 96700.0
+    smooth_shape: linear
+  depth_correction:
+    enabled: false
+
+densification:
+  rho_rel_initial: 0.55
+  model: physics_dual
+  rho_exponent: 1.0
+  max_delta_per_step: 0.02
+  k0_ss_per_s: 0.005
+  activation_energy_ss_j_per_mol: 48000.0
+  phi_solid_exponent: 0.8
+  k0_liq_per_s: 0.08
+  activation_energy_liq_j_per_mol: 0.0
+  phi_threshold: 0.01
+  phi_liq_exponent: 1.0
+  liquid_rate_mode: viscous_capillary
+  surface_tension_n_per_m: 0.03
+  particle_radius_m: 3.5e-5
+  eta_ref_pa_s: 8.0e3
+  eta_ref_temp_k: 458.15
+  eta_activation_j_per_mol: 6.0e4
+  geom_factor: 0.05
+  k0_per_s: 0.08
+  activation_energy_j_per_mol: 42000.0
+
+materials:
+  virgin:
+    sigma_s_per_m: 0.0
+    eps_r: 2.0
+  powder:
+    rho_solid_kg_per_m3: 490.0
+    k_solid_w_per_mk: 0.197
+    cp_solid_j_per_kgk: 1072.0
+  doped:
+    sigma_s_per_m: 0.04
+    sigma_profile: uniform
+    eps_r: 20.0
+    sigma_temp_coeff_per_K: 0.0
+    sigma_density_coeff: 0.0
+    sigma_ref_temp_c: 23.0
+    rho_solid_kg_per_m3: 460.0
+    rho_liquid_kg_per_m3: 1010.0
+    k_solid_w_per_mk: 0.10
+    k_liquid_w_per_mk: 0.26
+    cp_solid_j_per_kgk: 2500.0
+    cp_liquid_j_per_kgk: 3279.0
+
+reporting:
+  potential_contours: 18
+  temp_cbar_min_c: 20.0
+  temp_cbar_max_c: 350.0

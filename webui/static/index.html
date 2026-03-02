@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HEATR: High-frequency Electrothermal Additive Thermal Resolver</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/design-b.css" />
+</head>
+<body class="layout-b ids-inspired">
+  <header class="topbar topbar-ids">
+    <div>
+      <h1>HEATR: High-frequency Electrothermal Additive Thermal Resolver</h1>
+      <p>Operational control for electrothermal simulation runs</p>
+    </div>
+    <div class="header-tools">
+      <div class="status-pill" id="serverStatus">API online</div>
+      <details class="settings-menu">
+        <summary>Settings</summary>
+        <div class="settings-grid">
+          <label>Mode
+            <select id="prefMode">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </label>
+          <label>Accent
+            <select id="prefAccent">
+              <option value="blue">Blue</option>
+              <option value="green">Green</option>
+              <option value="amber">Amber</option>
+              <option value="violet">Violet</option>
+            </select>
+          </label>
+          <label>Background
+            <select id="prefBackground">
+              <option value="grid">Grid</option>
+              <option value="plain">Plain</option>
+              <option value="aurora">Aurora</option>
+            </select>
+          </label>
+          <label>Layout
+            <select id="prefLayout">
+              <option value="layout-1">Split</option>
+              <option value="layout-2">Stacked</option>
+              <option value="layout-3">Dual</option>
+            </select>
+          </label>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <nav class="tabs-nav">
+    <a class="tab-link active" href="/index.html">Operation</a>
+    <a class="tab-link" href="/results">Results</a>
+    <a class="tab-link" href="/examples">Examples</a>
+    <a class="tab-link" href="/theory">Theory</a>
+  </nav>
+
+  <main class="grid design-grid-b run-layout">
+    <section class="card form-card dash-card accent-blue">
+      <h2>Run Configuration</h2>
+      <form id="runForm">
+        <label>Mode
+          <select id="mode" name="mode">
+            <option value="single">Single Exposure</option>
+            <option value="sweep">Exposure Sweep</option>
+            <option value="optimizer">Exposure Optimizer</option>
+            <option value="turntable">Turntable Run</option>
+          </select>
+        </label>
+
+        <label>Shape
+          <select id="shape" name="shape"></select>
+        </label>
+
+        <label>Base Config Override (optional)
+          <select id="baseConfigSelect" name="base_config">
+            <option value="">Auto-select from match</option>
+          </select>
+        </label>
+
+        <label>Output Name
+          <input id="outputName" name="output_name" type="text" placeholder="e.g. circle_6min_gui" required />
+        </label>
+
+        <div class="mode-section" data-mode="single optimizer turntable">
+          <label>Exposure (minutes)
+            <input id="exposureMinutes" name="exposure_minutes" type="number" min="0.1" step="0.1" value="6" />
+          </label>
+        </div>
+
+        <div class="mode-section hidden" data-mode="sweep">
+          <label>Sweep Minutes (comma-separated)
+            <input id="sweepMinutes" name="sweep_minutes" type="text" value="6,7,8,9,10" />
+          </label>
+        </div>
+
+        <div class="mode-section hidden" data-mode="optimizer">
+          <label>Optimizer phi snapshots
+            <input id="phiSnapshots" name="phi_snapshots" type="text" value="0.50,0.75,0.90,0.95" />
+          </label>
+          <label>Temp ceiling (C)
+            <input id="tempCeiling" name="temp_ceiling_c" type="number" step="1" value="250" />
+          </label>
+          <label>Highlight phi
+            <input id="highlightPhi" name="highlight_phi" type="number" min="0" max="1" step="0.01" value="0.90" />
+          </label>
+        </div>
+
+        <div class="mode-section hidden" data-mode="turntable">
+          <label>Rotation per step (deg)
+            <input id="turntableRotationDeg" name="turntable_rotation_deg" type="number" step="0.1" value="90" />
+          </label>
+          <label>Number of rotation events
+            <input id="turntableTotalRotations" name="turntable_total_rotations" type="number" min="1" step="1" value="1" />
+          </label>
+          <p id="turntableFullRotInfo" class="muted">Total planned rotation: 90.0° (0.25 full 360° turns)</p>
+          <label>Rotation interval (s, optional)
+            <input id="turntableIntervalS" name="turntable_interval_s" type="number" min="0.001" step="0.1" placeholder="Auto-space across run" />
+          </label>
+        </div>
+
+        <details class="advanced-panel">
+          <summary>Advanced Parameters (optional)</summary>
+          <div class="adv-grid">
+            <label>grid_nx <input id="advGridNx" type="number" min="16" step="1" placeholder="120" /></label>
+            <label>grid_ny <input id="advGridNy" type="number" min="16" step="1" placeholder="120" /></label>
+            <div class="adv-section">
+              <strong>Electric + Thermal Controls</strong>
+              <p class="field-help">These tune RF drive conditions and heat-loss boundaries.</p>
+            </div>
+            <label>frequency_hz (RF carrier)
+              <input id="advFreqHz" type="number" min="1" step="1" placeholder="27120000" />
+            </label>
+            <label>voltage_v <input id="advVoltage" type="number" min="0" step="1" placeholder="860" /></label>
+            <label>generator_power_w <input id="advPower" type="number" min="0" step="1" placeholder="500" /></label>
+            <label>enforce_generator_power (power scaling on/off)
+              <select id="advEnforceGen">
+                <option value="">Use base config</option>
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </label>
+            <label>generator_transfer_efficiency <input id="advEff" type="number" min="0" max="1" step="0.001" placeholder="0.02" /></label>
+            <label>effective_depth_m <input id="advDepth" type="number" min="0" step="0.001" placeholder="0.020" /></label>
+            <label>dt_s <input id="advDt" type="number" min="0.001" step="0.01" placeholder="0.5" /></label>
+            <label>ambient_c (starting/environment temperature)
+              <input id="advAmbient" type="number" step="0.1" placeholder="23" />
+            </label>
+            <label>convection_h_w_per_m2k <input id="advConv" type="number" min="0" step="0.1" placeholder="5" /></label>
+            <label>max_qrf_w_per_m3 <input id="advMaxQrf" type="number" min="0" step="1000000" placeholder="1e11" /></label>
+            <label>max_temp_c <input id="advMaxTemp" type="number" min="0" step="1" placeholder="600" /></label>
+
+            <div class="adv-section">
+              <strong>Materials: Virgin (undoped domain)</strong>
+              <p class="field-help">Sets baseline dielectric response outside the doped region.</p>
+            </div>
+            <label>virgin.sigma_s_per_m (electrical conductivity)
+              <input id="advVirginSigma" type="number" min="0" step="0.0001" placeholder="0.0" />
+            </label>
+            <label>virgin.eps_r (relative permittivity)
+              <input id="advVirginEps" type="number" min="0" step="0.1" placeholder="2.0" />
+            </label>
+
+            <div class="adv-section">
+              <strong>Materials: Powder</strong>
+              <p class="field-help">Controls powder density, thermal conductivity, and heat capacity.</p>
+            </div>
+            <label>powder.rho_solid_kg_per_m3 (density)
+              <input id="advPowderRho" type="number" min="0" step="1" placeholder="490.0" />
+            </label>
+            <label>powder.k_solid_w_per_mk (thermal conductivity)
+              <input id="advPowderK" type="number" min="0" step="0.001" placeholder="0.197" />
+            </label>
+            <label>powder.cp_solid_j_per_kgk (heat capacity)
+              <input id="advPowderCp" type="number" min="0" step="1" placeholder="1072.0" />
+            </label>
+
+            <div class="adv-section">
+              <strong>Materials: Doped Part</strong>
+              <p class="field-help">Primary EQS + thermal properties for the actively heated region.</p>
+            </div>
+            <label>doped.sigma_s_per_m (conductivity)
+              <input id="advSigma" type="number" min="0" step="0.001" placeholder="0.04" />
+            </label>
+            <label>doped.sigma_profile (field shaping mode)
+              <input id="advDopedSigmaProfile" type="text" placeholder="uniform" />
+            </label>
+            <label>doped.eps_r (relative permittivity)
+              <input id="advDopedEps" type="number" min="0" step="0.1" placeholder="20.0" />
+            </label>
+            <label>doped.sigma_temp_coeff_per_K (conductivity temp sensitivity)
+              <input id="advSigmaTempCoeff" type="number" step="0.0001" placeholder="0.0" />
+            </label>
+            <label>doped.sigma_density_coeff (conductivity density sensitivity)
+              <input id="advSigmaDensityCoeff" type="number" step="0.0001" placeholder="0.0" />
+            </label>
+            <label>doped.sigma_ref_temp_c (reference temperature)
+              <input id="advSigmaRefTemp" type="number" step="0.1" placeholder="23.0" />
+            </label>
+            <label>doped.rho_solid_kg_per_m3 (solid density)
+              <input id="advDopedRhoSolid" type="number" min="0" step="1" placeholder="460.0" />
+            </label>
+            <label>doped.rho_liquid_kg_per_m3 (liquid density)
+              <input id="advDopedRhoLiquid" type="number" min="0" step="1" placeholder="1010.0" />
+            </label>
+            <label>doped.k_solid_w_per_mk (solid thermal conductivity)
+              <input id="advDopedKSolid" type="number" min="0" step="0.001" placeholder="0.10" />
+            </label>
+            <label>doped.k_liquid_w_per_mk (liquid thermal conductivity)
+              <input id="advDopedKLiquid" type="number" min="0" step="0.001" placeholder="0.26" />
+            </label>
+            <label>doped.cp_solid_j_per_kgk (solid heat capacity)
+              <input id="advDopedCpSolid" type="number" min="0" step="1" placeholder="2500.0" />
+            </label>
+            <label>doped.cp_liquid_j_per_kgk (liquid heat capacity)
+              <input id="advDopedCpLiquid" type="number" min="0" step="1" placeholder="3279.0" />
+            </label>
+          </div>
+        </details>
+
+        <div id="configMatch" class="match-box">Matching config...</div>
+
+        <details class="advanced-panel">
+          <summary>YAML Inspector</summary>
+          <div class="adv-grid">
+            <label>Config to preview
+              <select id="yamlPreviewSelect">
+                <option value="__matched__">Auto matched config</option>
+              </select>
+            </label>
+          </div>
+          <div id="yamlImportant" class="yaml-important"></div>
+          <pre id="yamlPreview" class="summary yaml-preview">Select a config to preview.</pre>
+        </details>
+
+        <button type="submit" class="primary">Launch Run</button>
+      </form>
+      <p class="muted">Prewarp scripts are intentionally excluded.</p>
+    </section>
+
+    <section class="card jobs-card dash-card accent-purple">
+      <h2>Active Jobs</h2>
+      <div id="jobs" class="jobs"></div>
+      <h3>Live Figures</h3>
+      <div id="completedArtifacts" class="completed-artifacts"></div>
+    </section>
+  </main>
+
+  <dialog id="imageModal" class="image-modal">
+    <div class="image-modal-head">
+      <strong id="imageModalTitle">Image</strong>
+      <button id="imageModalClose" type="button">Close</button>
+    </div>
+    <div class="image-modal-body">
+      <button id="imagePrev" type="button" class="nav-btn">◀</button>
+      <img id="imageModalImg" alt="result" />
+      <button id="imageNext" type="button" class="nav-btn">▶</button>
+    </div>
+  </dialog>
+
+  <script src="/static/settings.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
