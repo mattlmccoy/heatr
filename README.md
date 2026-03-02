@@ -25,25 +25,25 @@ tuning where you need fast iteration with physically informed coupling:
 
 ### 1) Electro-Quasi-Static Field Solve
 
-For harmonic drive frequency \(f\), with \(\omega = 2\pi f\), HEATR solves:
+For harmonic drive frequency $f$, with $\omega = 2\pi f$, HEATR solves:
 
-\[
+$$
 \nabla \cdot \left((\sigma + j\omega\varepsilon)\nabla V\right) = 0
-\]
+$$
 
 where:
-- \(V\): complex electric potential
-- \(\sigma\): electrical conductivity
-- \(\varepsilon\): permittivity
-- \(\mathbf{E} = -\nabla V\): electric field
+- $V$: complex electric potential
+- $\sigma$: electrical conductivity
+- $\varepsilon$: permittivity
+- $\mathbf{E} = -\nabla V$: electric field
 
 ### 2) RF Volumetric Heating
 
 The raw time-averaged Joule heating is:
 
-\[
+$$
 Q_{\mathrm{rf,raw}} = \frac{1}{2}\sigma |\mathbf{E}|^2
-\]
+$$
 
 If generator-enforcement is enabled, HEATR rescales the magnitude so total absorbed
 power matches configured generator assumptions (e.g., generator power and coupling
@@ -53,10 +53,10 @@ efficiency). This does **not** change spatial EQS shape, only global scale.
 
 Temperature is advanced by:
 
-\[
+$$
 \rho c_p \frac{\partial T}{\partial t} =
 \nabla \cdot (k \nabla T) + Q_{\mathrm{rf}} - Q_{\mathrm{loss}}
-\]
+$$
 
 including configurable boundary loss terms and numerically bounded stepping.
 
@@ -64,16 +64,16 @@ including configurable boundary loss terms and numerically bounded stepping.
 
 A smooth transition model maps temperature to melt fraction:
 
-\[
+$$
 \phi(T) \in [0,1]
-\]
+$$
 
 with configurable transition temperature and smoothing width (including latent-heat
 style effects through effective response terms).
 
 ### 5) Relative Density Evolution
 
-Relative density \(\rho_{\mathrm{rel}} \in [0,1]\) evolves with temperature and melt
+Relative density $\rho_{\mathrm{rel}} \in [0,1]$ evolves with temperature and melt
 state under bounded kinetics, allowing both solid-state and liquid-assisted regimes.
 
 ## Turntable Modeling
