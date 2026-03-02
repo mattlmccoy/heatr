@@ -1,0 +1,123 @@
+$ /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 rfam_eqs_coupled.py --config /Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/configs/_gui_generated/20260302-020108-959df8_diamond_tt_20260302_45deg_8rot_rerun_turntable.yaml --output-dir /Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/diamond_tt_20260302_45deg_8rot_rerun
+  [turntable] time-based: 45.0° every 40.0s × 8 = 360° total
+  [turntable] rotated by +45.0° → cumulative 45.0° at t=40.0s  (φ̄=0.000  ρ̄=0.550)
+  [turntable] rotated by +45.0° → cumulative 90.0° at t=80.0s  (φ̄=0.000  ρ̄=0.550)
+  [turntable] rotated by +45.0° → cumulative 135.0° at t=120.0s  (φ̄=0.001  ρ̄=0.550)
+  [turntable] rotated by +45.0° → cumulative 180.0° at t=160.0s  (φ̄=0.000  ρ̄=0.550)
+  [turntable] rotated by +45.0° → cumulative 225.0° at t=200.0s  (φ̄=0.001  ρ̄=0.550)
+  [turntable] rotated by +45.0° → cumulative 270.0° at t=240.0s  (φ̄=0.000  ρ̄=0.550)
+  [turntable] rotated by +45.0° → cumulative 315.0° at t=280.0s  (φ̄=0.003  ρ̄=0.550)
+  [turntable] rotated by +45.0° → cumulative 360.0° at t=320.0s  (φ̄=0.040  ρ̄=0.551)
+  [turntable] ── Rotation Schedule ─────────────────────────
+    cum +45.0°  at t=   40.0 s  (0 min 40 s)
+    cum +90.0°  at t=   80.0 s  (1 min 20 s)
+    cum +135.0°  at t=  120.0 s  (2 min 0 s)
+    cum +180.0°  at t=  160.0 s  (2 min 40 s)
+    cum +225.0°  at t=  200.0 s  (3 min 20 s)
+    cum +270.0°  at t=  240.0 s  (4 min 0 s)
+    cum +315.0°  at t=  280.0 s  (4 min 40 s)
+    cum +360.0°  at t=  320.0 s  (5 min 20 s)
+  [turntable] total rotation: 360.0°  over 360 s
+Saved time series: /Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/diamond_tt_20260302_45deg_8rot_rerun/time_series.json
+Saved GIF: /Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/diamond_tt_20260302_45deg_8rot_rerun/turntable_electric.gif
+Saved GIF: /Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/diamond_tt_20260302_45deg_8rot_rerun/turntable_thermal.gif
+Saved GIF: /Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/diamond_tt_20260302_45deg_8rot_rerun/turntable_density.gif
+  ✓  /Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/diamond_tt_20260302_45deg_8rot_rerun/rf_summary_v5.png
+Wrote outputs to: /Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/diamond_tt_20260302_45deg_8rot_rerun
+{
+  "grid": {
+    "nx": 120,
+    "ny": 120,
+    "dx_m": 0.0005042016806722678,
+    "dy_m": 0.0005042016806722678
+  },
+  "thermal_substeps_per_step": 5,
+  "thermal_dt_sub_s": 0.1,
+  "integrated_power_doped_W_per_m": 500.0,
+  "target_power_doped_W_per_m": 500.0,
+  "qrf_scale_applied_final": 8.285026578168075,
+  "generator_power_w": 500.0,
+  "generator_transfer_efficiency": 0.02,
+  "effective_depth_m": 0.02,
+  "energy_doped_total_J_per_m": 180000.0,
+  "mean_T_part_final_c": 152.25635233082713,
+  "max_T_part_final_c": 187.54679616755584,
+  "p95_T_part_final_c": 180.7219454111404,
+  "p99_T_part_final_c": 181.53910446491238,
+  "phase_transition_lo_c": 175.0,
+  "phase_transition_hi_c": 185.0,
+  "melt_reference_c": 180.0,
+  "frac_part_ge_transition_lo": 0.2229064039408867,
+  "frac_part_ge_transition_hi": 0.0024630541871921183,
+  "frac_part_ge_melt_ref": 0.08004926108374384,
+  "qrf_global_min_w_per_m3": 0.0,
+  "qrf_global_mean_w_per_m3": 136583.71913580305,
+  "qrf_global_max_w_per_m3": 63436251.674096145,
+  "qrf_part_min_w_per_m3": 109838.4382008763,
+  "qrf_part_mean_w_per_m3": 1211087.164750963,
+  "qrf_part_p95_w_per_m3": 2821029.2058021654,
+  "qrf_part_p99_w_per_m3": 9862272.459460847,
+  "qrf_part_max_w_per_m3": 63436251.674096145,
+  "frac_part_at_qrf_cap_final": 0.0,
+  "frac_part_at_temp_cap": 0.0,
+  "ui_abs_part_final": 0.1596240820989254,
+  "ui_rms_part_final": 0.19382103164947873,
+  "mean_phi_part_final": 0.08687882333354882,
+  "frac_part_phi_gt_0p1_final": 0.19950738916256158,
+  "frac_part_phi_gt_0p5_final": 0.08004926108374384,
+  "mean_rho_rel_part_final": 0.5558612993928543,
+  "energy_conv_loss_total_J_per_m": 0.28722167489385564,
+  "energy_stored_part_final_J_per_m": 76537.63986755788,
+  "energy_balance_residual_final_J_per_m": 103462.07291076722,
+  "mean_dens_rate_part_final_per_s": 0.00015967913882910552,
+  "mean_kdens_ss_part_final_per_s": 7.92133469172295e-09,
+  "mean_kdens_liq_part_final_per_s": 0.002205265241059938,
+  "max_dT_raw_final_c": 0.13136343783717094,
+  "max_dT_used_final_c": 0.13136343783717094,
+  "frac_cells_dT_clipped_final": 0.0,
+  "frac_cells_dT_clipped_mean": 2.4344135802469136e-05,
+  "time_final_s": 360.0,
+  "turntable_rotations": [
+    {
+      "cum_angle_deg": 45.0,
+      "event_time_s": 40.0,
+      "event_time_min": 0.6667
+    },
+    {
+      "cum_angle_deg": 90.0,
+      "event_time_s": 80.0,
+      "event_time_min": 1.3333
+    },
+    {
+      "cum_angle_deg": 135.0,
+      "event_time_s": 120.0,
+      "event_time_min": 2.0
+    },
+    {
+      "cum_angle_deg": 180.0,
+      "event_time_s": 160.0,
+      "event_time_min": 2.6667
+    },
+    {
+      "cum_angle_deg": 225.0,
+      "event_time_s": 200.0,
+      "event_time_min": 3.3333
+    },
+    {
+      "cum_angle_deg": 270.0,
+      "event_time_s": 240.0,
+      "event_time_min": 4.0
+    },
+    {
+      "cum_angle_deg": 315.0,
+      "event_time_s": 280.0,
+      "event_time_min": 4.6667
+    },
+    {
+      "cum_angle_deg": 360.0,
+      "event_time_s": 320.0,
+      "event_time_min": 5.3333
+    }
+  ],
+  "turntable_total_rotation_deg": 360.0
+}
