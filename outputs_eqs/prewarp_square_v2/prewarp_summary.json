@@ -1,0 +1,39 @@
+{
+  "target_shape": "square",
+  "target_width_mm": 20.0,
+  "target_height_mm": 20.0,
+  "n_resample_pts": 512,
+  "L_eff_mm": 10.0,
+  "rho_0": 0.55,
+  "max_iter": 10,
+  "lr": 0.5,
+  "smooth": 0.2,
+  "epe_tol_mm": 0.25,
+  "iterations_run": 2,
+  "converged": true,
+  "rmse_iter0_mm": 0.695,
+  "rmse_final_mm": 0.1738,
+  "rmse_verification_mm": 0.1738,
+  "target_bbox_x_mm": 20.0,
+  "target_bbox_y_mm": 20.0,
+  "prewarp_bbox_x_mm": 21.4201,
+  "prewarp_bbox_y_mm": 21.1705,
+  "iteration_history": [
+    {
+      "iter": 0,
+      "rmse_mm": 0.695,
+      "rho_mean": 0.6177,
+      "rho_std": 0.0588,
+      "sim_time_s": 9.7,
+      "best": true
+    },
+    {
+      "iter": 1,
+      "rmse_mm": 0.1738,
+      "rho_mean": 0.5802,
+      "rho_std": 0.0373,
+      "sim_time_s": 9.6,
+      "best": true
+    }
+  ]
+}
