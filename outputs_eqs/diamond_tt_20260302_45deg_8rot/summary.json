@@ -1,0 +1,97 @@
+{
+  "grid": {
+    "nx": 120,
+    "ny": 120,
+    "dx_m": 0.0005042016806722678,
+    "dy_m": 0.0005042016806722678
+  },
+  "thermal_substeps_per_step": 5,
+  "thermal_dt_sub_s": 0.1,
+  "integrated_power_doped_W_per_m": 500.0,
+  "target_power_doped_W_per_m": 500.0,
+  "qrf_scale_applied_final": 8.285026578168075,
+  "generator_power_w": 500.0,
+  "generator_transfer_efficiency": 0.02,
+  "effective_depth_m": 0.02,
+  "energy_doped_total_J_per_m": 180000.0,
+  "mean_T_part_final_c": 175.47971789129284,
+  "max_T_part_final_c": 222.65178854336835,
+  "p95_T_part_final_c": 183.4609586793348,
+  "p99_T_part_final_c": 197.20793807686564,
+  "phase_transition_lo_c": 175.0,
+  "phase_transition_hi_c": 185.0,
+  "melt_reference_c": 180.0,
+  "frac_part_ge_transition_lo": 0.6933497536945813,
+  "frac_part_ge_transition_hi": 0.02647783251231527,
+  "frac_part_ge_melt_ref": 0.43103448275862066,
+  "qrf_global_min_w_per_m3": 0.0,
+  "qrf_global_mean_w_per_m3": 136583.71913580305,
+  "qrf_global_max_w_per_m3": 63436251.674096145,
+  "qrf_part_min_w_per_m3": 109838.4382008763,
+  "qrf_part_mean_w_per_m3": 1211087.164750963,
+  "qrf_part_p95_w_per_m3": 2821029.2058021654,
+  "qrf_part_p99_w_per_m3": 9862272.459460847,
+  "qrf_part_max_w_per_m3": 63436251.674096145,
+  "frac_part_at_qrf_cap_final": 0.0,
+  "frac_part_at_temp_cap": 0.0,
+  "ui_abs_part_final": 0.04998258980422768,
+  "ui_rms_part_final": 0.0702728730804225,
+  "mean_phi_part_final": 0.38056283715939426,
+  "frac_part_phi_gt_0p1_final": 0.6490147783251231,
+  "frac_part_phi_gt_0p5_final": 0.43103448275862066,
+  "mean_rho_rel_part_final": 0.5512219702192367,
+  "energy_conv_loss_total_J_per_m": 584.793735706162,
+  "energy_stored_part_final_J_per_m": 136971.21063433777,
+  "energy_balance_residual_final_J_per_m": 42443.99562995607,
+  "mean_dens_rate_part_final_per_s": 0.0007716737692839846,
+  "mean_kdens_ss_part_final_per_s": 1.3362699296027962e-08,
+  "mean_kdens_liq_part_final_per_s": 0.0040583946638268675,
+  "max_dT_raw_final_c": 0.1392720241587993,
+  "max_dT_used_final_c": 0.1392720241587993,
+  "frac_cells_dT_clipped_final": 0.0,
+  "frac_cells_dT_clipped_mean": 7.210648148148148e-05,
+  "time_final_s": 360.0,
+  "turntable_rotations": [
+    {
+      "cum_angle_deg": 45.0,
+      "event_time_s": 40.0,
+      "event_time_min": 0.6667
+    },
+    {
+      "cum_angle_deg": 90.0,
+      "event_time_s": 80.0,
+      "event_time_min": 1.3333
+    },
+    {
+      "cum_angle_deg": 135.0,
+      "event_time_s": 120.0,
+      "event_time_min": 2.0
+    },
+    {
+      "cum_angle_deg": 180.0,
+      "event_time_s": 160.0,
+      "event_time_min": 2.6667
+    },
+    {
+      "cum_angle_deg": 225.0,
+      "event_time_s": 200.0,
+      "event_time_min": 3.3333
+    },
+    {
+      "cum_angle_deg": 270.0,
+      "event_time_s": 240.0,
+      "event_time_min": 4.0
+    },
+    {
+      "cum_angle_deg": 315.0,
+      "event_time_s": 280.0,
+      "event_time_min": 4.6667
+    },
+    {
+      "cum_angle_deg": 360.0,
+      "event_time_s": 320.0,
+      "event_time_min": 5.3333
+    }
+  ],
+  "turntable_total_rotation_deg": 360.0
+}
