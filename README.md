@@ -1,110 +1,148 @@
-# RFAM geo-prewarp — Canonical Electrothermal Forward Model
+# HEATR
 
-2D electro-quasi-static (EQS) + thermal solver for Radio Frequency Additive Manufacturing
-(RFAM) of Nylon 12. Solves for RF heating, phase change, and densification to enable
-geometry prewarp for shrinkage compensation.
+**High-frequency Electrothermal Additive Thermal Resolver**
 
-## Project status: **CANONICAL MODEL LOCKED (Mar 2026)**
+HEATR is a browser-driven and scriptable electrothermal process-simulation tool for
+RF additive manufacturing studies. It couples a 2D electro-quasi-static (EQS) solve
+to transient heat transfer, phase transition, and relative-density evolution.
 
-## Directory structure
+This repository contains:
+- the production solver (`rfam_eqs_coupled.py`)
+- the HEATR browser UI (`rfam_gui_server.py` + `webui/`)
+- run/config plumbing for sweeps, optimizers, and turntable studies
+- generated result datasets and examples
 
-```
-geo-prewarp/
-├── rfam_eqs_coupled.py          ← Main 2D EQS + thermal solver
-├── extract_comsol_qrf_2d.py     ← Extract 2D Q_rf map from COMSOL export
-├── RFAM_physics_from_literature.md  ← Physics reference notes
-├── configs/
-│   ├── rfam_eqs_xz_uniform_500w.yaml   ← CANONICAL base config (6 min)
-│   ├── _sweep_7min.yaml                ← Time sweep: 7 min
-│   ├── _sweep_8min.yaml                ← Time sweep: 8 min
-│   ├── _sweep_9min.yaml                ← Time sweep: 9 min
-│   ├── _sweep_10min.yaml               ← Time sweep: 10 min
-│   ├── rfam_eqs_comsol_qrf_driven.yaml       ← COMSOL Q_rf injection (full res)
-│   ├── rfam_eqs_comsol_qrf_driven_quick.yaml ← COMSOL Q_rf injection (quick test)
-│   └── _archive_old/                   ← All deprecated configs
-└── outputs_eqs/
-    ├── xz_uniform_6min_v2/     ← CANONICAL 6-min run (fields.npz, rf_summary_v4.png)
-    ├── _sweep_7min/             ← Time sweep results
-    ├── _sweep_8min/
-    ├── _sweep_9min/
-    ├── _sweep_10min/
-    ├── _sweep_time_sweep.png   ← Master time sweep figure (5-col × 2-row)
-    ├── comsol_exports/         ← COMSOL Q_rf map (qrf_2d_map.npy)
-    └── _archive_old/           ← All deprecated outputs
-```
+## What HEATR Is For
 
-## Canonical model physics
+HEATR is intended for process-window exploration, comparative studies, and control
+tuning where you need fast iteration with physically informed coupling:
+- how shape changes electric-field concentration
+- how heating evolves over exposure time
+- how turntable motion changes thermal uniformity and densification
+- how generator settings and material parameters shift outcomes
 
-**Uniform σ = 0.04 S/m** throughout the doped region. The EQS solve naturally
-produces the correct RF heating distribution:
-- **Corners**: Q_rf ≈ 37× mean (E-field concentration)
-- **Top/bottom faces** (⊥ to E-field): ~11× mean (strong coupling)
-- **Left/right faces** (∥ to E-field): ~1.6× mean (weak coupling)
-- **Center**: ~1× mean (heated primarily by conduction)
+## Core Theory (EQS -> HT -> Phase -> Density)
 
-**Key parameters:**
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| Generator power | 500 W | Fixed RF generator |
-| Coupling efficiency | 2% | Calibrated to 6-min melt |
-| Chamber | 60×60 mm | 20mm powder gap on all sides |
-| Part | 20×20 mm | Nylon 12, centered |
-| Grid | 120×120 | ~0.5mm resolution |
-| Electrode spacing | 60 mm | Top=0V, Bottom=860V |
-| Phase change | T=180°C, L=96.7 kJ/kg | Heaviside, ΔT=10°C |
+### 1) Electro-Quasi-Static Field Solve
 
-## Quick start
+For harmonic drive frequency \(f\), with \(\omega = 2\pi f\), HEATR solves:
 
-```bash
-# Canonical 6-min run
-python3 rfam_eqs_coupled.py \
-  --config configs/rfam_eqs_xz_uniform_500w.yaml \
-  --output-dir outputs_eqs/xz_uniform_6min_v2
+\[
+\nabla \cdot \left((\sigma + j\omega\varepsilon)\nabla V\right) = 0
+\]
 
-# Time sweep 7–10 min (parallel)
-for m in 7 8 9 10; do
-  python3 rfam_eqs_coupled.py \
-    --config configs/_sweep_${m}min.yaml \
-    --output-dir outputs_eqs/_sweep_${m}min > /tmp/sweep_${m}.log 2>&1 &
-done; wait
-```
+where:
+- \(V\): complex electric potential
+- \(\sigma\): electrical conductivity
+- \(\varepsilon\): permittivity
+- \(\mathbf{E} = -\nabla V\): electric field
 
-## Browser GUI (no prewarp controls)
+### 2) RF Volumetric Heating
 
-Use the browser interface to run the forward model with:
-- shape selection
-- single exposure time runs
-- exposure-time sweeps
-- optimizer-enabled runs
-- turntable runs
-- automatic config matching: reuses an existing config when parameters match
-- automatic config generation: creates a new `_gui_generated` config when no exact match exists
-- advanced overrides (optional) for core numerical/electrical/thermal parameters
-- live figure updates while jobs are running
-- in-page image viewer (no new tab required)
-- job logs + result browsing on a dedicated results page
-- examples page for existing sweep/shape outputs
+The raw time-averaged Joule heating is:
+
+\[
+Q_{\mathrm{rf,raw}} = \frac{1}{2}\sigma |\mathbf{E}|^2
+\]
+
+If generator-enforcement is enabled, HEATR rescales the magnitude so total absorbed
+power matches configured generator assumptions (e.g., generator power and coupling
+efficiency). This does **not** change spatial EQS shape, only global scale.
+
+### 3) Transient Heat Transfer
+
+Temperature is advanced by:
+
+\[
+\rho c_p \frac{\partial T}{\partial t} =
+\nabla \cdot (k \nabla T) + Q_{\mathrm{rf}} - Q_{\mathrm{loss}}
+\]
+
+including configurable boundary loss terms and numerically bounded stepping.
+
+### 4) Melt Fraction
+
+A smooth transition model maps temperature to melt fraction:
+
+\[
+\phi(T) \in [0,1]
+\]
+
+with configurable transition temperature and smoothing width (including latent-heat
+style effects through effective response terms).
+
+### 5) Relative Density Evolution
+
+Relative density \(\rho_{\mathrm{rel}} \in [0,1]\) evolves with temperature and melt
+state under bounded kinetics, allowing both solid-state and liquid-assisted regimes.
+
+## Turntable Modeling
+
+In turntable mode, geometry is rotated at event times set by:
+- `rotation_deg`
+- `total_rotations` (count of rotation events at `rotation_deg`, not count of full 360 deg revolutions)
+- optional `rotation_interval_s`
+
+At each rotation event HEATR remaps state fields, re-solves EQS with fixed electrodes,
+and continues thermal advancement while preserving thermal coherence.
+
+## HEATR GUI Features
+
+The browser UI exposes:
+- shape-first workflow with automatic base-config suggestion
+- manual base-config override when suggested config is not desired
+- run types: single exposure, time sweep, optimizer, turntable
+- advanced parameter overrides (electrical, thermal, material, solver)
+- YAML inspector with highlighted key values
+- live run logs and live result updates while jobs execute
+- dedicated results page with grouped browsing and in-page media viewing
+- examples page sourced from existing sweeps/shapes outputs
+- settings panel (accent/background/mode/layout preferences)
+
+Prewarp controls are intentionally excluded from the main UI workflow at this stage.
+
+## Quick Start
+
+### Launch GUI
 
 ```bash
 python3 rfam_gui_server.py
 ```
 
-Then open `http://127.0.0.1:8080`.
-Results page: `http://127.0.0.1:8080/results`
-Examples page: `http://127.0.0.1:8080/examples`
-Theory page: `http://127.0.0.1:8080/theory`
+Open:
+- `http://127.0.0.1:8080/`
+- results: `http://127.0.0.1:8080/results`
+- examples: `http://127.0.0.1:8080/examples`
+- theory: `http://127.0.0.1:8080/theory`
 
-## Time-sweep results
+### Run from CLI
 
-| t [min] | T̄ [°C] | T_max [°C] | φ (melt) | ρ_rel |
-|---------|---------|-----------|----------|-------|
-| 6       | 181.2   | 197.6     | 82.5%    | 0.627 |
-| 7       | 185.9   | 205.9     | 89.4%    | 0.692 |
-| 8       | 195.2   | 214.1     | 96.4%    | 0.783 |
-| 9       | 205.0   | 222.6     | 99.6%    | 0.868 |
-| 10      | 214.9   | 231.3     | 100%     | 0.932 |
+```bash
+python3 rfam_eqs_coupled.py \
+  --config configs/rfam_eqs_xz_uniform_500w.yaml \
+  --output-dir outputs_eqs/xz_uniform_6min_v2
+```
 
-## Next steps
-1. Compare Python temperature fields to COMSOL (export T from Tuned_Sigma.mph)
-2. Use φ/ρ_rel field as forward model for ILT-inspired geometry prewarp
-3. Higher-resolution run (240×240, 0.25mm) for publication quality
+## Repository Layout
+
+```text
+heatr/
+  rfam_eqs_coupled.py     # coupled EQS + HT + phase + density solver
+  rfam_gui_server.py      # backend/API for browser UI
+  webui/                  # frontend assets
+  configs/                # base and generated YAML configs
+  outputs_eqs/            # run outputs, figures, logs, animations
+  docs/                   # detailed theory/reference/runbook docs
+```
+
+## Documentation
+
+- [Theory](docs/theory.md)
+- [Configuration Reference](docs/config-reference.md)
+- [Validation Guide](docs/validation.md)
+- [Operational Runbook](docs/runbook.md)
+
+## Notes on Data and Archives
+
+Archive directories are intentionally excluded from repository uploads.
+Active outputs, examples, and logs are organized under `outputs_eqs/`.
