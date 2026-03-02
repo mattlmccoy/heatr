@@ -127,12 +127,53 @@ python3 rfam_eqs_coupled.py \
 
 ```text
 heatr/
-  rfam_eqs_coupled.py     # coupled EQS + HT + phase + density solver
-  rfam_gui_server.py      # backend/API for browser UI
-  webui/                  # frontend assets
-  configs/                # base and generated YAML configs
-  outputs_eqs/            # run outputs, figures, logs, animations
-  docs/                   # detailed theory/reference/runbook docs
+  rfam_eqs_coupled.py          # main solver: EQS + thermal + melt + density + turntable
+  rfam_gui_server.py           # HEATR backend, job runner, API routes, results indexing
+  shapes.py                    # parametric shape generation utilities used by solver/UI
+  rfam_spike_sweep.py          # spike-height/co-optimization sweep driver for geometry studies
+  make_rf_summary_v5.py        # consolidated publication-style RF/thermal summary figure builder
+  make_uniformity_comparison.py# compares runs on thermal/electric uniformity metrics
+  make_H_comparison.py         # H-shape specific comparative plotting/analysis script
+  extract_comsol_qrf_2d.py     # import/down-project COMSOL Q_rf maps for HEATR use
+  rfam_prewarp.py              # prewarp pipeline (kept in repo; not exposed in primary GUI flow)
+  rfam_prewarp_calibrate.py    # prewarp calibration/fit helper utilities
+  rfam_prewarp_paper.tex       # manuscript/report source for prewarp/electrothermal writeup
+  RFAM_physics_from_literature.md  # literature-grounded physics notes and assumptions
+  README.md                    # project overview, theory, usage, architecture
+
+  webui/
+    static/index.html          # main HEATR control page
+    static/app.js              # primary UI logic, run wiring, live status updates
+    static/results.html        # dedicated results browser page
+    static/results.js          # results grouping/rendering logic (images/gifs/metrics)
+    static/examples.html       # examples gallery page
+    static/examples.js         # examples data loading/rendering
+    static/theory.html         # in-app theory page with rendered LaTeX
+    static/settings.js         # theme/layout preferences and persistence
+    static/styles.css          # base HEATR styling
+    static/design-b.css        # selected redesign style system
+
+  configs/
+    rfam_eqs_xz_uniform_500w.yaml   # canonical baseline EQS/HT configuration
+    shape_*.yaml                    # per-shape baseline configs
+    _sweep_*.yaml                   # exposure-time sweep configs
+    rfam_square_turntable_*.yaml    # turntable-oriented configs
+    rfam_prewarp_*.yaml             # prewarp configs (for offline workflows)
+    _gui_generated/                 # auto-generated configs from UI parameter combinations
+    _archive_old/                   # legacy configs (intentionally not uploaded)
+
+  outputs_eqs/
+    <run_name>/                     # per-run artifacts: used_config, fields, summaries, plots, gifs
+    shapes/                         # shape-library example outputs
+    _logs/                          # run logs emitted by GUI/backend
+    _archive_old/                   # legacy outputs (intentionally not uploaded)
+
+  docs/
+    index.md                   # docs entry point
+    theory.md                  # detailed governing equations and model notes
+    config-reference.md        # important parameters and their effects
+    validation.md              # validation/verification guidance
+    runbook.md                 # operational workflow and troubleshooting
 ```
 
 ## Documentation
