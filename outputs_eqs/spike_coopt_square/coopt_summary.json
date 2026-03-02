@@ -1,0 +1,28 @@
+{
+  "h_optimal_mm": 0.0,
+  "rho_spike_final": 0.55,
+  "rho_ref_final": 0.55,
+  "density_gap_final": 0.0,
+  "iterations": 1,
+  "converged": true,
+  "density_tol": 0.005,
+  "spike_angles": [
+    0.0,
+    180.0
+  ],
+  "ref_angles": [
+    -90.0,
+    90.0
+  ],
+  "angle_width_deg": 10.0,
+  "w_base_mm": 2.0,
+  "all_iters": [
+    {
+      "iter": 0,
+      "h_mm": 0.0,
+      "rho_spike": 0.5500006001126485,
+      "rho_ref": 0.5500004265352303,
+      "gap": 1.7357741821655281e-07
+    }
+  ]
+}
