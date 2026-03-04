@@ -1,7 +1,17 @@
+outputs/
+outputs*/
+outputs_eqs/
+outputs_eqs/**
 .mplconfig/
 .ocr_comp/
 page-*.png
-**/_archive_old/
-**/_archive*/
-archive/
+
+# Local/generated artifacts
+__pycache__/
+*.pyc
 .DS_Store
+configs/_gui_generated/
+configs/_tmp_placement_size_study/
+archive/
+
+/heatr/
