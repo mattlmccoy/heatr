@@ -15,3 +15,7 @@ configs/_tmp_placement_size_study/
 archive/
 
 /heatr/
+
+.env
+**/.env
+.env.*
