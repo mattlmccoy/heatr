@@ -132,8 +132,11 @@ curl -X POST http://127.0.0.1:8080/api/tools/backfill-reports \
 ### Square baseline (480 s): electric fields
 ![Square baseline electric fields](docs/images/sample_square_baseline_480s_electric_fields.png)
 
-### Square baseline (480 s): paper-style report
-![Square baseline paper-style report](docs/images/sample_square_baseline_480s_paper_style_report.png)
+### Square baseline (480 s): density evolution
+![Square baseline density evolution](docs/images/sample_square_baseline_480s_density_evolution.gif)
+
+### Square baseline (480 s): thermal evolution
+![Square baseline thermal evolution](docs/images/sample_square_baseline_480s_thermal_evolution.gif)
 
 ### Square baseline (480 s): RF summary v5
 ![Square baseline RF summary v5](docs/images/sample_square_baseline_480s_rf_summary_v5.png)
