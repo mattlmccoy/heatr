@@ -73,6 +73,18 @@ Implemented controls include:
 - EQS/Qrf-based preview and calibration flow,
 - backfill module support for antennae diagnostics.
 
+### Antennae concept (why this exists)
+
+The antennae/spike feature is a field-shaping assist for geometries that have persistently undercoupled regions.
+
+Core idea:
+- add small protrusions at selected boundary locations to create local field concentration points,
+- those concentration points pull or redirect nearby E-field lines toward low-coupling zones,
+- this raises local RF power deposition (`Qrf`) where heating is normally weak,
+- which helps reduce underheating and improve final densification uniformity.
+
+In short, antennae are intentional geometric perturbations used to redistribute electromagnetic coupling toward parts of the shape that would otherwise lag thermally.
+
 ---
 
 ## Output Organization
@@ -117,17 +129,17 @@ curl -X POST http://127.0.0.1:8080/api/tools/backfill-reports \
 
 ## Example Figures
 
-### Electric fields / thermal context (SpaceX logo run)
-![SpaceX electric fields sample](docs/images/sample_spacex_electric_fields.png)
+### Square baseline (480 s): electric fields
+![Square baseline electric fields](docs/images/sample_square_baseline_480s_electric_fields.png)
 
-### Orientation optimizer report
-![Orientation optimizer sample](docs/images/sample_orientation_report.png)
+### Square baseline (480 s): paper-style report
+![Square baseline paper-style report](docs/images/sample_square_baseline_480s_paper_style_report.png)
 
-### Placement optimizer report
-![Placement optimizer sample](docs/images/sample_placement_report.png)
+### Square baseline (480 s): RF summary v5
+![Square baseline RF summary v5](docs/images/sample_square_baseline_480s_rf_summary_v5.png)
 
-### Shell thickness sweep summary
-![Shell sweep sample](docs/images/sample_shell_sweep_report.svg)
+### Orientation optimizer report (square)
+![Square orientation optimizer report](docs/images/sample_square_orientation_report.png)
 
 ---
 
