@@ -141,6 +141,28 @@ curl -X POST http://127.0.0.1:8080/api/tools/backfill-reports \
 ### Orientation optimizer report (square)
 ![Square orientation optimizer report](docs/images/sample_square_orientation_report.png)
 
+## GUI Pages (Browser)
+
+### Operation page
+Configure and launch runs. This page exposes run mode selection, shape and geometry sizing, physics model controls (including experimental DSC-calibrated options), optional antennae/shell/turntable controls, and live active-job previews.
+
+![HEATR Operation page](docs/images/gui_operation_page.png)
+
+### Results page
+Run-centric review and triage page. Filter/search runs, star important runs, queue report backfills, delete runs, and inspect right-column physics metrics with contextual interpretation.
+
+![HEATR Results page](docs/images/gui_results_page.png)
+
+### Files page
+Workspace file manager with in-browser preview. Browse/move/delete files and trigger backfill actions directly from run folders.
+
+![HEATR Files page](docs/images/gui_files_page.png)
+
+### Theory page
+Centralized model/theory reference page for equations, assumptions, and interpretation context used by the solver and reports.
+
+![HEATR Theory page](docs/images/gui_theory_page.png)
+
 ---
 
 ## Key Files
