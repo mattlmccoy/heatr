@@ -1,0 +1,17 @@
+RFAM workflow for geometry correction in graphite-doped PA12 powder:
+
+1) Input target polygon T in x-z plane (2D cross-section).
+2) Rasterize polygon mask on simulation grid.
+3) Solve electro-quasi-static (EQS) problem to obtain electric potential |V| and electric field E.
+4) Compute volumetric RF heating rate Q_rf proportional to sigma*|E|^2 and calibrated coupling factor eta.
+5) Advance transient thermal state T(x,z,t) with conduction and source Q_rf.
+6) Update melt fraction phi_melt and relative density rho_rel with temperature-dependent kinetics.
+7) Predict boundary shrinkage from rho_rel sampled near boundary and effective shrinkage length L_eff.
+8) Compare predicted sintered boundary B_hat to target T using edge placement error (EPE).
+9) Apply boundary correction (prewarp) and optionally turntable schedule, then re-simulate.
+10) Stop when RMS(EPE) is below tolerance.
+
+Key details to include in the visual:
+- Distinguish physics forward model (EQS -> thermal -> densification) from inverse correction loop.
+- Show optional strategy branches: spike assists, turntable rotation, and combined strategy.
+- Emphasize measurable outputs: boundary std (sigma_bnd), min/max ratio r_bnd, geometric RMSE.

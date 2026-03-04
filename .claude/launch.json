@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Output Browser",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "outputs_eqs"],
+      "port": 8765
+    },
+    {
+      "name": "Jupyter Notebook",
+      "runtimeExecutable": "jupyter",
+      "runtimeArgs": ["notebook", "--port", "8888", "--no-browser", "--NotebookApp.token=''"],
+      "port": 8888
+    }
+  ]
+}

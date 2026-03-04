@@ -14,7 +14,7 @@
       <p>Run-centric view with hero previews and expandable details</p>
     </div>
     <div class="header-tools">
-      <div class="status-pill" id="serverStatus">API online</div>
+      <div class="status-pill" id="serverStatus">HEATR service connected</div>
       <details class="settings-menu">
         <summary>Settings</summary>
         <div class="settings-grid">
@@ -38,7 +38,7 @@
   <nav class="tabs-nav">
     <a class="tab-link" href="/index.html">Operation</a>
     <a class="tab-link active" href="/results">Results</a>
-    <a class="tab-link" href="/examples">Examples</a>
+    <a class="tab-link" href="/files">Files</a>
     <a class="tab-link" href="/theory">Theory</a>
   </nav>
 
@@ -50,10 +50,35 @@
         <select id="runGroupFilter">
           <option value="">All groups</option>
         </select>
+        <select id="runModeFilter">
+          <option value="">All modes</option>
+        </select>
+        <select id="runStarFilter">
+          <option value="">All stars</option>
+          <option value="starred">Starred only</option>
+          <option value="unstarred">Unstarred only</option>
+        </select>
+        <select id="runSort">
+          <option value="created_newest" selected>Run created: newest to oldest</option>
+          <option value="created_oldest">Run created: oldest to newest</option>
+          <option value="newest">Last updated: newest to oldest</option>
+          <option value="oldest">Last updated: oldest to newest</option>
+          <option value="rho_desc">Highest rho</option>
+          <option value="tmax_desc">Highest Tmax</option>
+          <option value="images_desc">Most images</option>
+          <option value="name_az">Name A to Z</option>
+          <option value="name_za">Name Z to A</option>
+        </select>
         <button id="refreshResults" type="button">Refresh</button>
       </div>
       <div id="runCards" class="run-cards"></div>
     </section>
+    <aside class="card dash-card accent-blue metrics-card">
+      <h2>Run Metrics</h2>
+      <div id="metricsRunName" class="muted">Select a run card to inspect metrics.</div>
+      <div id="metricsMeta" class="muted"></div>
+      <div id="metricsTableWrap" class="metrics-table-wrap"></div>
+    </aside>
   </main>
 
   <dialog id="imageModal" class="image-modal">

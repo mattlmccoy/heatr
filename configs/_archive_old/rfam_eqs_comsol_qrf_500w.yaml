@@ -1,0 +1,114 @@
+# rfam_eqs_comsol_qrf_500w.yaml
+#
+# Exposure-time sweep at 500 W RF power, nylon 12 melt (180 °C).
+# Uses the COMSOL Q_rf shell-heating map (extract_comsol_qrf_2d.py output).
+#
+# Key physics:
+#   Part:   20×20×10 mm, 460 kg/m³ packed, Cp=2500 J/kgK
+#   Power:  500 W absorbed in the full 3D part → ~91× scale of COMSOL Q_rf
+#   Melt:   Nylon 12  T_pc = 180 °C  (COMSOL uses 185 °C; use 180 here)
+#
+# Time scale at 500 W:
+#   Mean Q_rf in part ≈ 130 MW/m³  → mean heating rate ≈ 113 K/s
+#   Shell edge (peak Q_rf) → melts in < 1 s
+#   Part centre (low Q_rf) → melts in ≈ 80 s from direct heating
+#   Run to 120 s to capture full melt front propagation inward.
+#
+# Grid: 85×65 (0.5 mm) for fast iteration.
+# dt_s: 0.05 s  →  n_substeps = 1  (below diffusion stability limit ≈ 0.12 s)
+# Total: 2400 steps × 0.05 s = 120 s
+#
+# Usage:
+#   python rfam_eqs_coupled.py \
+#       --config configs/rfam_eqs_comsol_qrf_500w.yaml \
+#       --output-dir outputs_eqs/comsol_qrf_500w
+
+geometry:
+  chamber_x: 0.042
+  chamber_y: 0.032
+  grid_nx: 85               # 0.5 mm spacing
+  grid_ny: 65
+  part:
+    shape: square
+    width:  0.020           # 20 mm
+    height: 0.020           # 20 mm
+    center_x: 0.0
+    center_y: 0.0
+    rotation_deg: 0.0
+
+electrodes:
+  mode: boundary
+  hi_boundary: top
+  lo_boundary: bottom
+  boundary_cells: 1
+
+electric:
+  frequency_hz: 27120000.0
+  voltage_v: 860.0
+  voltage_mode: grounded
+  solver_steps: 1
+  solver_tol: 1.0e-9
+  update_interval: 0         # Q_rf is fixed from COMSOL export
+  power_factor: 1.0
+  max_qrf_w_per_m3: 5.0e9   # raised cap to accommodate 500 W scaling
+  zero_qrf_outside_doped: true
+  qrf_file_npy: "outputs_eqs/comsol_exports/qrf_2d_map.npy"
+
+  # Total RF power absorbed in the full 3D part [W].
+  # Scales the COMSOL Q_rf map so that ∫Q_rf dV = target_power_w.
+  target_power_w: 500.0
+
+thermal:
+  ambient_c: 23.0
+  convection_h_w_per_m2k: 0.0
+  convective_boundaries: []
+
+  # Small outer step for temporal accuracy at high power.
+  # dt_s = 0.05 s < diffusion limit (≈0.12 s) → n_substeps = 1.
+  # Mean cell dT ≈ 113 K/s × 0.05 s = 5.7 °C/step (well within limit).
+  dt_s: 0.05
+  n_steps: 600              # 30 s total (covers full melt front propagation at 500 W)
+
+  max_deltaT_per_step_c: 20.0   # per-substep limiter; 5 °C/step at mean power
+  min_temp_c: -50.0
+  max_temp_c: 500.0
+
+  phase_change:
+    model: comsol_heaviside
+    t_pc_c: 180.0           # Nylon 12 melt temperature
+    dt_pc_c: 10.0           # Transition width: 175–185 °C
+    latent_heat_j_per_kg: 96700.0
+    smooth_shape: linear
+
+  depth_correction:
+    enabled: true
+    part_depth_m: 0.010     # 10 mm part Z-thickness
+    chamber_depth_m: 0.022  # 22 mm electrode spacing
+
+densification:
+  rho_rel_initial: 0.55
+  k0_per_s: 0.08
+  activation_energy_j_per_mol: 42000.0
+
+materials:
+  virgin:
+    sigma_s_per_m: 0.0
+    eps_r: 2.0
+
+  powder:
+    rho_solid_kg_per_m3: 490.0
+    k_solid_w_per_mk: 0.197
+    cp_solid_j_per_kgk: 1072.0
+
+  doped:
+    sigma_s_per_m: 0.04
+    eps_r: 20.0
+    sigma_temp_coeff_per_K: 0.0
+    sigma_density_coeff: 0.0
+    sigma_ref_temp_c: 23.0
+    rho_solid_kg_per_m3: 460.0
+    rho_liquid_kg_per_m3: 1010.0
+    k_solid_w_per_mk: 0.10
+    k_liquid_w_per_mk: 0.26
+    cp_solid_j_per_kgk: 2500.0
+    cp_liquid_j_per_kgk: 3279.0

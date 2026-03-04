@@ -1,0 +1,45 @@
+{
+  "source": "computed from outputs_eqs/*/fields.npz boundary mask statistics",
+  "cases": [
+    {
+      "id": "baseline_no_rotation",
+      "path": "outputs_eqs/turntable_test/no_rotation/fields.npz",
+      "bnd_std": 0.07243580580199778,
+      "r_bnd_min_max": 0.6986655889153324,
+      "rho_boundary_min": 0.5500004443284955,
+      "rho_boundary_max": 0.7872155907697741
+    },
+    {
+      "id": "single_90deg_at_3min",
+      "path": "outputs_eqs/turntable_test/rot90_fixed/fields.npz",
+      "bnd_std": 0.07048160210324217,
+      "r_bnd_min_max": 0.6981694999655593,
+      "rho_boundary_min": 0.5500005558009406,
+      "rho_boundary_max": 0.7877751116714096
+    },
+    {
+      "id": "four_90deg_rotations",
+      "path": "outputs_eqs/turntable_test/rot90x4_fixed/fields.npz",
+      "bnd_std": 0.05845297357668491,
+      "r_bnd_min_max": 0.6998880604035183,
+      "rho_boundary_min": 0.5520701952463428,
+      "rho_boundary_max": 0.7887978470843587
+    },
+    {
+      "id": "prewarp_only",
+      "path": "outputs_eqs/spike_coopt_v2_square/h0p00mm/fields.npz",
+      "bnd_std": 0.0403353356682327,
+      "r_bnd_min_max": 0.7993619307450199,
+      "rho_boundary_min": 0.5500004033755815,
+      "rho_boundary_max": 0.6880492830862874
+    },
+    {
+      "id": "prewarp_plus_four_90deg",
+      "path": "outputs_eqs/prewarp_turntable_4x_eval/fields.npz",
+      "bnd_std": 0.025329339689213064,
+      "r_bnd_min_max": 0.8644816510251825,
+      "rho_boundary_min": 0.5500004961323373,
+      "rho_boundary_max": 0.6362199770002008
+    }
+  ]
+}

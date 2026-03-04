@@ -35,6 +35,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
+import yaml
 from scipy.ndimage import binary_erosion, gaussian_filter
 
 # ── global style ──────────────────────────────────────────────────────────────
@@ -103,6 +104,15 @@ def make_rf_summary_v5(out_dir: str,
 
     d  = np.load(npz_path, allow_pickle=True)
     ts = json.load(open(ts_path))
+    used_cfg_path = os.path.join(out_dir, "used_config.yaml")
+    used_cfg = {}
+    if os.path.isfile(used_cfg_path):
+        try:
+            raw_cfg = yaml.safe_load(open(used_cfg_path))
+            if isinstance(raw_cfg, dict):
+                used_cfg = raw_cfg
+        except Exception:
+            used_cfg = {}
 
     x_mm = d["x"] * 1e3          # metres → mm,  shape (nx,)
     y_mm = d["y"] * 1e3          # metres → mm,  shape (ny,)
@@ -318,22 +328,26 @@ def make_rf_summary_v5(out_dir: str,
     ax_rho.contour(X, Y, pm_smooth, levels=[0.5],
                    colors=["black"], linewidths=[1.8], zorder=4)
 
-    # Melt fraction contours (only where part is defined)
-    phi_safe = np.where(pm, phi, 0.0)
+    # Melt fraction contours:
+    # default is full-domain (physically allows melt fronts outside target due to conduction);
+    # optional reporting override can clip to part for legacy style.
+    rep_cfg = used_cfg.get("reporting", {}) if isinstance(used_cfg.get("reporting", {}), dict) else {}
+    clip_melt_to_part = bool(rep_cfg.get("clip_melt_contours_to_part", False))
+    phi_contours = np.where(pm, phi, 0.0) if clip_melt_to_part else phi
     try:
-        ax_rho.contour(X, Y, phi_safe, levels=[0.10],
+        ax_rho.contour(X, Y, phi_contours, levels=[0.10],
                        colors=["cyan"],    linewidths=[1.1],
                        linestyles=["--"], zorder=5)
     except Exception:
         pass
     try:
-        ax_rho.contour(X, Y, phi_safe, levels=[0.50],
+        ax_rho.contour(X, Y, phi_contours, levels=[0.50],
                        colors=["yellow"],  linewidths=[1.4],
                        linestyles=["-"],  zorder=5)
     except Exception:
         pass
     try:
-        ax_rho.contour(X, Y, phi_safe, levels=[0.90],
+        ax_rho.contour(X, Y, phi_contours, levels=[0.90],
                        colors=["red"],     linewidths=[1.1],
                        linestyles=["--"], zorder=5)
     except Exception:

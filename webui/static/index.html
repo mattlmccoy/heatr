@@ -14,7 +14,7 @@
       <p>Operational control for electrothermal simulation runs</p>
     </div>
     <div class="header-tools">
-      <div class="status-pill" id="serverStatus">API online</div>
+      <div class="status-pill" id="serverStatus">HEATR service connected</div>
       <details class="settings-menu">
         <summary>Settings</summary>
         <div class="settings-grid">
@@ -54,26 +54,64 @@
   <nav class="tabs-nav">
     <a class="tab-link active" href="/index.html">Operation</a>
     <a class="tab-link" href="/results">Results</a>
-    <a class="tab-link" href="/examples">Examples</a>
+    <a class="tab-link" href="/files">Files</a>
     <a class="tab-link" href="/theory">Theory</a>
   </nav>
 
   <main class="grid design-grid-b run-layout">
     <section class="card form-card dash-card accent-blue">
-      <h2>Run Configuration</h2>
+      <div class="run-config-head">
+        <h2>Run Configuration</h2>
+        <div class="shape-preview-chip" id="shapePreviewChip" aria-live="polite">
+          <svg id="shapePreviewSvg" viewBox="0 0 100 100" role="img" aria-label="Selected shape preview">
+            <g id="shapePreviewGlyph"></g>
+          </svg>
+          <span id="shapePreviewLabel">square</span>
+        </div>
+        <button id="runBtnTop" type="submit" class="primary compact" form="runForm">Launch Run</button>
+      </div>
       <form id="runForm">
         <label>Mode
           <select id="mode" name="mode">
-            <option value="single">Single Exposure</option>
-            <option value="sweep">Exposure Sweep</option>
-            <option value="optimizer">Exposure Optimizer</option>
-            <option value="turntable">Turntable Run</option>
+            <option value="single">◎ │ Single Exposure</option>
+            <option value="sweep">≋ │ Exposure Sweep</option>
+            <option value="optimizer">◈ │ Exposure Optimizer</option>
+            <option value="turntable">↻ │ Turntable Run</option>
+            <option value="orientation_optimizer">⤾ │ Orientation Optimizer</option>
+            <option value="placement_optimizer">◫ │ Placement Optimizer</option>
+            <option value="shell_sweep">◌ │ Shell Thickness Sweep</option>
           </select>
         </label>
 
         <label>Shape
           <select id="shape" name="shape"></select>
         </label>
+        <div class="mode-section" data-mode="single sweep optimizer turntable orientation_optimizer placement_optimizer shell_sweep">
+          <details class="advanced-panel">
+            <summary>Geometry Size</summary>
+            <div class="adv-grid">
+              <label>Enable size override
+                <select id="geometrySizeEnabled">
+                  <option value="false" selected>false</option>
+                  <option value="true">true</option>
+                </select>
+              </label>
+              <label>Nominal size (mm)
+                <input id="geometryNominalMm" type="number" step="0.1" value="20.0" readonly />
+              </label>
+              <label>Desired size (mm)
+                <input id="geometrySizeMm" type="number" min="0.1" step="0.1" value="20.0" />
+              </label>
+              <label>Lock aspect ratio
+                <select id="geometryLockAspect">
+                  <option value="true" selected>true</option>
+                  <option value="false">false</option>
+                </select>
+              </label>
+            </div>
+            <p id="geometryNominalInfo" class="field-help">Nominal shape size: 20.0 mm.</p>
+          </details>
+        </div>
 
         <label>Base Config Override (optional)
           <select id="baseConfigSelect" name="base_config">
@@ -85,7 +123,7 @@
           <input id="outputName" name="output_name" type="text" placeholder="e.g. circle_6min_gui" required />
         </label>
 
-        <div class="mode-section" data-mode="single optimizer turntable">
+        <div class="mode-section" data-mode="single optimizer turntable orientation_optimizer placement_optimizer shell_sweep">
           <label>Exposure (minutes)
             <input id="exposureMinutes" name="exposure_minutes" type="number" min="0.1" step="0.1" value="6" />
           </label>
@@ -122,6 +160,385 @@
           </label>
         </div>
 
+        <div class="mode-section hidden" data-mode="orientation_optimizer">
+          <label>Angle min (deg)
+            <input id="orientationAngleMinDeg" type="number" step="1" value="0" />
+          </label>
+          <label>Angle max (deg)
+            <input id="orientationAngleMaxDeg" type="number" step="1" value="180" />
+          </label>
+          <label>Angle step (deg)
+            <input id="orientationAngleStepDeg" type="number" step="1" value="15" />
+          </label>
+          <label>Refine window (deg)
+            <input id="orientationRefineWindowDeg" type="number" step="1" value="10" />
+          </label>
+          <label>Refine step (deg)
+            <input id="orientationRefineStepDeg" type="number" step="1" value="5" />
+          </label>
+          <label>Exposure min (s)
+            <input id="orientationExposureMinS" type="number" step="1" value="240" />
+          </label>
+          <label>Exposure max (s)
+            <input id="orientationExposureMaxS" type="number" step="1" value="720" />
+          </label>
+          <label>Exposure step (s)
+            <input id="orientationExposureStepS" type="number" step="1" value="60" />
+          </label>
+          <label>Temp ceiling (C)
+            <input id="orientationTempCeilingC" type="number" step="1" value="250" />
+          </label>
+          <label>Min rho floor
+            <input id="orientationMinRhoFloor" type="number" min="0" max="1" step="0.01" value="0.55" />
+          </label>
+          <label>Generate angle gallery GIF
+            <select id="orientationAngleGifEnabled">
+              <option value="false" selected>false (faster)</option>
+              <option value="true">true (slower)</option>
+            </select>
+          </label>
+          <label>GIF frame duration (s)
+            <input id="orientationAngleGifFrameDurationS" type="number" min="0.1" step="0.1" value="2.0" />
+          </label>
+          <label>Angle plot color metric
+            <select id="orientationColorMetric">
+              <option value="mean_rho" selected>mean_rho (recommended)</option>
+              <option value="min_rho">min_rho</option>
+              <option value="temp_violation">temp_violation</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="mode-section hidden" data-mode="placement_optimizer">
+          <label>Algorithm
+            <select id="placementAlgorithm">
+              <option value="ga" selected>GA (recommended)</option>
+              <option value="cem">cem (legacy)</option>
+              <option value="random">random</option>
+            </select>
+          </label>
+          <label>N parts
+            <input id="placementNParts" type="number" min="4" step="1" value="4" />
+          </label>
+          <p class="field-help">Shape inherits from the main Shape selector.</p>
+          <label>Sample width (mm)
+            <input id="placementPartWidthMm" type="number" min="1" step="0.5" value="8.0" />
+          </label>
+          <label>Sample height (mm)
+            <input id="placementPartHeightMm" type="number" min="1" step="0.5" value="8.0" />
+          </label>
+          <label>Use turntable during placement
+            <select id="placementUseTurntable">
+              <option value="false" selected>false (faster)</option>
+              <option value="true">true (slower)</option>
+            </select>
+          </label>
+          <label>Turntable rotation per step (deg)
+            <input id="placementTurntableRotationDeg" type="number" step="0.1" value="90" />
+          </label>
+          <label>Turntable rotation events
+            <input id="placementTurntableTotalRotations" type="number" min="1" step="1" value="1" />
+          </label>
+          <label>Turntable interval (s, optional)
+            <input id="placementTurntableIntervalS" type="number" min="0.001" step="0.1" placeholder="Auto-space across run" />
+          </label>
+          <label>Clearance (mm)
+            <input id="placementClearanceMm" type="number" step="0.1" value="1.0" />
+          </label>
+          <label>Margin (mm)
+            <input id="placementSearchDomainMarginMm" type="number" step="0.1" value="2.0" />
+          </label>
+          <label>Proxy top K
+            <input id="placementProxyTopK" type="number" min="1" step="1" value="8" />
+          </label>
+          <label>Proxy population
+            <input id="placementProxyPopulation" type="number" min="4" step="1" value="24" />
+          </label>
+          <label>Proxy iters
+            <input id="placementProxyIters" type="number" min="1" step="1" value="4" />
+          </label>
+          <label>Proxy eval budget
+            <input id="placementProxyEvalBudget" type="number" min="8" step="1" value="96" />
+          </label>
+          <label>Temp ceiling (C)
+            <input id="placementTempCeilingC" type="number" step="1" value="250" />
+          </label>
+          <label>Min rho floor
+            <input id="placementMinRhoFloor" type="number" min="0" max="1" step="0.01" value="0.55" />
+          </label>
+          <details class="advanced-panel">
+            <summary>GA Controls (advanced)</summary>
+            <div class="adv-grid">
+              <label>GA population
+                <input id="placementGaPopulation" type="number" min="8" step="1" value="32" />
+              </label>
+              <label>GA generations
+                <input id="placementGaGenerations" type="number" min="1" step="1" value="8" />
+              </label>
+              <label>GA crossover rate
+                <input id="placementGaCrossoverRate" type="number" min="0" max="1" step="0.01" value="0.75" />
+              </label>
+              <label>GA mutation rate
+                <input id="placementGaMutationRate" type="number" min="0" max="1" step="0.01" value="0.18" />
+              </label>
+              <label>GA elitism
+                <input id="placementGaElitism" type="number" min="1" step="1" value="2" />
+              </label>
+              <label>GA tournament k
+                <input id="placementGaTournamentK" type="number" min="2" step="1" value="3" />
+              </label>
+              <label>GA seed
+                <input id="placementGaSeed" type="number" step="1" value="7" />
+              </label>
+            </div>
+          </details>
+        </div>
+
+        <div class="mode-section hidden" data-mode="shell_sweep">
+          <label>Shell thicknesses (mm, comma-separated)
+            <input id="shellSweepThicknessesMm" type="text" value="2,3,4,5,6,7" />
+          </label>
+          <label>Shapes for sweep (circle,square)
+            <input id="shellSweepShapes" type="text" value="circle,square" />
+          </label>
+          <label>Temp ceiling for ranking (C)
+            <input id="shellTempCeilingC" type="number" step="1" value="250" />
+          </label>
+        </div>
+
+        <details class="advanced-panel">
+          <summary>Antennae Assist (optional)</summary>
+          <div class="adv-grid">
+            <label>antennae.enabled
+              <select id="antennaeEnabledMode">
+                <option value="inherit" selected>inherit from base config</option>
+                <option value="true">enabled</option>
+                <option value="false">disabled</option>
+              </select>
+            </label>
+            <label>size mode
+              <select id="antennaeSizeMode">
+                <option value="global" selected>global size</option>
+                <option value="auto">auto size from Qrf deficit</option>
+              </select>
+            </label>
+            <label>global size (mm)
+              <input id="antennaeGlobalSizeMm" type="number" min="0.1" step="0.1" value="1.0" />
+            </label>
+            <label>auto min size (mm)
+              <input id="antennaeAutoMinMm" type="number" min="0.1" step="0.1" value="0.5" />
+            </label>
+            <label>auto max size (mm)
+              <input id="antennaeAutoMaxMm" type="number" min="0.1" step="0.1" value="2.0" />
+            </label>
+            <label>max antennae per part
+              <input id="antennaeMaxPerPart" type="number" min="1" step="1" value="4" />
+            </label>
+            <label>min anchor spacing (mm)
+              <input id="antennaeMinSpacingMm" type="number" min="0.1" step="0.1" value="2.0" />
+            </label>
+            <label>edge margin (mm)
+              <input id="antennaeEdgeMarginMm" type="number" min="0.1" step="0.1" value="1.0" />
+            </label>
+            <label>auto qrf percentile low
+              <input id="antennaeAutoQrfPercentileLow" type="number" min="0" max="100" step="1" value="10" />
+            </label>
+            <label>auto qrf percentile high
+              <input id="antennaeAutoQrfPercentileHigh" type="number" min="0" max="100" step="1" value="40" />
+            </label>
+            <div class="adv-section">
+              <button id="antennaePreviewBtn" type="button">Preview Antennae Placement</button>
+              <p class="field-help">Runs a fast EQS/Qrf pass and overlays candidate anchors + sizes.</p>
+            </div>
+            <label>calibration size ladder (mm)
+              <input id="antennaeCalibrationSizesMm" type="text" value="0.5,1.0,1.5,2.0" />
+            </label>
+            <label>calibration top-K coupled
+              <input id="antennaeCalibrationTopK" type="number" min="1" step="1" value="3" />
+            </label>
+            <label>include auto-size candidate
+              <select id="antennaeCalibrationIncludeAuto">
+                <option value="true" selected>true</option>
+                <option value="false">false</option>
+              </select>
+            </label>
+            <label>use turntable in calibration
+              <select id="antennaeCalibrationUseTurntable">
+                <option value="false" selected>false</option>
+                <option value="true">true</option>
+              </select>
+            </label>
+            <div class="adv-section">
+              <button id="antennaeCalibrateBtn" type="button">Queue Antennae Calibration</button>
+              <p class="field-help">Runs offline candidate sweep (proxy + coupled top-K) and writes calibration artifacts.</p>
+            </div>
+            <div class="adv-section">
+              <img id="antennaePreviewImg" class="file-preview-image hidden" alt="antennae preview" />
+              <pre id="antennaePreviewText" class="summary hidden"></pre>
+            </div>
+          </div>
+        </details>
+
+        <details class="advanced-panel">
+          <summary>Shelled Geometry (optional for non-sweep modes)</summary>
+          <div class="adv-grid">
+            <label>Enable shell
+              <select id="shellEnabled">
+                <option value="false" selected>false</option>
+                <option value="true">true</option>
+              </select>
+            </label>
+            <label>wall_thickness_mm
+              <input id="shellWallThicknessMm" type="number" min="0.1" step="0.1" value="3.0" />
+            </label>
+            <label>method
+              <select id="shellMethod">
+                <option value="offset_inward" selected>offset_inward</option>
+              </select>
+            </label>
+          </div>
+        </details>
+
+        <details class="advanced-panel">
+          <summary>Physics Model</summary>
+          <section class="model-info-card" id="modelInfoCard">
+            <h3>Model Comparison</h3>
+            <p class="muted">Loading model details and DSC provenance...</p>
+          </section>
+          <div class="adv-grid">
+            <label>Model Family
+              <select id="physicsModelFamily">
+                <option value="experimental_pa12_hybrid" selected>dsc_calibrated_pa12 (default)</option>
+                <option value="baseline">baseline (simplified)</option>
+              </select>
+            </label>
+            <label>dsc_model_enabled (writes physics_model.experimental_enabled)
+              <select id="physicsExperimentalEnabled">
+                <option value="false">false</option>
+                <option value="true" selected>true</option>
+              </select>
+            </label>
+            <label>provenance_tag
+              <input id="physicsProvenanceTag" type="text" placeholder="exp-pa12-v1" />
+            </label>
+            <label>parameter_source
+              <input id="physicsParameterSource" type="text" placeholder="literature+calibrated" />
+            </label>
+            <label>calibration_version
+              <input id="physicsCalibrationVersion" type="text" placeholder="exp-pa12-v1" />
+            </label>
+            <label>ab_bucket_id
+              <input id="physicsAbBucketId" type="text" placeholder="ab-2026-03-pa12" />
+            </label>
+            <label>provenance_file
+              <input id="physicsProvenanceFile" type="text" placeholder="configs/experimental_pa12_provenance.yaml" />
+            </label>
+            <label>dsc_profile_file
+              <input id="physicsDscProfileFile" type="text" placeholder="configs/experimental_pa12_dsc_profile.yaml" />
+            </label>
+
+            <div class="adv-section" id="expPhaseSection">
+              <strong>DSC-Calibrated Phase (Apparent Cp)</strong>
+              <p class="field-help">Used when model family is dsc_calibrated_pa12 (internal key: experimental_pa12_hybrid).</p>
+            </div>
+            <label>phase_model.type
+              <input id="expPhaseType" type="text" value="apparent_heat_capacity_dsc" />
+            </label>
+            <label>melt_onset_c
+              <input id="expMeltOnsetC" type="number" step="0.1" value="171.0" />
+            </label>
+            <label>melt_peak_c
+              <input id="expMeltPeakC" type="number" step="0.1" value="180.8" />
+            </label>
+            <label>melt_end_c
+              <input id="expMeltEndC" type="number" step="0.1" value="186.0" />
+            </label>
+            <label>lat_heat_j_per_kg
+              <input id="expLatHeat" type="number" step="1" value="101700" />
+            </label>
+            <label>cp_smoothing_strategy
+              <select id="expCpSmoothing">
+                <option value="linear">linear</option>
+                <option value="tanh">tanh</option>
+              </select>
+            </label>
+
+            <div class="adv-section" id="expDensSection">
+              <strong>DSC Model Densification (Viscous-Capillary)</strong>
+            </div>
+            <label>dens_model.type
+              <input id="expDensType" type="text" value="viscous_capillary_pa12" />
+            </label>
+            <label>viscosity_model
+              <select id="expViscosityModel">
+                <option value="arrhenius">arrhenius</option>
+                <option value="wlf">wlf</option>
+              </select>
+            </label>
+            <label>eta_ref_pa_s
+              <input id="expEtaRef" type="number" step="1" value="8000" />
+            </label>
+            <label>eta_ref_temp_k
+              <input id="expEtaRefTempK" type="number" step="0.1" value="458.15" />
+            </label>
+            <label>activation_energy_j_per_mol
+              <input id="expEtaEa" type="number" step="1" value="60000" />
+            </label>
+            <label>wlf_c1
+              <input id="expWlfC1" type="number" step="0.01" value="8.86" />
+            </label>
+            <label>wlf_c2_k
+              <input id="expWlfC2" type="number" step="0.1" value="101.6" />
+            </label>
+            <label>surface_tension_n_per_m
+              <input id="expSurfaceTension" type="number" step="0.0001" value="0.03" />
+            </label>
+            <label>particle_radius_m
+              <input id="expParticleRadius" type="number" step="0.000001" value="0.000035" />
+            </label>
+            <label>phi_exponent
+              <input id="expPhiExponent" type="number" step="0.01" value="1.0" />
+            </label>
+            <label>phi_threshold
+              <input id="expPhiThreshold" type="number" step="0.001" value="0.02" />
+            </label>
+            <label>porosity_exponent
+              <input id="expPorosityExponent" type="number" step="0.01" value="1.0" />
+            </label>
+            <label>geom_factor
+              <input id="expGeomFactor" type="number" step="0.001" value="0.05" />
+            </label>
+
+            <div class="adv-section" id="expCrSection">
+              <strong>Optional Crystallization</strong>
+            </div>
+            <label>crystallization_model.enabled
+              <select id="expCrEnabled">
+                <option value="false">false</option>
+                <option value="true">true</option>
+              </select>
+            </label>
+            <label>crystallization_model.type
+              <select id="expCrType">
+                <option value="nakamura">nakamura</option>
+                <option value="avrami_nonisothermal">avrami_nonisothermal</option>
+              </select>
+            </label>
+            <label>k0_per_s
+              <input id="expCrK0" type="number" step="0.0001" value="0.05" />
+            </label>
+            <label>ea_j_per_mol
+              <input id="expCrEa" type="number" step="1" value="42000" />
+            </label>
+            <label>exponent
+              <input id="expCrExponent" type="number" step="0.01" value="2.0" />
+            </label>
+            <label>liquid_suppression
+              <input id="expCrSuppression" type="number" step="0.01" value="0.25" />
+            </label>
+          </div>
+        </details>
+
         <details class="advanced-panel">
           <summary>Advanced Parameters (optional)</summary>
           <div class="adv-grid">
@@ -131,6 +548,14 @@
               <strong>Electric + Thermal Controls</strong>
               <p class="field-help">These tune RF drive conditions and heat-loss boundaries.</p>
             </div>
+            <label>Frequency profile
+              <select id="freqProfile">
+                <option value="rf_27_cal" selected>27.12 MHz (calibrated)</option>
+                <option value="rf_13_untested">13.56 MHz (untested approximation)</option>
+                <option value="custom">Custom (manual values)</option>
+              </select>
+            </label>
+            <p id="freqProfileWarning" class="field-help freq-profile-warning">Using calibrated 27.12 MHz defaults.</p>
             <label>frequency_hz (RF carrier)
               <input id="advFreqHz" type="number" min="1" step="1" placeholder="27120000" />
             </label>
@@ -144,7 +569,7 @@
               </select>
             </label>
             <label>generator_transfer_efficiency <input id="advEff" type="number" min="0" max="1" step="0.001" placeholder="0.02" /></label>
-            <label>effective_depth_m <input id="advDepth" type="number" min="0" step="0.001" placeholder="0.020" /></label>
+            <label>effective_depth_m <input id="advDepth" type="number" min="0" step="any" placeholder="0.020" /></label>
             <label>dt_s <input id="advDt" type="number" min="0.001" step="0.01" placeholder="0.5" /></label>
             <label>ambient_c (starting/environment temperature)
               <input id="advAmbient" type="number" step="0.1" placeholder="23" />
@@ -228,7 +653,8 @@
           <div class="adv-grid">
             <label>Config to preview
               <select id="yamlPreviewSelect">
-                <option value="__matched__">Auto matched config</option>
+                <option value="__effective__">Effective run config (merged)</option>
+                <option value="__matched__">Matched base config only</option>
               </select>
             </label>
           </div>
@@ -236,7 +662,7 @@
           <pre id="yamlPreview" class="summary yaml-preview">Select a config to preview.</pre>
         </details>
 
-        <button type="submit" class="primary">Launch Run</button>
+        <button id="runBtnBottom" type="submit" class="primary">Launch Run</button>
       </form>
       <p class="muted">Prewarp scripts are intentionally excluded.</p>
     </section>

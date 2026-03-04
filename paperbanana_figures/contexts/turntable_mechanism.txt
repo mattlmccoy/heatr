@@ -1,0 +1,25 @@
+Discrete turntable model for RFAM anisotropy averaging:
+
+Physical idea:
+- Electrodes remain stationary.
+- Entire part assembly rotates in discrete angle steps.
+- Fields are remapped after each rotation event.
+
+Rotation remap equation:
+f_new(x,z) = f_old(R_{-DeltaTheta}(x,z))
+for fields f in {temperature T, relative density rho_rel, melt fraction phi_melt}.
+
+Schedule:
+t_k = (k/(N_r+1))*t_total, k = 1..N_r
+Example used in manuscript:
+- N_r = 4
+- t_total = 360 s
+- Events at t = 72, 144, 216, 288 s
+- DeltaTheta = 90 deg each, total 360 deg
+
+Communicative intent:
+- Show why frequent early rotation outperforms one late rotation.
+- Emphasize finite-step residual anisotropy versus ideal continuous averaging limit.
+- Include side-by-side mini timelines:
+  A) single 90 deg at 180 s (weak improvement)
+  B) four 90 deg steps (stronger uniformity).

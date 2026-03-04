@@ -1,0 +1,14 @@
+vlm:
+  provider: openrouter
+  model: google/gemini-3-flash-preview
+
+image:
+  provider: openrouter_imagen
+  model: google/gemini-3-pro-image-preview
+
+pipeline:
+  refinement_iterations: 2
+  output_resolution: 2k
+
+output:
+  dir: paperbanana_figures/generated

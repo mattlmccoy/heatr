@@ -1,0 +1,26 @@
+[
+  {
+    "strategy": "Baseline (no correction)",
+    "prewarp": false,
+    "bnd_std": 0.0781,
+    "r_bnd": 0.684
+  },
+  {
+    "strategy": "Prewarp only (L_eff=7 mm)",
+    "prewarp": true,
+    "bnd_std": 0.0562,
+    "r_bnd": 0.742
+  },
+  {
+    "strategy": "4x 90 deg turntable only",
+    "prewarp": false,
+    "bnd_std": 0.0516,
+    "r_bnd": 0.721
+  },
+  {
+    "strategy": "Prewarp + 4x 90 deg",
+    "prewarp": true,
+    "bnd_std": 0.0108,
+    "r_bnd": 0.938
+  }
+]

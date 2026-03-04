@@ -1,0 +1,83 @@
+version: "exp-pa12-prov-v1"
+calibration_version: "exp-pa12-v1"
+notes:
+  - "This table stores parameter provenance for the experimental PA12 hybrid bucket."
+  - "Baseline model remains unchanged and is not gated by this table."
+
+sources:
+  JA2022:
+    citation: "Allison et al., Computational design strategy to improve RF heating uniformity, Rapid Prototyping Journal (2022), 10-1108/RPJ-08-2021-0193"
+    path: "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/previous-work/Computational_design_strategy_to_improve_RF_heating_uniformity_10-1108_RPJ-08-2021-0193.pdf"
+  JA2022_VOL:
+    citation: "Allison et al., Volumetric fusion of graphite-doped nylon, Rapid Prototyping Journal (2022), 10-1108/RPJ-09-2020-0218"
+    path: "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/previous-work/Seepersad-volumetric_fusion_of_graphite_doped_nylon_10-1108_RPJ-09-2020-0218.pdf"
+  NAKAMURA_CLASS:
+    citation: "Nakamura/Avrami non-isothermal crystallization modeling context"
+    citation_note: "Reference link intentionally omitted until verified."
+  INTERNAL_DSC_PA12:
+    citation: "HEATR internal PA12 DSC calibration dataset"
+    citation_note: "Primary source for onset/peak/end and latent heat values in experimental_pa12_dsc_profile.yaml."
+
+parameters:
+  phase_model.melt_onset_c:
+    value: 171.0
+    units: "C"
+    source: "INTERNAL_DSC_PA12"
+    page_eq: "internal DSC calibration profile"
+    confidence: "medium"
+  phase_model.melt_peak_c:
+    value: 180.8
+    units: "C"
+    source: "INTERNAL_DSC_PA12"
+    page_eq: "internal DSC calibration profile"
+    confidence: "medium"
+  phase_model.melt_end_c:
+    value: 186.0
+    units: "C"
+    source: "INTERNAL_DSC_PA12"
+    page_eq: "internal DSC calibration profile"
+    confidence: "medium"
+  phase_model.lat_heat_j_per_kg:
+    value: 101700.0
+    units: "J/kg"
+    source: "INTERNAL_DSC_PA12"
+    page_eq: "internal DSC calibration profile"
+    confidence: "medium"
+
+  dens_model.viscosity_model:
+    value: "arrhenius"
+    units: "-"
+    source: "JA2022_VOL"
+    page_eq: "polymer melt flow dependence on temperature"
+    confidence: "medium"
+  dens_model.surface_tension_n_per_m:
+    value: 0.03
+    units: "N/m"
+    source: "JA2022"
+    page_eq: "calibrated model constant in current codebase"
+    confidence: "medium"
+  dens_model.particle_radius_m:
+    value: 3.5e-05
+    units: "m"
+    source: "JA2022_VOL"
+    page_eq: "powder-size dependent process context"
+    confidence: "medium"
+
+  crystallization_model.k0_per_s:
+    value: 0.05
+    units: "1/s"
+    source: "NAKAMURA_CLASS"
+    page_eq: "Nakamura/Avrami model-form class default"
+    confidence: "low"
+  crystallization_model.ea_j_per_mol:
+    value: 42000.0
+    units: "J/mol"
+    source: "NAKAMURA_CLASS"
+    page_eq: "kinetics model-form default"
+    confidence: "low"
+  crystallization_model.exponent:
+    value: 2.0
+    units: "-"
+    source: "NAKAMURA_CLASS"
+    page_eq: "Avrami exponent class default"
+    confidence: "low"

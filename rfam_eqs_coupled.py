@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import csv
 import io
 import json
 import math
+from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,7 +15,7 @@ import numpy as np
 import yaml
 from scipy import sparse
 from scipy.sparse import linalg as spla
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, binary_erosion, distance_transform_edt
 
 import os
 
@@ -22,9 +25,10 @@ import matplotlib.pyplot as plt
 from matplotlib.path import Path as MplPath
 from matplotlib.ticker import FuncFormatter
 try:
-    from PIL import Image
+    from PIL import Image, ImageDraw
 except Exception:  # pragma: no cover - optional dependency guard
     Image = None
+    ImageDraw = None
 
 from shapes import make_shape, rotate
 
@@ -48,6 +52,8 @@ class SimState:
     T: np.ndarray
     phi: np.ndarray
     rho_rel: np.ndarray
+    x_cryst: np.ndarray | None = None
+    part_id_mask: np.ndarray | None = None
 
 
 def _copy_state(state: "SimState") -> "SimState":
@@ -67,6 +73,8 @@ def _copy_state(state: "SimState") -> "SimState":
         T=state.T.copy(),
         phi=state.phi.copy(),
         rho_rel=state.rho_rel.copy(),
+        x_cryst=(None if state.x_cryst is None else state.x_cryst.copy()),
+        part_id_mask=(None if state.part_id_mask is None else state.part_id_mask.copy()),
     )
 
 
@@ -109,6 +117,10 @@ class PhaseConfig:
     dt_pc_c: float
     smooth_shape: str
     tanh_beta: float
+    dsc_onset_c: float | None = None
+    dsc_peak_c: float | None = None
+    dsc_end_c: float | None = None
+    cp_smoothing_strategy: str = "linear"
 
 
 @dataclass
@@ -161,6 +173,22 @@ class ThermalParams:
     depth_correction_enabled: bool = False
     depth_correction_part_depth_m: float = 0.010
     depth_correction_chamber_depth_m: float = 0.016
+    physics_model_family: str = "baseline"
+    experimental_viscosity_model: str = "arrhenius"
+    experimental_viscosity_ref_pa_s: float = 8.0e3
+    experimental_viscosity_ref_temp_k: float = 458.15
+    experimental_viscosity_activation_j_per_mol: float = 6.0e4
+    experimental_wlf_c1: float = 8.86
+    experimental_wlf_c2_k: float = 101.6
+    experimental_phi_exponent: float = 1.0
+    experimental_porosity_exponent: float = 1.0
+    experimental_phi_threshold: float = 0.02
+    crystallization_enabled: bool = False
+    crystallization_model: str = "nakamura"
+    crystallization_k0_per_s: float = 0.05
+    crystallization_ea_j_per_mol: float = 4.2e4
+    crystallization_exponent: float = 2.0
+    crystallization_liquid_suppression: float = 0.25
     debug: bool = False
 
 
@@ -169,6 +197,51 @@ def load_config(path: Path) -> dict:
     if not isinstance(cfg, dict):
         raise ValueError(f"Invalid config file: {path}")
     return cfg
+
+
+def _load_provenance_table(path: Path) -> dict:
+    data = yaml.safe_load(path.read_text())
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid provenance table: {path}")
+    params = data.get("parameters", {})
+    if not isinstance(params, dict):
+        raise ValueError(f"Invalid provenance table parameters block: {path}")
+    return data
+
+
+def _validate_experimental_provenance(
+    provenance: dict,
+    required_params: list[str],
+) -> None:
+    params = provenance.get("parameters", {})
+    missing = [p for p in required_params if p not in params]
+    if missing:
+        raise ValueError(
+            "Experimental model requires provenance entries for: "
+            + ", ".join(missing)
+        )
+    for key in required_params:
+        item = params.get(key, {})
+        if not isinstance(item, dict):
+            raise ValueError(f"Invalid provenance entry for {key}")
+        for field in ("source", "page_eq", "confidence"):
+            if field not in item:
+                raise ValueError(f"Provenance entry {key} missing field '{field}'")
+
+
+def _load_dsc_profile(path: Path) -> dict:
+    data = yaml.safe_load(path.read_text())
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid DSC profile: {path}")
+    for key in ("melt_onset_c", "melt_peak_c", "melt_end_c", "lat_heat_j_per_kg"):
+        if key not in data:
+            raise ValueError(f"DSC profile missing '{key}': {path}")
+    onset = float(data["melt_onset_c"])
+    peak = float(data["melt_peak_c"])
+    end = float(data["melt_end_c"])
+    if not (onset < peak < end):
+        raise ValueError(f"DSC profile invalid interval (need onset < peak < end): {path}")
+    return data
 
 
 def oriented_rect_mask(
@@ -485,6 +558,40 @@ def phase_fraction(T: np.ndarray, phase_cfg: PhaseConfig) -> tuple[np.ndarray, n
     T_eval = np.array(T, dtype=float, copy=True)
     model = str(phase_cfg.model).strip().lower()
 
+    if model in {"apparent_heat_capacity_dsc", "dsc_apparent_cp"}:
+        onset = float(
+            phase_cfg.dsc_onset_c
+            if phase_cfg.dsc_onset_c is not None
+            else (phase_cfg.t_pc_c - 0.5 * max(phase_cfg.dt_pc_c, 1e-9))
+        )
+        end = float(
+            phase_cfg.dsc_end_c
+            if phase_cfg.dsc_end_c is not None
+            else (phase_cfg.t_pc_c + 0.5 * max(phase_cfg.dt_pc_c, 1e-9))
+        )
+        peak = float(
+            phase_cfg.dsc_peak_c
+            if phase_cfg.dsc_peak_c is not None
+            else 0.5 * (onset + end)
+        )
+        if end <= onset:
+            end = onset + 1e-6
+        width = max(end - onset, 1e-9)
+        smooth = str(phase_cfg.cp_smoothing_strategy or "linear").strip().lower()
+
+        if smooth == "tanh":
+            w = max(0.20 * width, 1e-9)
+            z = (T_eval - peak) / w
+            phi = 0.5 * (1.0 + np.tanh(z))
+            dphi_dT = 0.5 * (1.0 / np.cosh(z) ** 2) / w
+            phi = np.where(T_eval <= onset, 0.0, np.where(T_eval >= end, 1.0, phi))
+            dphi_dT = np.where((T_eval >= onset) & (T_eval <= end), dphi_dT, 0.0)
+        else:
+            # Default DSC apparent-cp style melt interval mapping.
+            phi = np.clip((T_eval - onset) / width, 0.0, 1.0)
+            dphi_dT = np.where((T_eval >= onset) & (T_eval <= end), 1.0 / width, 0.0)
+        return phi, dphi_dT
+
     if model in {"comsol_heaviside", "heaviside"}:
         # COMSOL phase model uses a smooth Heaviside centered at T_pc with width dT_pc.
         t_pc = float(phase_cfg.t_pc_c)
@@ -595,74 +702,57 @@ def chimney_natural_convection_h(
     return np.clip(h, 0.0, 1e4)
 
 
-def make_domain(cfg: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    geom = cfg["geometry"]
-    nx = int(geom["grid_nx"])
-    ny = int(geom["grid_ny"])
-    wx = float(geom["chamber_x"])
-    wy = float(geom["chamber_y"])
+def _shape_kwargs_from_part(part: dict) -> dict:
+    out: dict = {"n_circle_pts": int(part.get("n_circle_pts", 220))}
+    for _k in (
+        "svg_path", "image_path", "thickness", "inner_radius_ratio",
+        "n_points", "corner_radius", "curve_pts", "path_index",
+        "threshold", "polygon_points",
+    ):
+        if _k in part:
+            out[_k] = part[_k]
+    return out
 
-    x = np.linspace(-0.5 * wx, 0.5 * wx, nx)
-    y = np.linspace(-0.5 * wy, 0.5 * wy, ny)
 
-    part = geom["part"]
-    shape = part["shape"]
+def _single_part_mask_and_fill(
+    x: np.ndarray,
+    y: np.ndarray,
+    part: dict,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    shape = str(part["shape"])
     width = float(part["width"])
     height = float(part.get("height", width))
     rot_deg = float(part.get("rotation_deg", 0.0))
     cx = float(part.get("center_x", 0.0))
     cy = float(part.get("center_y", 0.0))
-
-    _shape_kwargs = dict(
-        n_circle_pts=int(part.get("n_circle_pts", 220)),
-    )
-    # Pass optional shape-specific kwargs from YAML if present
-    for _k in ("svg_path", "image_path", "thickness", "inner_radius_ratio",
-               "n_points", "corner_radius", "curve_pts", "path_index", "threshold",
-               "polygon_points"):        # polygon_points used by rfam_prewarp.py
-        if _k in part:
-            _shape_kwargs[_k] = part[_k]
-    poly = make_shape(shape, width, height, **_shape_kwargs)
+    poly = make_shape(shape, width, height, **_shape_kwargs_from_part(part))
     poly = rotate(poly, math.radians(rot_deg))
     poly[:, 0] += cx
     poly[:, 1] += cy
 
-    # ── exact analytical masking for curved shapes ─────────────────────────
-    # Replaces polygon rasterization for circles/ellipses to eliminate the
-    # staircase boundary artifacts that create false E-field hotspots in EQS.
     _s = shape.strip().lower()
     if _s in {"circle", "disk", "cylinder", "sphere"}:
         _xx, _yy = np.meshgrid(x, y, indexing="xy")
-        if rot_deg == 0.0:
-            r = width / 2.0
-            p_mask = ((_xx - cx) ** 2 + (_yy - cy) ** 2) <= r ** 2
-        else:
-            # rotated circle is still a circle
-            r = width / 2.0
-            p_mask = ((_xx - cx) ** 2 + (_yy - cy) ** 2) <= r ** 2
+        r = width / 2.0
+        p_mask = ((_xx - cx) ** 2 + (_yy - cy) ** 2) <= r ** 2
     elif _s in {"ellipse", "oval"}:
         _xx, _yy = np.meshgrid(x, y, indexing="xy")
-        a = width  / 2.0   # x semi-axis
-        b = height / 2.0   # y semi-axis
+        a = width / 2.0
+        b = height / 2.0
         if rot_deg == 0.0:
             p_mask = ((_xx - cx) ** 2 / a ** 2 + (_yy - cy) ** 2 / b ** 2) <= 1.0
         else:
-            # rotated ellipse — rotate coordinates into principal axes
             _cos_r = math.cos(-math.radians(rot_deg))
             _sin_r = math.sin(-math.radians(rot_deg))
-            _dx = _xx - cx;  _dy = _yy - cy
-            _u  = _dx * _cos_r - _dy * _sin_r
-            _v  = _dx * _sin_r + _dy * _cos_r
+            _dx = _xx - cx
+            _dy = _yy - cy
+            _u = _dx * _cos_r - _dy * _sin_r
+            _v = _dx * _sin_r + _dy * _cos_r
             p_mask = (_u ** 2 / a ** 2 + _v ** 2 / b ** 2) <= 1.0
     else:
         p_mask = polygon_mask(poly, x, y)
-    d_mask = p_mask.copy()  # v1: whole part is doped region.
 
-    # ── sub-pixel fill fraction for anti-aliased EQS material boundary ──────
-    # Smoothly blends σ and ε_r at the boundary, eliminating the staircase
-    # corner artefacts that produce false E-field hot-spots for non-axis-aligned
-    # edges (diagonal faces, curves approximated on a Cartesian grid).
-    _N_SUB = 8   # 8×8 = 64 sub-samples per cell  (~0.06 ms per 14 400-cell grid)
+    _N_SUB = 8
     if _s in {"circle", "disk", "cylinder", "sphere"}:
         r_fill = width / 2.0
         fill_frac = _subpixel_fill_fraction(
@@ -671,7 +761,7 @@ def make_domain(cfg: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarr
             x, y, n_sub=_N_SUB,
         )
     elif _s in {"ellipse", "oval"}:
-        a_fill = width  / 2.0
+        a_fill = width / 2.0
         b_fill = height / 2.0
         if rot_deg == 0.0:
             fill_frac = _subpixel_fill_fraction(
@@ -683,19 +773,322 @@ def make_domain(cfg: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarr
             _cos_f = math.cos(-math.radians(rot_deg))
             _sin_f = math.sin(-math.radians(rot_deg))
             fill_frac = _subpixel_fill_fraction(
-                lambda xx, yy, _cx=cx, _cy=cy, _a=a_fill, _b=b_fill,
-                _c=_cos_f, _s=_sin_f: (
-                    ((xx-_cx)*_c - (yy-_cy)*_s)**2 / _a**2
-                    + ((xx-_cx)*_s + (yy-_cy)*_c)**2 / _b**2 <= 1.0
+                lambda xx, yy, _cx=cx, _cy=cy, _a=a_fill, _b=b_fill, _c=_cos_f, _s=_sin_f: (
+                    ((xx - _cx) * _c - (yy - _cy) * _s) ** 2 / _a ** 2
+                    + ((xx - _cx) * _s + (yy - _cy) * _c) ** 2 / _b ** 2 <= 1.0
                 ),
                 x, y, n_sub=_N_SUB,
             )
     else:
-        # All other polygonal shapes — sub-pixel sampling of the polygon
         fill_frac = _subpixel_fill_fraction(poly, x, y, n_sub=_N_SUB)
+    return poly, p_mask, fill_frac
+
+
+def _apply_shell_to_mask(
+    x: np.ndarray,
+    y: np.ndarray,
+    part: dict,
+    outer_mask: np.ndarray,
+    outer_fill: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    shell_cfg = part.get("shell", {}) if isinstance(part.get("shell", {}), dict) else {}
+    if not shell_cfg:
+        return outer_mask, outer_fill
+    if not bool(shell_cfg.get("enabled", False)):
+        return outer_mask, outer_fill
+    wall_mm = float(shell_cfg.get("wall_thickness_mm", 0.0))
+    if wall_mm <= 0.0:
+        return outer_mask, outer_fill
+    method = str(shell_cfg.get("method", "offset_inward")).strip().lower()
+    if method != "offset_inward":
+        return outer_mask, outer_fill
+
+    shape = str(part.get("shape", "")).strip().lower()
+    width = float(part.get("width", 0.0))
+    height = float(part.get("height", width))
+    inset = 2.0 * wall_mm * 1e-3
+    if inset <= 0.0 or inset >= min(width, height):
+        return outer_mask, outer_fill
+
+    inner_part = dict(part)
+    inner_part["width"] = width - inset
+    inner_part["height"] = height - inset
+    if shape not in {"circle", "disk", "cylinder", "sphere", "square", "rect", "rectangle"}:
+        print(f"  [shell] shape '{shape}' not supported in v1; using solid mask")
+        return outer_mask, outer_fill
+
+    _, inner_mask, inner_fill = _single_part_mask_and_fill(x, y, inner_part)
+    shell_mask = outer_mask & (~inner_mask)
+    shell_fill = np.clip(outer_fill - inner_fill, 0.0, 1.0)
+    return shell_mask, shell_fill
+
+
+def _antennae_cfg_from_root(cfg: dict) -> dict:
+    ant = cfg.get("antennae", {}) if isinstance(cfg.get("antennae", {}), dict) else {}
+    spk = cfg.get("spike", {}) if isinstance(cfg.get("spike", {}), dict) else {}
+    out = dict(ant)
+    for k, v in spk.items():
+        out.setdefault(str(k), v)
+    return out
+
+
+def _antennae_enabled(cfg: dict) -> bool:
+    ant = _antennae_cfg_from_root(cfg)
+    return bool(ant.get("enabled", False))
+
+
+def _apply_antennae_to_mask(
+    x: np.ndarray,
+    y: np.ndarray,
+    part: dict,
+    base_mask: np.ndarray,
+    base_fill: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    inst_raw = part.get("antennae_instances", [])
+    if not isinstance(inst_raw, list) or not inst_raw:
+        return base_mask, base_fill
+    out_mask = np.array(base_mask, copy=True, dtype=bool)
+    out_fill = np.array(base_fill, copy=True, dtype=float)
+    for inst in inst_raw:
+        if not isinstance(inst, dict):
+            continue
+        try:
+            cx = float(inst.get("center_x", 0.0))
+            cy = float(inst.get("center_y", 0.0))
+            size_mm = float(inst.get("size_mm", 0.0))
+        except Exception:
+            continue
+        r = max(size_mm * 1e-3, 0.0)
+        if r <= 0.0:
+            continue
+        xx, yy = np.meshgrid(x, y, indexing="xy")
+        m = ((xx - cx) ** 2 + (yy - cy) ** 2) <= r ** 2
+        if not np.any(m):
+            continue
+        f = _subpixel_fill_fraction(
+            lambda xq, yq, _cx=cx, _cy=cy, _r=r: (xq - _cx) ** 2 + (yq - _cy) ** 2 <= _r ** 2,
+            x,
+            y,
+            n_sub=8,
+        )
+        out_mask |= m
+        out_fill = np.maximum(out_fill, f)
+    return out_mask, out_fill
+
+
+def _resolve_antennae_instances(cfg: dict) -> dict:
+    ant = _antennae_cfg_from_root(cfg)
+    if not bool(ant.get("enabled", False)):
+        return {"enabled": False, "instances": []}
+    geom = cfg.get("geometry", {}) if isinstance(cfg.get("geometry", {}), dict) else {}
+    if bool(geom.get("_antennae_resolved", False)):
+        rows: list[dict] = []
+        parts = _parts_from_geometry(geom) if isinstance(geom, dict) else []
+        for pid, p in enumerate(parts, start=1):
+            insts = p.get("antennae_instances", []) if isinstance(p, dict) else []
+            if not isinstance(insts, list):
+                continue
+            for inst in insts:
+                if isinstance(inst, dict):
+                    rr = dict(inst)
+                    rr["part_id"] = int(pid)
+                    rows.append(rr)
+        return {"enabled": True, "instances": rows}
+
+    base = copy.deepcopy(cfg)
+    base_geom = base.setdefault("geometry", {})
+    base_geom.pop("_antennae_resolved", None)
+    for p in _parts_from_geometry(base_geom):
+        if isinstance(p, dict):
+            p.pop("antennae_instances", None)
+
+    x, y, _, _, doped_mask, elec_hi, elec_lo, fill_frac, part_id_mask, _ = make_domain(base)
+    dx = float(base_geom["chamber_x"]) / max(int(base_geom["grid_nx"]) - 1, 1)
+    dy = float(base_geom["chamber_y"]) / max(int(base_geom["grid_ny"]) - 1, 1)
+    dA = dx * dy
+    elec = base["electric"]
+    mats = base["materials"]
+    sigma_v = max(float(mats["virgin"]["sigma_s_per_m"]), 1e-8)
+    eps_v = float(mats["virgin"]["eps_r"])
+    sigma_d0 = float(mats["doped"]["sigma_s_per_m"])
+    eps_d = float(mats["doped"]["eps_r"])
+    sigma = sigma_v + fill_frac * (sigma_d0 - sigma_v)
+    eps_r = eps_v + fill_frac * (eps_d - eps_v)
+    omega = 2.0 * math.pi * float(elec["frequency_hz"])
+    v0 = float(elec["voltage_v"])
+    mode = str(elec.get("voltage_mode", "centered")).strip().lower()
+    if mode in {"grounded", "single_ended"}:
+        v_hi, v_lo = v0, 0.0
+    else:
+        v_hi, v_lo = 0.5 * v0, -0.5 * v0
+    _, _, _, _, _, qrf = solve_electric_state(
+        sigma, eps_r, omega, elec_hi, elec_lo, v_hi, v_lo, dx, dy, elec, x, y,
+        float(elec.get("power_factor", 1.0)),
+        float(elec.get("max_qrf_w_per_m3", 1.0e11)),
+    )
+    if bool(elec.get("zero_qrf_outside_doped", True)):
+        qrf = np.where(doped_mask, qrf, 0.0)
+
+    size_mode = str(ant.get("size_mode", "global")).strip().lower()
+    global_size_mm = float(ant.get("global_size_mm", 1.0))
+    auto = ant.get("auto_size", {}) if isinstance(ant.get("auto_size", {}), dict) else {}
+    auto_min_mm = float(auto.get("min_mm", 0.5))
+    auto_max_mm = float(auto.get("max_mm", 2.0))
+    q_lo_pct = float(auto.get("qrf_percentile_low", 10.0))
+    q_hi_pct = float(auto.get("qrf_percentile_high", 40.0))
+    plc = ant.get("placement", {}) if isinstance(ant.get("placement", {}), dict) else {}
+    max_n = int(plc.get("max_antennae_per_part", 4))
+    min_spacing = float(plc.get("min_anchor_spacing_mm", 2.0)) * 1e-3
+    edge_margin = float(plc.get("edge_margin_mm", 1.0)) * 1e-3
+
+    yy, xx = np.meshgrid(y, x, indexing="ij")
+    parts = _parts_from_geometry(cfg["geometry"])
+    signed_cache: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    selected_rows: list[dict] = []
+
+    for pid in sorted(int(v) for v in np.unique(part_id_mask) if int(v) > 0):
+        m = part_id_mask == pid
+        if not np.any(m):
+            continue
+        edge = m & (~binary_erosion(m))
+        if not np.any(edge):
+            continue
+        q_edge = qrf[edge]
+        if q_edge.size == 0:
+            continue
+        q_lo = float(np.percentile(q_edge, q_lo_pct))
+        q_hi = float(np.percentile(q_edge, q_hi_pct))
+        denom = max(q_hi - q_lo, 1e-12)
+        idxs = np.argwhere(edge)
+        idxs = sorted(idxs, key=lambda ij: float(qrf[int(ij[0]), int(ij[1])]))
+        part_cfg = parts[pid - 1] if pid - 1 < len(parts) else {}
+        cx0 = float(part_cfg.get("center_x", 0.0)) if isinstance(part_cfg, dict) else 0.0
+        cy0 = float(part_cfg.get("center_y", 0.0)) if isinstance(part_cfg, dict) else 0.0
+        signed = distance_transform_edt(m) - distance_transform_edt(~m)
+        gy, gx = np.gradient(signed)
+        signed_cache[pid] = (signed, gx, gy)
+        picked_xy: list[tuple[float, float]] = []
+        for iy, ix in idxs:
+            qv = float(qrf[int(iy), int(ix)])
+            if qv > q_hi:
+                continue
+            px = float(x[int(ix)])
+            py = float(y[int(iy)])
+            if abs(px) > (0.5 * float(base_geom["chamber_x"]) - edge_margin):
+                continue
+            if abs(py) > (0.5 * float(base_geom["chamber_y"]) - edge_margin):
+                continue
+            if any(math.hypot(px - sx, py - sy) < min_spacing for sx, sy in picked_xy):
+                continue
+            deficit = float(np.clip((q_hi - qv) / denom, 0.0, 1.0))
+            if size_mode == "auto":
+                size_mm = float(np.clip(auto_min_mm + deficit * (auto_max_mm - auto_min_mm), auto_min_mm, auto_max_mm))
+            else:
+                size_mm = float(max(global_size_mm, 0.05))
+            nxv = -float(gx[int(iy), int(ix)])
+            nyv = -float(gy[int(iy), int(ix)])
+            nn = math.hypot(nxv, nyv)
+            if nn < 1e-12:
+                nxv = px - cx0
+                nyv = py - cy0
+                nn = math.hypot(nxv, nyv)
+            if nn < 1e-12:
+                nxv, nyv, nn = 1.0, 0.0, 1.0
+            nxv /= nn
+            nyv /= nn
+            offset = 0.55 * size_mm * 1e-3
+            acx = float(px + nxv * offset)
+            acy = float(py + nyv * offset)
+            picked_xy.append((px, py))
+            selected_rows.append({
+                "part_id": int(pid),
+                "anchor_x": px,
+                "anchor_y": py,
+                "center_x": acx,
+                "center_y": acy,
+                "size_mm": float(size_mm),
+                "qrf": qv,
+                "qrf_deficit": deficit,
+                "size_mode": size_mode,
+                "power_w_per_m": float(np.sum(qrf[m]) * dA),
+            })
+            if len(picked_xy) >= max_n:
+                break
+
+    for pid, p in enumerate(parts, start=1):
+        if not isinstance(p, dict):
+            continue
+        rows = [r for r in selected_rows if int(r.get("part_id", -1)) == pid]
+        p["antennae_instances"] = [
+            {
+                "center_x": float(r["center_x"]),
+                "center_y": float(r["center_y"]),
+                "size_mm": float(r["size_mm"]),
+                "anchor_x": float(r["anchor_x"]),
+                "anchor_y": float(r["anchor_y"]),
+                "qrf_deficit": float(r["qrf_deficit"]),
+            }
+            for r in rows
+        ]
+    cfg["geometry"]["_antennae_resolved"] = True
+    cfg["geometry"]["_antennae_summary"] = {"instances": selected_rows}
+    return {"enabled": True, "instances": selected_rows}
+
+
+def _parts_from_geometry(geom: dict) -> list[dict]:
+    parts_raw = geom.get("parts", None)
+    if isinstance(parts_raw, list) and parts_raw:
+        return [p for p in parts_raw if isinstance(p, dict)]
+    part = geom.get("part", {})
+    if not isinstance(part, dict):
+        raise ValueError("geometry.part must be a mapping")
+    return [part]
+
+
+def make_domain(
+    cfg: dict,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[np.ndarray]]:
+    geom = cfg["geometry"]
+    nx = int(geom["grid_nx"])
+    ny = int(geom["grid_ny"])
+    wx = float(geom["chamber_x"])
+    wy = float(geom["chamber_y"])
+
+    x = np.linspace(-0.5 * wx, 0.5 * wx, nx)
+    y = np.linspace(-0.5 * wy, 0.5 * wy, ny)
+
+    parts = _parts_from_geometry(geom)
+    if not parts:
+        raise ValueError("No geometry part definition found")
+    boolean_cfg = geom.get("boolean", {}) if isinstance(geom.get("boolean", {}), dict) else {}
+    boolean_mode = str(boolean_cfg.get("mode", "union")).strip().lower()
+    if boolean_mode != "union":
+        raise ValueError("Only geometry.boolean.mode='union' is supported in v1")
+
+    global_shell = geom.get("shell", {}) if isinstance(geom.get("shell", {}), dict) else {}
+    p_mask = np.zeros((ny, nx), dtype=bool)
+    d_mask = np.zeros((ny, nx), dtype=bool)
+    fill_frac = np.zeros((ny, nx), dtype=float)
+    part_id_mask = np.zeros((ny, nx), dtype=np.int32)
+    part_polys: list[np.ndarray] = []
+    for idx, p in enumerate(parts, start=1):
+        part_cfg = dict(p)
+        if global_shell and "shell" not in part_cfg:
+            part_cfg["shell"] = dict(global_shell)
+        poly_i, mask_i, fill_i = _single_part_mask_and_fill(x, y, part_cfg)
+        mask_i, fill_i = _apply_shell_to_mask(x, y, part_cfg, mask_i, fill_i)
+        mask_i, fill_i = _apply_antennae_to_mask(x, y, part_cfg, mask_i, fill_i)
+        if not np.any(mask_i):
+            continue
+        part_polys.append(poly_i)
+        p_mask |= mask_i
+        d_mask |= mask_i
+        fill_frac = np.maximum(fill_frac, fill_i)
+        part_id_mask[mask_i] = idx
 
     elec = cfg["electrodes"]
     mode = str(elec.get("mode", "plates")).strip().lower()
+    part_poly_ref = part_polys[0] if part_polys else np.array([[-1e-3, -1e-3], [1e-3, -1e-3], [1e-3, 1e-3], [-1e-3, 1e-3]])
     if mode == "boundary":
         hi, lo = build_boundary_electrodes(
             x=x,
@@ -712,7 +1105,7 @@ def make_domain(cfg: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarr
         hi, lo = build_electrodes(
             x=x,
             y=y,
-            part_poly=poly,
+            part_poly=part_poly_ref,
             spacing=float(elec["spacing"]),
             length=float(elec["length"]),
             thickness=float(elec["thickness"]),
@@ -721,7 +1114,7 @@ def make_domain(cfg: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarr
             center_y=float(elec.get("center_y", 0.0)),
         )
 
-    return x, y, poly, p_mask, d_mask, hi, lo, fill_frac
+    return x, y, part_poly_ref, p_mask, d_mask, hi, lo, fill_frac, part_id_mask, part_polys
 
 
 def _build_rotated_part_mask(
@@ -729,7 +1122,7 @@ def _build_rotated_part_mask(
     extra_rot_deg: float,
     x: np.ndarray,
     y: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Re-rasterize the part mask at (original_rotation_deg + extra_rot_deg).
 
     Keeps electrodes fixed (physically correct turntable model) and only
@@ -742,62 +1135,86 @@ def _build_rotated_part_mask(
     fill_frac  : float (ny, nx) — sub-pixel fill fraction for blended EQS boundary
     """
     import copy as _copy
+
+    def _rot_xy(cx: float, cy: float, deg: float) -> tuple[float, float]:
+        rr = math.radians(float(deg))
+        c = math.cos(rr)
+        s = math.sin(rr)
+        return float(c * cx - s * cy), float(s * cx + c * cy)
+
     cfg_rot = _copy.deepcopy(geom_cfg)
-    orig_rot = float(cfg_rot["part"].get("rotation_deg", 0.0))
-    cfg_rot["part"]["rotation_deg"] = orig_rot + extra_rot_deg
+    parts = cfg_rot.get("parts", None)
+    if isinstance(parts, list) and parts:
+        p_mask_r = np.zeros((len(y), len(x)), dtype=bool)
+        d_mask_r = np.zeros_like(p_mask_r)
+        fill_frac_r = np.zeros((len(y), len(x)), dtype=float)
+        part_id_mask = np.zeros_like(p_mask_r, dtype=np.int32)
+        global_shell = cfg_rot.get("shell", {}) if isinstance(cfg_rot.get("shell", {}), dict) else {}
+        for idx, part in enumerate(parts, start=1):
+            if not isinstance(part, dict):
+                continue
+            p_cfg = dict(part)
+            if global_shell and "shell" not in p_cfg:
+                p_cfg["shell"] = dict(global_shell)
+            cx0 = float(p_cfg.get("center_x", 0.0))
+            cy0 = float(p_cfg.get("center_y", 0.0))
+            cxr, cyr = _rot_xy(cx0, cy0, extra_rot_deg)
+            p_cfg["center_x"] = cxr
+            p_cfg["center_y"] = cyr
+            p_cfg["rotation_deg"] = float(p_cfg.get("rotation_deg", 0.0)) + float(extra_rot_deg)
+            insts = p_cfg.get("antennae_instances", [])
+            if isinstance(insts, list) and insts:
+                new_insts = []
+                for inst in insts:
+                    if not isinstance(inst, dict):
+                        continue
+                    icx = float(inst.get("center_x", 0.0))
+                    icy = float(inst.get("center_y", 0.0))
+                    icxr, icyr = _rot_xy(icx, icy, extra_rot_deg)
+                    ii = dict(inst)
+                    ii["center_x"] = float(icxr)
+                    ii["center_y"] = float(icyr)
+                    new_insts.append(ii)
+                p_cfg["antennae_instances"] = new_insts
+            _, pm_i, ff_i = _single_part_mask_and_fill(x, y, p_cfg)
+            pm_i, ff_i = _apply_shell_to_mask(x, y, p_cfg, pm_i, ff_i)
+            pm_i, ff_i = _apply_antennae_to_mask(x, y, p_cfg, pm_i, ff_i)
+            if not np.any(pm_i):
+                continue
+            p_mask_r |= pm_i
+            d_mask_r |= pm_i
+            fill_frac_r = np.maximum(fill_frac_r, ff_i)
+            part_id_mask[pm_i] = idx
+        return p_mask_r, d_mask_r, fill_frac_r, part_id_mask
 
-    nx_g, ny_g = x.size, y.size
-    part = cfg_rot["part"]
-    shape  = part["shape"]
-    width  = float(part["width"])
-    height = float(part.get("height", width))
-    rot_d  = float(part.get("rotation_deg", 0.0))
-    cx     = float(part.get("center_x", 0.0))
-    cy     = float(part.get("center_y", 0.0))
-
-    _shape_kwargs: dict = dict(n_circle_pts=int(part.get("n_circle_pts", 220)))
-    for _k in ("svg_path", "image_path", "thickness", "inner_radius_ratio",
-               "n_points", "corner_radius", "curve_pts", "path_index",
-               "threshold", "polygon_points"):
-        if _k in part:
-            _shape_kwargs[_k] = part[_k]
-
-    poly_r = make_shape(shape, width, height, **_shape_kwargs)
-    poly_r = rotate(poly_r, math.radians(rot_d))
-    poly_r[:, 0] += cx
-    poly_r[:, 1] += cy
-
-    _s = shape.strip().lower()
-    _N_SUB = 8
-    if _s in {"circle", "disk", "cylinder", "sphere"}:
-        _xx, _yy = np.meshgrid(x, y, indexing="xy")
-        r_c = width / 2.0
-        p_mask_r = ((_xx - cx) ** 2 + (_yy - cy) ** 2) <= r_c ** 2
-        fill_frac_r = _subpixel_fill_fraction(
-            lambda xx, yy, _cx=cx, _cy=cy, _r=r_c:
-                (xx - _cx) ** 2 + (yy - _cy) ** 2 <= _r ** 2,
-            x, y, n_sub=_N_SUB,
-        )
-    elif _s in {"ellipse", "oval"}:
-        _xx, _yy = np.meshgrid(x, y, indexing="xy")
-        a_e = width / 2.0; b_e = height / 2.0
-        _cos_r = math.cos(-math.radians(rot_d)); _sin_r = math.sin(-math.radians(rot_d))
-        _dx = _xx - cx; _dy = _yy - cy
-        _u = _dx * _cos_r - _dy * _sin_r; _v = _dx * _sin_r + _dy * _cos_r
-        p_mask_r = (_u ** 2 / a_e ** 2 + _v ** 2 / b_e ** 2) <= 1.0
-        fill_frac_r = _subpixel_fill_fraction(
-            lambda xx, yy, _cx=cx, _cy=cy, _a=a_e, _b=b_e, _c=_cos_r, _s=_sin_r: (
-                ((xx-_cx)*_c - (yy-_cy)*_s)**2/_a**2
-                + ((xx-_cx)*_s + (yy-_cy)*_c)**2/_b**2 <= 1.0
-            ),
-            x, y, n_sub=_N_SUB,
-        )
-    else:
-        p_mask_r = polygon_mask(poly_r, x, y)
-        fill_frac_r = _subpixel_fill_fraction(poly_r, x, y, n_sub=_N_SUB)
-
+    part_cfg = cfg_rot.get("part", {}) if isinstance(cfg_rot.get("part", {}), dict) else {}
+    cx0 = float(part_cfg.get("center_x", 0.0))
+    cy0 = float(part_cfg.get("center_y", 0.0))
+    cxr, cyr = _rot_xy(cx0, cy0, extra_rot_deg)
+    part_cfg["center_x"] = cxr
+    part_cfg["center_y"] = cyr
+    part_cfg["rotation_deg"] = float(part_cfg.get("rotation_deg", 0.0)) + float(extra_rot_deg)
+    insts = part_cfg.get("antennae_instances", [])
+    if isinstance(insts, list) and insts:
+        new_insts = []
+        for inst in insts:
+            if not isinstance(inst, dict):
+                continue
+            icx = float(inst.get("center_x", 0.0))
+            icy = float(inst.get("center_y", 0.0))
+            icxr, icyr = _rot_xy(icx, icy, extra_rot_deg)
+            ii = dict(inst)
+            ii["center_x"] = float(icxr)
+            ii["center_y"] = float(icyr)
+            new_insts.append(ii)
+        part_cfg["antennae_instances"] = new_insts
+    _, p_mask_r, fill_frac_r = _single_part_mask_and_fill(x, y, part_cfg)
+    p_mask_r, fill_frac_r = _apply_shell_to_mask(x, y, part_cfg, p_mask_r, fill_frac_r)
+    p_mask_r, fill_frac_r = _apply_antennae_to_mask(x, y, part_cfg, p_mask_r, fill_frac_r)
     d_mask_r = p_mask_r.copy()
-    return p_mask_r, d_mask_r, fill_frac_r
+    part_id_mask = np.zeros_like(p_mask_r, dtype=np.int32)
+    part_id_mask[p_mask_r] = 1
+    return p_mask_r, d_mask_r, fill_frac_r, part_id_mask
 
 
 def solve_electric_state(
@@ -880,7 +1297,8 @@ def thermal_step(
     part_mask: np.ndarray,
     expo: np.ndarray,
     params: ThermalParams,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, float]]:
+    x_cryst: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, dict[str, float]]:
     phi_part, dphi_dT = phase_fraction(T, params.phase_cfg)
     # Defensive scalar extraction to avoid interpreter-level key-load artifacts
     # observed on some Python 3.14 builds.
@@ -1005,14 +1423,64 @@ def thermal_step(
     phi_out = np.where(phi_out < 0.0, 0.0, np.where(phi_out > 1.0, 1.0, phi_out))
     Tk = np.maximum(np.array(T_work, dtype=float, copy=True) + 273.15, 1.0)
     one_minus_rho = np.clip(1.0 - rho_rel, 0.0, 1.0)
-    phi_term = np.power(phi_out, dens_phi_exponent)
+    # Optional non-isothermal crystallization kinetics for experimental bucket.
+    x_cryst_new: np.ndarray | None = None
+    phi_for_dens = np.array(phi_out, dtype=float, copy=True)
+    if params.crystallization_enabled:
+        if x_cryst is None:
+            x_cryst_prev = np.zeros_like(T_work)
+        else:
+            x_cryst_prev = np.clip(np.asarray(x_cryst, dtype=float), 0.0, 1.0)
+        cool_rate = np.maximum((np.asarray(T, dtype=float) - T_work) / max(dt, 1e-9), 0.0)
+        cryst_model = str(params.crystallization_model).strip().lower()
+        k_cr = float(params.crystallization_k0_per_s) * np.exp(
+            -float(params.crystallization_ea_j_per_mol) / (R_GAS * Tk)
+        )
+        n_cr = max(float(params.crystallization_exponent), 1e-6)
+        if cryst_model in {"avrami_nonisothermal", "avrami"}:
+            rate_cr = k_cr * np.power(np.clip(1.0 - x_cryst_prev, 0.0, 1.0), n_cr)
+        else:
+            # Nakamura-like cooling-weighted growth form.
+            rate_cr = k_cr * np.power(np.clip(1.0 - x_cryst_prev, 0.0, 1.0), n_cr) * (
+                cool_rate / (cool_rate + 1.0)
+            )
+        x_cryst_new = np.clip(x_cryst_prev + dt * rate_cr, 0.0, 1.0)
+        liq_supp = np.clip(float(params.crystallization_liquid_suppression), 0.0, 1.0)
+        phi_for_dens = np.clip(phi_out * (1.0 - liq_supp * x_cryst_new), 0.0, 1.0)
+
+    phi_term = np.power(phi_for_dens, dens_phi_exponent)
     rho_term = np.power(one_minus_rho, dens_rho_exponent)
 
     dens_model = str(params.dens_model).strip().lower()
     kdens_ss = np.zeros_like(T_work)
     kdens_liq = np.zeros_like(T_work)
 
-    if dens_model in {"physics_dual", "dual_mechanism"}:
+    if dens_model in {"experimental_viscous_capillary_pa12"}:
+        visc_model = str(params.experimental_viscosity_model).strip().lower()
+        if visc_model == "wlf":
+            t_ref = max(float(params.experimental_viscosity_ref_temp_k), 1.0)
+            c1 = float(params.experimental_wlf_c1)
+            c2 = float(params.experimental_wlf_c2_k)
+            dtk = Tk - t_ref
+            denom = np.where(np.abs(c2 + dtk) < 1e-6, np.sign(c2 + dtk) * 1e-6, c2 + dtk)
+            log10_shift = -c1 * dtk / denom
+            eta = max(float(params.experimental_viscosity_ref_pa_s), 1e-12) * np.power(10.0, log10_shift)
+        else:
+            eta_ref = max(float(params.experimental_viscosity_ref_pa_s), 1e-12)
+            eta_ea = max(float(params.experimental_viscosity_activation_j_per_mol), 0.0)
+            t_ref = max(float(params.experimental_viscosity_ref_temp_k), 1.0)
+            eta = eta_ref * np.exp(eta_ea / R_GAS * (1.0 / Tk - 1.0 / t_ref))
+
+        kdens_liq = float(params.dens_geom_factor) * float(params.dens_surface_tension_n_per_m) / (
+            np.maximum(eta, 1e-12) * max(float(params.dens_particle_radius_m), 1e-9)
+        )
+        phi_thr = float(params.experimental_phi_threshold)
+        phi_act = np.clip((phi_for_dens - phi_thr) / max(1.0 - phi_thr, 1e-9), 0.0, 1.0)
+        phi_drive = np.power(phi_act, float(params.experimental_phi_exponent))
+        porosity = np.clip(1.0 - rho_rel, 0.0, 1.0)
+        porosity_drive = np.power(porosity, float(params.experimental_porosity_exponent))
+        rate = kdens_liq * phi_drive * porosity_drive
+    elif dens_model in {"physics_dual", "dual_mechanism"}:
         # Two-mechanism kinetics:
         # 1) solid-state diffusion/creep (active below full melt),
         # 2) liquid-assisted capillary flow (active once local melt fraction is present).
@@ -1104,7 +1572,9 @@ def thermal_step(
             np.mean(np.abs(dT_step_raw) > dT_cap_abs) if np.isfinite(dT_cap_abs) else 0.0
         ),
     }
-    return T_return, rho_rel_new, phi_out, diag
+    if x_cryst_new is not None:
+        diag["mean_x_cryst_part"] = float(np.mean(x_cryst_new[part_mask]))
+    return T_return, rho_rel_new, phi_out, x_cryst_new, diag
 
 
 def part_energy_per_depth(T: np.ndarray, rho_rel: np.ndarray, part_mask: np.ndarray, params: dict) -> float:
@@ -1157,7 +1627,14 @@ def part_energy_per_depth(T: np.ndarray, rho_rel: np.ndarray, part_mask: np.ndar
 
 
 def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
-    x, y, _, part_mask, doped_mask, elec_hi, elec_lo, fill_frac = make_domain(cfg)
+    antennae_resolved = {"enabled": False, "instances": []}
+    if _antennae_enabled(cfg):
+        try:
+            antennae_resolved = _resolve_antennae_instances(cfg)
+        except Exception as ant_err:
+            print(f"  [antennae] resolve skipped: {ant_err}")
+            antennae_resolved = {"enabled": False, "instances": []}
+    x, y, _, part_mask, doped_mask, elec_hi, elec_lo, fill_frac, part_id_mask, _part_polys = make_domain(cfg)
     dx = float(x[1] - x[0])
     dy = float(y[1] - y[0])
 
@@ -1165,6 +1642,23 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     therm = cfg["thermal"]
     dens = cfg["densification"]
     mat = cfg["materials"]
+    physics_cfg = cfg.get("physics_model", {}) if isinstance(cfg.get("physics_model", {}), dict) else {}
+    physics_model_family = str(physics_cfg.get("family", "baseline")).strip().lower() or "baseline"
+    if physics_model_family not in {"baseline", "experimental_pa12_hybrid"}:
+        raise ValueError(f"Unsupported physics_model.family: {physics_model_family}")
+    experimental_enabled = bool(physics_cfg.get("experimental_enabled", False))
+    experimental_densification_enabled = bool(physics_cfg.get("experimental_densification_enabled", True))
+    if physics_model_family != "baseline" and not experimental_enabled:
+        raise ValueError(
+            "physics_model.experimental_enabled must be true when physics_model.family != baseline"
+        )
+    provenance_tag = str(physics_cfg.get("provenance_tag", "")).strip()
+    parameter_source = str(physics_cfg.get("parameter_source", "baseline")).strip()
+    calibration_version = str(physics_cfg.get("calibration_version", "baseline")).strip()
+    ab_bucket_id = str(physics_cfg.get("ab_bucket_id", "")).strip()
+    literature_refs = physics_cfg.get("literature_refs", [])
+    if not isinstance(literature_refs, list):
+        literature_refs = []
 
     ny, nx = part_mask.shape
     dA = dx * dy
@@ -1211,57 +1705,123 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     rho_rel_init = float(dens.get("rho_rel_initial", 0.55))
 
     phase_cfg = therm["phase_change"]
-    phase_model = str(phase_cfg.get("model", "linear_window")).strip().lower()
-    if phase_model in {"comsol_heaviside", "heaviside"}:
-        if "t_pc_c" in phase_cfg and "dt_pc_c" in phase_cfg:
-            phase_user = PhaseConfig(
-                model="comsol_heaviside",
-                solidus_c=0.0,
-                liquidus_c=0.0,
-                t_pc_c=float(phase_cfg["t_pc_c"]),
-                dt_pc_c=float(phase_cfg["dt_pc_c"]),
-                smooth_shape=str(phase_cfg.get("smooth_shape", "linear")),
-                tanh_beta=float(phase_cfg.get("tanh_beta", 8.0)),
+    exp_phase_cfg = cfg.get("phase_model", {}) if isinstance(cfg.get("phase_model", {}), dict) else {}
+    exp_dens_cfg = cfg.get("dens_model", {}) if isinstance(cfg.get("dens_model", {}), dict) else {}
+    exp_cr_cfg = cfg.get("crystallization_model", {}) if isinstance(cfg.get("crystallization_model", {}), dict) else {}
+    provenance_table: dict | None = None
+    dsc_profile: dict | None = None
+    if physics_model_family == "experimental_pa12_hybrid":
+        if str(exp_phase_cfg.get("type", "")).strip().lower() not in {"apparent_heat_capacity_dsc"}:
+            raise ValueError("experimental_pa12_hybrid requires phase_model.type = apparent_heat_capacity_dsc")
+        if str(exp_dens_cfg.get("type", "")).strip().lower() not in {"viscous_capillary_pa12"}:
+            raise ValueError("experimental_pa12_hybrid requires dens_model.type = viscous_capillary_pa12")
+        prov_path_raw = str(physics_cfg.get("provenance_file", "configs/experimental_pa12_provenance.yaml")).strip()
+        prov_path = Path(prov_path_raw)
+        if not prov_path.is_absolute():
+            prov_path = Path(__file__).resolve().parent / prov_path
+        provenance_table = _load_provenance_table(prov_path)
+        req_prov = [
+            "phase_model.melt_onset_c",
+            "phase_model.melt_peak_c",
+            "phase_model.melt_end_c",
+            "phase_model.lat_heat_j_per_kg",
+            "dens_model.surface_tension_n_per_m",
+            "dens_model.particle_radius_m",
+            "dens_model.viscosity_model",
+        ]
+        if bool(exp_cr_cfg.get("enabled", False)):
+            req_prov.extend(
+                [
+                    "crystallization_model.k0_per_s",
+                    "crystallization_model.ea_j_per_mol",
+                    "crystallization_model.exponent",
+                ]
             )
+        _validate_experimental_provenance(provenance_table, req_prov)
+        dsc_profile_raw = str(physics_cfg.get("dsc_profile_file", "configs/experimental_pa12_dsc_profile.yaml")).strip()
+        dsc_profile_path = Path(dsc_profile_raw)
+        if not dsc_profile_path.is_absolute():
+            dsc_profile_path = Path(__file__).resolve().parent / dsc_profile_path
+        dsc_profile = _load_dsc_profile(dsc_profile_path)
+    if physics_model_family == "experimental_pa12_hybrid":
+        use_dsc_profile = bool(exp_phase_cfg.get("use_dsc_profile", True))
+        if use_dsc_profile and dsc_profile is not None:
+            onset = float(dsc_profile["melt_onset_c"])
+            peak = float(dsc_profile["melt_peak_c"])
+            end = float(dsc_profile["melt_end_c"])
+            latent_heat = float(dsc_profile["lat_heat_j_per_kg"])
         else:
-            # Backward compatibility when only solidus/liquidus are provided.
-            t_s = float(phase_cfg["solidus_c"])
-            t_l = float(phase_cfg["liquidus_c"])
-            phase_user = PhaseConfig(
-                model="comsol_heaviside",
-                solidus_c=t_s,
-                liquidus_c=t_l,
-                t_pc_c=0.5 * (t_s + t_l),
-                dt_pc_c=max(t_l - t_s, 1e-9),
-                smooth_shape=str(phase_cfg.get("smooth_shape", "linear")),
-                tanh_beta=float(phase_cfg.get("tanh_beta", 8.0)),
-            )
+            onset = float(exp_phase_cfg.get("melt_onset_c", 120.0))
+            peak = float(exp_phase_cfg.get("melt_peak_c", 150.0))
+            end = float(exp_phase_cfg.get("melt_end_c", 180.0))
+            latent_heat = float(exp_phase_cfg.get("lat_heat_j_per_kg", phase_cfg.get("latent_heat_j_per_kg", 96700.0)))
+        if not (onset < peak < end):
+            raise ValueError("phase_model melt temperatures must satisfy onset < peak < end")
+        phase_user = PhaseConfig(
+            model="apparent_heat_capacity_dsc",
+            solidus_c=onset,
+            liquidus_c=end,
+            t_pc_c=peak,
+            dt_pc_c=max(end - onset, 1e-9),
+            smooth_shape=str(exp_phase_cfg.get("cp_smoothing_strategy", "linear")),
+            tanh_beta=float(phase_cfg.get("tanh_beta", 8.0)),
+            dsc_onset_c=onset,
+            dsc_peak_c=peak,
+            dsc_end_c=end,
+            cp_smoothing_strategy=str(exp_phase_cfg.get("cp_smoothing_strategy", "linear")),
+        )
     else:
-        if "solidus_c" in phase_cfg and "liquidus_c" in phase_cfg:
-            t_s = float(phase_cfg["solidus_c"])
-            t_l = float(phase_cfg["liquidus_c"])
-            phase_user = PhaseConfig(
-                model="linear_window",
-                solidus_c=t_s,
-                liquidus_c=t_l,
-                t_pc_c=0.5 * (t_s + t_l),
-                dt_pc_c=max(t_l - t_s, 1e-9),
-                smooth_shape=str(phase_cfg.get("smooth_shape", "linear")),
-                tanh_beta=float(phase_cfg.get("tanh_beta", 8.0)),
-            )
+        phase_model = str(phase_cfg.get("model", "linear_window")).strip().lower()
+        if phase_model in {"comsol_heaviside", "heaviside"}:
+            if "t_pc_c" in phase_cfg and "dt_pc_c" in phase_cfg:
+                phase_user = PhaseConfig(
+                    model="comsol_heaviside",
+                    solidus_c=0.0,
+                    liquidus_c=0.0,
+                    t_pc_c=float(phase_cfg["t_pc_c"]),
+                    dt_pc_c=float(phase_cfg["dt_pc_c"]),
+                    smooth_shape=str(phase_cfg.get("smooth_shape", "linear")),
+                    tanh_beta=float(phase_cfg.get("tanh_beta", 8.0)),
+                )
+            else:
+                # Backward compatibility when only solidus/liquidus are provided.
+                t_s = float(phase_cfg["solidus_c"])
+                t_l = float(phase_cfg["liquidus_c"])
+                phase_user = PhaseConfig(
+                    model="comsol_heaviside",
+                    solidus_c=t_s,
+                    liquidus_c=t_l,
+                    t_pc_c=0.5 * (t_s + t_l),
+                    dt_pc_c=max(t_l - t_s, 1e-9),
+                    smooth_shape=str(phase_cfg.get("smooth_shape", "linear")),
+                    tanh_beta=float(phase_cfg.get("tanh_beta", 8.0)),
+                )
         else:
-            t_pc = float(phase_cfg["t_pc_c"])
-            dT_pc = float(phase_cfg["dt_pc_c"])
-            phase_user = PhaseConfig(
-                model="linear_window",
-                solidus_c=t_pc - 0.5 * dT_pc,
-                liquidus_c=t_pc + 0.5 * dT_pc,
-                t_pc_c=t_pc,
-                dt_pc_c=max(dT_pc, 1e-9),
-                smooth_shape=str(phase_cfg.get("smooth_shape", "linear")),
-                tanh_beta=float(phase_cfg.get("tanh_beta", 8.0)),
-            )
-    latent_heat = float(phase_cfg["latent_heat_j_per_kg"])
+            if "solidus_c" in phase_cfg and "liquidus_c" in phase_cfg:
+                t_s = float(phase_cfg["solidus_c"])
+                t_l = float(phase_cfg["liquidus_c"])
+                phase_user = PhaseConfig(
+                    model="linear_window",
+                    solidus_c=t_s,
+                    liquidus_c=t_l,
+                    t_pc_c=0.5 * (t_s + t_l),
+                    dt_pc_c=max(t_l - t_s, 1e-9),
+                    smooth_shape=str(phase_cfg.get("smooth_shape", "linear")),
+                    tanh_beta=float(phase_cfg.get("tanh_beta", 8.0)),
+                )
+            else:
+                t_pc = float(phase_cfg["t_pc_c"])
+                dT_pc = float(phase_cfg["dt_pc_c"])
+                phase_user = PhaseConfig(
+                    model="linear_window",
+                    solidus_c=t_pc - 0.5 * dT_pc,
+                    liquidus_c=t_pc + 0.5 * dT_pc,
+                    t_pc_c=t_pc,
+                    dt_pc_c=max(dT_pc, 1e-9),
+                    smooth_shape=str(phase_cfg.get("smooth_shape", "linear")),
+                    tanh_beta=float(phase_cfg.get("tanh_beta", 8.0)),
+                )
+        latent_heat = float(phase_cfg["latent_heat_j_per_kg"])
     ambient_c = float(therm["ambient_c"])
 
     convection_model = str(therm.get("convection_model", "constant")).strip().lower()
@@ -1286,6 +1846,8 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     dens_k0 = float(dens["k0_per_s"])
     dens_ea = float(dens["activation_energy_j_per_mol"])
     dens_model = str(dens.get("model", "arrhenius_phi")).strip().lower()
+    if physics_model_family == "experimental_pa12_hybrid" and experimental_densification_enabled:
+        dens_model = "experimental_viscous_capillary_pa12"
     dens_phi_exponent = float(dens.get("phi_exponent", 1.0))
     dens_rho_exponent = float(dens.get("rho_exponent", 1.0))
     dens_max_delta_per_step = float(dens.get("max_delta_per_step", 0.05))
@@ -1295,6 +1857,31 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     dens_eta_ref_temp_k = float(dens.get("eta_ref_temp_k", 458.15))
     dens_eta_activation_j_per_mol = float(dens.get("eta_activation_j_per_mol", 6.0e4))
     dens_geom_factor = float(dens.get("geom_factor", 0.05))
+    exp_viscosity_model = str(exp_dens_cfg.get("viscosity_model", "arrhenius")).strip().lower()
+    exp_visc_params = exp_dens_cfg.get("viscosity_params", {}) if isinstance(exp_dens_cfg.get("viscosity_params", {}), dict) else {}
+    exp_visc_ref_pa_s = float(exp_visc_params.get("eta_ref_pa_s", dens_eta_ref_pa_s))
+    exp_visc_ref_temp_k = float(exp_visc_params.get("eta_ref_temp_k", dens_eta_ref_temp_k))
+    exp_visc_ea = float(exp_visc_params.get("activation_energy_j_per_mol", dens_eta_activation_j_per_mol))
+    exp_wlf_c1 = float(exp_visc_params.get("wlf_c1", 8.86))
+    exp_wlf_c2 = float(exp_visc_params.get("wlf_c2_k", 101.6))
+    exp_phi_exp = float(exp_dens_cfg.get("phi_exponent", dens_phi_exponent))
+    exp_porosity_cfg = exp_dens_cfg.get("porosity_coupling_params", {})
+    if not isinstance(exp_porosity_cfg, dict):
+        exp_porosity_cfg = {}
+    exp_porosity_exp = float(exp_porosity_cfg.get("porosity_exponent", dens_rho_exponent))
+    exp_phi_threshold = float(exp_dens_cfg.get("phi_threshold", dens.get("phi_threshold", 0.02)))
+    if physics_model_family == "experimental_pa12_hybrid":
+        dens_surface_tension_n_per_m = float(exp_dens_cfg.get("surface_tension_n_per_m", dens_surface_tension_n_per_m))
+        dens_particle_radius_m = float(exp_dens_cfg.get("particle_radius_m", dens_particle_radius_m))
+        dens_geom_factor = float(exp_dens_cfg.get("geom_factor", dens_geom_factor))
+
+    crystallization_enabled = bool(exp_cr_cfg.get("enabled", False)) and physics_model_family == "experimental_pa12_hybrid"
+    crystallization_model = str(exp_cr_cfg.get("type", "nakamura")).strip().lower()
+    crystallization_params = exp_cr_cfg.get("params", {}) if isinstance(exp_cr_cfg.get("params", {}), dict) else {}
+    crystallization_k0 = float(crystallization_params.get("k0_per_s", 0.05))
+    crystallization_ea = float(crystallization_params.get("ea_j_per_mol", 4.2e4))
+    crystallization_exp = float(crystallization_params.get("exponent", 2.0))
+    crystallization_liq_supp = float(crystallization_params.get("liquid_suppression", 0.25))
 
     depth_cfg = therm.get("depth_correction", {})
     depth_correction_enabled = bool(depth_cfg.get("enabled", False))
@@ -1412,6 +1999,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     rho_rel = np.zeros((ny, nx), dtype=float)
     rho_rel[part_mask] = rho_rel_init
     phi = np.zeros_like(T)
+    x_cryst = np.zeros_like(T) if crystallization_enabled else None
 
     hist: dict[str, list[float]] = {
         "time_s": [],
@@ -1430,6 +2018,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         "mean_dens_rate_part_per_s": [],
         "mean_kdens_ss_part_per_s": [],
         "mean_kdens_liq_part_per_s": [],
+        "mean_x_cryst_part": [],
         "max_dT_raw_c": [],
         "max_dT_used_c": [],
         "frac_cells_dT_clipped": [],
@@ -1502,6 +2091,22 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         depth_correction_enabled=depth_correction_enabled,
         depth_correction_part_depth_m=depth_correction_part_depth_m,
         depth_correction_chamber_depth_m=depth_correction_chamber_depth_m,
+        physics_model_family=physics_model_family,
+        experimental_viscosity_model=exp_viscosity_model,
+        experimental_viscosity_ref_pa_s=exp_visc_ref_pa_s,
+        experimental_viscosity_ref_temp_k=exp_visc_ref_temp_k,
+        experimental_viscosity_activation_j_per_mol=exp_visc_ea,
+        experimental_wlf_c1=exp_wlf_c1,
+        experimental_wlf_c2_k=exp_wlf_c2,
+        experimental_phi_exponent=exp_phi_exp,
+        experimental_porosity_exponent=exp_porosity_exp,
+        experimental_phi_threshold=exp_phi_threshold,
+        crystallization_enabled=crystallization_enabled,
+        crystallization_model=crystallization_model,
+        crystallization_k0_per_s=crystallization_k0,
+        crystallization_ea_j_per_mol=crystallization_ea,
+        crystallization_exponent=crystallization_exp,
+        crystallization_liquid_suppression=crystallization_liq_supp,
     )
 
     # ── Turntable mode setup ─────────────────────────────────────────────────────
@@ -1605,7 +2210,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             tt_rotation_steps.append(it)
             t_now_tt = (it + 1) * dt
             # Re-rasterize part at new cumulative rotation (electrodes stay fixed)
-            new_part_mask, new_doped_mask, _new_fill = _build_rotated_part_mask(
+            new_part_mask, new_doped_mask, _new_fill, new_part_id_mask = _build_rotated_part_mask(
                 cfg["geometry"], tt_current_rot, x, y
             )
             # Transfer thermal/density state using SPATIAL ROTATION REMAPPING.
@@ -1657,7 +2262,10 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             rho_new = np.clip(rho_new, 0.0, 1.0)
             phi_new = np.clip(phi_new, 0.0, 1.0)
             T, rho_rel, phi = T_new, rho_new, phi_new
+            if x_cryst is not None:
+                x_cryst = np.clip(_remap_field(x_cryst, 0.0), 0.0, 1.0)
             part_mask, doped_mask = new_part_mask, new_doped_mask
+            part_id_mask = new_part_id_mask
             # Recompute sigma from rotated thermal/density fields for consistency.
             sigma[:, :] = sigma_v
             sigma[new_part_mask] = np.clip(
@@ -1729,8 +2337,13 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         max_dt_raw_acc = 0.0
         max_dt_used_acc = 0.0
         frac_dt_clip_acc = 0.0
+        x_cr_acc = 0.0
         for _ in range(n_substeps):
-            T, rho_rel, phi, diag_step = thermal_step(T, rho_rel, Qrf, part_mask, expo, therm_params)
+            T, rho_rel, phi, x_cryst_new, diag_step = thermal_step(
+                T, rho_rel, Qrf, part_mask, expo, therm_params, x_cryst=x_cryst
+            )
+            if x_cryst_new is not None:
+                x_cryst = x_cryst_new
             T = np.nan_to_num(T, nan=ambient_c, posinf=temp_max_c, neginf=temp_min_c)
             T = np.where(T < temp_min_c, temp_min_c, np.where(T > temp_max_c, temp_max_c, T))
             phi = np.nan_to_num(phi, nan=0.0, posinf=1.0, neginf=0.0)
@@ -1745,6 +2358,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             max_dt_raw_acc = max(max_dt_raw_acc, float(diag_step.get("max_dT_raw_c", 0.0)))
             max_dt_used_acc = max(max_dt_used_acc, float(diag_step.get("max_dT_used_c", 0.0)))
             frac_dt_clip_acc += float(diag_step.get("frac_cells_dT_clipped", 0.0))
+            x_cr_acc += float(diag_step.get("mean_x_cryst_part", 0.0))
 
         hist["time_s"].append((it + 1) * dt)
         hist["mean_T_part_c"].append(float(np.mean(T[part_mask])))
@@ -1778,6 +2392,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         hist["mean_dens_rate_part_per_s"].append(dens_rate_acc / float(n_substeps))
         hist["mean_kdens_ss_part_per_s"].append(kss_acc / float(n_substeps))
         hist["mean_kdens_liq_part_per_s"].append(kliq_acc / float(n_substeps))
+        hist["mean_x_cryst_part"].append(x_cr_acc / float(n_substeps))
         hist["max_dT_raw_c"].append(max_dt_raw_acc)
         hist["max_dT_used_c"].append(max_dt_used_acc)
         hist["frac_cells_dT_clipped"].append(frac_dt_clip_acc / float(n_substeps))
@@ -1810,6 +2425,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
                         elec_hi=elec_hi, elec_lo=elec_lo,
                         V=V, Ex=Ex, Ey=Ey, E_mag=E_mag, Qrf=Qrf,
                         T=T, phi=phi, rho_rel=rho_rel,
+                        part_id_mask=part_id_mask,
                     ))
                     opt_snapshots[thr] = (
                         _state_snap,
@@ -1835,6 +2451,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
                         elec_hi=elec_hi, elec_lo=elec_lo,
                         V=V, Ex=Ex, Ey=Ey, E_mag=E_mag, Qrf=Qrf,
                         T=T, phi=phi, rho_rel=rho_rel,
+                        part_id_mask=part_id_mask,
                     ))
                     opt_prev_snap = (
                         _state_prev,
@@ -1871,11 +2488,37 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         T=T,
         phi=phi,
         rho_rel=rho_rel,
+        x_cryst=x_cryst,
+        part_id_mask=part_id_mask,
     )
 
     t_part = T[part_mask]
     qrf_all = np.asarray(Qrf, dtype=float)
     qrf_part = qrf_all[part_mask]
+    part_stats: list[dict[str, float]] = []
+    part_ids = sorted(int(v) for v in np.unique(part_id_mask) if int(v) > 0)
+    for pid in part_ids:
+        m = part_id_mask == pid
+        if not np.any(m):
+            continue
+        t_i = T[m]
+        rho_i = rho_rel[m]
+        q_i = qrf_all[m]
+        part_stats.append(
+            {
+                "part_id": int(pid),
+                "cell_count": int(np.sum(m)),
+                "mean_T_c": float(np.mean(t_i)),
+                "max_T_c": float(np.max(t_i)),
+                "mean_rho_rel": float(np.mean(rho_i)),
+                "min_rho_rel": float(np.min(rho_i)),
+                "std_rho_rel": float(np.std(rho_i)),
+                "mean_qrf_w_per_m3": float(np.mean(q_i)),
+                "p10_qrf_w_per_m3": float(np.percentile(q_i, 10.0)),
+            }
+        )
+    part_mean_rhos = [s["mean_rho_rel"] for s in part_stats]
+    part_min_rhos = [s["min_rho_rel"] for s in part_stats]
     if phase_user.model in {"comsol_heaviside", "heaviside"}:
         trans_lo_c = float(phase_user.t_pc_c - 0.5 * phase_user.dt_pc_c)
         trans_hi_c = float(phase_user.t_pc_c + 0.5 * phase_user.dt_pc_c)
@@ -1936,6 +2579,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         "mean_kdens_liq_part_final_per_s": float(
             hist["mean_kdens_liq_part_per_s"][-1] if hist["mean_kdens_liq_part_per_s"] else 0.0
         ),
+        "mean_x_cryst_part_final": float(hist["mean_x_cryst_part"][-1] if hist["mean_x_cryst_part"] else 0.0),
         "max_dT_raw_final_c": float(hist["max_dT_raw_c"][-1] if hist["max_dT_raw_c"] else 0.0),
         "max_dT_used_final_c": float(hist["max_dT_used_c"][-1] if hist["max_dT_used_c"] else 0.0),
         "frac_cells_dT_clipped_final": float(
@@ -1943,7 +2587,33 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         ),
         "frac_cells_dT_clipped_mean": float(np.mean(hist["frac_cells_dT_clipped"])) if hist["frac_cells_dT_clipped"] else 0.0,
         "time_final_s": float(hist["time_s"][-1] if hist["time_s"] else 0.0),
+        "model_family": physics_model_family,
+        "parameter_source": parameter_source,
+        "literature_refs": [str(v) for v in literature_refs],
+        "calibration_version": calibration_version,
+        "ab_bucket_id": ab_bucket_id,
+        "provenance_tag": provenance_tag,
+        "part_stats": part_stats,
+        "parts_count": int(len(part_stats)),
+        "inter_part_mean_rho_std": float(np.std(part_mean_rhos)) if part_mean_rhos else 0.0,
+        "inter_part_mean_rho_minmax_ratio": float(min(part_mean_rhos) / max(max(part_mean_rhos), 1e-9)) if part_mean_rhos else 0.0,
+        "inter_part_min_rho_std": float(np.std(part_min_rhos)) if part_min_rhos else 0.0,
+        "antennae_enabled": bool(antennae_resolved.get("enabled", False)),
+        "antennae_count": int(len(antennae_resolved.get("instances", []))),
+        "antennae_instances": antennae_resolved.get("instances", []),
     }
+    if provenance_table is not None:
+        summary["provenance_file"] = str(
+            Path(physics_cfg.get("provenance_file", "configs/experimental_pa12_provenance.yaml"))
+        )
+        summary["provenance_version"] = str(provenance_table.get("version", "unknown"))
+    if dsc_profile is not None:
+        summary["dsc_profile_file"] = str(Path(physics_cfg.get("dsc_profile_file", "configs/experimental_pa12_dsc_profile.yaml")))
+        summary["dsc_profile_version"] = str(dsc_profile.get("version", "unknown"))
+        summary["dsc_profile_melt_onset_c"] = float(dsc_profile["melt_onset_c"])
+        summary["dsc_profile_melt_peak_c"] = float(dsc_profile["melt_peak_c"])
+        summary["dsc_profile_melt_end_c"] = float(dsc_profile["melt_end_c"])
+        summary["dsc_profile_lat_heat_j_per_kg"] = float(dsc_profile["lat_heat_j_per_kg"])
 
     # ── Turntable post-loop: add rotation schedule to summary ────────────────────
     if tt_enabled and tt_rotation_steps:
@@ -2491,6 +3161,18 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "used_config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False))
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    ant_rows = summary.get("antennae_instances", []) if isinstance(summary, dict) else []
+    if isinstance(ant_rows, list) and ant_rows:
+        (output_dir / "antennae_summary.json").write_text(
+            json.dumps(
+                {
+                    "enabled": bool(summary.get("antennae_enabled", False)),
+                    "count": int(summary.get("antennae_count", len(ant_rows))),
+                    "instances": ant_rows,
+                },
+                indent=2,
+            )
+        )
 
     np.savez_compressed(
         output_dir / "fields.npz",
@@ -2506,6 +3188,7 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         rho_rel=state.rho_rel,
         part_mask=state.part_mask,
         doped_mask=state.doped_mask,
+        part_id_mask=(state.part_id_mask if state.part_id_mask is not None else np.zeros_like(state.part_mask, dtype=np.int32)),
         elec_hi=state.elec_hi,
         elec_lo=state.elec_lo,
     )
@@ -2800,16 +3483,35 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
 
     # Compact "paper-style" summary figure.
     fig4, ax4 = plt.subplots(2, 2, figsize=(10.6, 8.8))
+    # Colorbars must match the displayed map range for contextual correctness.
+    _t_finite = T_disp[np.isfinite(T_disp)]
+    if _t_finite.size:
+        _t_vmin = float(np.min(_t_finite))
+        _t_vmax = float(np.max(_t_finite))
+    else:
+        _t_vmin, _t_vmax = 0.0, 1.0
+    if math.isclose(_t_vmin, _t_vmax):
+        _t_vmax = _t_vmin + 1e-6
+
+    _q_finite = q_plot_disp[np.isfinite(q_plot_disp)]
+    if _q_finite.size:
+        _q_vmin = float(np.min(_q_finite))
+        _q_vmax = float(np.max(_q_finite))
+    else:
+        _q_vmin, _q_vmax = 0.0, 1.0
+    if math.isclose(_q_vmin, _q_vmax):
+        _q_vmax = _q_vmin + 1e-6
+
     imrpt = ax4[0, 0].imshow(
         T_disp,
         extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]],
         origin="lower",
         cmap="jet",
-        vmin=float(rep.get("temp_cbar_min_c", 20.0)),
-        vmax=float(rep.get("temp_cbar_max_c", 220.0)),
+        vmin=_t_vmin,
+        vmax=_t_vmax,
         interpolation="bilinear",
     )
-    ax4[0, 0].set_title("Temperature [C] with E-field streamlines")
+    ax4[0, 0].set_title(f"Temperature [C] with E-field streamlines ({_t_vmin:.1f}-{_t_vmax:.1f})")
     _overlay_e_stream(ax4[0, 0])
     if show_equipotential:
         ax4[0, 0].contour(state.x, state.y, np.real(state.V), levels=levels, colors="w", linewidths=0.5, alpha=0.45)
@@ -2821,11 +3523,11 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]],
         origin="lower",
         cmap="jet",
-        vmin=0.0,
-        vmax=qrf_display_vmax,
+        vmin=_q_vmin,
+        vmax=_q_vmax,
         interpolation="bilinear",
     )
-    ax4[0, 1].set_title(f"Qrf [MW/m^3] (clip 0-{qrf_display_vmax:.2f})")
+    ax4[0, 1].set_title(f"Qrf [MW/m^3] ({_q_vmin:.2f}-{_q_vmax:.2f})")
     _overlay_e_stream(ax4[0, 1])
     cbq = plt.colorbar(imq, ax=ax4[0, 1], shrink=0.84)
     _style_cbar(cbq, decimals=2)
@@ -2864,6 +3566,1083 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
     # Animated evolution outputs (all runs + turntable rotation events).
     _generate_animation_gifs(cfg=cfg, state=state, output_dir=output_dir, opt_data=opt_data)
 
+    # Always attempt consolidated summary figure output for every run mode.
+    try:
+        import make_rf_summary_v5 as _v5mod
+        _v5mod.make_rf_summary_v5(str(output_dir))
+    except Exception as _v5_err:
+        print(f"  [rf_summary_v5] Skipped: {_v5_err}")
+
+    # Persist per-run report manifest used by generalized backfill tooling.
+    try:
+        def _run_type_from_cfg(_cfg: dict) -> str:
+            if bool(_cfg.get("orientation_optimizer", {}).get("enabled", False)):
+                return "orientation_optimizer"
+            if bool(_cfg.get("placement_optimizer", {}).get("enabled", False)):
+                return "placement_optimizer"
+            if bool(_cfg.get("turntable", {}).get("enabled", False)):
+                return "turntable"
+            if bool(_cfg.get("optimizer", {}).get("enabled", False)):
+                return "optimizer"
+            return "single"
+
+        rel_files = sorted(
+            p.relative_to(output_dir).as_posix()
+            for p in output_dir.rglob("*")
+            if p.is_file()
+        )
+        run_type = _run_type_from_cfg(cfg)
+        caps: list[str] = ["manifest_refresh_v1"]
+        rel_set = set(rel_files)
+        if {"summary.json", "fields.npz"}.issubset(rel_set):
+            caps.append("rf_summary_v5_v1")
+        if "fields.npz" in rel_set:
+            caps.append("core_reports_v1")
+        if run_type == "orientation_optimizer" and ("orientation_candidates.json" in rel_set or "orientation_pareto.json" in rel_set):
+            caps.append("orientation_diagnostics_v1")
+        if run_type == "placement_optimizer" and "placement_topk_coupled.json" in rel_set:
+            caps.append("placement_reports_v1")
+        if run_type == "shell_sweep" and "shell_sweep_summary.json" in rel_set:
+            caps.append("shell_sweep_report_v1")
+        if "antennae_summary.json" in rel_set and {"summary.json", "fields.npz"}.issubset(rel_set):
+            caps.append("antennae_reports_v1")
+        reports = [
+            r for r in rel_files
+            if r.lower().endswith((".png", ".gif", ".svg", ".json", ".csv"))
+            and ("report" in r.lower() or r.startswith("orientation_") or r.startswith("placement_") or r.startswith("shell_sweep_") or r.endswith("rf_summary_v5.png"))
+        ]
+        manifest_path = output_dir / "report_manifest.json"
+        existing = {}
+        if manifest_path.exists():
+            try:
+                existing = json.loads(manifest_path.read_text())
+            except Exception:
+                existing = {}
+        manifest = {
+            "schema_version": 1,
+            "run_type": run_type,
+            "created_at": existing.get("created_at", datetime.now().isoformat(timespec="seconds")),
+            "last_backfill_at": existing.get("last_backfill_at", None),
+            "available_inputs": rel_files,
+            "available_reports": sorted(set(reports)),
+            "backfill_capabilities": sorted(set(caps)),
+            "module_history": existing.get("module_history", []),
+            "latest_by_module": existing.get("latest_by_module", {}),
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+    except Exception as _mf_err:
+        print(f"  [report_manifest] Skipped: {_mf_err}")
+
+
+def _set_exposure_seconds(cfg: dict, exposure_s: float) -> None:
+    thermal = cfg.setdefault("thermal", {})
+    dt = float(thermal.get("dt_s", 0.5))
+    thermal["n_steps"] = int(max(1, round(float(exposure_s) / max(dt, 1e-9))))
+
+
+def _get_exposure_seconds(cfg: dict) -> float:
+    thermal = cfg.get("thermal", {}) if isinstance(cfg.get("thermal", {}), dict) else {}
+    dt = float(thermal.get("dt_s", 0.5))
+    n_steps = int(thermal.get("n_steps", 1))
+    return float(max(dt, 0.0) * max(n_steps, 1))
+
+
+def _dominates(a: dict, b: dict) -> bool:
+    better_or_equal = (
+        a["mean_rho"] >= b["mean_rho"]
+        and a["min_rho"] >= b["min_rho"]
+        and a["std_rho"] <= b["std_rho"]
+        and a["temp_violation"] <= b["temp_violation"]
+    )
+    strictly_better = (
+        a["mean_rho"] > b["mean_rho"]
+        or a["min_rho"] > b["min_rho"]
+        or a["std_rho"] < b["std_rho"]
+        or a["temp_violation"] < b["temp_violation"]
+    )
+    return bool(better_or_equal and strictly_better)
+
+
+def _pareto_front(rows: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for i, r in enumerate(rows):
+        dominated = False
+        for j, s in enumerate(rows):
+            if i == j:
+                continue
+            if _dominates(s, r):
+                dominated = True
+                break
+        if not dominated:
+            out.append(r)
+    return out
+
+
+def _recommend_knee(rows: list[dict]) -> dict:
+    if not rows:
+        raise ValueError("empty pareto set")
+    arr_mean = np.array([r["mean_rho"] for r in rows], dtype=float)
+    arr_min = np.array([r["min_rho"] for r in rows], dtype=float)
+    arr_std = np.array([r["std_rho"] for r in rows], dtype=float)
+    arr_tv = np.array([r["temp_violation"] for r in rows], dtype=float)
+    n_mean = (arr_mean - np.min(arr_mean)) / max(np.max(arr_mean) - np.min(arr_mean), 1e-9)
+    n_min = (arr_min - np.min(arr_min)) / max(np.max(arr_min) - np.min(arr_min), 1e-9)
+    n_std = 1.0 - (arr_std - np.min(arr_std)) / max(np.max(arr_std) - np.min(arr_std), 1e-9)
+    n_tv = 1.0 - (arr_tv - np.min(arr_tv)) / max(np.max(arr_tv) - np.min(arr_tv), 1e-9)
+    score = 0.35 * n_mean + 0.35 * n_min + 0.20 * n_std + 0.10 * n_tv
+    return rows[int(np.argmax(score))]
+
+
+def _knee_scores(rows: list[dict]) -> np.ndarray:
+    if not rows:
+        return np.array([], dtype=float)
+    arr_mean = np.array([r["mean_rho"] for r in rows], dtype=float)
+    arr_min = np.array([r["min_rho"] for r in rows], dtype=float)
+    arr_std = np.array([r["std_rho"] for r in rows], dtype=float)
+    arr_tv = np.array([r["temp_violation"] for r in rows], dtype=float)
+    n_mean = (arr_mean - np.min(arr_mean)) / max(np.max(arr_mean) - np.min(arr_mean), 1e-9)
+    n_min = (arr_min - np.min(arr_min)) / max(np.max(arr_min) - np.min(arr_min), 1e-9)
+    n_std = 1.0 - (arr_std - np.min(arr_std)) / max(np.max(arr_std) - np.min(arr_std), 1e-9)
+    n_tv = 1.0 - (arr_tv - np.min(arr_tv)) / max(np.max(arr_tv) - np.min(arr_tv), 1e-9)
+    return 0.35 * n_mean + 0.35 * n_min + 0.20 * n_std + 0.10 * n_tv
+
+
+def _candidate_metrics_from_summary(summary: dict, constraints: dict) -> dict:
+    part_stats = summary.get("part_stats", []) if isinstance(summary.get("part_stats", []), list) else []
+    per_part_mean = [float(s.get("mean_rho_rel", 0.0)) for s in part_stats if isinstance(s, dict)]
+    per_part_min = [float(s.get("min_rho_rel", 0.0)) for s in part_stats if isinstance(s, dict)]
+    mean_rho = float(summary.get("mean_rho_rel_part_final", 0.0))
+    min_rho = float(min(per_part_min) if per_part_min else summary.get("mean_rho_rel_part_final", 0.0))
+    std_rho = float(np.std(per_part_mean)) if per_part_mean else float(np.std([mean_rho]))
+    max_t = float(summary.get("max_T_part_final_c", 0.0))
+    temp_ceiling = float(constraints.get("temp_ceiling_c", 250.0))
+    min_rho_floor = float(constraints.get("min_rho_floor", 0.0))
+    return {
+        "mean_rho": mean_rho,
+        "min_rho": min_rho,
+        "std_rho": std_rho,
+        "max_temp_c": max_t,
+        "temp_ceiling_c": temp_ceiling,
+        "temp_violation": max(0.0, max_t - temp_ceiling),
+        "min_rho_violation": max(0.0, min_rho_floor - min_rho),
+    }
+
+
+def _render_scatter_report(
+    rows: list[dict],
+    pareto: list[dict],
+    best: dict,
+    output_png: Path,
+    title: str,
+    context_text: str | None = None,
+) -> None:
+    if not rows:
+        return
+    fig, ax = plt.subplots(1, 2, figsize=(11.2, 4.6), dpi=180)
+    means = [r["mean_rho"] for r in rows]
+    mins = [r["min_rho"] for r in rows]
+    stds = [r["std_rho"] for r in rows]
+    tv = [r["temp_violation"] for r in rows]
+    ax[0].scatter(means, mins, c=stds, cmap="viridis", s=20, alpha=0.35, label="all candidates")
+    ax[0].set_xlabel("mean rho")
+    ax[0].set_ylabel("min rho")
+    ax[0].set_title("Densification tradeoff")
+    ax[0].grid(alpha=0.25)
+    sc_tv = ax[1].scatter(stds, means, c=tv, cmap="magma", s=20, alpha=0.35, label="all candidates")
+    ax[1].set_xlabel("std rho")
+    ax[1].set_ylabel("mean rho")
+    ax[1].set_title("Uniformity vs mean")
+    ax[1].grid(alpha=0.25)
+
+    if pareto:
+        p_means = [r["mean_rho"] for r in pareto]
+        p_mins = [r["min_rho"] for r in pareto]
+        p_stds = [r["std_rho"] for r in pareto]
+        p_tvs = [r["temp_violation"] for r in pareto]
+        ax[0].scatter(p_means, p_mins, marker="D", s=40, facecolors="none", edgecolors="black", linewidths=1.1, label="pareto front")
+        ax[1].scatter(p_stds, p_means, marker="D", s=40, facecolors="none", edgecolors="black", linewidths=1.1, label="pareto front")
+
+    ax[0].plot([best.get("mean_rho", 0.0)], [best.get("min_rho", 0.0)], "r*", ms=14)
+    ax[1].plot([best.get("std_rho", 0.0)], [best.get("mean_rho", 0.0)], "r*", ms=14)
+    if "rotation_deg" in best and "exposure_s" in best:
+        ideal_txt = f"Ideal pareto angle: {float(best['rotation_deg']):.1f} deg @ {float(best['exposure_s']):.0f} s"
+    else:
+        ideal_txt = "Selected Pareto point"
+    ax[0].annotate(
+        ideal_txt,
+        xy=(best.get("mean_rho", 0.0), best.get("min_rho", 0.0)),
+        xytext=(0.03, 0.06),
+        textcoords="axes fraction",
+        fontsize=8.5,
+        bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="#444444", alpha=0.9),
+    )
+    ceil_c = None
+    for r in rows:
+        if "temp_ceiling_c" in r:
+            ceil_c = float(r["temp_ceiling_c"])
+            break
+    cbar = plt.colorbar(sc_tv, ax=ax[1], shrink=0.88)
+    if ceil_c is not None:
+        cbar.set_label(f"temp ceiling violation [C], ceiling={ceil_c:.1f} C")
+    else:
+        cbar.set_label("temp ceiling violation [C]")
+    if context_text:
+        fig.text(0.01, 0.01, context_text, fontsize=8.2, color="#555555")
+    for axi in ax:
+        axi.legend(loc="best", fontsize=8)
+    fig.suptitle(title, fontsize=10)
+    fig.tight_layout()
+    fig.savefig(output_png, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _render_orientation_angle_report(
+    angle_rows: list[dict],
+    best: dict,
+    output_png: Path,
+    color_metric: str = "mean_rho",
+    temp_ceiling_c: float | None = None,
+    exposure_text: str | None = None,
+) -> None:
+    if not angle_rows:
+        return
+    angles = [float(r["rotation_deg"]) for r in angle_rows]
+    scores = [float(r["best_effectiveness_score"]) for r in angle_rows]
+    temp_v = [float(r.get("best_temp_violation", 0.0)) for r in angle_rows]
+    mean_r = [float(r.get("best_mean_rho", 0.0)) for r in angle_rows]
+    min_r = [float(r.get("best_min_rho", 0.0)) for r in angle_rows]
+    pareto_flag = [bool(r.get("is_pareto_angle", False)) for r in angle_rows]
+
+    metric = str(color_metric or "mean_rho").strip().lower()
+    if metric == "temp_violation":
+        cvals = np.array(temp_v, dtype=float)
+        cmap = "magma_r"
+        if temp_ceiling_c is not None:
+            cbar_label = f"temp ceiling violation [C], ceiling={temp_ceiling_c:.1f} C"
+        else:
+            cbar_label = "temp ceiling violation [C]"
+    elif metric == "min_rho":
+        cvals = np.array(min_r, dtype=float)
+        cmap = "viridis"
+        cbar_label = "best min rho"
+    else:
+        metric = "mean_rho"
+        cvals = np.array(mean_r, dtype=float)
+        cmap = "viridis"
+        cbar_label = "best mean rho"
+
+    fig, ax = plt.subplots(1, 1, figsize=(10.2, 4.4), dpi=180)
+    sc = ax.scatter(angles, scores, c=cvals, cmap=cmap, s=70, alpha=0.85, edgecolor="k", linewidth=0.35, label="angle candidates")
+    # Always preserve temperature context: violating points are outlined in red.
+    for a, s, tv in zip(angles, scores, temp_v):
+        if float(tv) > 0.0:
+            ax.plot([a], [s], marker="o", ms=10, markerfacecolor="none", markeredgecolor="#d62728", markeredgewidth=1.25, linestyle="None")
+    for a, s, pr in zip(angles, scores, pareto_flag):
+        if pr:
+            ax.plot([a], [s], marker="D", ms=7, markerfacecolor="none", markeredgecolor="black", linestyle="None")
+    b_ang = float(best.get("rotation_deg", 0.0))
+    b_score = float(best.get("effectiveness_score", np.max(scores) if scores else 0.0))
+    ax.plot([b_ang], [b_score], "r*", ms=15, label="selected ideal angle")
+    ax.set_title("Orientation Angle Effectiveness (best exposure per angle)")
+    ax.set_xlabel("rotation angle [deg]")
+    ax.set_ylabel("effectiveness score")
+    ax.grid(alpha=0.25)
+    cbar = plt.colorbar(sc, ax=ax, shrink=0.86)
+    cbar.set_label(cbar_label)
+    for a, s, m in zip(angles, scores, mean_r):
+        ax.text(a, s + 0.005, f"{m:.3f}", fontsize=7, ha="center", va="bottom", alpha=0.7)
+    ax.text(
+        0.995,
+        0.015,
+        "red ring = temp ceiling violated",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=7.5,
+        color="#b22222",
+    )
+    ax.legend(loc="best", fontsize=8)
+    context_lines: list[str] = []
+    if exposure_text:
+        context_lines.append(str(exposure_text))
+    if temp_ceiling_c is not None:
+        exp_txt_l = str(exposure_text or "").lower()
+        if "ceiling" not in exp_txt_l:
+            context_lines.append(f"temperature ceiling: {float(temp_ceiling_c):.1f} C")
+    if context_lines:
+        ax.text(
+            0.01,
+            0.99,
+            "\n".join(context_lines),
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=8.2,
+            color="#222222",
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="#666666", alpha=0.9),
+        )
+    fig.tight_layout()
+    fig.savefig(output_png, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _orientation_frame_from_state(state: SimState, row: dict) -> np.ndarray:
+    if Image is None or ImageDraw is None:
+        return np.zeros((32, 32, 3), dtype=np.uint8)
+    T = np.asarray(state.T, dtype=float)
+    tmin = float(np.nanmin(T))
+    tmax = float(np.nanmax(T))
+    if math.isclose(tmin, tmax):
+        tmax = tmin + 1e-6
+    norm = np.clip((T - tmin) / max(tmax - tmin, 1e-9), 0.0, 1.0)
+    cmap = plt.get_cmap("inferno")
+    rgba = cmap(norm)
+    rgb = (255.0 * np.asarray(rgba[..., :3], dtype=float)).astype(np.uint8)
+    mask = np.asarray(state.part_mask, dtype=bool)
+    rgb[~mask] = (0.30 * rgb[~mask]).astype(np.uint8)
+    img = Image.fromarray(rgb).resize((280, 280), resample=Image.Resampling.BILINEAR)
+    bar_h = 46
+    canvas = Image.new("RGB", (280, 280 + bar_h), color=(15, 15, 18))
+    canvas.paste(img, (0, 0))
+    draw = ImageDraw.Draw(canvas)
+    txt1 = f"angle {float(row['rotation_deg']):.1f} deg | exposure {float(row['best_exposure_s']):.0f} s"
+    txt2 = f"mean {float(row['best_mean_rho']):.3f} | min {float(row['best_min_rho']):.3f} | dTceil {float(row['best_temp_violation']):.1f} C"
+    draw.text((8, 286), txt1, fill=(235, 235, 235))
+    draw.text((8, 302), txt2, fill=(190, 190, 190))
+    return np.asarray(canvas, dtype=np.uint8)
+
+
+def _write_orientation_angle_gif(
+    cfg_base: dict,
+    angle_rows: list[dict],
+    output_dir: Path,
+    frame_duration_s: float = 2.0,
+    output_name: str = "orientation_angle_gallery.gif",
+) -> None:
+    if not angle_rows:
+        return
+    try:
+        import imageio.v2 as imageio
+    except Exception:
+        print("  [orientation gif] imageio not available; skipping.")
+        return
+    frames: list[np.ndarray] = []
+    sorted_rows = sorted(angle_rows, key=lambda r: float(r["rotation_deg"]))
+    for row in sorted_rows:
+        c = copy.deepcopy(cfg_base)
+        if isinstance(c.get("geometry", {}).get("part", {}), dict):
+            c["geometry"]["part"]["rotation_deg"] = float(row["rotation_deg"])
+        elif isinstance(c.get("geometry", {}).get("parts", []), list):
+            for part in c["geometry"]["parts"]:
+                if isinstance(part, dict):
+                    part["rotation_deg"] = float(row["rotation_deg"])
+        _set_exposure_seconds(c, float(row["best_exposure_s"]))
+        state, _, _, _, _ = run_sim(c)
+        frames.append(_orientation_frame_from_state(state, row))
+    if frames:
+        imageio.mimsave(
+            output_dir / output_name,
+            frames,
+            duration=max(0.1, float(frame_duration_s)),
+            loop=0,
+        )
+
+
+def run_orientation_optimizer(cfg: dict, output_dir: Path) -> dict:
+    oo = cfg.get("orientation_optimizer", {}) if isinstance(cfg.get("orientation_optimizer", {}), dict) else {}
+    color_metric = str(oo.get("color_metric", "mean_rho")).strip().lower()
+    constraints = oo.get("constraints", {}) if isinstance(oo.get("constraints", {}), dict) else {}
+    a_min = float(oo.get("angle_min_deg", 0.0))
+    a_max = float(oo.get("angle_max_deg", 180.0))
+    a_step = float(oo.get("angle_step_deg", 15.0))
+    e_min = float(oo.get("exposure_min_s", 240.0))
+    e_max = float(oo.get("exposure_max_s", 720.0))
+    e_step = float(oo.get("exposure_step_s", 60.0))
+    refine_window = float(oo.get("refine_window_deg", 10.0))
+    refine_step = float(oo.get("refine_step_deg", 5.0))
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    candidates: list[dict] = []
+
+    base = copy.deepcopy(cfg)
+    base.pop("orientation_optimizer", None)
+    base.pop("optimizer", None)
+    base.pop("turntable", None)
+    base.pop("placement_optimizer", None)
+
+    angles = np.arange(a_min, a_max + 1e-9, max(a_step, 1e-9), dtype=float)
+    exposures = np.arange(e_min, e_max + 1e-9, max(e_step, 1e-9), dtype=float)
+    for ang in angles:
+        for exp_s in exposures:
+            c = copy.deepcopy(base)
+            if isinstance(c.get("geometry", {}).get("part", {}), dict):
+                c["geometry"]["part"]["rotation_deg"] = float(ang)
+            elif isinstance(c.get("geometry", {}).get("parts", []), list):
+                for part in c["geometry"]["parts"]:
+                    if isinstance(part, dict):
+                        part["rotation_deg"] = float(ang)
+            _set_exposure_seconds(c, exp_s)
+            _, summary, _, _, _ = run_sim(c)
+            m = _candidate_metrics_from_summary(summary, constraints)
+            m.update({"rotation_deg": float(ang), "exposure_s": float(exp_s), "source": "coarse"})
+            candidates.append(m)
+
+    coarse_front = _pareto_front(candidates)
+    coarse_best = _recommend_knee(coarse_front if coarse_front else candidates)
+    ref_angles = np.arange(
+        coarse_best["rotation_deg"] - refine_window,
+        coarse_best["rotation_deg"] + refine_window + 1e-9,
+        max(refine_step, 1e-9),
+        dtype=float,
+    )
+    for ang in ref_angles:
+        for exp_s in exposures:
+            if any(abs(r["rotation_deg"] - float(ang)) < 1e-9 and abs(r["exposure_s"] - float(exp_s)) < 1e-9 for r in candidates):
+                continue
+            c = copy.deepcopy(base)
+            if isinstance(c.get("geometry", {}).get("part", {}), dict):
+                c["geometry"]["part"]["rotation_deg"] = float(ang)
+            elif isinstance(c.get("geometry", {}).get("parts", []), list):
+                for part in c["geometry"]["parts"]:
+                    if isinstance(part, dict):
+                        part["rotation_deg"] = float(ang)
+            _set_exposure_seconds(c, exp_s)
+            _, summary, _, _, _ = run_sim(c)
+            m = _candidate_metrics_from_summary(summary, constraints)
+            m.update({"rotation_deg": float(ang), "exposure_s": float(exp_s), "source": "refine"})
+            candidates.append(m)
+
+    pareto = _pareto_front(candidates)
+    scores = _knee_scores(candidates)
+    pareto_key = {
+        (round(float(r["rotation_deg"]), 9), round(float(r["exposure_s"]), 9))
+        for r in pareto
+    }
+    for idx, r in enumerate(candidates):
+        r["effectiveness_score"] = float(scores[idx]) if idx < len(scores) else 0.0
+        r["is_pareto"] = (
+            round(float(r["rotation_deg"]), 9),
+            round(float(r["exposure_s"]), 9),
+        ) in pareto_key
+    best = _recommend_knee(pareto if pareto else candidates)
+    best = dict(best)
+    if "effectiveness_score" not in best:
+        best["effectiveness_score"] = float(max(scores)) if len(scores) else 0.0
+
+    angle_map: dict[float, list[dict]] = {}
+    for r in candidates:
+        angle_map.setdefault(float(r["rotation_deg"]), []).append(r)
+    angle_rows: list[dict] = []
+    for ang in sorted(angle_map.keys()):
+        rows_ang = angle_map[ang]
+        best_ang = max(rows_ang, key=lambda rr: float(rr.get("effectiveness_score", 0.0)))
+        pareto_exposures = sorted(
+            float(rr["exposure_s"]) for rr in rows_ang if bool(rr.get("is_pareto", False))
+        )
+        angle_rows.append(
+            {
+                "rotation_deg": float(ang),
+                "n_candidates": int(len(rows_ang)),
+                "best_exposure_s": float(best_ang["exposure_s"]),
+                "best_effectiveness_score": float(best_ang.get("effectiveness_score", 0.0)),
+                "best_mean_rho": float(best_ang["mean_rho"]),
+                "best_min_rho": float(best_ang["min_rho"]),
+                "best_std_rho": float(best_ang["std_rho"]),
+                "best_temp_violation": float(best_ang["temp_violation"]),
+                "is_pareto_angle": bool(len(pareto_exposures) > 0),
+                "pareto_exposures_s": pareto_exposures,
+                "effective_reason": (
+                    "on pareto front"
+                    if pareto_exposures
+                    else "dominated (lower score or higher violation)"
+                ),
+            }
+        )
+
+    (output_dir / "orientation_candidates.json").write_text(json.dumps(candidates, indent=2))
+    with (output_dir / "orientation_candidates.csv").open("w", newline="", encoding="utf-8") as _f_csv:
+        keys = [
+            "rotation_deg", "exposure_s", "source", "effectiveness_score", "is_pareto",
+            "mean_rho", "min_rho", "std_rho", "max_temp_c", "temp_violation", "min_rho_violation",
+        ]
+        w = csv.DictWriter(_f_csv, fieldnames=keys)
+        w.writeheader()
+        for r in candidates:
+            w.writerow({k: r.get(k, "") for k in keys})
+    (output_dir / "orientation_angle_summary.json").write_text(json.dumps(angle_rows, indent=2))
+    with (output_dir / "orientation_angle_summary.csv").open("w", newline="", encoding="utf-8") as _f_ang:
+        keys = [
+            "rotation_deg", "n_candidates", "best_exposure_s", "best_effectiveness_score",
+            "best_mean_rho", "best_min_rho", "best_std_rho", "best_temp_violation",
+            "is_pareto_angle", "pareto_exposures_s", "effective_reason",
+        ]
+        w = csv.DictWriter(_f_ang, fieldnames=keys)
+        w.writeheader()
+        for r in angle_rows:
+            row_out = dict(r)
+            row_out["pareto_exposures_s"] = ",".join(f"{v:.1f}" for v in r.get("pareto_exposures_s", []))
+            w.writerow({k: row_out.get(k, "") for k in keys})
+    (output_dir / "orientation_pareto.json").write_text(json.dumps(pareto, indent=2))
+    (output_dir / "orientation_best.json").write_text(json.dumps(best, indent=2))
+    temp_ceiling_c = float(constraints.get("temp_ceiling_c", 250.0))
+    orient_context = (
+        f"exposure sweep: {e_min:.0f}-{e_max:.0f} s (step {e_step:.0f} s)\n"
+        f"temperature ceiling: {temp_ceiling_c:.1f} C"
+    )
+    _render_scatter_report(
+        candidates,
+        pareto,
+        best,
+        output_dir / "orientation_report.png",
+        "Orientation Optimizer",
+        context_text=orient_context,
+    )
+    _render_orientation_angle_report(
+        angle_rows,
+        best,
+        output_dir / "orientation_angle_effectiveness.png",
+        color_metric=color_metric,
+        temp_ceiling_c=temp_ceiling_c,
+        exposure_text=orient_context,
+    )
+    if bool(oo.get("angle_gif_enabled", False)):
+        _write_orientation_angle_gif(
+            base,
+            angle_rows,
+            output_dir,
+            frame_duration_s=float(oo.get("angle_gif_frame_duration_s", 2.0)),
+        )
+
+    final_cfg = copy.deepcopy(base)
+    if isinstance(final_cfg.get("geometry", {}).get("part", {}), dict):
+        final_cfg["geometry"]["part"]["rotation_deg"] = float(best["rotation_deg"])
+    _set_exposure_seconds(final_cfg, float(best["exposure_s"]))
+    state, summary, hist, tt_steps, opt_data = run_sim(final_cfg)
+    summary["orientation_optimizer"] = {
+        "best": best,
+        "pareto_count": len(pareto),
+        "angles_tried": int(len(angle_rows)),
+        "color_metric": color_metric,
+        "angle_gif_frame_duration_s": float(oo.get("angle_gif_frame_duration_s", 2.0)),
+    }
+    save_outputs(final_cfg, state, summary, hist, output_dir, tt_rotation_steps=tt_steps, opt_data=opt_data)
+    return best
+
+
+def _rankdata(vals: list[float]) -> np.ndarray:
+    arr = np.asarray(vals, dtype=float)
+    order = np.argsort(arr)
+    ranks = np.empty_like(order, dtype=float)
+    ranks[order] = np.arange(len(arr), dtype=float)
+    return ranks
+
+
+def _spearman(a: list[float], b: list[float]) -> float:
+    if len(a) < 2 or len(a) != len(b):
+        return 0.0
+    ra = _rankdata(a)
+    rb = _rankdata(b)
+    c = np.corrcoef(ra, rb)
+    return float(c[0, 1]) if c.shape == (2, 2) and np.isfinite(c[0, 1]) else 0.0
+
+
+def _compute_eqs_qrf_for_cfg(cfg: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    x, y, _, part_mask, doped_mask, elec_hi, elec_lo, fill_frac, _pid, _ = make_domain(cfg)
+    geom = cfg["geometry"]
+    dx = float(geom["chamber_x"]) / max(int(geom["grid_nx"]) - 1, 1)
+    dy = float(geom["chamber_y"]) / max(int(geom["grid_ny"]) - 1, 1)
+    elec = cfg["electric"]
+    mat = cfg["materials"]
+    sigma_v = max(float(mat["virgin"]["sigma_s_per_m"]), 1e-8)
+    eps_v = float(mat["virgin"]["eps_r"])
+    sigma_d0 = float(mat["doped"]["sigma_s_per_m"])
+    eps_d = float(mat["doped"]["eps_r"])
+    sigma = sigma_v + fill_frac * (sigma_d0 - sigma_v)
+    eps_r = eps_v + fill_frac * (eps_d - eps_v)
+    omega = 2.0 * math.pi * float(elec["frequency_hz"])
+    v0 = float(elec["voltage_v"])
+    mode = str(elec.get("voltage_mode", "centered")).strip().lower()
+    if mode in {"grounded", "single_ended"}:
+        v_hi, v_lo = v0, 0.0
+    else:
+        v_hi, v_lo = 0.5 * v0, -0.5 * v0
+    _, _, _, _, _, qrf = solve_electric_state(
+        sigma, eps_r, omega, elec_hi, elec_lo, v_hi, v_lo, dx, dy, elec, x, y,
+        float(elec.get("power_factor", 1.0)), float(elec.get("max_qrf_w_per_m3", 1.0e11)),
+    )
+    if bool(elec.get("zero_qrf_outside_doped", True)):
+        qrf = np.where(doped_mask, qrf, 0.0)
+    return x, y, part_mask, np.asarray(qrf, dtype=float)
+
+
+def generate_antennae_preview(cfg: dict, output_png: Path) -> dict:
+    if not _antennae_enabled(cfg):
+        return {"ok": False, "error": "antennae disabled"}
+    work = copy.deepcopy(cfg)
+    ant = _resolve_antennae_instances(work)
+    base = copy.deepcopy(cfg)
+    base["antennae"] = dict(base.get("antennae", {})) if isinstance(base.get("antennae", {}), dict) else {}
+    base["antennae"]["enabled"] = False
+    if "spike" in base and isinstance(base["spike"], dict):
+        base["spike"]["enabled"] = False
+    for p in _parts_from_geometry(base.get("geometry", {})):
+        if isinstance(p, dict):
+            p.pop("antennae_instances", None)
+    x, y, p_mask, qrf = _compute_eqs_qrf_for_cfg(base)
+    qmw = qrf / 1.0e6
+    qf = qmw[np.isfinite(qmw)]
+    qmin = float(np.min(qf)) if qf.size else 0.0
+    qmax = float(np.max(qf)) if qf.size else 1.0
+    if math.isclose(qmin, qmax):
+        qmax = qmin + 1e-6
+    fig, ax = plt.subplots(1, 1, figsize=(7.6, 5.8), dpi=180)
+    im = ax.imshow(
+        qmw,
+        extent=[float(x[0]), float(x[-1]), float(y[0]), float(y[-1])],
+        origin="lower",
+        cmap="magma",
+        vmin=qmin,
+        vmax=qmax,
+        interpolation="bilinear",
+    )
+    ax.contour(x, y, p_mask.astype(float), levels=[0.5], colors=["w"], linewidths=0.9)
+    rows = [r for r in ant.get("instances", []) if isinstance(r, dict)]
+    for r in rows:
+        cx = float(r.get("center_x", 0.0))
+        cy = float(r.get("center_y", 0.0))
+        ax.plot([cx], [cy], marker="o", ms=5, mfc="#22c55e", mec="black", mew=0.5)
+        size_mm = float(r.get("size_mm", 0.0))
+        ax.text(cx, cy, f"{size_mm:.2f}mm", fontsize=6.5, color="white", ha="left", va="bottom")
+    cb = plt.colorbar(im, ax=ax, shrink=0.86)
+    cb.set_label("Qrf [MW/m^3]")
+    ax.set_title("Antennae Preview: EQS/Qrf + candidate anchors")
+    ax.set_xlabel("x [m]")
+    ax.set_ylabel("y [m]")
+    ax.set_aspect("equal")
+    ax.grid(alpha=0.2)
+    fig.tight_layout()
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_png, bbox_inches="tight")
+    plt.close(fig)
+    return {"ok": True, "image_path": str(output_png), "instances": rows, "n_instances": len(rows)}
+
+
+def _compute_eqs_proxy(cfg: dict) -> dict:
+    x, y, _, part_mask, doped_mask, elec_hi, elec_lo, fill_frac, part_id_mask, _ = make_domain(cfg)
+    geom = cfg["geometry"]
+    dx = float(geom["chamber_x"]) / max(int(geom["grid_nx"]) - 1, 1)
+    dy = float(geom["chamber_y"]) / max(int(geom["grid_ny"]) - 1, 1)
+    elec = cfg["electric"]
+    mat = cfg["materials"]
+    sigma_v = max(float(mat["virgin"]["sigma_s_per_m"]), 1e-8)
+    eps_v = float(mat["virgin"]["eps_r"])
+    sigma_d0 = float(mat["doped"]["sigma_s_per_m"])
+    eps_d = float(mat["doped"]["eps_r"])
+    sigma = sigma_v + fill_frac * (sigma_d0 - sigma_v)
+    eps_r = eps_v + fill_frac * (eps_d - eps_v)
+    omega = 2.0 * math.pi * float(elec["frequency_hz"])
+    v0 = float(elec["voltage_v"])
+    mode = str(elec.get("voltage_mode", "centered")).strip().lower()
+    if mode == "grounded":
+        v_hi, v_lo = v0, 0.0
+    elif mode == "single_ended":
+        v_hi, v_lo = v0, 0.0
+    else:
+        v_hi, v_lo = 0.5 * v0, -0.5 * v0
+    _, _, _, _, _, Qrf = solve_electric_state(
+        sigma, eps_r, omega, elec_hi, elec_lo, v_hi, v_lo, dx, dy, elec, x, y,
+        float(elec.get("power_factor", 1.0)), float(elec.get("max_qrf_w_per_m3", 1.0e11))
+    )
+    dA = dx * dy
+    if bool(elec.get("zero_qrf_outside_doped", True)):
+        Qrf = np.where(doped_mask, Qrf, 0.0)
+    means: list[float] = []
+    p10s: list[float] = []
+    for pid in sorted(int(v) for v in np.unique(part_id_mask) if int(v) > 0):
+        m = part_id_mask == pid
+        if not np.any(m):
+            continue
+        q = np.asarray(Qrf[m], dtype=float)
+        means.append(float(np.mean(q)))
+        p10s.append(float(np.percentile(q, 10.0)))
+    mean_q = float(np.mean(means)) if means else 0.0
+    std_q = float(np.std(means)) if means else 0.0
+    min_p10 = float(min(p10s)) if p10s else 0.0
+    # Fairness-first proxy: prioritize lower inter-part spread, then preserve low-tail and mean.
+    score = (-1.0 * std_q) + (0.20 * min_p10) + (0.05 * mean_q)
+    return {
+        "proxy_score": score,
+        "proxy_fairness_std_qrf": std_q,
+        "proxy_mean_qrf": mean_q,
+        "proxy_std_qrf": std_q,
+        "proxy_min_p10_qrf": min_p10,
+        "proxy_power_w_per_m": float(np.sum(Qrf[doped_mask]) * dA),
+    }
+
+
+def _generate_layouts(
+    px_half: float,
+    py_half: float,
+    radius: float,
+    clearance: float,
+    n: int,
+    seed: int = 7,
+    n_parts: int = 4,
+) -> list[list[tuple[float, float]]]:
+    rng = np.random.default_rng(seed)
+    out: list[list[tuple[float, float]]] = []
+    seen: set[tuple[tuple[float, float], ...]] = set()
+    d_min = 2.0 * radius + clearance
+
+    x_lo = -float(px_half)
+    x_hi = float(px_half)
+    y_lo = -float(py_half)
+    y_hi = float(py_half)
+
+    def _is_valid(points: list[tuple[float, float]], x: float, y: float) -> bool:
+        if not (x_lo <= x <= x_hi and y_lo <= y <= y_hi):
+            return False
+        for px, py in points:
+            if math.hypot(x - px, y - py) < d_min:
+                return False
+        return True
+
+    def _signature(points: list[tuple[float, float]]) -> tuple[tuple[float, float], ...]:
+        # Round and sort so permutations are considered the same layout.
+        return tuple(sorted((round(float(x), 5), round(float(y), 5)) for x, y in points))
+
+    tries = 0
+    max_tries = max(2000, n * 600)
+    while len(out) < n and tries < max_tries:
+        tries += 1
+        pts: list[tuple[float, float]] = []
+        inner_tries = 0
+        while len(pts) < n_parts and inner_tries < 400:
+            inner_tries += 1
+            x = float(rng.uniform(x_lo, x_hi))
+            y = float(rng.uniform(y_lo, y_hi))
+            if _is_valid(pts, x, y):
+                pts.append((x, y))
+        if len(pts) != n_parts:
+            continue
+        sig = _signature(pts)
+        if sig in seen:
+            continue
+        seen.add(sig)
+        out.append(pts)
+    return out
+
+
+def _layout_signature(layout: list[tuple[float, float]]) -> tuple[tuple[float, float], ...]:
+    return tuple(sorted((round(float(x), 5), round(float(y), 5)) for x, y in layout))
+
+
+def _is_layout_valid(
+    layout: list[tuple[float, float]],
+    x_lo: float,
+    x_hi: float,
+    y_lo: float,
+    y_hi: float,
+    d_min: float,
+) -> bool:
+    for i, (x, y) in enumerate(layout):
+        if not (x_lo <= x <= x_hi and y_lo <= y <= y_hi):
+            return False
+        for j in range(i + 1, len(layout)):
+            x2, y2 = layout[j]
+            if math.hypot(x - x2, y - y2) < d_min:
+                return False
+    return True
+
+
+def _sample_layout_from_gaussian(
+    rng: np.random.Generator,
+    mu: np.ndarray,
+    sigma: np.ndarray,
+    x_lo: float,
+    x_hi: float,
+    y_lo: float,
+    y_hi: float,
+    d_min: float,
+    tries: int = 120,
+) -> list[tuple[float, float]] | None:
+    n_parts = int(mu.shape[0])
+    for _ in range(max(1, tries)):
+        pts = rng.normal(mu, sigma)
+        pts[:, 0] = np.clip(pts[:, 0], x_lo, x_hi)
+        pts[:, 1] = np.clip(pts[:, 1], y_lo, y_hi)
+        layout = [(float(p[0]), float(p[1])) for p in pts]
+        if _is_layout_valid(layout, x_lo, x_hi, y_lo, y_hi, d_min):
+            return layout
+    return None
+
+
+def run_placement_optimizer(cfg: dict, output_dir: Path) -> dict:
+    po = cfg.get("placement_optimizer", {}) if isinstance(cfg.get("placement_optimizer", {}), dict) else {}
+    constraints = po.get("constraints", {}) if isinstance(po.get("constraints", {}), dict) else {}
+    n_parts = int(po.get("n_parts", 4))
+    if n_parts < 1:
+        raise ValueError("placement_optimizer requires n_parts >= 1")
+    ga_cfg = po.get("ga", {}) if isinstance(po.get("ga", {}), dict) else {}
+    algorithm = str(po.get("algorithm", "ga")).strip().lower()
+    if algorithm not in {"ga", "cem", "random"}:
+        algorithm = "ga"
+
+    allowed_shapes = {
+        "square", "rectangle", "circle", "ellipse", "triangle", "equilateral_triangle",
+        "diamond", "hexagon", "octagon", "pentagon", "star", "star6", "star8",
+        "cross", "rounded_rect", "l_shape", "t_shape", "trapezoid",
+    }
+    use_turntable = bool(po.get("use_turntable", False))
+    clearance = float(po.get("clearance_mm", 1.0)) * 1e-3
+    margin = float(po.get("search_domain_margin_mm", 2.0)) * 1e-3
+    proxy_top_k = int(po.get("proxy_top_k", 8))
+    proxy_eval_budget = int(po.get("proxy_eval_budget", max(80, int(ga_cfg.get("population", 32)) * max(int(ga_cfg.get("generations", 8)), 1))))
+
+    base = copy.deepcopy(cfg)
+    base.pop("placement_optimizer", None)
+    base.pop("orientation_optimizer", None)
+    base.pop("optimizer", None)
+    if not use_turntable:
+        base.pop("turntable", None)
+
+    part_src = base.get("geometry", {}).get("part", {})
+    shape_inherited = str(part_src.get("shape", cfg.get("geometry", {}).get("part", {}).get("shape", "circle"))).strip().lower()
+    if shape_inherited not in allowed_shapes:
+        raise ValueError(f"unsupported placement shape: {shape_inherited}")
+    width = float(po.get("part_width_mm", float(part_src.get("width", 0.020)) * 1e3)) * 1e-3
+    height = float(po.get("part_height_mm", float(part_src.get("height", width)) * 1e3)) * 1e-3
+    radius = 0.5 * math.hypot(width, height)
+    chamber_x = float(base["geometry"]["chamber_x"])
+    chamber_y = float(base["geometry"]["chamber_y"])
+    px_half = 0.5 * chamber_x - radius - margin
+    py_half = 0.5 * chamber_y - radius - margin
+    x_lo = -float(px_half)
+    x_hi = float(px_half)
+    y_lo = -float(py_half)
+    y_hi = float(py_half)
+    d_min = 2.0 * radius + clearance
+    if x_lo >= x_hi or y_lo >= y_hi:
+        raise ValueError("No feasible placement domain after margins and part size")
+
+    def _layout_to_cfg(layout: list[tuple[float, float]]) -> dict:
+        c = copy.deepcopy(base)
+        c["geometry"]["parts"] = []
+        for cx, cy in layout:
+            p_out = {
+                "shape": str(shape_inherited),
+                "width": width,
+                "height": height,
+                "center_x": float(cx),
+                "center_y": float(cy),
+                "rotation_deg": 0.0,
+            }
+            if shape_inherited in {"circle", "disk", "ellipse", "star", "star6", "star8"}:
+                p_out["n_circle_pts"] = int(part_src.get("n_circle_pts", 220))
+            c["geometry"]["parts"].append(p_out)
+        c["geometry"].pop("part", None)
+        return c
+
+    seed = int(ga_cfg.get("seed", po.get("seed", 7)))
+    rng = np.random.default_rng(seed)
+    pop_n = int(ga_cfg.get("population", po.get("proxy_population", 32)))
+    generations = int(ga_cfg.get("generations", po.get("proxy_iters", 8)))
+    mutation_rate = float(ga_cfg.get("mutation_rate", 0.18))
+    crossover_rate = float(ga_cfg.get("crossover_rate", 0.75))
+    elitism = int(ga_cfg.get("elitism", 2))
+    tournament_k = int(ga_cfg.get("tournament_k", 3))
+
+    proxy_rows: list[dict] = []
+    next_candidate_id = 0
+    eval_cache: dict[tuple[tuple[float, float], ...], dict] = {}
+
+    def _eval_layout(layout: list[tuple[float, float]]) -> dict:
+        nonlocal next_candidate_id
+        sig = _layout_signature(layout)
+        if sig in eval_cache:
+            return eval_cache[sig]
+        c = _layout_to_cfg(layout)
+        pxm = _compute_eqs_proxy(c)
+        row = {"candidate_id": int(next_candidate_id), "layout": [(float(a), float(b)) for a, b in layout], **pxm}
+        next_candidate_id += 1
+        eval_cache[sig] = row
+        proxy_rows.append(row)
+        return row
+
+    def _random_layout() -> list[tuple[float, float]] | None:
+        lay = _generate_layouts(px_half, py_half, radius, clearance, n=1, seed=int(rng.integers(1, 10_000_000)), n_parts=n_parts)
+        return lay[0] if lay else None
+
+    def _repair_layout(layout: list[tuple[float, float]]) -> list[tuple[float, float]] | None:
+        if _is_layout_valid(layout, x_lo, x_hi, y_lo, y_hi, d_min):
+            return layout
+        pts = [tuple(p) for p in layout]
+        for _ in range(80):
+            i = int(rng.integers(0, len(pts)))
+            x0, y0 = pts[i]
+            xn = float(np.clip(x0 + rng.normal(0.0, 0.12 * (x_hi - x_lo)), x_lo, x_hi))
+            yn = float(np.clip(y0 + rng.normal(0.0, 0.12 * (y_hi - y_lo)), y_lo, y_hi))
+            pts[i] = (xn, yn)
+            if _is_layout_valid(list(pts), x_lo, x_hi, y_lo, y_hi, d_min):
+                return list(pts)
+        rr = _random_layout()
+        return rr
+
+    def _tournament(pop_rows: list[dict]) -> dict:
+        kk = min(max(2, tournament_k), len(pop_rows))
+        idxs = rng.choice(len(pop_rows), size=kk, replace=False)
+        cand = [pop_rows[int(i)] for i in idxs]
+        return sorted(cand, key=lambda r: float(r.get("proxy_score", -1e30)), reverse=True)[0]
+
+    if algorithm in {"ga", "cem"}:
+        pop: list[list[tuple[float, float]]] = _generate_layouts(px_half, py_half, radius, clearance, n=max(pop_n, 8), seed=seed, n_parts=n_parts)
+        while len(pop) < max(pop_n, 8):
+            rr = _random_layout()
+            if rr is None:
+                break
+            pop.append(rr)
+        if not pop:
+            raise RuntimeError("placement optimizer could not initialize feasible layouts")
+        print(f"  [placement][ga] population={len(pop)} generations={max(1, generations)}")
+        for gen in range(max(1, generations)):
+            if len(proxy_rows) >= proxy_eval_budget:
+                break
+            pop_rows = []
+            for lay in pop:
+                if len(proxy_rows) >= proxy_eval_budget:
+                    break
+                pop_rows.append(_eval_layout(lay))
+            if not pop_rows:
+                break
+            ranked = sorted(pop_rows, key=lambda r: float(r.get("proxy_score", -1e30)), reverse=True)
+            next_pop: list[list[tuple[float, float]]] = [list(r["layout"]) for r in ranked[: max(1, elitism)]]
+            mut_sigma = max(1e-6, 0.16 * (x_hi - x_lo) * (1.0 - (gen / max(1, generations))))
+            while len(next_pop) < pop_n and len(proxy_rows) < proxy_eval_budget:
+                p1 = _tournament(ranked)
+                p2 = _tournament(ranked)
+                a = np.asarray(p1["layout"], dtype=float)
+                b = np.asarray(p2["layout"], dtype=float)
+                if float(rng.random()) < crossover_rate:
+                    alpha = float(rng.uniform(0.2, 0.8))
+                    c = alpha * a + (1.0 - alpha) * b
+                else:
+                    c = np.array(a, copy=True)
+                for i in range(c.shape[0]):
+                    if float(rng.random()) < mutation_rate:
+                        c[i, 0] += float(rng.normal(0.0, mut_sigma))
+                        c[i, 1] += float(rng.normal(0.0, mut_sigma))
+                c[:, 0] = np.clip(c[:, 0], x_lo, x_hi)
+                c[:, 1] = np.clip(c[:, 1], y_lo, y_hi)
+                child = [(float(v[0]), float(v[1])) for v in c]
+                fixed = _repair_layout(child)
+                if fixed is None:
+                    continue
+                next_pop.append(fixed)
+            pop = next_pop
+    else:
+        n_candidates = int(po.get("n_candidates", 48))
+        print(f"  [placement][proxy-random] evaluating {n_candidates} layouts")
+        pop = _generate_layouts(px_half, py_half, radius, clearance, n=n_candidates, seed=seed, n_parts=n_parts)
+        for lay in pop:
+            if len(proxy_rows) >= proxy_eval_budget:
+                break
+            _eval_layout(lay)
+
+    proxy_rows = sorted(proxy_rows, key=lambda r: r["proxy_score"], reverse=True)
+    if not proxy_rows:
+        raise RuntimeError("placement optimizer could not generate any feasible candidate layouts")
+    top_rows = proxy_rows[: max(1, min(proxy_top_k, len(proxy_rows)))]
+
+    coupled_rows: list[dict] = []
+    for i, r in enumerate(top_rows):
+        print(f"  [placement][coupled] {i+1}/{len(top_rows)} candidate_id={r['candidate_id']}")
+        c = _layout_to_cfg(r["layout"])
+        _, summary, _, _, _ = run_sim(c)
+        m = _candidate_metrics_from_summary(summary, constraints)
+        m.update({"candidate_id": int(r["candidate_id"]), "layout": r["layout"], "proxy_score": float(r["proxy_score"])})
+        coupled_rows.append(m)
+
+    if coupled_rows:
+        rho_proxy = [float(r["proxy_score"]) for r in coupled_rows]
+        rho_coupled = [float(r["mean_rho"]) for r in coupled_rows]
+        sp = _spearman(rho_proxy, rho_coupled)
+        top_proxy = [r["candidate_id"] for r in sorted(coupled_rows, key=lambda x: x["proxy_score"], reverse=True)[:3]]
+        top_coupled = [r["candidate_id"] for r in sorted(coupled_rows, key=lambda x: x["mean_rho"], reverse=True)[:3]]
+        overlap = len(set(top_proxy).intersection(set(top_coupled)))
+    else:
+        sp = 0.0
+        overlap = 0
+
+    gate_pass = bool(sp >= float(po.get("proxy_gate_spearman_min", 0.8)) and overlap >= int(po.get("proxy_gate_top3_overlap_min", 2)))
+    pareto = _pareto_front(coupled_rows)
+    rows_rank = pareto if pareto else coupled_rows
+    eligible = [r for r in rows_rank if float(r.get("temp_violation", 0.0)) <= 0.0 and float(r.get("min_rho_violation", 0.0)) <= 0.0]
+    if not eligible:
+        eligible = rows_rank
+    best = sorted(
+        eligible,
+        key=lambda r: (
+            float(r.get("temp_violation", 0.0)),
+            float(r.get("min_rho_violation", 0.0)),
+            float(r.get("std_rho", 1e9)),
+            -float(r.get("min_rho", 0.0)),
+            -float(r.get("mean_rho", 0.0)),
+        ),
+    )[0]
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "placement_candidates_proxy.json").write_text(json.dumps(proxy_rows, indent=2))
+    (output_dir / "placement_topk_coupled.json").write_text(json.dumps(coupled_rows, indent=2))
+    (output_dir / "placement_pareto.json").write_text(json.dumps(pareto, indent=2))
+    placement_best = dict(best)
+    placement_best["proxy_gate_pass"] = gate_pass
+    placement_best["proxy_gate_spearman"] = sp
+    placement_best["proxy_gate_top3_overlap"] = overlap
+    placement_best["algorithm"] = algorithm
+    placement_best["shape"] = str(shape_inherited)
+    placement_best["part_width_mm"] = float(width * 1e3)
+    placement_best["part_height_mm"] = float(height * 1e3)
+    placement_best["n_parts"] = int(n_parts)
+    placement_best["use_turntable"] = bool(use_turntable)
+    (output_dir / "placement_best.json").write_text(json.dumps(placement_best, indent=2))
+    temp_ceiling_c = float(constraints.get("temp_ceiling_c", 250.0))
+    exposure_s = _get_exposure_seconds(base)
+    placement_context = (
+        f"fixed exposure: {exposure_s:.0f} s; "
+        f"temperature ceiling: {temp_ceiling_c:.1f} C; "
+        f"parts={n_parts}, size={width*1e3:.1f}x{height*1e3:.1f} mm, turntable={'on' if use_turntable else 'off'}"
+    )
+    _render_scatter_report(
+        coupled_rows,
+        pareto,
+        best,
+        output_dir / "placement_report.png",
+        "Placement Optimizer",
+        context_text=placement_context,
+    )
+
+    final_cfg = copy.deepcopy(base)
+    final_cfg["geometry"]["parts"] = []
+    for idx_part, (cx, cy) in enumerate(best["layout"]):
+        p_out = {
+            "shape": str(shape_inherited),
+            "width": width,
+            "height": height,
+            "center_x": float(cx),
+            "center_y": float(cy),
+            "rotation_deg": 0.0,
+        }
+        if shape_inherited in {"circle", "disk", "ellipse", "star", "star6", "star8"}:
+            p_out["n_circle_pts"] = int(part_src.get("n_circle_pts", 220))
+        final_cfg["geometry"]["parts"].append(
+            p_out
+        )
+    final_cfg["geometry"].pop("part", None)
+    state, summary, hist, tt_steps, opt_data = run_sim(final_cfg)
+    summary["placement_optimizer"] = placement_best
+    save_outputs(final_cfg, state, summary, hist, output_dir, tt_rotation_steps=tt_steps, opt_data=opt_data)
+    return placement_best
+
 
 def main() -> None:
     p = argparse.ArgumentParser(description="RFAM EQS -> transient thermal/phase/densification simulator")
@@ -2872,6 +4651,16 @@ def main() -> None:
     args = p.parse_args()
 
     cfg = load_config(args.config)
+    if bool(cfg.get("orientation_optimizer", {}).get("enabled", False)):
+        best = run_orientation_optimizer(cfg, args.output_dir)
+        print(f"Wrote outputs to: {args.output_dir.resolve()}")
+        print(json.dumps({"orientation_best": best}, indent=2))
+        return
+    if bool(cfg.get("placement_optimizer", {}).get("enabled", False)):
+        best = run_placement_optimizer(cfg, args.output_dir)
+        print(f"Wrote outputs to: {args.output_dir.resolve()}")
+        print(json.dumps({"placement_best": best}, indent=2))
+        return
     state, summary, hist, tt_rotation_steps, opt_data = run_sim(cfg)
     save_outputs(
         cfg, state, summary, hist, args.output_dir,
@@ -2879,13 +4668,6 @@ def main() -> None:
         opt_data=opt_data,
     )
     generate_optimizer_report(cfg, opt_data, hist, args.output_dir)
-
-    # Auto-generate rf_summary_v5.png after every run
-    try:
-        import make_rf_summary_v5 as _v5mod
-        _v5mod.make_rf_summary_v5(str(args.output_dir))
-    except Exception as _v5_err:
-        print(f"  [rf_summary_v5] Skipped: {_v5_err}")
 
     print(f"Wrote outputs to: {args.output_dir.resolve()}")
     print(json.dumps(summary, indent=2))

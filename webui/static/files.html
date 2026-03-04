@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HEATR File Manager</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/design-b.css" />
+</head>
+<body class="ids-inspired">
+  <header class="topbar topbar-ids">
+    <div>
+      <h1>HEATR File Manager</h1>
+      <p>Browse, move, and delete local workspace files.</p>
+    </div>
+    <div class="header-tools">
+      <div class="status-pill" id="serverStatus">HEATR service connected</div>
+      <details class="settings-menu">
+        <summary>Settings</summary>
+        <div class="settings-grid">
+          <label>Mode
+            <select id="prefMode"><option value="dark">Dark</option><option value="light">Light</option></select>
+          </label>
+          <label>Accent
+            <select id="prefAccent"><option value="blue">Blue</option><option value="green">Green</option><option value="amber">Amber</option><option value="violet">Violet</option></select>
+          </label>
+          <label>Background
+            <select id="prefBackground"><option value="grid">Grid</option><option value="plain">Plain</option><option value="aurora">Aurora</option></select>
+          </label>
+          <label>Layout
+            <select id="prefLayout"><option value="layout-1">Split</option><option value="layout-2">Stacked</option><option value="layout-3">Dual</option></select>
+          </label>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <nav class="tabs-nav">
+    <a class="tab-link" href="/index.html">Operation</a>
+    <a class="tab-link" href="/results">Results</a>
+    <a class="tab-link active" href="/files">Files</a>
+    <a class="tab-link" href="/theory">Theory</a>
+  </nav>
+
+  <main class="results-page files-page">
+    <section class="card dash-card accent-green">
+      <h2>Workspace Files</h2>
+      <div class="file-toolbar">
+        <input id="fmPath" type="text" placeholder="relative path (e.g. outputs_eqs)" />
+        <button id="fmUpBtn" type="button">Up</button>
+        <button id="fmRefreshBtn" type="button">Refresh</button>
+      </div>
+      <div class="file-manager-grid">
+        <div class="file-manager-left">
+          <div class="file-meta">
+            <span id="fmCwd">.</span>
+            <span id="fmStatus" class="muted"></span>
+          </div>
+
+          <div class="file-table-wrap">
+            <table class="file-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Modified</th>
+                </tr>
+              </thead>
+              <tbody id="fmRows"></tbody>
+            </table>
+          </div>
+
+          <div class="file-actions">
+            <div class="summary" id="fmSelected">Selected: (none)</div>
+            <div class="file-action-row">
+              <input id="fmMoveDst" type="text" placeholder="destination relative path (e.g. outputs_eqs/archive/file.png)" />
+              <button id="fmMoveBtn" type="button">Move Selected</button>
+            </div>
+            <div class="file-action-row">
+              <label class="file-inline-check"><input id="fmRecursive" type="checkbox" /> Recursive delete</label>
+              <button id="fmDeleteBtn" type="button" class="danger-btn">Delete Selected</button>
+              <button id="fmBackfillBtn" type="button">Backfill Reports Here</button>
+              <button id="fmBackfillAdvBtn" type="button">Backfill (Advanced)</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="file-preview">
+          <h3>Preview</h3>
+          <div id="fmPreviewMeta" class="muted">No file selected.</div>
+          <div id="fmPreviewRoot" class="file-preview-root"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/settings.js"></script>
+  <script src="/static/file_manager.js"></script>
+</body>
+</html>

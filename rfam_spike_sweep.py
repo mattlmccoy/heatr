@@ -78,6 +78,10 @@ def run_spike_sweep(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cfg = yaml.safe_load(cfg_path.read_text())
+    antennae_enabled = pw.is_antennae_enabled(cfg)
+    if not antennae_enabled:
+        print("  [antennae] disabled by config; forcing baseline-only sweep (h=0)")
+        h_values_mm = [0.0]
 
     # Load base prewarp polygon (mm → metres)
     poly_data = np.loadtxt(prewarp_csv, delimiter=",", skiprows=1)  # (N, 2) mm
@@ -105,7 +109,7 @@ def run_spike_sweep(
 
         # Build spiked polygon (h=0 → baseline, no spikes added)
         if h_mm > 0.0:
-            P_spiked = pw.add_spike_features(
+            P_spiked = pw.add_antennae_features(
                 P_base,
                 spike_regions,
                 h_mm=h_mm,

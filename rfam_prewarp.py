@@ -53,6 +53,7 @@ import json
 import math
 import sys
 import time
+import warnings
 from pathlib import Path
 
 import matplotlib
@@ -869,12 +870,29 @@ def _save_evaluate_figure(
 # Antenna / Spike Assist Features  (Phase 2 prewarp)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
+def is_antennae_enabled(cfg: dict | None) -> bool:
+    c = cfg if isinstance(cfg, dict) else {}
+    ant = c.get("antennae", {}) if isinstance(c.get("antennae", {}), dict) else {}
+    if "enabled" in ant:
+        return bool(ant.get("enabled", True))
+    spike = c.get("spike", {}) if isinstance(c.get("spike", {}), dict) else {}
+    if "enabled" in spike:
+        warnings.warn(
+            "Config key 'spike.enabled' is deprecated; use 'antennae.enabled'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return bool(spike.get("enabled", True))
+    return True
+
 def add_spike_features(
     poly: np.ndarray,
     spike_regions: list[dict],
     h_mm: float = 2.0,
     w_base_mm: float = 4.0,
     n_pts: int = 15,
+    _deprecated_call: bool = True,
 ) -> np.ndarray:
     """Insert smooth Gaussian-shaped protrusions (antenna spikes) at specified
     angular regions of a polygon.
@@ -897,6 +915,12 @@ def add_spike_features(
     -------
     new_poly : (M, 2) resampled polygon with spikes, same vertex count N as input
     """
+    if _deprecated_call:
+        warnings.warn(
+            "add_spike_features() is deprecated; use add_antennae_features().",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     h = h_mm * 1e-3          # metres
     w = w_base_mm * 1e-3      # metres
     sigma_g = w / (2.0 * np.sqrt(2.0 * np.log(2.0)))   # Gaussian σ
@@ -955,6 +979,23 @@ def add_spike_features(
     new_pts = np.vstack(segments) if segments else poly.copy()
     # Resample back to original vertex count for uniform spacing
     return resample_polygon(new_pts, N)
+
+
+def add_antennae_features(
+    poly: np.ndarray,
+    antennae_regions: list[dict],
+    h_mm: float = 2.0,
+    w_base_mm: float = 4.0,
+    n_pts: int = 15,
+) -> np.ndarray:
+    return add_spike_features(
+        poly=poly,
+        spike_regions=antennae_regions,
+        h_mm=h_mm,
+        w_base_mm=w_base_mm,
+        n_pts=n_pts,
+        _deprecated_call=False,
+    )
 
 
 def detect_spike_regions(
@@ -1034,6 +1075,22 @@ def detect_spike_regions(
             merged.append(reg)
 
     return merged
+
+
+def detect_antennae_regions(
+    poly: np.ndarray,
+    epe_per_vertex_mm: list[float] | np.ndarray,
+    epe_threshold_mm: float = 0.15,
+    min_width_deg: float = 20.0,
+    merge_gap_deg: float = 10.0,
+) -> list[dict]:
+    return detect_spike_regions(
+        poly=poly,
+        epe_per_vertex_mm=epe_per_vertex_mm,
+        epe_threshold_mm=epe_threshold_mm,
+        min_width_deg=min_width_deg,
+        merge_gap_deg=merge_gap_deg,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1158,11 +1215,18 @@ def run_spike_coopt(
                     improvement_pct, converged, all_iters, poly_optimal
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    antennae_enabled = is_antennae_enabled(cfg)
 
     spike_regions = [
         {"angle_center_deg": a, "angle_width_deg": angle_width_deg}
         for a in spike_angles
     ]
+    if not antennae_enabled:
+        print("  [antennae] disabled by config; running baseline-only (h=0)")
+        spike_regions = []
+        h_values = [0.0]
+        h_lo = 0.0
+        h_hi = 0.0
 
     print(f"\n{'='*64}")
     print(f"  Spike Co-Optimisation — Boundary Std Minimisation")
@@ -1171,8 +1235,8 @@ def run_spike_coopt(
     print(f"{'='*64}\n")
 
     def _make_spiked_poly(h_mm: float) -> np.ndarray:
-        return add_spike_features(
-            prewarp_poly, spike_regions=spike_regions,
+        return add_antennae_features(
+            prewarp_poly, antennae_regions=spike_regions,
             h_mm=h_mm, w_base_mm=w_base_mm, n_pts=n_pts_per_spike,
         )
 
@@ -1285,6 +1349,38 @@ def run_spike_coopt(
 
     print(f"  [coopt] Outputs → {output_dir.resolve()}")
     return result
+
+
+def run_antennae_coopt(
+    prewarp_poly: np.ndarray,
+    cfg: dict,
+    output_dir: Path,
+    antennae_angles: list[float],
+    angle_width_deg: float,
+    w_base_mm: float = 2.0,
+    n_pts_per_antenna: int = 20,
+    h_values: list[float] | None = None,
+    h_lo: float = 0.0,
+    h_hi: float = 6.0,
+    n_coarse: int = 6,
+    refine_bracket: float = 1.0,
+    n_refine: int = 4,
+) -> dict:
+    return run_spike_coopt(
+        prewarp_poly=prewarp_poly,
+        cfg=cfg,
+        output_dir=output_dir,
+        spike_angles=antennae_angles,
+        angle_width_deg=angle_width_deg,
+        w_base_mm=w_base_mm,
+        n_pts_per_spike=n_pts_per_antenna,
+        h_values=h_values,
+        h_lo=h_lo,
+        h_hi=h_hi,
+        n_coarse=n_coarse,
+        refine_bracket=refine_bracket,
+        n_refine=n_refine,
+    )
 
     # Write JSON summary (excluding poly array)
     json_summary = {k: v for k, v in result.items() if k != "poly_optimal"}
@@ -1406,6 +1502,8 @@ def main() -> None:
                         "adjust spike height to equalise face densities")
     p.add_argument("--coopt-spike-angles", type=float, nargs="+", default=[0.0, 180.0],
                    help="Angular centres of spike faces [degrees] for co-optimisation")
+    p.add_argument("--coopt-antennae-angles", type=float, nargs="+", default=None,
+                   help="Alias for --coopt-spike-angles (preferred naming)")
     p.add_argument("--coopt-angle-width",  type=float, default=10.0,
                    help="Gaussian spike angular width [degrees] (keep narrow: 5–15°)")
     p.add_argument("--coopt-w-base",       type=float, default=2.0,
@@ -1429,11 +1527,12 @@ def main() -> None:
         from shapes import resample_polygon as _rsp
         N = int(cfg["target"].get("n_resample_pts", 512))
         poly = _rsp(poly, N)
+        spike_angles = args.coopt_antennae_angles if args.coopt_antennae_angles else args.coopt_spike_angles
         run_spike_coopt(
             prewarp_poly    = poly,
             cfg             = cfg,
             output_dir      = args.output_dir,
-            spike_angles    = args.coopt_spike_angles,
+            spike_angles    = spike_angles,
             angle_width_deg = args.coopt_angle_width,
             w_base_mm       = args.coopt_w_base,
             h_hi            = args.coopt_h_hi,

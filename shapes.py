@@ -485,8 +485,11 @@ def make_shape_from_svg(svg_path: str,
     if not all_d:
         raise ValueError(f"No <path> elements found in {svg_path}")
 
-    # Rasterise all paths onto a bitmap using matplotlib (handles winding correctly)
-    scale = raster_res / max(svg_w, svg_h)
+    # Rasterise with a small guard band to avoid edge clipping for paths that
+    # lie on/near the SVG boundary.
+    pad_px = max(2, int(round(0.02 * raster_res)))
+    work_res = max(raster_res - 2 * pad_px, 1)
+    scale = work_res / max(svg_w, svg_h)
     bmp = np.zeros((raster_res, raster_res), dtype=np.uint8)
 
     for d in all_d:
@@ -495,8 +498,8 @@ def make_shape_from_svg(svg_path: str,
             if len(sp) < 3:
                 continue
             # Map SVG coords → pixel coords (y flipped)
-            px = ((sp[:, 0] - svg_x0) * scale).astype(np.int32)
-            py = ((svg_h - (sp[:, 1] - svg_y0)) * scale).astype(np.int32)
+            px = np.rint((sp[:, 0] - svg_x0) * scale + pad_px).astype(np.int32)
+            py = np.rint((svg_h - (sp[:, 1] - svg_y0)) * scale + pad_px).astype(np.int32)
             px = np.clip(px, 0, raster_res - 1)
             py = np.clip(py, 0, raster_res - 1)
             pts_cv = np.column_stack([px, py]).reshape(-1, 1, 2)
@@ -513,14 +516,200 @@ def make_shape_from_svg(svg_path: str,
         raise ValueError("Could not extract a 2-D contour from SVG")
 
     # Convert pixel → SVG coords, flip y back to our convention
-    poly[:, 0] = poly[:, 0] / scale + svg_x0
-    poly[:, 1] = svg_h - poly[:, 1] / scale + svg_y0
+    poly[:, 0] = (poly[:, 0] - pad_px) / scale + svg_x0
+    poly[:, 1] = svg_h - (poly[:, 1] - pad_px) / scale + svg_y0
     poly[:, 1] = -poly[:, 1]   # flip y for simulation convention
 
     # Scale, center, resample
     poly = _center_and_scale(poly, target_width_m, target_height_m)
     poly = resample_polygon(poly, n_pts)
     return poly
+
+
+def make_shapes_from_svg(
+    svg_path: str,
+    target_width_m: float,
+    target_height_m: Optional[float] = None,
+    n_pts_each: int = 320,
+    curve_pts: int = 20,
+    raster_res: int = 1024,
+    min_area_frac: float = 0.0005,
+    preserve_aspect: bool = True,
+) -> list[np.ndarray]:
+    """
+    Load an SVG and return ALL disconnected outer contours as a list of polygons.
+
+    This is intended for discontinuous logos where `make_shape_from_svg` (largest
+    contour only) would drop smaller components.
+    """
+    import cv2
+    from xml.etree import ElementTree as ET
+
+    svg_path = Path(svg_path)
+    if not svg_path.exists():
+        raise FileNotFoundError(f"SVG not found: {svg_path}")
+
+    tree = ET.parse(svg_path)
+    root = tree.getroot()
+
+    vb = root.get("viewBox", "")
+    if vb:
+        vb_vals = [float(v) for v in vb.split()]
+        svg_x0, svg_y0, svg_w, svg_h = vb_vals
+    else:
+        svg_w = float(root.get("width", 100))
+        svg_h = float(root.get("height", 100))
+        svg_x0, svg_y0 = 0.0, 0.0
+
+    all_d: list[str] = []
+    for elem in root.iter():
+        tag = elem.tag.split("}")[-1]
+        if tag == "path":
+            d = elem.get("d", "")
+            if d:
+                all_d.append(d)
+    if not all_d:
+        raise ValueError(f"No <path> elements found in {svg_path}")
+
+    pad_px = max(2, int(round(0.02 * raster_res)))
+    work_res = max(raster_res - 2 * pad_px, 1)
+    scale = work_res / max(svg_w, svg_h)
+    bmp = np.zeros((raster_res, raster_res), dtype=np.uint8)
+    for d in all_d:
+        for sp in _parse_svg_path_d(d, curve_pts=curve_pts):
+            if len(sp) < 3:
+                continue
+            px = np.rint((sp[:, 0] - svg_x0) * scale + pad_px).astype(np.int32)
+            py = np.rint((svg_h - (sp[:, 1] - svg_y0)) * scale + pad_px).astype(np.int32)
+            px = np.clip(px, 0, raster_res - 1)
+            py = np.clip(py, 0, raster_res - 1)
+            pts_cv = np.column_stack([px, py]).reshape(-1, 1, 2)
+            cv2.fillPoly(bmp, [pts_cv], 255)
+
+    contours, _ = cv2.findContours(bmp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not contours:
+        raise ValueError(f"No contours found after rasterising {svg_path}")
+
+    areas = [float(cv2.contourArea(c)) for c in contours]
+    max_area = max(areas) if areas else 0.0
+    keep: list[np.ndarray] = []
+    for cnt, a in zip(contours, areas):
+        if max_area > 0 and a / max_area < float(min_area_frac):
+            continue
+        poly = cnt.squeeze().astype(float)
+        if poly.ndim != 2 or poly.shape[1] != 2:
+            continue
+        poly[:, 0] = (poly[:, 0] - pad_px) / scale + svg_x0
+        poly[:, 1] = svg_h - (poly[:, 1] - pad_px) / scale + svg_y0
+        poly[:, 1] = -poly[:, 1]
+        keep.append(poly)
+    if not keep:
+        raise ValueError("All contours filtered out; reduce min_area_frac.")
+
+    all_pts = np.vstack(keep)
+    lo = all_pts.min(axis=0)
+    hi = all_pts.max(axis=0)
+    span = hi - lo
+    ctr = lo + span / 2.0
+    sx = target_width_m / max(span[0], 1e-12)
+    if target_height_m is not None:
+        sy_fit = target_height_m / max(span[1], 1e-12)
+    else:
+        sy_fit = sx
+    if preserve_aspect:
+        s = min(sx, sy_fit)
+        sx = s
+        sy = s
+    else:
+        sy = sy_fit
+
+    out: list[np.ndarray] = []
+    for poly in keep:
+        p = (poly - ctr) * np.array([sx, sy], dtype=float)
+        p = resample_polygon(p, n_pts_each)
+        out.append(p)
+    return out
+
+
+def make_shapes_from_svg_paths(
+    svg_path: str,
+    target_width_m: float,
+    target_height_m: Optional[float] = None,
+    n_pts_each: int = 1200,
+    curve_pts: int = 64,
+    min_span_frac: float = 0.002,
+    preserve_aspect: bool = True,
+) -> list[np.ndarray]:
+    """
+    Vector-native SVG import: parse path subpaths directly (no raster contouring).
+    This avoids pixel stair-step artifacts for logos like SpaceX.
+    """
+    from xml.etree import ElementTree as ET
+
+    svg_path = Path(svg_path)
+    if not svg_path.exists():
+        raise FileNotFoundError(f"SVG not found: {svg_path}")
+
+    tree = ET.parse(svg_path)
+    root = tree.getroot()
+
+    vb = root.get("viewBox", "")
+    if vb:
+        vb_vals = [float(v) for v in vb.split()]
+        svg_x0, svg_y0, svg_w, svg_h = vb_vals
+    else:
+        svg_w = float(root.get("width", 100))
+        svg_h = float(root.get("height", 100))
+        svg_x0, svg_y0 = 0.0, 0.0
+
+    all_d: list[str] = []
+    for elem in root.iter():
+        tag = elem.tag.split("}")[-1]
+        if tag == "path":
+            d = elem.get("d", "")
+            if d:
+                all_d.append(d)
+    if not all_d:
+        raise ValueError(f"No <path> elements found in {svg_path}")
+
+    polys: list[np.ndarray] = []
+    for d in all_d:
+        for sp in _parse_svg_path_d(d, curve_pts=curve_pts):
+            if len(sp) < 3:
+                continue
+            p = np.asarray(sp, dtype=float).copy()
+            p[:, 1] = -p[:, 1]
+            span = p.max(axis=0) - p.min(axis=0)
+            if max(float(span[0]), float(span[1])) < max(svg_w, svg_h) * float(min_span_frac):
+                continue
+            polys.append(p)
+    if not polys:
+        raise ValueError("No valid SVG subpaths extracted.")
+
+    all_pts = np.vstack(polys)
+    lo = all_pts.min(axis=0)
+    hi = all_pts.max(axis=0)
+    span = hi - lo
+    ctr = lo + span / 2.0
+
+    sx = target_width_m / max(span[0], 1e-12)
+    if target_height_m is not None:
+        sy_fit = target_height_m / max(span[1], 1e-12)
+    else:
+        sy_fit = sx
+    if preserve_aspect:
+        s = min(sx, sy_fit)
+        sx = s
+        sy = s
+    else:
+        sy = sy_fit
+
+    out: list[np.ndarray] = []
+    for p in polys:
+        q = (p - ctr) * np.array([sx, sy], dtype=float)
+        q = resample_polygon(q, n_pts_each)
+        out.append(q)
+    return out
 
 
 def make_shape_from_image(image_path: str,

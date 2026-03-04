@@ -1,0 +1,17 @@
+thresholds:
+  temp_rmse_c_max: 15.0
+  phi_iou_0p5_min: 0.70
+  rho_rmse_max: 0.10
+  delta_mean_rho_final_abs_max: 0.08
+  exp_phi_dsc_mae_max: 0.20
+
+cases:
+  - name: "Square static"
+    baseline_run: "prewarp_square/verification"
+    experimental_run: "_experimental/square_static_exp_test"
+  - name: "Square turntable 4x"
+    baseline_run: "prewarp_turntable_4x_eval"
+    experimental_run: "_experimental/square_turntable_4x_exp_test"
+  - name: "Shape star static"
+    baseline_run: "shapes/shape_star"
+    experimental_run: "_experimental/shape_star_exp_test"

@@ -1,0 +1,32 @@
+[
+  {
+    "strategy": "No rotation (baseline)",
+    "prewarp": false,
+    "bnd_std": 0.0724,
+    "r_bnd": 0.699
+  },
+  {
+    "strategy": "1x 90 deg at t=3 min",
+    "prewarp": false,
+    "bnd_std": 0.0705,
+    "r_bnd": 0.698
+  },
+  {
+    "strategy": "4x 90 deg (time-based)",
+    "prewarp": false,
+    "bnd_std": 0.0585,
+    "r_bnd": 0.700
+  },
+  {
+    "strategy": "Prewarp only",
+    "prewarp": true,
+    "bnd_std": 0.0403,
+    "r_bnd": 0.799
+  },
+  {
+    "strategy": "Prewarp + 4x 90 deg",
+    "prewarp": true,
+    "bnd_std": 0.0253,
+    "r_bnd": 0.865
+  }
+]

@@ -1,0 +1,20 @@
+Mechanism figure request: explain positive synergy between prewarp and turntable for H-shape.
+
+Observed metrics (H-shape):
+- Baseline bnd_std = 0.0781
+- Prewarp only bnd_std = 0.0562 (28% reduction)
+- Turntable only bnd_std = 0.0516 (34% reduction)
+- Combined bnd_std = 0.0108 (86% reduction)
+
+Need a causal diagram (not just bars):
+1) Prewarp extends weakly coupled, parallel-to-E face regions outward.
+2) This geometric extension improves local electric coupling and Q_rf on previously under-heated regions.
+3) Turntable then rotates the already-optimized geometry through multiple orientations.
+4) Each face region alternates across weak and strong coupling states with improved baseline geometry.
+5) Net effect exceeds additive expectation: structural + temporal averaging interaction.
+
+Visual requirements:
+- Left column: baseline coupling map with weak/strong zones.
+- Middle column: prewarp geometric compensation.
+- Right column: turntable averaging over corrected geometry.
+- Add a callout showing "naive additive expectation: 62%" vs "actual: 86%".

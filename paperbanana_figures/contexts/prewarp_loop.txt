@@ -1,0 +1,28 @@
+EPE-based geometry prewarp algorithm (RFAM analog of inverse lithography):
+
+Given:
+- Target polygon T
+- Initial polygon P0 = T
+- Number of vertices N = 512 (equally spaced by arc length)
+- Step size alpha = 1.0
+- Laplacian smoothing lambda_s = 0.15, 3 passes
+- Convergence threshold epsilon_EPE = 0.25 mm (square/circle), 0.30 mm (H-shape)
+
+Iteration k:
+1) Run coupled EQS + thermal + densification simulation for polygon P_k over 360 s.
+2) For each boundary vertex i, sample boundary density rho_rel_bnd[i] at ~1.5 grid cells inward.
+3) Predict local shrinkage ratio:
+   s[i] = 1 - sqrt(rho_rel_0 / rho_rel_bnd[i]), with rho_rel_0 = 0.55.
+4) Predict post-sinter boundary:
+   B_hat[i] = P_k[i] - s[i]*L_eff*n_hat[i].
+5) Compute edge placement error:
+   EPE[i] = (T[i] - B_hat[i]) dot n_hat[i].
+6) Update polygon:
+   P_{k+1}[i] = P_k[i] + alpha*EPE[i]*n_hat[i].
+7) Apply Laplacian smoothing and re-sample to N=512 vertices.
+8) Check RMS(EPE) and terminate if below epsilon_EPE.
+
+Design requirements for figure:
+- Use a closed-loop flowchart with explicit equations on the right margin.
+- Separate "Forward physics" block from "Inverse geometric update" block.
+- Include one mini-panel showing boundary normal correction vectors.

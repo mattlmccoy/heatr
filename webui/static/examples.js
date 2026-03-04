@@ -34,11 +34,15 @@ function renderMaster(url) {
   root.querySelector("button").onclick = () => openViewer(items, 0);
 }
 
-function pathUrl(prefix, name, img) {
-  return `/files/outputs_eqs/${prefix}/${encodeURIComponent(name)}/${encodeURIComponent(img)}`;
+function pathUrl(relDir, img) {
+  const encodedRel = String(relDir || "")
+    .split("/")
+    .map((x) => encodeURIComponent(x))
+    .join("/");
+  return `/files/outputs_eqs/${encodedRel}/${encodeURIComponent(img)}`;
 }
 
-function renderSection(rootId, prefix, rows) {
+function renderSection(rootId, rows) {
   const root = byId(rootId);
   root.innerHTML = "";
   if (!rows?.length) {
@@ -48,8 +52,9 @@ function renderSection(rootId, prefix, rows) {
 
   rows.forEach((row) => {
     const images = row.images || [];
-    const items = images.map((img) => ({ url: pathUrl(prefix, row.name, img), title: `${row.name}/${img}` }));
-    const preview = row.preview ? pathUrl(prefix, row.name, row.preview) : (items[0]?.url || "");
+    const relDir = row.rel_dir || "";
+    const items = images.map((img) => ({ url: pathUrl(relDir, img), title: `${row.name}/${img}` }));
+    const preview = row.preview ? pathUrl(relDir, row.preview) : (items[0]?.url || "");
 
     const el = document.createElement("article");
     el.className = "example-card";
@@ -79,10 +84,11 @@ function renderSection(rootId, prefix, rows) {
 async function init() {
   const data = await fetchJson("/api/examples");
   renderMaster(data.master_sweep);
-  renderSection("sweepGrid", "sweeps", data.sweeps || []);
-  renderSection("shapeGrid", "shapes", data.shapes || []);
+  renderSection("sweepGrid", data.sweeps || []);
+  renderSection("shapeGrid", data.shapes || []);
 }
 
 init().catch((err) => {
-  byId("serverStatus").textContent = `Error: ${err.message}`;
+  const s = byId("serverStatus");
+  if (s) s.textContent = "HEATR service unreachable";
 });

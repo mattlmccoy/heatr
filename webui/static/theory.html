@@ -45,11 +45,11 @@
   <nav class="tabs-nav">
     <a class="tab-link" href="/index.html">Operation</a>
     <a class="tab-link" href="/results">Results</a>
-    <a class="tab-link" href="/examples">Examples</a>
+    <a class="tab-link" href="/files">Files</a>
     <a class="tab-link active" href="/theory">Theory</a>
   </nav>
 
-  <main class="results-page">
+  <main class="results-page theory-page">
     <section class="card dash-card accent-blue theory-doc">
       <h2>1. Electro-Quasi-Static (EQS) Problem</h2>
       <p>
@@ -99,25 +99,47 @@
       -k\nabla T\cdot\hat{n} = h\,(T - T_{\infty})
       $$
       <p>
-        Phase fraction uses a smooth transition around melt temperature $T_{pc}$:
+        HEATR exposes two phase-change families in the GUI:
+      </p>
+      <ol>
+        <li><strong>baseline</strong>: COMSOL-style smoothed Heaviside apparent heat-capacity transition around a nominal phase window.</li>
+        <li><strong>experimental_pa12_hybrid</strong>: DSC-calibrated apparent heat-capacity melt interval for PA12.</li>
+      </ol>
+      <p>
+        In both cases, melt fraction is represented as:
       </p>
       $$
       \phi(T) \in [0,1],\qquad \phi \approx 0 \text{ (solid)},\ \phi \approx 1 \text{ (liquid)}
       $$
       <p>
-        Latent heat is included via effective heat-capacity treatment around the phase interval.
+        and latent heat is integrated in the effective heat capacity over the transition interval.
       </p>
+      <p>
+        Default experimental DSC profile (from <code>configs/experimental_pa12_dsc_profile.yaml</code>):
+      </p>
+      $$
+      T_{\mathrm{onset}} = 171.0^\circ\mathrm{C},\quad
+      T_{\mathrm{peak}} = 180.8^\circ\mathrm{C},\quad
+      T_{\mathrm{end}} = 186.0^\circ\mathrm{C},\quad
+      L = 101.7\ \mathrm{kJ/kg}
+      $$
 
       <h2>4. Densification Evolution</h2>
       <p>
-        Relative density $\rho_{rel}$ evolves with temperature and phase-dependent kinetics.
-        HEATR supports dual-regime formulations (solid-state and liquid-assisted contributions), schematically:
+        Relative density $\rho_{rel}$ evolves with temperature and phase-dependent kinetics:
       </p>
       $$
       \frac{d\rho_{rel}}{dt} = R_{ss}(T,\phi,\rho_{rel}) + R_{liq}(T,\phi,\rho_{rel})
       $$
       <p>
-        with Arrhenius-like terms, thresholding by melt fraction, and per-step rate limiting for stability.
+        Model family mapping:
+      </p>
+      <ol>
+        <li><strong>baseline</strong>: existing simplified/legacy densification branch for continuity with prior studies.</li>
+        <li><strong>experimental_pa12_hybrid</strong>: viscous-capillary liquid-regime densification with configurable viscosity law (Arrhenius/WLF), plus optional crystallization kinetics branch.</li>
+      </ol>
+      <p>
+        Both paths retain stability controls (thresholding, clipping, and timestep limits).
       </p>
 
       <h2>5. Turntable and Optimizer Logic</h2>
@@ -147,6 +169,27 @@
         The model is a COMSOL-like electrothermal surrogate for rapid iteration. Accuracy depends on geometry fidelity,
         material calibration, boundary assumptions, and selected numerical settings ($\Delta t$, grid, source constraints).
       </p>
+      <p>
+        The browser now defaults to <code>dsc_calibrated_pa12</code> (internal family key:
+        <code>experimental_pa12_hybrid</code>) but keeps
+        <code>baseline</code> selectable for legacy comparison and reproducibility.
+      </p>
+
+      <h2>8. Data Sources and References</h2>
+      <p>
+        HEATR stores source provenance in:
+      </p>
+      <ul>
+        <li><code>configs/experimental_pa12_dsc_profile.yaml</code> (DSC profile values)</li>
+        <li><code>configs/experimental_pa12_provenance.yaml</code> (parameter-level source table)</li>
+      </ul>
+      <p>Primary references:</p>
+      <ul>
+        <li>Allison et al., <em>Computational design strategy to improve RF heating uniformity</em>, Rapid Prototyping Journal (2022), DOI: 10.1108/RPJ-08-2021-0193.</li>
+        <li>Allison et al., <em>Volumetric fusion of graphite-doped nylon</em>, Rapid Prototyping Journal (2022), DOI: 10.1108/RPJ-09-2020-0218.</li>
+        <li>HEATR internal PA12 DSC calibration dataset (used for onset/peak/end and latent heat in <code>experimental_pa12_dsc_profile.yaml</code>).</li>
+        <li>Optional crystallization branch is modeled with a Nakamura/Avrami-form class and remains default-disabled.</li>
+      </ul>
     </section>
   </main>
 

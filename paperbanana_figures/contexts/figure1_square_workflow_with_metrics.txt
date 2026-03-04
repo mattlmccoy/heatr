@@ -1,0 +1,43 @@
+Figure goal: one information-dense process/workflow figure for the square case, with real measured metrics embedded.
+
+Title concept:
+"RFAM correction workflow for square target with measured boundary-uniformity gains"
+
+Required layout:
+1) Left side: process/workflow blocks with arrows.
+2) Right side: compact quantitative panel with values from real runs.
+3) Bottom strip: rotation schedule and key equations.
+
+Workflow blocks (left):
+- Target polygon T (20 mm x 20 mm)
+- Forward model: EQS -> Q_rf -> thermal -> densification
+- Compute boundary statistics from rho_rel (boundary mask)
+- Branch A: no geometric correction / no rotation (baseline)
+- Branch B: turntable schedule
+- Branch C: prewarp loop (EPE-based)
+- Branch D: prewarp + turntable (combined)
+
+Include equations:
+- EPE[i] = (T[i] - B_hat[i]) dot n_hat[i]
+- P_{k+1}[i] = P_k[i] + alpha * EPE[i] * n_hat[i]
+- bnd_std = std(rho_rel on boundary)
+- r_bnd = min(rho_rel_boundary)/max(rho_rel_boundary)
+
+Use these exact measured values (from outputs_eqs/*/fields.npz):
+- Baseline no rotation: bnd_std = 0.0724, r_bnd = 0.699
+- 1x 90 deg rotation at t=3 min: bnd_std = 0.0705, r_bnd = 0.698
+- 4x 90 deg rotations: bnd_std = 0.0585, r_bnd = 0.700
+- Prewarp only: bnd_std = 0.0403, r_bnd = 0.799
+- Prewarp + 4x 90 deg: bnd_std = 0.0253, r_bnd = 0.865
+
+Rotation schedule callout:
+- Total exposure 360 s
+- Events at t = 72, 144, 216, 288 s
+- Delta theta = 90 deg each event
+
+Visual intent:
+- Publication-ready, technical, dense but readable.
+- Explicitly annotate percent reduction in bnd_std versus baseline:
+  - 4x rotation only: 19.3%
+  - prewarp only: 44.3%
+  - prewarp + 4x rotation: 65.0%

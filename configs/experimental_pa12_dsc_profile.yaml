@@ -1,0 +1,20 @@
+version: "pa12-dsc-v1"
+material: "PA12"
+state: "powder-bed process reference"
+notes:
+  - "Primary melt transition profile for experimental_pa12_hybrid."
+  - "These values are used when phase_model.use_dsc_profile=true."
+
+# Conservative PA12 melt window aligned with literature-reported melting behavior
+# for SLS/LPBF-relevant PA12 systems (onset near low-170s C, peak near ~180 C).
+melt_onset_c: 171.0
+melt_peak_c: 180.8
+melt_end_c: 186.0
+lat_heat_j_per_kg: 101700.0
+
+sources:
+  - citation: "Allison et al., Volumetric fusion of graphite-doped nylon, Rapid Prototyping Journal (2022), 10-1108/RPJ-09-2020-0218"
+    path: "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/previous-work/Seepersad-volumetric_fusion_of_graphite_doped_nylon_10-1108_RPJ-09-2020-0218.pdf"
+  - citation: "Allison et al., Computational design strategy to improve RF heating uniformity, Rapid Prototyping Journal (2022), 10-1108/RPJ-08-2021-0193"
+    path: "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/previous-work/Computational_design_strategy_to_improve_RF_heating_uniformity_10-1108_RPJ-08-2021-0193.pdf"
+  - citation: "HEATR internal PA12 DSC calibration dataset (replace with final public citation when available)"
