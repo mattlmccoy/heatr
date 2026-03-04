@@ -1,112 +1,155 @@
-# RFAM geo-prewarp — Canonical Electrothermal Forward Model
+# HEATR: High-frequency Electrothermal Additive Thermal Resolver
 
-2D electro-quasi-static (EQS) + thermal solver for Radio Frequency Additive Manufacturing
-(RFAM) of Nylon 12. Solves for RF heating, phase change, and densification to enable
-geometry prewarp for shrinkage compensation.
+HEATR is a 2D electrothermal RF simulation platform for polymer additive manufacturing workflows.
+It couples:
+- electro-quasi-static (EQS) field solve,
+- RF volumetric heating,
+- transient thermal transport,
+- melt progression and densification metrics,
+- optional process-assist geometry features (antennae, shells),
+- optimization workflows (exposure, orientation, placement).
 
-## Project status: **CANONICAL MODEL LOCKED (Mar 2026)**
+The project includes both:
+- a Python solver/runtime (`rfam_eqs_coupled.py`), and
+- a browser GUI (`rfam_gui_server.py` + `webui/static/*`).
 
-## Directory structure
+---
 
-```
-geo-prewarp/
-├── rfam_eqs_coupled.py          ← Main 2D EQS + thermal solver
-├── extract_comsol_qrf_2d.py     ← Extract 2D Q_rf map from COMSOL export
-├── RFAM_physics_from_literature.md  ← Physics reference notes
-├── configs/
-│   ├── rfam_eqs_xz_uniform_500w.yaml   ← CANONICAL base config (6 min)
-│   ├── _sweep_7min.yaml                ← Time sweep: 7 min
-│   ├── _sweep_8min.yaml                ← Time sweep: 8 min
-│   ├── _sweep_9min.yaml                ← Time sweep: 9 min
-│   ├── _sweep_10min.yaml               ← Time sweep: 10 min
-│   ├── rfam_eqs_comsol_qrf_driven.yaml       ← COMSOL Q_rf injection (full res)
-│   ├── rfam_eqs_comsol_qrf_driven_quick.yaml ← COMSOL Q_rf injection (quick test)
-│   └── _archive_old/                   ← All deprecated configs
-└── outputs_eqs/
-    ├── xz_uniform_6min_v2/     ← CANONICAL 6-min run (fields.npz, rf_summary_v4.png)
-    ├── _sweep_7min/             ← Time sweep results
-    ├── _sweep_8min/
-    ├── _sweep_9min/
-    ├── _sweep_10min/
-    ├── _sweep_time_sweep.png   ← Master time sweep figure (5-col × 2-row)
-    ├── comsol_exports/         ← COMSOL Q_rf map (qrf_2d_map.npy)
-    └── _archive_old/           ← All deprecated outputs
-```
+## What Is Current (Mar 2026)
 
-## Canonical model physics
+### Core run modes
+- `single` (single exposure)
+- `sweep` (exposure sweep)
+- `optimizer` (exposure optimizer)
+- `turntable` (scheduled rotation events)
+- `orientation_optimizer` (angle + exposure Pareto workflow)
+- `placement_optimizer` (multi-part layout optimization)
+- `shell_sweep` (shell thickness sweep)
 
-**Uniform σ = 0.04 S/m** throughout the doped region. The EQS solve naturally
-produces the correct RF heating distribution:
-- **Corners**: Q_rf ≈ 37× mean (E-field concentration)
-- **Top/bottom faces** (⊥ to E-field): ~11× mean (strong coupling)
-- **Left/right faces** (∥ to E-field): ~1.6× mean (weak coupling)
-- **Center**: ~1× mean (heated primarily by conduction)
+### GUI / workflow upgrades
+- Operation / Results / Files / Theory pages
+- Job queue with progress, reorder, pause/resume/cancel, duration tracking
+- Results page filters (mode/group/star), run starring, delete run action
+- Metrics side panel with contextual descriptions
+- File manager with in-browser preview, move/delete, and backfill actions
+- Geometry size override (`Desired size (mm)`) with nominal size + aspect lock
 
-**Key parameters:**
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| Generator power | 500 W | Fixed RF generator |
-| Coupling efficiency | 2% | Calibrated to 6-min melt |
-| Chamber | 60×60 mm | 20mm powder gap on all sides |
-| Part | 20×20 mm | Nylon 12, centered |
-| Grid | 120×120 | ~0.5mm resolution |
-| Electrode spacing | 60 mm | Top=0V, Bottom=860V |
-| Phase change | T=180°C, L=96.7 kJ/kg | Heaviside, ΔT=10°C |
+### Reporting & backfill
+- Unified queue-backed backfill endpoint for run artifacts:
+  - `POST /api/tools/backfill-reports`
+- Per-run manifest support:
+  - `report_manifest.json`
+- Module registry covers core reports + mode-specific diagnostics (orientation, placement, shell sweep, antennae)
+- Versioned non-destructive backfill outputs:
+  - `*.backfill.<module_id>.<timestamp>.*`
 
-## Quick start
+---
 
-```bash
-# Canonical 6-min run
-python3 rfam_eqs_coupled.py \
-  --config configs/rfam_eqs_xz_uniform_500w.yaml \
-  --output-dir outputs_eqs/xz_uniform_6min_v2
+## Physics Model (Including DSC-Calibrated Phase Change)
 
-# Time sweep 7–10 min (parallel)
-for m in 7 8 9 10; do
-  python3 rfam_eqs_coupled.py \
-    --config configs/_sweep_${m}min.yaml \
-    --output-dir outputs_eqs/_sweep_${m}min > /tmp/sweep_${m}.log 2>&1 &
-done; wait
-```
+HEATR supports a baseline model and an experimental PA12 hybrid model family.
 
-## Browser GUI (no prewarp controls)
+The experimental path uses DSC-calibrated melt transition values from:
+- `configs/experimental_pa12_dsc_profile.yaml`
+- `configs/experimental_pa12_provenance.yaml`
 
-Use the browser interface to run the forward model with:
-- shape selection
-- single exposure time runs
-- exposure-time sweeps
-- optimizer-enabled runs
-- orientation optimizer runs (angle + exposure Pareto)
-- placement optimizer runs (4-part circle layouts, EQS proxy + coupled rerank)
-- turntable runs
-- automatic config matching: reuses an existing config when parameters match
-- automatic config generation: creates a new `_gui_generated` config when no exact match exists
-- advanced overrides (optional) for core numerical/electrical/thermal parameters
-- live figure updates while jobs are running
-- in-page image viewer (no new tab required)
-- job logs + result browsing on a dedicated results page
-- examples page for existing sweep/shape outputs
+Current PA12 DSC profile (`pa12-dsc-v1`):
+- melt onset: **171.0 C**
+- melt peak: **180.8 C**
+- melt end: **186.0 C**
+- latent heat: **101700 J/kg**
 
+These are used by the experimental phase model flow when enabled (for example apparent-heat-capacity style phase behavior in the experimental stack).
+
+---
+
+## Antennae / Spike Migration
+
+Canonical naming is now **antennae**. Legacy `spike` keys are still accepted as compatibility aliases.
+
+Implemented controls include:
+- hard on/off gate,
+- global or auto size mode,
+- EQS/Qrf-based preview and calibration flow,
+- backfill module support for antennae diagnostics.
+
+---
+
+## Output Organization
+
+Run outputs are organized under:
+
+`outputs_eqs/runs/<shape>/<mode>/<model-family>/<run_name>/`
+
+Examples:
+- `outputs_eqs/runs/square/single/experimental/...`
+- `outputs_eqs/runs/T_shape/orientation_optimizer/experimental/...`
+- `outputs_eqs/runs/square/shell_sweep/experimental/...`
+
+> Generated outputs are intentionally excluded from Git tracking.
+
+---
+
+## Quick Start
+
+### 1) Launch GUI
 ```bash
 python3 rfam_gui_server.py
 ```
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080)
 
-Then open `http://127.0.0.1:8080`.
-Results page: `http://127.0.0.1:8080/results`
-Examples page: `http://127.0.0.1:8080/examples`
-Theory page: `http://127.0.0.1:8080/theory`
+### 2) Run headless single case (example)
+```bash
+python3 rfam_eqs_coupled.py \
+  --config configs/rfam_eqs_xz_uniform_500w.yaml \
+  --output-dir outputs_eqs/runs/square/single/baseline/manual_example
+```
 
-## Time-sweep results
+### 3) Generate orientation diagnostics from existing run artifacts
+Use Results/File Manager backfill buttons, or call API:
+```bash
+curl -X POST http://127.0.0.1:8080/api/tools/backfill-reports \
+  -H 'Content-Type: application/json' \
+  -d '{"output_dir":"outputs_eqs/runs/T_shape/orientation_optimizer/experimental/tshape_orient_20260303"}'
+```
 
-| t [min] | T̄ [°C] | T_max [°C] | φ (melt) | ρ_rel |
-|---------|---------|-----------|----------|-------|
-| 6       | 181.2   | 197.6     | 82.5%    | 0.627 |
-| 7       | 185.9   | 205.9     | 89.4%    | 0.692 |
-| 8       | 195.2   | 214.1     | 96.4%    | 0.783 |
-| 9       | 205.0   | 222.6     | 99.6%    | 0.868 |
-| 10      | 214.9   | 231.3     | 100%     | 0.932 |
+---
 
-## Next steps
-1. Compare Python temperature fields to COMSOL (export T from Tuned_Sigma.mph)
-2. Use φ/ρ_rel field as forward model for ILT-inspired geometry prewarp
-3. Higher-resolution run (240×240, 0.25mm) for publication quality
+## Example Figures
+
+### Electric fields / thermal context (SpaceX logo run)
+![SpaceX electric fields sample](docs/images/sample_spacex_electric_fields.png)
+
+### Orientation optimizer report
+![Orientation optimizer sample](docs/images/sample_orientation_report.png)
+
+### Placement optimizer report
+![Placement optimizer sample](docs/images/sample_placement_report.png)
+
+### Shell thickness sweep summary
+![Shell sweep sample](docs/images/sample_shell_sweep_report.svg)
+
+---
+
+## Key Files
+
+- Solver core: `rfam_eqs_coupled.py`
+- GUI server: `rfam_gui_server.py`
+- GUI client logic: `webui/static/app.js`
+- Results UI: `webui/static/results.js`
+- Files UI: `webui/static/file_manager.js`
+- Shape library: `shapes.py`
+- Backfill modules:
+  - `backfill_core_reports.py`
+  - `backfill_orientation_reports.py`
+  - `backfill_placement_reports.py`
+  - `backfill_shell_sweep_reports.py`
+  - `backfill_antennae_reports.py`
+
+---
+
+## Notes
+
+- This repository is now rooted at `geo-prewarp` for direct Git workflows.
+- If you use GitHub over SSH, set remote as:
+  - `git@github.com:mattlmccoy/heatr.git`
