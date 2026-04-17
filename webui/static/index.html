@@ -306,78 +306,13 @@
           </label>
         </div>
 
-        <details class="advanced-panel">
-          <summary>Antennae Assist (optional)</summary>
-          <div class="adv-grid">
-            <label>antennae.enabled
-              <select id="antennaeEnabledMode">
-                <option value="inherit" selected>inherit from base config</option>
-                <option value="true">enabled</option>
-                <option value="false">disabled</option>
-              </select>
-            </label>
-            <label>size mode
-              <select id="antennaeSizeMode">
-                <option value="global" selected>global size</option>
-                <option value="auto">auto size from Qrf deficit</option>
-              </select>
-            </label>
-            <label>global size (mm)
-              <input id="antennaeGlobalSizeMm" type="number" min="0.1" step="0.1" value="1.0" />
-            </label>
-            <label>auto min size (mm)
-              <input id="antennaeAutoMinMm" type="number" min="0.1" step="0.1" value="0.5" />
-            </label>
-            <label>auto max size (mm)
-              <input id="antennaeAutoMaxMm" type="number" min="0.1" step="0.1" value="2.0" />
-            </label>
-            <label>max antennae per part
-              <input id="antennaeMaxPerPart" type="number" min="1" step="1" value="4" />
-            </label>
-            <label>min anchor spacing (mm)
-              <input id="antennaeMinSpacingMm" type="number" min="0.1" step="0.1" value="2.0" />
-            </label>
-            <label>edge margin (mm)
-              <input id="antennaeEdgeMarginMm" type="number" min="0.1" step="0.1" value="1.0" />
-            </label>
-            <label>auto qrf percentile low
-              <input id="antennaeAutoQrfPercentileLow" type="number" min="0" max="100" step="1" value="10" />
-            </label>
-            <label>auto qrf percentile high
-              <input id="antennaeAutoQrfPercentileHigh" type="number" min="0" max="100" step="1" value="40" />
-            </label>
-            <div class="adv-section">
-              <button id="antennaePreviewBtn" type="button">Preview Antennae Placement</button>
-              <p class="field-help">Runs a fast EQS/Qrf pass and overlays candidate anchors + sizes.</p>
-            </div>
-            <label>calibration size ladder (mm)
-              <input id="antennaeCalibrationSizesMm" type="text" value="0.5,1.0,1.5,2.0" />
-            </label>
-            <label>calibration top-K coupled
-              <input id="antennaeCalibrationTopK" type="number" min="1" step="1" value="3" />
-            </label>
-            <label>include auto-size candidate
-              <select id="antennaeCalibrationIncludeAuto">
-                <option value="true" selected>true</option>
-                <option value="false">false</option>
-              </select>
-            </label>
-            <label>use turntable in calibration
-              <select id="antennaeCalibrationUseTurntable">
-                <option value="false" selected>false</option>
-                <option value="true">true</option>
-              </select>
-            </label>
-            <div class="adv-section">
-              <button id="antennaeCalibrateBtn" type="button">Queue Antennae Calibration</button>
-              <p class="field-help">Runs offline candidate sweep (proxy + coupled top-K) and writes calibration artifacts.</p>
-            </div>
-            <div class="adv-section">
-              <img id="antennaePreviewImg" class="file-preview-image hidden" alt="antennae preview" />
-              <pre id="antennaePreviewText" class="summary hidden"></pre>
-            </div>
-          </div>
-        </details>
+        <div class="antennae-toggle-row">
+          <label class="antennae-toggle-label">
+            <input type="checkbox" id="antennaeEnabled" />
+            <span class="antennae-toggle-text">Enable Antennae Assist</span>
+          </label>
+          <span class="antennae-toggle-hint" id="antennaeToggleHint">When enabled, "Launch Run" will open the interactive Antenna Workshop.</span>
+        </div>
 
         <details class="advanced-panel">
           <summary>Shelled Geometry (optional for non-sweep modes)</summary>
@@ -684,6 +619,108 @@
       <button id="imagePrev" type="button" class="nav-btn">◀</button>
       <img id="imageModalImg" alt="result" />
       <button id="imageNext" type="button" class="nav-btn">▶</button>
+    </div>
+  </dialog>
+
+  <!-- Antenna Workshop Modal -->
+  <dialog id="antennaWorkshop" class="ant-workshop-dialog">
+    <div class="ant-workshop-inner">
+
+      <div class="ant-workshop-header">
+        <div>
+          <h2 class="ant-workshop-title">Antenna Workshop</h2>
+          <p class="ant-workshop-subtitle">Place antennas on the geometry to redistribute RF field energy toward under-heated zones.</p>
+        </div>
+        <button id="antWorkshopCloseBtn" type="button" class="ant-close-btn" aria-label="Close">✕</button>
+      </div>
+
+      <div class="ant-workshop-body">
+
+        <!-- Left: interactive SVG canvas -->
+        <div class="ant-canvas-col">
+          <div class="ant-canvas-legend">
+            <span class="ant-legend-item ant-legend-chamber">Chamber</span>
+            <span class="ant-legend-item ant-legend-part">Part</span>
+            <span class="ant-legend-item ant-legend-electrode">Electrodes</span>
+            <span class="ant-legend-item ant-legend-antenna">Antenna</span>
+          </div>
+          <div class="ant-canvas-wrap" id="antCanvasWrap">
+            <svg id="antCanvas" class="ant-canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
+          <div class="ant-canvas-status" id="antCanvasStatus">Loading geometry&hellip;</div>
+        </div>
+
+        <!-- Right: controls panel -->
+        <div class="ant-controls-col">
+
+          <section class="ant-ctrl-section">
+            <h3 class="ant-ctrl-heading">Quick Search</h3>
+            <p class="ant-ctrl-desc">Runs a fast EQS pass to identify the best antenna placement based on Qrf deficit. Results can then be adjusted manually.</p>
+            <button id="antQuickSearchBtn" type="button" class="ant-btn-primary">Run Quick Search</button>
+            <div id="antSearchStatus" class="ant-search-status hidden"></div>
+          </section>
+
+          <section class="ant-ctrl-section">
+            <h3 class="ant-ctrl-heading">Antenna Size</h3>
+            <label class="ant-ctrl-label">Default size (mm)
+              <input id="antDefaultSizeMm" type="number" min="0.1" max="20" step="0.1" value="1.0" class="ant-ctrl-input" />
+            </label>
+            <div id="antSelectedSizeRow" class="hidden">
+              <label class="ant-ctrl-label">Selected antenna size (mm)
+                <input id="antSelectedSizeMm" type="number" min="0.1" max="20" step="0.1" value="1.0" class="ant-ctrl-input" />
+              </label>
+            </div>
+            <button id="antClearAllBtn" type="button" class="ant-btn-danger">Clear All</button>
+          </section>
+
+          <section class="ant-ctrl-section">
+            <h3 class="ant-ctrl-heading">Launch Mode</h3>
+            <div class="ant-radio-group">
+              <label class="ant-radio-label">
+                <input type="radio" name="antLaunchMode" id="antModeSingle" value="single" checked />
+                Single run
+              </label>
+              <label class="ant-radio-label">
+                <input type="radio" name="antLaunchMode" id="antModeSweep" value="sweep" />
+                Size sweep
+              </label>
+            </div>
+            <div id="antSweepControls" class="hidden">
+              <label class="ant-ctrl-label">Min size (mm)
+                <input id="antSweepMinMm" type="number" min="0.1" step="0.1" value="0.5" class="ant-ctrl-input" />
+              </label>
+              <label class="ant-ctrl-label">Max size (mm)
+                <input id="antSweepMaxMm" type="number" min="0.1" step="0.1" value="2.0" class="ant-ctrl-input" />
+              </label>
+              <label class="ant-ctrl-label">Steps
+                <input id="antSweepSteps" type="number" min="2" max="12" step="1" value="4" class="ant-ctrl-input" />
+              </label>
+              <p class="ant-ctrl-desc">Anchor positions stay fixed; only antenna size varies across steps.</p>
+            </div>
+          </section>
+
+          <section class="ant-ctrl-section ant-ctrl-section--list">
+            <h3 class="ant-ctrl-heading">Placed Antennas (<span id="antCountLabel">0</span>)</h3>
+            <div id="antInstanceList" class="ant-instance-list">
+              <p class="ant-instance-empty">No antennas placed yet.<br>Click on the canvas or use Quick Search.</p>
+            </div>
+          </section>
+
+          <div class="ant-ctrl-hint">
+            <strong>Canvas controls:</strong> Click to place &bull; Drag to move &bull; Right-click to remove &bull; Scroll over antenna to resize
+          </div>
+
+        </div>
+      </div>
+
+      <div class="ant-workshop-footer">
+        <button id="antCancelBtn" type="button" class="ant-btn-secondary">Cancel</button>
+        <div class="ant-footer-launch">
+          <button id="antLaunchRunBtn" type="button" class="ant-btn-primary ant-btn-launch">Launch Run</button>
+          <button id="antLaunchSweepBtn" type="button" class="ant-btn-primary ant-btn-launch hidden">Launch Sweep</button>
+        </div>
+      </div>
+
     </div>
   </dialog>
 
