@@ -4227,6 +4227,73 @@ def generate_antennae_preview(cfg: dict, output_png: Path) -> dict:
     return {"ok": True, "image_path": str(output_png), "instances": rows, "n_instances": len(rows)}
 
 
+def generate_antennae_quick_search(cfg: dict) -> dict:
+    """Run EQS and return suggested antenna placements plus a Qrf heatmap as a base64 PNG data URL."""
+    import base64
+    import io as _io
+
+    if not _antennae_enabled(cfg):
+        return {"ok": False, "error": "antennae disabled"}
+
+    # Resolve instances using current antennae config (auto-placement)
+    work = copy.deepcopy(cfg)
+    ant = _resolve_antennae_instances(work)
+    instances = [r for r in ant.get("instances", []) if isinstance(r, dict)]
+
+    # Compute Qrf on base geometry (no antennas) for visualization
+    base = copy.deepcopy(cfg)
+    base["antennae"] = dict(base.get("antennae", {})) if isinstance(base.get("antennae", {}), dict) else {}
+    base["antennae"]["enabled"] = False
+    if "spike" in base and isinstance(base["spike"], dict):
+        base["spike"]["enabled"] = False
+    for p in _parts_from_geometry(base.get("geometry", {})):
+        if isinstance(p, dict):
+            p.pop("antennae_instances", None)
+
+    x, y, _p_mask, qrf = _compute_eqs_qrf_for_cfg(base)
+    qmw = qrf / 1.0e6
+    qf = qmw[np.isfinite(qmw) & (qmw > 0)]
+    qmin = float(np.min(qf)) if qf.size else 0.0
+    qmax = float(np.max(qf)) if qf.size else 1.0
+    if math.isclose(qmin, qmax):
+        qmax = qmin + 1e-6
+
+    # Render heatmap only (no axes, no colorbar) for overlay use
+    fig, ax = plt.subplots(1, 1, figsize=(5, 5), dpi=120)
+    ax.imshow(
+        qmw,
+        extent=[float(x[0]) * 1000, float(x[-1]) * 1000, float(y[0]) * 1000, float(y[-1]) * 1000],
+        origin="lower",
+        cmap="magma",
+        vmin=qmin,
+        vmax=qmax,
+        interpolation="bilinear",
+        aspect="equal",
+    )
+    ax.axis("off")
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    buf = _io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
+    buf.seek(0)
+    heatmap_b64 = base64.b64encode(buf.read()).decode("ascii")
+
+    geom = cfg.get("geometry", {})
+    chamber_x = float(geom.get("chamber_x", 0.06))
+    chamber_y = float(geom.get("chamber_y", 0.06))
+
+    return {
+        "ok": True,
+        "instances": instances,
+        "n_instances": len(instances),
+        "heatmap_data_url": f"data:image/png;base64,{heatmap_b64}",
+        "qrf_min_mw_m3": qmin,
+        "qrf_max_mw_m3": qmax,
+        "chamber_x_m": chamber_x,
+        "chamber_y_m": chamber_y,
+    }
+
+
 def _compute_eqs_proxy(cfg: dict) -> dict:
     x, y, _, part_mask, doped_mask, elec_hi, elec_lo, fill_frac, part_id_mask, _ = make_domain(cfg)
     geom = cfg["geometry"]

@@ -1134,6 +1134,35 @@ def _apply_antennae_config(cfg: dict[str, Any], payload: dict[str, Any]) -> None
     spike_cfg["enabled"] = enabled
     cfg["spike"] = spike_cfg
 
+    # Handle explicitly placed antenna instances from the interactive workshop.
+    # When provided, these bypass the EQS auto-placement solve entirely.
+    explicit = payload.get("antennae_explicit_instances", None)
+    if explicit is not None and isinstance(explicit, list):
+        from rfam_eqs_coupled import _parts_from_geometry
+        geom = cfg.get("geometry", {})
+        if isinstance(geom, dict):
+            parts = _parts_from_geometry(geom)
+            for p in parts:
+                if isinstance(p, dict):
+                    p["antennae_instances"] = []
+            for inst in explicit:
+                if not isinstance(inst, dict):
+                    continue
+                pid = int(inst.get("part_id", 1)) - 1
+                if pid < 0:
+                    pid = 0
+                if pid < len(parts) and isinstance(parts[pid], dict):
+                    if not isinstance(parts[pid].get("antennae_instances"), list):
+                        parts[pid]["antennae_instances"] = []
+                    parts[pid]["antennae_instances"].append({
+                        "center_x": float(inst.get("center_x", 0.0)),
+                        "center_y": float(inst.get("center_y", 0.0)),
+                        "size_mm": float(inst.get("size_mm", 1.0)),
+                        "anchor_x": float(inst.get("anchor_x", inst.get("center_x", 0.0))),
+                        "anchor_y": float(inst.get("anchor_y", inst.get("center_y", 0.0))),
+                    })
+            geom["_antennae_resolved"] = True
+
 
 def _apply_shell_config(cfg: dict[str, Any], payload: dict[str, Any], wall_thickness_mm: float | None = None) -> None:
     shell_enabled = bool(payload.get("shell_enabled", False))
@@ -1893,6 +1922,65 @@ def _launch_antennae_calibration_mode(payload: dict[str, Any], job: dict[str, An
     _set_job_progress(job_id, completed_runs=1, progress_pct=100.0, progress_label="Antennae calibration complete")
 
 
+def _launch_antennae_size_sweep_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
+    """Run multiple single simulations with fixed anchor positions but varying antenna sizes."""
+    output_prefix = str(payload.get("output_name", "")).strip()
+    if not _is_valid_output_name(output_prefix):
+        raise ValueError("output_name must use only letters, numbers, '_' or '-'")
+
+    anchors = payload.get("antennae_explicit_instances", [])
+    if not isinstance(anchors, list) or not anchors:
+        raise ValueError("antennae_explicit_instances must be a non-empty list for antenna size sweep")
+
+    sweep_min = float(payload.get("antennae_sweep_min_mm", 0.5))
+    sweep_max = float(payload.get("antennae_sweep_max_mm", 2.0))
+    sweep_steps = max(2, int(payload.get("antennae_sweep_steps", 4)))
+    exposure_minutes = float(payload.get("exposure_minutes", 6.0))
+    if exposure_minutes <= 0:
+        exposure_minutes = 6.0
+
+    import numpy as _np
+    sizes = list(_np.linspace(sweep_min, sweep_max, sweep_steps))
+    total = len(sizes)
+    job_id = str(job["id"])
+    _set_job_progress(job_id, total_runs=total, completed_runs=0, progress_pct=0.0,
+                      progress_label=f"Antenna size sweep queued (0/{total})")
+
+    for idx, size_mm in enumerate(sizes, start=1):
+        instances_for_size = [dict(inst, size_mm=float(size_mm)) for inst in anchors if isinstance(inst, dict)]
+        step_payload = dict(payload)
+        step_payload["antennae_explicit_instances"] = instances_for_size
+        step_payload["antennae_enabled"] = True
+
+        suffix = f"{size_mm:.2f}mm".replace(".", "p")
+        cfg_path = _prepare_config(
+            mode="single",
+            payload=step_payload,
+            exposure_minutes=exposure_minutes,
+            output_tag=f"{output_prefix}_{suffix}_antsize",
+            job=job,
+        )
+        out_name = f"{output_prefix}_{suffix}_antsize"
+        out_dir = _output_dir_for_request(out_name, step_payload)
+        _register_job_output(job, out_dir)
+        _set_job_progress(
+            job_id,
+            progress_pct=100.0 * float(idx - 1) / float(total),
+            progress_label=f"Antenna sweep {idx}/{total} ({size_mm:.2f}mm)",
+        )
+        cmd = [sys.executable, "rfam_eqs_coupled.py", "--config", str(cfg_path), "--output-dir", str(out_dir)]
+        rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id)
+        if rc != 0:
+            _set_job_progress(job_id, progress_label=f"Antenna sweep failed at step {idx}/{total}")
+            raise RuntimeError(f"antenna size sweep step {idx} ({size_mm:.2f}mm) exited with code {rc}")
+        _set_job_progress(
+            job_id,
+            completed_runs=idx,
+            progress_pct=100.0 * float(idx) / float(total),
+            progress_label=f"Antenna sweep {idx}/{total} complete ({size_mm:.2f}mm)",
+        )
+
+
 def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
     job = JOBS[job_id]
     try:
@@ -1901,6 +1989,8 @@ def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
             _run_backfill_reports_job(payload, job)
         elif mode == "antennae_calibrate":
             _launch_antennae_calibration_mode(payload, job)
+        elif mode == "antennae_size_sweep":
+            _launch_antennae_size_sweep_mode(payload, job)
         elif mode == "sweep":
             _launch_sweep_mode(payload, job)
         elif mode == "shell_sweep":
@@ -3091,6 +3181,8 @@ class Handler(BaseHTTPRequestHandler):
             "/api/tools/backfill-orientation",
             "/api/tools/antennae-preview",
             "/api/tools/antennae-calibrate",
+            "/api/tools/antennae-geometry",
+            "/api/tools/antennae-quick-search",
         }:
             return self._json({"error": "not found"}, status=404)
 
@@ -3370,8 +3462,86 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self._json({"error": str(exc)}, status=400)
 
+        if path == "/api/tools/antennae-geometry":
+            try:
+                req_mode = str(payload.get("mode", "single")).strip()
+                if req_mode not in {"single", "optimizer", "turntable", "orientation_optimizer", "placement_optimizer"}:
+                    req_mode = "single"
+                exposure_minutes = float(payload.get("exposure_minutes", 6.0))
+                if exposure_minutes <= 0:
+                    exposure_minutes = 6.0
+                effective = _effective_config_for_request(payload, req_mode, exposure_minutes)
+                cfg_text = str(effective.get("effective_config_text", "")).strip()
+                cfg = yaml.safe_load(cfg_text) if cfg_text else {}
+                if not isinstance(cfg, dict):
+                    cfg = {}
+                geom = cfg.get("geometry", {})
+                chamber_x = float(geom.get("chamber_x", 0.06))
+                chamber_y = float(geom.get("chamber_y", 0.06))
+                from shapes import make_shape, rotate as _rotate_poly
+                import math as _math
+                from rfam_eqs_coupled import _parts_from_geometry
+                parts_out = []
+                for p in _parts_from_geometry(geom):
+                    if not isinstance(p, dict):
+                        continue
+                    shape_name = str(p.get("shape", "square"))
+                    w = float(p.get("width", 0.02))
+                    h = float(p.get("height", w))
+                    cx = float(p.get("center_x", 0.0))
+                    cy = float(p.get("center_y", 0.0))
+                    rot_deg = float(p.get("rotation_deg", 0.0))
+                    try:
+                        poly = make_shape(shape_name, w, h)
+                    except Exception:
+                        import numpy as _np
+                        poly = _np.array([[-w/2, -h/2], [w/2, -h/2], [w/2, h/2], [-w/2, h/2]])
+                    if rot_deg:
+                        poly = _rotate_poly(poly, _math.radians(rot_deg))
+                    poly_trans = (poly + [cx, cy]).tolist()
+                    parts_out.append({
+                        "polygon_m": poly_trans,
+                        "center_x": cx,
+                        "center_y": cy,
+                        "width": w,
+                        "height": h,
+                        "shape": shape_name,
+                    })
+                return self._json({
+                    "ok": True,
+                    "chamber_x_m": chamber_x,
+                    "chamber_y_m": chamber_y,
+                    "parts": parts_out,
+                })
+            except Exception as exc:
+                return self._json({"ok": False, "error": str(exc)}, status=400)
+
+        if path == "/api/tools/antennae-quick-search":
+            try:
+                req_mode = str(payload.get("mode", "single")).strip()
+                if req_mode not in {"single", "optimizer", "turntable", "orientation_optimizer", "placement_optimizer"}:
+                    req_mode = "single"
+                exposure_minutes = float(payload.get("exposure_minutes", 6.0))
+                if exposure_minutes <= 0:
+                    exposure_minutes = 6.0
+                effective = _effective_config_for_request(payload, req_mode, exposure_minutes)
+                cfg_text = str(effective.get("effective_config_text", "")).strip()
+                cfg = yaml.safe_load(cfg_text) if cfg_text else {}
+                if not isinstance(cfg, dict):
+                    cfg = {}
+                ant_cfg = cfg.get("antennae", {})
+                if not isinstance(ant_cfg, dict):
+                    ant_cfg = {}
+                ant_cfg["enabled"] = True
+                cfg["antennae"] = ant_cfg
+                from rfam_eqs_coupled import generate_antennae_quick_search
+                out = generate_antennae_quick_search(cfg)
+                return self._json(out)
+            except Exception as exc:
+                return self._json({"ok": False, "error": str(exc)}, status=400)
+
         mode = str(payload.get("mode", "single"))
-        if mode not in {"single", "sweep", "optimizer", "turntable", "orientation_optimizer", "placement_optimizer", "shell_sweep"}:
+        if mode not in {"single", "sweep", "optimizer", "turntable", "orientation_optimizer", "placement_optimizer", "shell_sweep", "antennae_size_sweep"}:
             return self._json({"error": "invalid mode"}, status=400)
 
         shape = str(payload.get("shape", "")).strip()

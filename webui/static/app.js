@@ -115,20 +115,7 @@ const PARAM_HELP = {
   placementGaElitism: "Number of top layouts carried unchanged to next generation.",
   placementGaTournamentK: "Tournament selection size for GA parent picks.",
   placementGaSeed: "Random seed for reproducible GA initialization.",
-  antennaeEnabledMode: "Antennae assist toggle. Inherit keeps base config value; enabled/disabled explicitly writes antennae.enabled for this run.",
-  antennaeSizeMode: "Antennae size strategy. Global uses one size; auto maps local Qrf deficit to a size range.",
-  antennaeGlobalSizeMm: "Global antenna size in millimeters when size mode is global.",
-  antennaeAutoMinMm: "Minimum antenna size for auto mode.",
-  antennaeAutoMaxMm: "Maximum antenna size for auto mode.",
-  antennaeMaxPerPart: "Maximum antennae placed per part from underheated boundary regions.",
-  antennaeMinSpacingMm: "Minimum spacing between selected antenna anchors.",
-  antennaeEdgeMarginMm: "Minimum chamber-edge margin for antenna placement.",
-  antennaeAutoQrfPercentileLow: "Lower Qrf percentile used for auto-size deficit normalization.",
-  antennaeAutoQrfPercentileHigh: "Upper Qrf percentile used for auto-size deficit normalization.",
-  antennaeCalibrationSizesMm: "Comma-separated global antenna sizes (mm) used during calibration runs.",
-  antennaeCalibrationTopK: "Number of proxy-ranked antennae candidates promoted to full coupled validation.",
-  antennaeCalibrationIncludeAuto: "If true, includes one auto-size candidate alongside the global-size ladder.",
-  antennaeCalibrationUseTurntable: "If true, validates calibration candidates with turntable enabled (slower).",
+  antennaeEnabled: "When checked, Launch Run opens the interactive Antenna Workshop where you place antennas visually, run a Quick Search, and choose single or size-sweep mode before launching.",
   shellEnabled: "Enables shell geometry generation for selected part(s).",
   shellWallThicknessMm: "Shell wall thickness in millimeters.",
   shellMethod: "Shell generation method (v1 uses inward offset).",
@@ -375,17 +362,7 @@ function updateDependentVisibility() {
   const shellEnabled = String(byId("shellEnabled")?.value || "false").toLowerCase() === "true";
   ["shellWallThicknessMm", "shellMethod"].forEach((id) => _setVisibleById(id, shellEnabled));
 
-  const antEnabledMode = String(byId("antennaeEnabledMode")?.value || "inherit").toLowerCase();
-  const antPanelEnabled = antEnabledMode !== "false";
-  [
-    "antennaeSizeMode", "antennaeMaxPerPart", "antennaeMinSpacingMm", "antennaeEdgeMarginMm",
-    "antennaePreviewBtn", "antennaeCalibrationSizesMm", "antennaeCalibrationTopK",
-    "antennaeCalibrationIncludeAuto", "antennaeCalibrationUseTurntable", "antennaeCalibrateBtn",
-  ].forEach((id) => _setVisibleById(id, antPanelEnabled));
-  const antSizeMode = String(byId("antennaeSizeMode")?.value || "global").toLowerCase();
-  _setVisibleById("antennaeGlobalSizeMm", antPanelEnabled && antSizeMode !== "auto");
-  ["antennaeAutoMinMm", "antennaeAutoMaxMm", "antennaeAutoQrfPercentileLow", "antennaeAutoQrfPercentileHigh"]
-    .forEach((id) => _setVisibleById(id, antPanelEnabled && antSizeMode === "auto"));
+  // Antennae UI is now in the Antenna Workshop modal; nothing to toggle here.
 
   const family = String(byId("physicsModelFamily")?.value || "experimental_pa12_hybrid").toLowerCase();
   const expEnabled = String(byId("physicsExperimentalEnabled")?.value || "true").toLowerCase() === "true";
@@ -688,18 +665,8 @@ function buildPayload(includeOutput = true) {
     payload.placement_min_rho_floor = Number(byId("placementMinRhoFloor")?.value);
   }
 
-  const antennaeMode = String(byId("antennaeEnabledMode")?.value || "inherit").trim().toLowerCase();
-  if (antennaeMode === "true") payload.antennae_enabled = true;
-  else if (antennaeMode === "false") payload.antennae_enabled = false;
-  payload.antennae_size_mode = String(byId("antennaeSizeMode")?.value || "global").trim().toLowerCase();
-  payload.antennae_global_size_mm = Number(byId("antennaeGlobalSizeMm")?.value);
-  payload.antennae_auto_min_mm = Number(byId("antennaeAutoMinMm")?.value);
-  payload.antennae_auto_max_mm = Number(byId("antennaeAutoMaxMm")?.value);
-  payload.antennae_max_per_part = Number(byId("antennaeMaxPerPart")?.value);
-  payload.antennae_min_spacing_mm = Number(byId("antennaeMinSpacingMm")?.value);
-  payload.antennae_edge_margin_mm = Number(byId("antennaeEdgeMarginMm")?.value);
-  payload.antennae_auto_qrf_percentile_low = Number(byId("antennaeAutoQrfPercentileLow")?.value);
-  payload.antennae_auto_qrf_percentile_high = Number(byId("antennaeAutoQrfPercentileHigh")?.value);
+  // Antennae enable state is read from the simple checkbox.
+  // Placement details are configured in the Antenna Workshop modal, not here.
 
   payload.shell_enabled = (String(byId("shellEnabled")?.value || "false").toLowerCase() === "true");
   payload.shell_wall_thickness_mm = Number(byId("shellWallThicknessMm")?.value);
@@ -1242,73 +1209,21 @@ async function refreshMatch() {
   }
 }
 
-async function previewAntennae() {
-  const status = byId("serverStatus");
-  const img = byId("antennaePreviewImg");
-  const txt = byId("antennaePreviewText");
-  if (!img || !txt) return;
-  try {
-    if (status) status.textContent = "Generating antennae preview...";
-    const payload = buildPayload(false);
-    payload.antennae_preview_request = true;
-    const data = await fetchJson("/api/tools/antennae-preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!data?.ok) throw new Error(data?.error || "preview failed");
-    img.src = data.image_url || "";
-    img.classList.toggle("hidden", !data.image_url);
-    const rows = Array.isArray(data.instances) ? data.instances : [];
-    const preview = {
-      n_instances: Number(data.n_instances || rows.length),
-      size_mode: data.size_mode || "",
-      part_counts: data.part_counts || {},
-      first_instances: rows.slice(0, 8),
-    };
-    txt.textContent = JSON.stringify(preview, null, 2);
-    txt.classList.remove("hidden");
-    if (status) status.textContent = "Antennae preview ready";
-  } catch (err) {
-    txt.textContent = `Preview error: ${err.message}`;
-    txt.classList.remove("hidden");
-    if (status) status.textContent = "Antennae preview failed";
-  }
-}
-
-async function queueAntennaeCalibration() {
-  const status = byId("serverStatus");
-  try {
-    if (status) status.textContent = "Queueing antennae calibration...";
-    const payload = buildPayload(false);
-    const baseName = String(byId("outputName")?.value || "").trim() || "antennae_calibration";
-    payload.output_name = `${baseName}_antcal`;
+async function launchRun(ev) {
+  ev.preventDefault();
+  const antennaeEnabled = byId("antennaeEnabled")?.checked || false;
+  const payload = buildPayload(true);
+  if (antennaeEnabled) {
     payload.antennae_enabled = true;
-    payload.antennae_calibration_sizes_mm = parseNumberList(byId("antennaeCalibrationSizesMm")?.value);
-    payload.antennae_calibration_top_k = Number(byId("antennaeCalibrationTopK")?.value);
-    payload.antennae_calibration_include_auto = String(byId("antennaeCalibrationIncludeAuto")?.value || "true").toLowerCase() === "true";
-    payload.antennae_calibration_use_turntable = String(byId("antennaeCalibrationUseTurntable")?.value || "false").toLowerCase() === "true";
-    await fetchJson("/api/tools/antennae-calibrate", {
+    AntennaWorkshop.open(payload);
+  } else {
+    await fetchJson("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     await loadJobs();
-    if (status) status.textContent = "Antennae calibration queued";
-  } catch (err) {
-    if (status) status.textContent = `Antennae calibration error: ${err.message}`;
   }
-}
-
-async function launchRun(ev) {
-  ev.preventDefault();
-  const payload = buildPayload(true);
-  await fetchJson("/api/run", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  await loadJobs();
 }
 
 async function init() {
@@ -1346,12 +1261,8 @@ async function init() {
   byId("physicsExperimentalEnabled")?.addEventListener("change", updateDependentVisibility);
   byId("placementUseTurntable")?.addEventListener("change", updateDependentVisibility);
   byId("shellEnabled")?.addEventListener("change", updateDependentVisibility);
-  byId("antennaeEnabledMode")?.addEventListener("change", updateDependentVisibility);
-  byId("antennaeSizeMode")?.addEventListener("change", updateDependentVisibility);
   byId("expCrEnabled")?.addEventListener("change", updateDependentVisibility);
   byId("expViscosityModel")?.addEventListener("change", updateDependentVisibility);
-  byId("antennaePreviewBtn")?.addEventListener("click", previewAntennae);
-  byId("antennaeCalibrateBtn")?.addEventListener("click", queueAntennaeCalibration);
   byId("turntableRotationDeg")?.addEventListener("input", refreshTurntableInfo);
   byId("turntableRotationDeg")?.addEventListener("change", refreshTurntableInfo);
   byId("turntableTotalRotations")?.addEventListener("input", refreshTurntableInfo);
@@ -1389,10 +1300,6 @@ async function init() {
     "placementGaElitism", "placementGaTournamentK", "placementGaSeed",
     "placementTempCeilingC", "placementMinRhoFloor",
     "shellSweepThicknessesMm", "shellSweepShapes", "shellTempCeilingC",
-    "antennaeEnabledMode", "antennaeSizeMode", "antennaeGlobalSizeMm", "antennaeAutoMinMm", "antennaeAutoMaxMm",
-    "antennaeMaxPerPart", "antennaeMinSpacingMm", "antennaeEdgeMarginMm",
-    "antennaeAutoQrfPercentileLow", "antennaeAutoQrfPercentileHigh",
-    "antennaeCalibrationSizesMm", "antennaeCalibrationTopK", "antennaeCalibrationIncludeAuto", "antennaeCalibrationUseTurntable",
     "shellEnabled", "shellWallThicknessMm", "shellMethod",
     "advGridNx", "advGridNy", "advFreqHz", "advVoltage", "advPower", "advEnforceGen", "advEff",
     "advDepth", "advDt", "advAmbient", "advConv", "advSigma", "advDopedSigmaProfile",
@@ -1418,6 +1325,7 @@ async function init() {
 
   byId("yamlPreviewSelect")?.addEventListener("change", refreshYamlPreview);
 
+  AntennaWorkshop.init();
   setModeSections();
   attachParamInfoIcons();
   await loadMeta();
@@ -1446,5 +1354,528 @@ async function init() {
     }
   }, 1000);
 }
+
+// ─── Antenna Workshop ────────────────────────────────────────────────────────
+const AntennaWorkshop = {
+  // Runtime state
+  formPayload: null,
+  geometry: null,       // {chamber_x_m, chamber_y_m, parts:[{polygon_m,center_x,center_y,...}]}
+  antennas: [],         // [{id, center_x, center_y, size_mm}]  — all in metres
+  selectedIdx: -1,
+  drag: null,           // {idx, svgStartX, svgStartY, simStartX, simStartY}
+  heatmapUrl: null,
+  nextId: 0,
+
+  SVG_W: 500,
+  SVG_H: 500,
+  PADDING: 30,
+
+  // ── coordinate helpers ──────────────────────────────────────────────────────
+  _scale() {
+    const g = this.geometry;
+    if (!g) return 1;
+    const dw = this.SVG_W - 2 * this.PADDING;
+    const dh = this.SVG_H - 2 * this.PADDING;
+    return Math.min(dw / (g.chamber_x_m * 1000), dh / (g.chamber_y_m * 1000));
+  },
+  _offset() {
+    const g = this.geometry;
+    if (!g) return { x: this.PADDING, y: this.PADDING };
+    const sc = this._scale();
+    const dw = this.SVG_W - 2 * this.PADDING;
+    const dh = this.SVG_H - 2 * this.PADDING;
+    return {
+      x: this.PADDING + (dw - g.chamber_x_m * 1000 * sc) / 2,
+      y: this.PADDING + (dh - g.chamber_y_m * 1000 * sc) / 2,
+    };
+  },
+  simToSvg(sx, sy) {
+    const g = this.geometry;
+    if (!g) return { x: 0, y: 0 };
+    const sc = this._scale();
+    const off = this._offset();
+    return {
+      x: off.x + (sx + g.chamber_x_m / 2) * 1000 * sc,
+      y: off.y + (g.chamber_y_m / 2 - sy) * 1000 * sc,
+    };
+  },
+  svgToSim(vx, vy) {
+    const g = this.geometry;
+    if (!g) return { x: 0, y: 0 };
+    const sc = this._scale();
+    const off = this._offset();
+    return {
+      x: (vx - off.x) / (1000 * sc) - g.chamber_x_m / 2,
+      y: g.chamber_y_m / 2 - (vy - off.y) / (1000 * sc),
+    };
+  },
+  getSvgPoint(evt) {
+    const svg = byId("antCanvas");
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    return {
+      x: ((evt.clientX - rect.left) / rect.width) * this.SVG_W,
+      y: ((evt.clientY - rect.top) / rect.height) * this.SVG_H,
+    };
+  },
+  // px radius for an antenna in the SVG
+  antRadiusPx(sizeMm) {
+    const sc = this._scale();
+    return Math.max((sizeMm / 2) * sc, 5);  // at least 5px for click targets
+  },
+
+  // ── open / close ────────────────────────────────────────────────────────────
+  async open(formPayload) {
+    this.formPayload = formPayload;
+    this.antennas = [];
+    this.selectedIdx = -1;
+    this.drag = null;
+    this.heatmapUrl = null;
+    this.geometry = null;
+    this.nextId = 0;
+
+    const dlg = byId("antennaWorkshop");
+    if (!dlg) return;
+    dlg.showModal();
+
+    this._setStatus("Loading geometry\u2026");
+    this._renderPlaceholder();
+    try {
+      const data = await fetchJson("/api/tools/antennae-geometry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formPayload),
+      });
+      if (!data?.ok) throw new Error(data?.error || "geometry failed");
+      this.geometry = data;
+      this.render();
+      this._setStatus("Click canvas to place antennas \u2022 Drag to move \u2022 Right-click to remove \u2022 Scroll to resize");
+    } catch (err) {
+      this._setStatus(`Error loading geometry: ${err.message}`);
+    }
+  },
+
+  close() {
+    byId("antennaWorkshop")?.close();
+  },
+
+  _setStatus(text) {
+    const el = byId("antCanvasStatus");
+    if (el) el.textContent = text;
+  },
+
+  _renderPlaceholder() {
+    const svg = byId("antCanvas");
+    if (!svg) return;
+    svg.setAttribute("width", this.SVG_W);
+    svg.setAttribute("height", this.SVG_H);
+    svg.innerHTML = `<rect width="${this.SVG_W}" height="${this.SVG_H}" fill="#0d1117"/>
+      <text x="${this.SVG_W / 2}" y="${this.SVG_H / 2}" text-anchor="middle" fill="#4b5563" font-size="14">Loading\u2026</text>`;
+  },
+
+  // ── SVG renderer ─────────────────────────────────────────────────────────────
+  render() {
+    const svg = byId("antCanvas");
+    if (!svg || !this.geometry) return;
+    const g = this.geometry;
+    const ns = "http://www.w3.org/2000/svg";
+
+    svg.setAttribute("width", this.SVG_W);
+    svg.setAttribute("height", this.SVG_H);
+    svg.setAttribute("viewBox", `0 0 ${this.SVG_W} ${this.SVG_H}`);
+    svg.innerHTML = "";
+
+    // Background
+    const bg = document.createElementNS(ns, "rect");
+    bg.setAttribute("width", this.SVG_W);
+    bg.setAttribute("height", this.SVG_H);
+    bg.setAttribute("fill", "#0d1117");
+    svg.appendChild(bg);
+
+    // Heatmap overlay (from Quick Search)
+    if (this.heatmapUrl) {
+      const tl = this.simToSvg(-g.chamber_x_m / 2, g.chamber_y_m / 2);
+      const br = this.simToSvg(g.chamber_x_m / 2, -g.chamber_y_m / 2);
+      const img = document.createElementNS(ns, "image");
+      img.setAttributeNS("http://www.w3.org/1999/xlink", "href", this.heatmapUrl);
+      img.setAttribute("x", tl.x);
+      img.setAttribute("y", tl.y);
+      img.setAttribute("width", br.x - tl.x);
+      img.setAttribute("height", br.y - tl.y);
+      img.setAttribute("preserveAspectRatio", "none");
+      img.setAttribute("opacity", "0.75");
+      svg.appendChild(img);
+    }
+
+    // Chamber border
+    const tl = this.simToSvg(-g.chamber_x_m / 2, g.chamber_y_m / 2);
+    const br = this.simToSvg(g.chamber_x_m / 2, -g.chamber_y_m / 2);
+    const chamber = document.createElementNS(ns, "rect");
+    chamber.setAttribute("x", tl.x);
+    chamber.setAttribute("y", tl.y);
+    chamber.setAttribute("width", br.x - tl.x);
+    chamber.setAttribute("height", br.y - tl.y);
+    chamber.setAttribute("fill", this.heatmapUrl ? "none" : "rgba(15,23,42,0.9)");
+    chamber.setAttribute("stroke", "#334155");
+    chamber.setAttribute("stroke-width", "1.5");
+    svg.appendChild(chamber);
+
+    // Electrode strips (top and bottom of chamber)
+    const elecH = 5;
+    for (const [ey, fy] of [[tl.y - elecH, tl.y], [br.y, br.y + elecH]]) {
+      const el = document.createElementNS(ns, "rect");
+      el.setAttribute("x", tl.x);
+      el.setAttribute("y", ey);
+      el.setAttribute("width", br.x - tl.x);
+      el.setAttribute("height", elecH);
+      el.setAttribute("fill", "#f59e0b");
+      el.setAttribute("opacity", "0.8");
+      svg.appendChild(el);
+    }
+
+    // Part polygons
+    for (const part of g.parts || []) {
+      const pts = (part.polygon_m || []).map(([px, py]) => {
+        const s = this.simToSvg(px, py);
+        return `${s.x.toFixed(2)},${s.y.toFixed(2)}`;
+      }).join(" ");
+      const poly = document.createElementNS(ns, "polygon");
+      poly.setAttribute("points", pts);
+      poly.setAttribute("fill", "rgba(59,130,246,0.2)");
+      poly.setAttribute("stroke", "#3b82f6");
+      poly.setAttribute("stroke-width", "1.5");
+      svg.appendChild(poly);
+    }
+
+    // Chamber size label
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("x", tl.x + 4);
+    label.setAttribute("y", br.y - 4);
+    label.setAttribute("fill", "#475569");
+    label.setAttribute("font-size", "9");
+    label.textContent = `${(g.chamber_x_m * 1000).toFixed(0)}\u00d7${(g.chamber_y_m * 1000).toFixed(0)} mm`;
+    svg.appendChild(label);
+
+    // Antennas
+    this.antennas.forEach((ant, idx) => {
+      const pos = this.simToSvg(ant.center_x, ant.center_y);
+      const r = this.antRadiusPx(ant.size_mm);
+      const sel = idx === this.selectedIdx;
+
+      const g_el = document.createElementNS(ns, "g");
+      g_el.setAttribute("data-ant-idx", idx);
+      g_el.style.cursor = "move";
+
+      const circle = document.createElementNS(ns, "circle");
+      circle.setAttribute("cx", pos.x);
+      circle.setAttribute("cy", pos.y);
+      circle.setAttribute("r", r);
+      circle.setAttribute("fill", sel ? "rgba(34,197,94,0.45)" : "rgba(34,197,94,0.25)");
+      circle.setAttribute("stroke", sel ? "#22c55e" : "#16a34a");
+      circle.setAttribute("stroke-width", sel ? "2.5" : "1.5");
+      g_el.appendChild(circle);
+
+      // Size label
+      const txt = document.createElementNS(ns, "text");
+      txt.setAttribute("x", pos.x);
+      txt.setAttribute("y", pos.y + r + 10);
+      txt.setAttribute("text-anchor", "middle");
+      txt.setAttribute("fill", sel ? "#86efac" : "#4ade80");
+      txt.setAttribute("font-size", "9");
+      txt.textContent = `${ant.size_mm.toFixed(1)}mm`;
+      g_el.appendChild(txt);
+
+      // Cross-hair dot
+      const dot = document.createElementNS(ns, "circle");
+      dot.setAttribute("cx", pos.x);
+      dot.setAttribute("cy", pos.y);
+      dot.setAttribute("r", "2");
+      dot.setAttribute("fill", sel ? "#22c55e" : "#16a34a");
+      g_el.appendChild(dot);
+
+      svg.appendChild(g_el);
+    });
+
+    this._updateInstanceList();
+  },
+
+  // ── canvas interaction ───────────────────────────────────────────────────────
+  _hitTest(svgPt) {
+    for (let i = this.antennas.length - 1; i >= 0; i--) {
+      const ant = this.antennas[i];
+      const pos = this.simToSvg(ant.center_x, ant.center_y);
+      const r = this.antRadiusPx(ant.size_mm);
+      const dx = svgPt.x - pos.x;
+      const dy = svgPt.y - pos.y;
+      if (Math.sqrt(dx * dx + dy * dy) <= r + 3) return i;
+    }
+    return -1;
+  },
+
+  onMouseDown(evt) {
+    if (!this.geometry) return;
+    evt.preventDefault();
+    const pt = this.getSvgPoint(evt);
+    const hit = this._hitTest(pt);
+
+    if (evt.button === 2) {
+      // Right-click → delete
+      if (hit >= 0) {
+        this.antennas.splice(hit, 1);
+        if (this.selectedIdx === hit) this.selectedIdx = -1;
+        else if (this.selectedIdx > hit) this.selectedIdx--;
+        this.render();
+      }
+      return;
+    }
+
+    if (hit >= 0) {
+      // Click existing → select and prepare drag
+      this.selectedIdx = hit;
+      const ant = this.antennas[hit];
+      this.drag = { idx: hit, svgStartX: pt.x, svgStartY: pt.y, simStartX: ant.center_x, simStartY: ant.center_y };
+      this.render();
+      this._syncSelectedSizeInput();
+    } else {
+      // Click empty → place new antenna
+      const sim = this.svgToSim(pt.x, pt.y);
+      const g = this.geometry;
+      const halfX = g.chamber_x_m / 2;
+      const halfY = g.chamber_y_m / 2;
+      if (Math.abs(sim.x) > halfX || Math.abs(sim.y) > halfY) return;  // outside chamber
+      const sizeMm = Number(byId("antDefaultSizeMm")?.value || 1.0);
+      this.antennas.push({ id: this.nextId++, center_x: sim.x, center_y: sim.y, size_mm: sizeMm });
+      this.selectedIdx = this.antennas.length - 1;
+      this.drag = null;
+      this.render();
+      this._syncSelectedSizeInput();
+    }
+  },
+
+  onMouseMove(evt) {
+    if (!this.drag) return;
+    evt.preventDefault();
+    const pt = this.getSvgPoint(evt);
+    const sc = this._scale();
+    const dx = (pt.x - this.drag.svgStartX) / (1000 * sc);
+    const dy = -(pt.y - this.drag.svgStartY) / (1000 * sc);
+    const g = this.geometry;
+    const halfX = g.chamber_x_m / 2;
+    const halfY = g.chamber_y_m / 2;
+    this.antennas[this.drag.idx].center_x = Math.max(-halfX, Math.min(halfX, this.drag.simStartX + dx));
+    this.antennas[this.drag.idx].center_y = Math.max(-halfY, Math.min(halfY, this.drag.simStartY + dy));
+    this.render();
+  },
+
+  onMouseUp() {
+    this.drag = null;
+  },
+
+  onContextMenu(evt) {
+    evt.preventDefault();  // prevent browser menu; actual delete happens in onMouseDown
+  },
+
+  onWheel(evt) {
+    if (!this.geometry) return;
+    const pt = this.getSvgPoint(evt);
+    const hit = this._hitTest(pt);
+    if (hit < 0) return;
+    evt.preventDefault();
+    const ant = this.antennas[hit];
+    const delta = evt.deltaY < 0 ? 0.1 : -0.1;
+    ant.size_mm = Math.max(0.1, Math.round((ant.size_mm + delta) * 10) / 10);
+    if (hit === this.selectedIdx) this._syncSelectedSizeInput();
+    this.render();
+  },
+
+  // ── quick search ─────────────────────────────────────────────────────────────
+  async runQuickSearch() {
+    const btn = byId("antQuickSearchBtn");
+    const status = byId("antSearchStatus");
+    if (btn) btn.disabled = true;
+    if (status) { status.textContent = "Running EQS\u2026 this takes a few seconds."; status.classList.remove("hidden"); }
+    this._setStatus("Running Quick Search EQS pass\u2026");
+    try {
+      const payload = Object.assign({}, this.formPayload);
+      payload.antennae_enabled = true;
+      const data = await fetchJson("/api/tools/antennae-quick-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!data?.ok) throw new Error(data?.error || "search failed");
+      this.heatmapUrl = data.heatmap_data_url || null;
+      // Populate antennas from suggestion, but keep any the user already placed
+      const rows = Array.isArray(data.instances) ? data.instances : [];
+      this.antennas = rows.map((r) => ({
+        id: this.nextId++,
+        center_x: Number(r.center_x),
+        center_y: Number(r.center_y),
+        size_mm: Number(r.size_mm) || 1.0,
+      }));
+      this.selectedIdx = -1;
+      this.render();
+      if (status) status.textContent = `Quick Search found ${this.antennas.length} candidate position${this.antennas.length !== 1 ? "s" : ""}. Adjust as needed.`;
+      this._setStatus("Quick Search complete \u2022 Adjust positions by dragging \u2022 Resize with scroll wheel");
+    } catch (err) {
+      if (status) status.textContent = `Search failed: ${err.message}`;
+      this._setStatus("Quick Search failed.");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  // ── instance list (right-panel) ──────────────────────────────────────────────
+  _updateInstanceList() {
+    const list = byId("antInstanceList");
+    const count = byId("antCountLabel");
+    if (count) count.textContent = this.antennas.length;
+    if (!list) return;
+    if (this.antennas.length === 0) {
+      list.innerHTML = '<p class="ant-instance-empty">No antennas placed yet.<br>Click on the canvas or use Quick Search.</p>';
+      return;
+    }
+    list.innerHTML = this.antennas.map((ant, idx) => {
+      const xmm = (ant.center_x * 1000).toFixed(1);
+      const ymm = (ant.center_y * 1000).toFixed(1);
+      const sel = idx === this.selectedIdx;
+      return `<div class="ant-instance-item${sel ? " ant-instance-selected" : ""}" data-ant-idx="${idx}">
+        <span class="ant-instance-info">Ant ${idx + 1}: (${xmm}, ${ymm}) mm &bull; ${ant.size_mm.toFixed(1)}mm</span>
+        <button class="ant-instance-del" data-del-idx="${idx}" title="Remove">&#x2715;</button>
+      </div>`;
+    }).join("");
+
+    list.querySelectorAll(".ant-instance-item").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        if (e.target.classList.contains("ant-instance-del")) return;
+        const idx = Number(el.dataset.antIdx);
+        this.selectedIdx = idx;
+        this.render();
+        this._syncSelectedSizeInput();
+      });
+    });
+    list.querySelectorAll(".ant-instance-del").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.dataset.delIdx);
+        this.antennas.splice(idx, 1);
+        if (this.selectedIdx === idx) this.selectedIdx = -1;
+        else if (this.selectedIdx > idx) this.selectedIdx--;
+        this.render();
+      });
+    });
+
+    // Update selected-size row visibility
+    const selRow = byId("antSelectedSizeRow");
+    if (selRow) selRow.classList.toggle("hidden", this.selectedIdx < 0);
+  },
+
+  _syncSelectedSizeInput() {
+    const selRow = byId("antSelectedSizeRow");
+    const selInput = byId("antSelectedSizeMm");
+    if (!selRow || !selInput) return;
+    if (this.selectedIdx >= 0 && this.selectedIdx < this.antennas.length) {
+      selRow.classList.remove("hidden");
+      selInput.value = this.antennas[this.selectedIdx].size_mm.toFixed(1);
+    } else {
+      selRow.classList.add("hidden");
+    }
+  },
+
+  // ── launch ───────────────────────────────────────────────────────────────────
+  async _doLaunch(sweepMode) {
+    const payload = Object.assign({}, this.formPayload);
+    payload.antennae_enabled = true;
+    payload.antennae_explicit_instances = this.antennas.map((ant) => ({
+      center_x: ant.center_x,
+      center_y: ant.center_y,
+      size_mm: ant.size_mm,
+      anchor_x: ant.center_x,
+      anchor_y: ant.center_y,
+      part_id: 1,
+    }));
+
+    if (sweepMode) {
+      payload.mode = "antennae_size_sweep";
+      payload.antennae_sweep_min_mm = Number(byId("antSweepMinMm")?.value || 0.5);
+      payload.antennae_sweep_max_mm = Number(byId("antSweepMaxMm")?.value || 2.0);
+      payload.antennae_sweep_steps = Number(byId("antSweepSteps")?.value || 4);
+    }
+
+    try {
+      await fetchJson("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      this.close();
+      await loadJobs();
+    } catch (err) {
+      this._setStatus(`Launch failed: ${err.message}`);
+    }
+  },
+
+  // ── wiring (called from init) ────────────────────────────────────────────────
+  init() {
+    const svg = byId("antCanvas");
+    if (svg) {
+      svg.addEventListener("mousedown", (e) => this.onMouseDown(e));
+      svg.addEventListener("contextmenu", (e) => this.onContextMenu(e));
+      svg.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
+      window.addEventListener("mousemove", (e) => { if (this.drag) this.onMouseMove(e); });
+      window.addEventListener("mouseup", () => this.onMouseUp());
+    }
+
+    byId("antWorkshopCloseBtn")?.addEventListener("click", () => this.close());
+    byId("antCancelBtn")?.addEventListener("click", () => this.close());
+    byId("antQuickSearchBtn")?.addEventListener("click", () => this.runQuickSearch());
+
+    byId("antClearAllBtn")?.addEventListener("click", () => {
+      this.antennas = [];
+      this.selectedIdx = -1;
+      this.heatmapUrl = null;
+      this.render();
+    });
+
+    byId("antDefaultSizeMm")?.addEventListener("input", () => {
+      // Apply to selected antenna if one is selected
+      if (this.selectedIdx >= 0 && this.selectedIdx < this.antennas.length) {
+        const v = Number(byId("antDefaultSizeMm")?.value);
+        if (v > 0) {
+          this.antennas[this.selectedIdx].size_mm = v;
+          byId("antSelectedSizeMm") && (byId("antSelectedSizeMm").value = v.toFixed(1));
+          this.render();
+        }
+      }
+    });
+
+    byId("antSelectedSizeMm")?.addEventListener("input", () => {
+      if (this.selectedIdx >= 0 && this.selectedIdx < this.antennas.length) {
+        const v = Number(byId("antSelectedSizeMm")?.value);
+        if (v > 0) {
+          this.antennas[this.selectedIdx].size_mm = v;
+          this.render();
+        }
+      }
+    });
+
+    // Launch mode radio buttons toggle sweep controls
+    document.querySelectorAll('input[name="antLaunchMode"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        const isSweep = byId("antModeSweep")?.checked;
+        byId("antSweepControls")?.classList.toggle("hidden", !isSweep);
+        byId("antLaunchRunBtn")?.classList.toggle("hidden", isSweep);
+        byId("antLaunchSweepBtn")?.classList.toggle("hidden", !isSweep);
+      });
+    });
+
+    byId("antLaunchRunBtn")?.addEventListener("click", () => this._doLaunch(false));
+    byId("antLaunchSweepBtn")?.addEventListener("click", () => this._doLaunch(true));
+
+    // Close on backdrop click
+    byId("antennaWorkshop")?.addEventListener("click", (e) => {
+      if (e.target === byId("antennaWorkshop")) this.close();
+    });
+  },
+};
 
 init();
