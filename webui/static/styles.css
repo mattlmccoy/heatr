@@ -230,6 +230,10 @@ button.primary.compact {
 }
 .job-progress-label {
   color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .job-progress-meta {
   color: var(--muted);
@@ -247,7 +251,7 @@ button.primary.compact {
   width: 0%;
   border-radius: inherit;
   background: linear-gradient(90deg, #3c83ef, #57a7ff);
-  transition: width 240ms ease;
+  transition: width 0.95s linear;
 }
 .job-progress-fill.running { background: linear-gradient(90deg, #f0b43f, #ffd278); }
 .job-progress-fill.completed { background: linear-gradient(90deg, #21a66d, #5fd69f); }
@@ -684,4 +688,247 @@ body[data-theme="sunset"] {
   margin: 0 0 0.6rem;
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+/* ── Theory page validation table ───────────────────────────────────────── */
+.theory-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.87rem;
+  margin: 1rem 0 1.5rem;
+}
+.theory-table th,
+.theory-table td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line, #ddd);
+  vertical-align: top;
+  text-align: left;
+}
+.theory-table th {
+  background: var(--bg-1, #e8dfcc);
+  color: var(--ink, #1f2329);
+  font-weight: 600;
+}
+.theory-table tbody tr:nth-child(even) {
+  background: var(--bg-0, #f5f2ea);
+}
+.theory-table td:first-child {
+  white-space: nowrap;
+  font-family: monospace;
+}
+.theory-doc h3 {
+  margin-top: 1.2rem;
+  margin-bottom: 0.4rem;
+  font-size: 1rem;
+  color: var(--ink, #1f2329);
+}
+
+/* ── Dark-mode overrides for theory table (ids-inspired theme) ───────────── */
+.ids-inspired .theory-table th,
+.ids-inspired .theory-table td {
+  border-color: var(--border-color, #2a2e3a);
+  color: var(--text-primary, #e8eaed);
+}
+.ids-inspired .theory-table th {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 700;
+}
+.ids-inspired .theory-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.04);
+}
+.ids-inspired .theory-table tbody tr:nth-child(odd) {
+  background: transparent;
+}
+.ids-inspired .theory-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.ids-inspired .theory-doc h3 {
+  color: var(--text-primary, #e8eaed);
+}
+
+/* ── Physics snapshot panel (live metrics inside job cards) ─────────────── */
+.job-physics {
+  margin-top: 0.35rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.3rem;
+}
+.job-physics-summary {
+  font-size: 0.74rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 0;
+}
+.job-physics-summary::-webkit-details-marker { display: none; }
+.job-physics-summary::before {
+  content: "\25B6";    /* ▶ */
+  font-size: 0.55rem;
+  flex-shrink: 0;
+  transition: transform 120ms ease;
+  color: var(--muted);
+  opacity: 0.7;
+}
+.job-physics[open] > .job-physics-summary::before {
+  transform: rotate(90deg);
+}
+.physics-gauges {
+  margin-top: 0.28rem;
+  display: grid;
+  gap: 0.18rem;
+}
+.gauge-row {
+  display: grid;
+  grid-template-columns: 1.55rem 1fr 4.2rem;
+  align-items: center;
+  gap: 0.3rem;
+}
+.gauge-label {
+  color: var(--muted);
+  font-family: monospace;
+  font-size: 0.67rem;
+  text-align: right;
+}
+.gauge-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.09);
+  overflow: hidden;
+}
+.ids-inspired .gauge-track {
+  background: rgba(255, 255, 255, 0.12);
+}
+.gauge-fill {
+  height: 100%;
+  border-radius: inherit;
+  width: 0%;
+  transition: width 0.95s linear;
+}
+/* Temperature: blue (cold) → amber (warm) → red (hot) */
+.gauge-temp-fill { background: linear-gradient(90deg, #60a5fa, #f59e0b, #ef4444); }
+/* Melt fraction: indigo → violet */
+.gauge-melt-fill { background: linear-gradient(90deg, #818cf8, #a855f7); }
+/* Relative density: cool grey → warm gold */
+.gauge-dens-fill { background: linear-gradient(90deg, #9ca3af, #d97706); }
+/* Energy error: green (good) → amber → red (bad) */
+.gauge-err-fill  { background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444); }
+/* T_max: amber → red → dark red (hotter than mean T̄ gradient) */
+.gauge-tmax-fill { background: linear-gradient(90deg, #f59e0b, #ef4444, #b91c1c); }
+
+/* ── DSC milestone tick marks on temperature gauge bars ─────────────────────
+   Three 1px ticks at Nylon 12 DSC temperatures (25–240 °C scale):
+     onset  175 °C → (175-25)/(240-25) = 69.77 %
+     peak   180 °C → (180-25)/(240-25) = 72.09 %
+     end    185 °C → (185-25)/(240-25) = 74.42 %
+   The ::after pseudo-element overlays the fill on top via position:absolute.
+   Light-mode: subtle dark ticks   Dark-mode (.ids-inspired): bright white ticks
+   ────────────────────────────────────────────────────────────────────────── */
+.gauge-track:has(.gauge-temp-fill),
+.gauge-track:has(.gauge-tmax-fill) {
+  position: relative;   /* establishes containing block for ::after */
+}
+.gauge-track:has(.gauge-temp-fill)::after,
+.gauge-track:has(.gauge-tmax-fill)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Three hairline ticks: onset (dim) · peak (bright) · end (dim) */
+  background:
+    linear-gradient(90deg,
+      transparent calc(69.77% - 0.5px),
+      rgba(0,0,0,0.28) calc(69.77% - 0.5px),
+      rgba(0,0,0,0.28) calc(69.77% + 0.5px),
+      transparent      calc(69.77% + 0.5px)
+    ),
+    linear-gradient(90deg,
+      transparent calc(72.09% - 0.5px),
+      rgba(0,0,0,0.50) calc(72.09% - 0.5px),
+      rgba(0,0,0,0.50) calc(72.09% + 0.5px),
+      transparent      calc(72.09% + 0.5px)
+    ),
+    linear-gradient(90deg,
+      transparent calc(74.42% - 0.5px),
+      rgba(0,0,0,0.28) calc(74.42% - 0.5px),
+      rgba(0,0,0,0.28) calc(74.42% + 0.5px),
+      transparent      calc(74.42% + 0.5px)
+    );
+}
+.ids-inspired .gauge-track:has(.gauge-temp-fill)::after,
+.ids-inspired .gauge-track:has(.gauge-tmax-fill)::after {
+  background:
+    linear-gradient(90deg,
+      transparent calc(69.77% - 0.5px),
+      rgba(255,255,255,0.55) calc(69.77% - 0.5px),
+      rgba(255,255,255,0.55) calc(69.77% + 0.5px),
+      transparent            calc(69.77% + 0.5px)
+    ),
+    linear-gradient(90deg,
+      transparent calc(72.09% - 0.5px),
+      rgba(255,255,255,0.85) calc(72.09% - 0.5px),
+      rgba(255,255,255,0.85) calc(72.09% + 0.5px),
+      transparent            calc(72.09% + 0.5px)
+    ),
+    linear-gradient(90deg,
+      transparent calc(74.42% - 0.5px),
+      rgba(255,255,255,0.55) calc(74.42% - 0.5px),
+      rgba(255,255,255,0.55) calc(74.42% + 0.5px),
+      transparent            calc(74.42% + 0.5px)
+    );
+}
+/* Static run-card gauges (results page) — no transition, widths set directly in HTML */
+.run-gauges {
+  margin-top: 0.4rem;
+}
+.run-gauges .gauge-row {
+  display: grid;
+  grid-template-columns: 1.55rem 1fr 4.2rem;
+  align-items: center;
+  gap: 0.22rem;
+  margin-bottom: 0.12rem;
+}
+.run-gauges .gauge-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.09);
+  overflow: hidden;
+}
+.ids-inspired .run-gauges .gauge-track {
+  background: rgba(255, 255, 255, 0.12);
+}
+.run-gauges .gauge-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: none;   /* static — no animation */
+}
+.run-gauges .gauge-label {
+  font-size: 0.64rem;
+  font-family: monospace;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+.run-gauges .gauge-val {
+  text-align: right;
+  font-family: monospace;
+  font-size: 0.64rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.gauge-val {
+  text-align: right;
+  font-family: monospace;
+  font-size: 0.67rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.job-physics-step {
+  margin-top: 0.18rem;
+  font-size: 0.67rem;
+  color: var(--muted);
+  font-family: monospace;
+  opacity: 0.75;
 }

@@ -622,14 +622,33 @@ function buildPayload(includeOutput = true) {
     }
   }
   if (mode === "orientation_optimizer") {
+    const targetExposureS = Number(byId("exposureMinutes")?.value) * 60.0;
+    let orientationExposureMinS = Number(byId("orientationExposureMinS")?.value);
+    let orientationExposureMaxS = Number(byId("orientationExposureMaxS")?.value);
+    let orientationExposureStepS = Number(byId("orientationExposureStepS")?.value);
+    // Preserve advanced behavior when user customizes this range; otherwise, if the
+    // stock broad sweep is still present, lock to the requested main exposure.
+    if (
+      Number.isFinite(targetExposureS) && targetExposureS > 0 &&
+      orientationExposureMinS === 240 &&
+      orientationExposureMaxS === 720 &&
+      orientationExposureStepS === 60
+    ) {
+      orientationExposureMinS = targetExposureS;
+      orientationExposureMaxS = targetExposureS;
+      orientationExposureStepS = Math.max(targetExposureS, 1);
+      if (byId("orientationExposureMinS")) byId("orientationExposureMinS").value = String(orientationExposureMinS);
+      if (byId("orientationExposureMaxS")) byId("orientationExposureMaxS").value = String(orientationExposureMaxS);
+      if (byId("orientationExposureStepS")) byId("orientationExposureStepS").value = String(orientationExposureStepS);
+    }
     payload.orientation_angle_min_deg = Number(byId("orientationAngleMinDeg")?.value);
     payload.orientation_angle_max_deg = Number(byId("orientationAngleMaxDeg")?.value);
     payload.orientation_angle_step_deg = Number(byId("orientationAngleStepDeg")?.value);
     payload.orientation_refine_window_deg = Number(byId("orientationRefineWindowDeg")?.value);
     payload.orientation_refine_step_deg = Number(byId("orientationRefineStepDeg")?.value);
-    payload.orientation_exposure_min_s = Number(byId("orientationExposureMinS")?.value);
-    payload.orientation_exposure_max_s = Number(byId("orientationExposureMaxS")?.value);
-    payload.orientation_exposure_step_s = Number(byId("orientationExposureStepS")?.value);
+    payload.orientation_exposure_min_s = orientationExposureMinS;
+    payload.orientation_exposure_max_s = orientationExposureMaxS;
+    payload.orientation_exposure_step_s = orientationExposureStepS;
     payload.orientation_temp_ceiling_c = Number(byId("orientationTempCeilingC")?.value);
     payload.orientation_min_rho_floor = Number(byId("orientationMinRhoFloor")?.value);
     payload.orientation_angle_gif_enabled = String(byId("orientationAngleGifEnabled")?.value || "false").toLowerCase() === "true";
@@ -989,112 +1008,262 @@ function openViewer(items, index) {
   if (!dlg.open) dlg.showModal();
 }
 
+// ── Persistent animation state for job cards ─────────────────────────────
+// Keyed by job ID.  Each entry holds references to animated DOM elements so
+// they survive the innerHTML rebuild and CSS transitions keep firing.
+const _jobAnimState = new Map();
+
+function _getJobAnim(jobId) {
+  if (!_jobAnimState.has(jobId)) {
+    _jobAnimState.set(jobId, {
+      progressFill: null,
+      tempFill: null,
+      tmaxFill: null,
+      meltFill: null,
+      densFill: null,
+      errFill: null,
+      physicsOpen: null,   // null = use default; true/false = user chose
+      wasRunning: false,
+    });
+  }
+  return _jobAnimState.get(jobId);
+}
+
+// Build the physics-snapshot <details> panel HTML.
+// All gauge fill widths start at 0% — they are set live via rAF after paint.
+function _buildPhysicsPanel(snap, isOpen) {
+  if (!snap) return "";
+  const T    = Number(snap.T_mean_c || 0);
+  const Tmax = Number(snap.T_max_c  || snap.T_mean_c || 0);
+  const phi  = Number(snap.phi_mean || 0);
+  const rho  = Number(snap.rho_mean || 0);
+  const err  = Number(snap.err_pct  || 0);
+  const step  = Number(snap.step  || 0);
+  const total = Number(snap.total || 1);
+  const summary =
+    `T\u0305\u00a0${T.toFixed(1)}\u00b0C` +
+    `\u2002\u00b7\u2002T\u2191\u00a0${Tmax.toFixed(1)}\u00b0C` +
+    `\u2002\u00b7\u2002\u03c6\u0305\u00a0${phi.toFixed(3)}` +
+    `\u2002\u00b7\u2002\u03c1\u0305\u00a0${rho.toFixed(3)}` +
+    `\u2002\u00b7\u2002err\u00a0${err.toFixed(3)}%`;
+  return `<details class="job-physics"${isOpen ? " open" : ""}>
+  <summary class="job-physics-summary">${summary}</summary>
+  <div class="physics-gauges">
+    <div class="gauge-row">
+      <span class="gauge-label">T\u2191</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-tmax-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${Tmax.toFixed(1)}\u00b0C</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">T\u0305</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-temp-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${T.toFixed(1)}\u00b0C</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">\u03c6\u0305</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-melt-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${phi.toFixed(3)}</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">\u03c1\u0305</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-dens-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${rho.toFixed(3)}</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">err</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-err-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${err.toFixed(3)}%</span>
+    </div>
+  </div>
+  <div class="job-physics-step">Step ${step}\u2009/\u2009${total}</div>
+</details>`;
+}
+
+function _buildJobCardHTML(j, pct, snap, physicsOpen) {
+  const statusCls = j.status;
+  const cfg = j.config_resolution?.[0]?.resolved;
+  const cfgLine = cfg?.config_name ? `${cfg.match_type}: ${cfg.config_name}` : "";
+  const outputs = (j.output_dirs || []).join(", ");
+  const totalRuns = Number.isFinite(Number(j.total_runs)) ? Math.max(1, Number(j.total_runs)) : 1;
+  const doneRuns = Number.isFinite(Number(j.completed_runs)) ? Math.max(0, Number(j.completed_runs)) : 0;
+  const progressLabel = String(j.progress_label || (j.status === "completed" ? "Completed" : "Running"));
+  const createdMs = parseIsoMs(j.created_at);
+  const startedMs = parseIsoMs(j.started_at);
+  const endedMs   = parseIsoMs(j.ended_at);
+  let timerLabel = "";
+  if (startedMs !== null) {
+    const endRef = endedMs !== null ? endedMs : Date.now();
+    timerLabel = (endedMs !== null || ["completed", "failed", "cancelled"].includes(String(j.status)))
+      ? `Duration: ${formatDuration((endRef - startedMs) / 1000)}`
+      : `Elapsed: ${formatDuration((endRef - startedMs) / 1000)}`;
+  } else if (createdMs !== null && (String(j.status) === "queued" || String(j.status) === "paused")) {
+    timerLabel = `Waiting: ${formatDuration((Date.now() - createdMs) / 1000)}`;
+  }
+  const queuePos = Number.isFinite(Number(j.queue_position)) ? Number(j.queue_position) : null;
+  const queueControls = (j.status === "queued")
+    ? `<div class="queue-controls">
+        <span class="muted">Queue #${queuePos ?? "?"}</span>
+        <button class="queue-btn" data-jobid="${j.id}" data-dir="up" type="button">Up</button>
+        <button class="queue-btn" data-jobid="${j.id}" data-dir="down" type="button">Down</button>
+      </div>`
+    : "";
+  let controlButtons = "";
+  if (j.status === "queued") {
+    controlButtons = `<div class="job-controls">
+      <button class="job-ctl-btn" data-jobid="${j.id}" data-action="pause" type="button">Pause</button>
+      <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
+    </div>`;
+  } else if (j.status === "running") {
+    controlButtons = `<div class="job-controls">
+      <button class="job-ctl-btn" data-jobid="${j.id}" data-action="pause" type="button">Pause</button>
+      <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
+    </div>`;
+  } else if (j.status === "paused") {
+    controlButtons = `<div class="job-controls">
+      <button class="job-ctl-btn" data-jobid="${j.id}" data-action="resume" type="button">Resume</button>
+      <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
+    </div>`;
+  } else if (j.status === "cancelling") {
+    controlButtons = `<div class="job-controls"><span class="muted">Cancelling...</span></div>`;
+  }
+  return `
+    <div class="job-head">
+      <strong>${j.id}</strong>
+      <span class="badge ${statusCls}">${j.status}</span>
+    </div>
+    <div class="job-progress-wrap">
+      <div class="job-progress-label">${progressLabel}</div>
+      <div class="job-progress-meta">${doneRuns}/${totalRuns} \u2022 ${pct.toFixed(0)}%</div>
+    </div>
+    <div class="job-progress-track">
+      <div class="job-progress-fill ${statusCls}" style="width:0%"></div>
+    </div>
+    ${_buildPhysicsPanel(snap, physicsOpen)}
+    <div>${j.mode} \u2022 ${j.output_name || "(batch)"}</div>
+    <div>${j.started_at || j.created_at || ""}</div>
+    <div class="muted">${timerLabel}</div>
+    <div class="muted">${cfgLine}</div>
+    ${queueControls}
+    ${controlButtons}
+    <div class="muted">${outputs || "No outputs yet"}</div>
+    <div><a href="${j.log_url}" target="_blank">log</a></div>
+  `;
+}
+
+function _attachJobCardListeners(el, j) {
+  el.querySelectorAll(".queue-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id  = btn.getAttribute("data-jobid");
+      const dir = btn.getAttribute("data-dir");
+      if (!id || !dir) return;
+      try { await reorderQueuedJob(id, dir); } catch (err) { console.error(err); }
+    });
+  });
+  el.querySelectorAll(".job-ctl-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id     = btn.getAttribute("data-jobid");
+      const action = btn.getAttribute("data-action");
+      if (!id || !action) return;
+      try { await controlJob(id, action); } catch (err) { console.error(err); }
+    });
+  });
+}
+
 function renderJobs(jobs) {
   const root = byId("jobs");
   if (!root) return;
   root.innerHTML = "";
+
   if (!jobs.length) {
     root.textContent = "No jobs yet.";
+    _jobAnimState.clear();
     return;
   }
 
+  const hasRunning = jobs.some((j) => j.status === "running");
+  const seenIds = new Set(jobs.map((j) => j.id));
+  _jobAnimState.forEach((_, id) => { if (!seenIds.has(id)) _jobAnimState.delete(id); });
+
   jobs.forEach((j) => {
+    const rawPct = Number.isFinite(Number(j.progress_pct))
+      ? Number(j.progress_pct)
+      : (j.status === "completed" ? 100 : 0);
+    const pct  = Math.max(0, Math.min(100, rawPct));
+    const snap = j.physics_snapshot || null;
+    const anim = _getJobAnim(j.id);
+
+    // Default open state: open for running/paused jobs, closed for everything else.
+    // Once the user toggles the panel we respect their choice.
+    if (anim.physicsOpen === null) {
+      anim.physicsOpen = (j.status === "running" || j.status === "paused");
+    } else if (!anim.wasRunning && hasRunning && j.status !== "running" && j.status !== "paused") {
+      // Auto-collapse queued/completed jobs that were never running when another
+      // job starts (only fires once per job, then user controls it).
+      anim.physicsOpen = false;
+    }
+    anim.wasRunning = anim.wasRunning || (j.status === "running");
+
     const el = document.createElement("div");
     el.className = "job";
-    const statusCls = j.status;
-    const cfg = j.config_resolution?.[0]?.resolved;
-    const cfgLine = cfg?.config_name ? `${cfg.match_type}: ${cfg.config_name}` : "";
-    const outputs = (j.output_dirs || []).join(", ");
-    const totalRuns = Number.isFinite(Number(j.total_runs)) ? Math.max(1, Number(j.total_runs)) : 1;
-    const doneRuns = Number.isFinite(Number(j.completed_runs)) ? Math.max(0, Number(j.completed_runs)) : 0;
-    const rawPct = Number.isFinite(Number(j.progress_pct)) ? Number(j.progress_pct) : (j.status === "completed" ? 100 : 0);
-    const pct = Math.max(0, Math.min(100, rawPct));
-    const progressLabel = String(j.progress_label || (j.status === "completed" ? "Completed" : "Running"));
-    const createdMs = parseIsoMs(j.created_at);
-    const startedMs = parseIsoMs(j.started_at);
-    const endedMs = parseIsoMs(j.ended_at);
-    let timerLabel = "";
-    if (startedMs !== null) {
-      const endRef = endedMs !== null ? endedMs : Date.now();
-      timerLabel = (endedMs !== null || ["completed", "failed", "cancelled"].includes(String(j.status)))
-        ? `Duration: ${formatDuration((endRef - startedMs) / 1000)}`
-        : `Elapsed: ${formatDuration((endRef - startedMs) / 1000)}`;
-    } else if (createdMs !== null && (String(j.status) === "queued" || String(j.status) === "paused")) {
-      timerLabel = `Waiting: ${formatDuration((Date.now() - createdMs) / 1000)}`;
+    el.innerHTML = _buildJobCardHTML(j, pct, snap, !!anim.physicsOpen);
+
+    // ── Transplant persistent animated fill elements ──────────────────────
+    // By reusing the same DOM node across renders the CSS `transition` fires
+    // properly (it sees a change on an existing element instead of a new one).
+    function transplant(selector, animKey, newClass) {
+      const placeholder = el.querySelector(selector);
+      if (!placeholder) return;
+      if (anim[animKey]) {
+        if (newClass) anim[animKey].className = newClass;
+        placeholder.parentNode.replaceChild(anim[animKey], placeholder);
+      } else {
+        anim[animKey] = placeholder;
+      }
     }
-    const queuePos = Number.isFinite(Number(j.queue_position)) ? Number(j.queue_position) : null;
-    const queueControls = (j.status === "queued")
-      ? `<div class="queue-controls">
-          <span class="muted">Queue #${queuePos ?? "?"}</span>
-          <button class="queue-btn" data-jobid="${j.id}" data-dir="up" type="button">Up</button>
-          <button class="queue-btn" data-jobid="${j.id}" data-dir="down" type="button">Down</button>
-        </div>`
-      : "";
-    let controlButtons = "";
-    if (j.status === "queued") {
-      controlButtons = `<div class="job-controls">
-        <button class="job-ctl-btn" data-jobid="${j.id}" data-action="pause" type="button">Pause</button>
-        <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
-      </div>`;
-    } else if (j.status === "running") {
-      controlButtons = `<div class="job-controls">
-        <button class="job-ctl-btn" data-jobid="${j.id}" data-action="pause" type="button">Pause</button>
-        <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
-      </div>`;
-    } else if (j.status === "paused") {
-      controlButtons = `<div class="job-controls">
-        <button class="job-ctl-btn" data-jobid="${j.id}" data-action="resume" type="button">Resume</button>
-        <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
-      </div>`;
-    } else if (j.status === "cancelling") {
-      controlButtons = `<div class="job-controls"><span class="muted">Cancelling...</span></div>`;
-    }
-    el.innerHTML = `
-      <div class="job-head">
-        <strong>${j.id}</strong>
-        <span class="badge ${statusCls}">${j.status}</span>
-      </div>
-      <div class="job-progress-wrap">
-        <div class="job-progress-label">${progressLabel}</div>
-        <div class="job-progress-meta">${doneRuns}/${totalRuns} • ${pct.toFixed(0)}%</div>
-      </div>
-      <div class="job-progress-track">
-        <div class="job-progress-fill ${statusCls}" style="width:${pct.toFixed(1)}%"></div>
-      </div>
-      <div>${j.mode} • ${j.output_name || "(batch)"}</div>
-      <div>${j.started_at || j.created_at || ""}</div>
-      <div class="muted">${timerLabel}</div>
-      <div class="muted">${cfgLine}</div>
-      ${queueControls}
-      ${controlButtons}
-      <div class="muted">${outputs || "No outputs yet"}</div>
-      <div><a href="${j.log_url}" target="_blank">log</a></div>
-    `;
-    el.querySelectorAll(".queue-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const id = btn.getAttribute("data-jobid");
-        const dir = btn.getAttribute("data-dir");
-        if (!id || !dir) return;
-        try {
-          await reorderQueuedJob(id, dir);
-        } catch (err) {
-          console.error(err);
-        }
-      });
-    });
-    el.querySelectorAll(".job-ctl-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const id = btn.getAttribute("data-jobid");
-        const action = btn.getAttribute("data-action");
-        if (!id || !action) return;
-        try {
-          await controlJob(id, action);
-        } catch (err) {
-          console.error(err);
-        }
-      });
-    });
+    transplant(".job-progress-fill", "progressFill", `job-progress-fill ${j.status}`);
+    transplant(".gauge-temp-fill",   "tempFill");
+    transplant(".gauge-tmax-fill",   "tmaxFill");
+    transplant(".gauge-melt-fill",   "meltFill");
+    transplant(".gauge-dens-fill",   "densFill");
+    transplant(".gauge-err-fill",    "errFill");
+
+    _attachJobCardListeners(el, j);
     root.appendChild(el);
+
+    // ── Animate fill widths after first paint ─────────────────────────────
+    requestAnimationFrame(() => {
+      if (anim.progressFill) anim.progressFill.style.width = `${pct.toFixed(1)}%`;
+      if (snap) {
+        const T    = Number(snap.T_mean_c || 0);
+        const Tmax = Number(snap.T_max_c  || snap.T_mean_c || 0);
+        const phi  = Number(snap.phi_mean || 0);
+        const rho  = Number(snap.rho_mean || 0);
+        const err  = Number(snap.err_pct  || 0);
+        // Temperature: 25 °C (ambient) → 240 °C (headroom above 231 °C max observed)
+        // DSC ticks at 175 / 180 / 185 °C are rendered via CSS ::after on the track.
+        if (anim.tempFill) anim.tempFill.style.width =
+          `${Math.min(100, Math.max(0, (T - 25) / (240 - 25) * 100)).toFixed(1)}%`;
+        if (anim.tmaxFill) anim.tmaxFill.style.width =
+          `${Math.min(100, Math.max(0, (Tmax - 25) / (240 - 25) * 100)).toFixed(1)}%`;
+        // Melt fraction: 0 → 1
+        if (anim.meltFill) anim.meltFill.style.width =
+          `${Math.min(100, Math.max(0, phi * 100)).toFixed(1)}%`;
+        // Relative density: powder (~0.45) → fully dense (1.0)
+        if (anim.densFill) anim.densFill.style.width =
+          `${Math.min(100, Math.max(0, (rho - 0.45) / 0.55 * 100)).toFixed(1)}%`;
+        // Energy error: 0 % → 2 % cap
+        if (anim.errFill) anim.errFill.style.width =
+          `${Math.min(100, Math.max(0, err / 2.0 * 100)).toFixed(1)}%`;
+      }
+    });
+
+    // ── Track user open/close toggle ──────────────────────────────────────
+    const details = el.querySelector(".job-physics");
+    if (details) {
+      details.addEventListener("toggle", () => {
+        anim.physicsOpen = details.open;
+      });
+    }
   });
 }
 
@@ -1344,7 +1513,7 @@ async function init() {
       const s = byId("serverStatus");
       if (s) s.textContent = "HEATR service unreachable";
     }
-  }, 3000);
+  }, 1000);
 
   setInterval(() => {
     try {

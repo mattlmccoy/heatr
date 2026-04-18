@@ -75,11 +75,58 @@ function metricLine(ex) {
   if (ex.model_family) parts.push(`model ${String(ex.model_family)}`);
   if (ex.calibration_version) parts.push(`cal ${String(ex.calibration_version)}`);
   if (ex.ab_bucket_id) parts.push(`ab ${String(ex.ab_bucket_id)}`);
-  if (ex.max_T_part_c !== undefined) parts.push(`Tmax ${Number(ex.max_T_part_c).toFixed(1)} C`);
-  if (ex.mean_phi_part !== undefined) parts.push(`phi ${Number(ex.mean_phi_part).toFixed(3)}`);
-  if (ex.mean_rho_rel_part !== undefined) parts.push(`rho ${Number(ex.mean_rho_rel_part).toFixed(3)}`);
+  if (ex.max_T_part_c !== undefined) parts.push(`T\u2191 ${Number(ex.max_T_part_c).toFixed(1)}\u00b0C`);
+  if (ex.mean_phi_part !== undefined) parts.push(`\u03c6\u0305 ${Number(ex.mean_phi_part).toFixed(3)}`);
+  if (ex.mean_rho_rel_part !== undefined) parts.push(`\u03c1\u0305 ${Number(ex.mean_rho_rel_part).toFixed(3)}`);
   if (ex.t_final_s !== undefined) parts.push(`t ${Number(ex.t_final_s).toFixed(1)} s`);
-  return parts.join(" | ") || "No summary metrics";
+  return parts.join(" \u2022 ") || "No summary metrics";
+}
+
+// Build a static gauge panel for a run card using summary_excerpt fields.
+// Widths are computed directly into style attributes (no CSS transition).
+function _buildRunGaugesHTML(ex) {
+  if (!ex) return "";
+  const T_max  = Number(ex.max_T_part_c      ?? 0);
+  const T_mean = Number(ex.mean_T_part_c     ?? 0);
+  const phi    = Number(ex.mean_phi_part     ?? 0);
+  const rho    = Number(ex.mean_rho_rel_part ?? 0);
+  const err    = ex.energy_err_pct != null ? Number(ex.energy_err_pct) : -1;
+  // Skip the panel entirely if there are no meaningful values
+  if (T_mean === 0 && T_max === 0 && phi === 0 && rho === 0) return "";
+  // Clamp helpers — same ranges as the live job gauges (max 240 °C)
+  const clamp = (v, lo, hi) => Math.min(100, Math.max(0, (v - lo) / (hi - lo) * 100));
+  const T_max_pct  = clamp(T_max,  25, 240);
+  const T_mean_pct = clamp(T_mean, 25, 240);
+  const phi_pct    = Math.min(100, Math.max(0, phi * 100));
+  const rho_pct    = clamp(rho, 0.45, 1.0);
+  const errRow = err >= 0 ? `
+    <div class="gauge-row">
+      <span class="gauge-label">err</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-err-fill" style="width:${Math.min(100, err / 2 * 100).toFixed(1)}%"></div></div>
+      <span class="gauge-val">${err.toFixed(3)}%</span>
+    </div>` : "";
+  return `<div class="run-gauges">
+    <div class="gauge-row">
+      <span class="gauge-label">T\u2191</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-tmax-fill" style="width:${T_max_pct.toFixed(1)}%"></div></div>
+      <span class="gauge-val">${T_max.toFixed(1)}\u00b0C</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">T\u0305</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-temp-fill" style="width:${T_mean_pct.toFixed(1)}%"></div></div>
+      <span class="gauge-val">${T_mean.toFixed(1)}\u00b0C</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">\u03c6\u0305</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-melt-fill" style="width:${phi_pct.toFixed(1)}%"></div></div>
+      <span class="gauge-val">${phi.toFixed(3)}</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">\u03c1\u0305</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-dens-fill" style="width:${rho_pct.toFixed(1)}%"></div></div>
+      <span class="gauge-val">${rho.toFixed(3)}</span>
+    </div>${errRow}
+  </div>`;
 }
 
 function renderGroupFilter(runs) {
@@ -359,9 +406,12 @@ function renderRunCards() {
       <div class="run-head">
         <div>
           <strong>${run.name}</strong>
-          <div class="muted">${run.group} • created ${run.run_created_at || "unknown"} • updated ${run.updated_at} • ${run.image_count} image(s) • ${run.run_type || "unknown"}</div>
+          <div class="muted">${run.group} \u2022 created ${run.run_created_at || "unknown"} \u2022 updated ${run.updated_at} \u2022 ${run.image_count} image(s) \u2022 ${run.run_type || "unknown"}</div>
         </div>
-        <div class="muted">${metricLine(run.summary_excerpt || {})}</div>
+        <div>
+          <div class="muted run-metric-line">${metricLine(run.summary_excerpt || {})}</div>
+          ${_buildRunGaugesHTML(run.summary_excerpt || {})}
+        </div>
       </div>
       ${backfillAction}
       <div class="run-hero"></div>

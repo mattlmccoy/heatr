@@ -124,7 +124,7 @@ def _load_run_stars() -> dict[str, bool]:
         if not RUN_STARS_FILE.exists():
             return {}
         try:
-            data = json.loads(RUN_STARS_FILE.read_text())
+            data = json.loads(RUN_STARS_FILE.read_text(encoding="utf-8"))
         except Exception:
             return {}
         if not isinstance(data, dict):
@@ -141,7 +141,7 @@ def _load_run_stars() -> dict[str, bool]:
 def _save_run_stars(stars: dict[str, bool]) -> None:
     with RUN_META_LOCK:
         clean = {str(k).strip().strip("/"): bool(v) for k, v in stars.items() if str(k).strip().strip("/")}
-        RUN_STARS_FILE.write_text(json.dumps(clean, indent=2, sort_keys=True) + "\n")
+        RUN_STARS_FILE.write_text(json.dumps(clean, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _set_run_star(run_name: str, starred: bool) -> None:
@@ -197,7 +197,7 @@ def _list_base_configs() -> list[str]:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"Config is not a mapping: {path}")
     return data
@@ -497,7 +497,7 @@ def _config_preview(name: str) -> dict[str, Any]:
     if "prewarp" in cfg_path.name.lower():
         raise FileNotFoundError(name)
 
-    text = cfg_path.read_text()
+    text = cfg_path.read_text(encoding="utf-8")
     cfg = _load_yaml(cfg_path)
     part = cfg.get("geometry", {}).get("part", {})
     thermal = cfg.get("thermal", {})
@@ -955,6 +955,21 @@ def _configure_optimizer(cfg: dict[str, Any], payload: dict[str, Any]) -> None:
 
 
 def _configure_orientation_optimizer(cfg: dict[str, Any], payload: dict[str, Any]) -> None:
+    e_min = float(payload.get("orientation_exposure_min_s", 240.0))
+    e_max = float(payload.get("orientation_exposure_max_s", 720.0))
+    e_step = float(payload.get("orientation_exposure_step_s", 60.0))
+    # If UI leaves the stock broad sweep (240-720s), honor main exposure_minutes as
+    # the intended single target exposure to avoid unexpected 12-minute selections.
+    if abs(e_min - 240.0) < 1e-9 and abs(e_max - 720.0) < 1e-9 and abs(e_step - 60.0) < 1e-9:
+        try:
+            exp_min = float(payload.get("exposure_minutes", 6.0))
+            if exp_min > 0:
+                exp_s = exp_min * 60.0
+                e_min = exp_s
+                e_max = exp_s
+                e_step = max(exp_s, 1.0)
+        except Exception:
+            pass
     cfg["orientation_optimizer"] = {
         "enabled": True,
         "angle_min_deg": float(payload.get("orientation_angle_min_deg", 0.0)),
@@ -962,9 +977,9 @@ def _configure_orientation_optimizer(cfg: dict[str, Any], payload: dict[str, Any
         "angle_step_deg": float(payload.get("orientation_angle_step_deg", 15.0)),
         "refine_window_deg": float(payload.get("orientation_refine_window_deg", 10.0)),
         "refine_step_deg": float(payload.get("orientation_refine_step_deg", 5.0)),
-        "exposure_min_s": float(payload.get("orientation_exposure_min_s", 240.0)),
-        "exposure_max_s": float(payload.get("orientation_exposure_max_s", 720.0)),
-        "exposure_step_s": float(payload.get("orientation_exposure_step_s", 60.0)),
+        "exposure_min_s": e_min,
+        "exposure_max_s": e_max,
+        "exposure_step_s": e_step,
         "angle_gif_enabled": bool(payload.get("orientation_angle_gif_enabled", False)),
         "angle_gif_frame_duration_s": float(payload.get("orientation_angle_gif_frame_duration_s", 2.0)),
         "color_metric": str(payload.get("orientation_color_metric", "mean_rho")),
@@ -1209,6 +1224,7 @@ def _make_job(mode: str, output_name: str | None = None) -> dict[str, Any]:
         "progress_pct": 0.0,
         "progress_label": "Queued",
         "queue_position": None,
+        "physics_snapshot": None,   # populated by HEATR_PROGRESS lines; persists after completion
     }
     with JOBS_LOCK:
         JOBS[jid] = job
@@ -1453,7 +1469,7 @@ def _build_artifact(output_dir: Path) -> dict[str, Any]:
     summary_path = output_dir / "summary.json"
     if summary_path.exists():
         try:
-            summary = json.loads(summary_path.read_text())
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
         except Exception:
             summary = {"error": "Failed to parse summary.json"}
     images = _collect_images_recursive(output_dir)
@@ -1488,17 +1504,100 @@ def _refresh_job_artifacts(job: dict[str, Any]) -> None:
     job["artifacts"] = artifacts
 
 
+def _parse_heatr_progress(line: str, job_id: str) -> None:
+    """Parse a HEATR_PROGRESS line from rfam_eqs_coupled.py and update job progress.
+
+    Expected format (space-separated key=value pairs after the prefix):
+        HEATR_PROGRESS pct=58.33 step=420 total=720 T=165.2 Tmax=196.1 phi=0.0210 rho=0.5510 err=0.0001 eta=11.3
+    """
+    parts: dict[str, str] = {}
+    for tok in line.split():
+        if "=" in tok:
+            k, _, v = tok.partition("=")
+            parts[k] = v
+    try:
+        pct = float(parts["pct"])
+        step = int(parts["step"])
+        total = int(parts["total"])
+        T_val = float(parts.get("T", 0.0))
+        T_max_val = float(parts.get("Tmax", T_val))
+        phi_val = float(parts.get("phi", 0.0))
+        rho_val = float(parts.get("rho", 0.0))
+        err_val = float(parts.get("err", 0.0))
+    except (KeyError, ValueError):
+        return
+    label = (
+        f"Step {step}/{total}"
+        f" \u2022 T\u0305={T_val:.1f}\u00b0C"
+        f" \u2022 T\u2191={T_max_val:.1f}\u00b0C"
+        f" \u2022 \u03c6\u0305={phi_val:.3f}"
+        f" \u2022 \u03c1\u0305={rho_val:.3f}"
+        f" \u2022 err={err_val:.3f}%"
+    )
+    _set_job_progress(job_id, progress_pct=pct, progress_label=label)
+    # Persist physics snapshot — survives job completion so the final state
+    # remains visible in the webui after the run finishes.
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if job is not None:
+            job["physics_snapshot"] = {
+                "step": step,
+                "total": total,
+                "T_mean_c": T_val,
+                "T_max_c": T_max_val,
+                "phi_mean": phi_val,
+                "rho_mean": rho_val,
+                "err_pct": err_val,
+            }
+
+
 def _run_command(cmd: list[str], log_path: Path, job_id: str | None = None) -> int:
+    """Run *cmd* as a subprocess, streaming output to *log_path*.
+
+    When *job_id* is provided the function also watches for ``HEATR_PROGRESS``
+    lines written by ``rfam_eqs_coupled.py`` to stderr and uses them to drive
+    the webui progress bar in near-real-time.
+    """
     _write_job_log(log_path, f"$ {' '.join(cmd)}")
     with log_path.open("a", encoding="utf-8") as logf:
-        proc = subprocess.Popen(cmd, cwd=ROOT, stdout=logf, stderr=subprocess.STDOUT)
+        # Use PIPE so we can intercept HEATR_PROGRESS lines; stderr is merged
+        # into stdout so both streams end up in the same log file.
+        proc = subprocess.Popen(
+            cmd,
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,          # line-buffered
+        )
         if job_id is not None:
             with PROC_LOCK:
                 RUNNING_PROCS[job_id] = proc
+
+        # Reader thread: writes every line to the log and parses progress tokens.
+        def _reader() -> None:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                try:
+                    logf.write(line)
+                    logf.flush()
+                except Exception:
+                    pass
+                if job_id is not None and line.startswith("HEATR_PROGRESS"):
+                    try:
+                        _parse_heatr_progress(line, job_id)
+                    except Exception:
+                        pass
+
+        reader_t = threading.Thread(target=_reader, daemon=True)
+        reader_t.start()
+
         try:
             while True:
                 rc = proc.poll()
                 if rc is not None:
+                    reader_t.join(timeout=5.0)
                     return int(rc)
                 if job_id is not None and _is_cancel_requested(job_id):
                     try:
@@ -1507,6 +1606,7 @@ def _run_command(cmd: list[str], log_path: Path, job_id: str | None = None) -> i
                     except subprocess.TimeoutExpired:
                         proc.kill()
                         proc.wait(timeout=2.0)
+                    reader_t.join(timeout=2.0)
                     raise JobCancelled("cancelled by user")
                 time.sleep(0.2)
         finally:
@@ -1575,7 +1675,7 @@ def _prepare_config(mode: str, payload: dict[str, Any], exposure_minutes: float,
 
     gen_name = f"{job['id']}_{output_tag}_{mode}.yaml"
     gen_path = GUI_CONFIG_DIR / gen_name
-    gen_path.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    gen_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
 
     job["config_resolution"].append({
         "requested": req_sig,
@@ -1656,7 +1756,7 @@ def _write_shell_sweep_report_svg(rows: list[dict[str, Any]], report_dir: Path) 
         'Mean relative density, rho_rel (-)</text>'
     )
     lines.append("</svg>")
-    (report_dir / "shell_sweep_report.svg").write_text("\n".join(lines))
+    (report_dir / "shell_sweep_report.svg").write_text("\n".join(lines), encoding="utf-8")
 
 
 def _write_shell_sweep_report_png(rows: list[dict[str, Any]], report_dir: Path) -> None:
@@ -1840,7 +1940,7 @@ def _launch_shell_sweep_mode(payload: dict[str, Any], job: dict[str, Any]) -> No
             summary_path = out_dir / "summary.json"
             if summary_path.exists():
                 try:
-                    summary = json.loads(summary_path.read_text())
+                    summary = json.loads(summary_path.read_text(encoding="utf-8"))
                 except Exception:
                     summary = {}
             rows.append({
@@ -1863,7 +1963,7 @@ def _launch_shell_sweep_mode(payload: dict[str, Any], job: dict[str, Any]) -> No
             "best": best,
             "rows": rows,
         }
-        (summary_dir / "shell_sweep_summary.json").write_text(json.dumps(sweep_summary, indent=2))
+        (summary_dir / "shell_sweep_summary.json").write_text(json.dumps(sweep_summary, indent=2), encoding="utf-8")
         _write_shell_sweep_report(rows, summary_dir)
         _load_or_build_manifest(summary_dir)
 
@@ -2120,7 +2220,7 @@ def _get_run_type(path: Path) -> str:
     manifest_path = path / "report_manifest.json"
     if manifest_path.exists():
         try:
-            m = json.loads(manifest_path.read_text())
+            m = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest_rt = str(m.get("run_type", "")).strip()
         except Exception:
             pass
@@ -2128,7 +2228,7 @@ def _get_run_type(path: Path) -> str:
     summary_path = path / "summary.json"
     if summary_path.exists():
         try:
-            summary = json.loads(summary_path.read_text())
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
             rt = _detect_run_type_from_summary(summary)
             if rt != "unknown":
                 detected_rt = rt
@@ -2291,7 +2391,7 @@ def _resolve_backfill_capabilities(path: Path, run_type: str | None = None) -> l
                     ant_ok = True
                 elif summary_path.exists():
                     try:
-                        summary = json.loads(summary_path.read_text())
+                        summary = json.loads(summary_path.read_text(encoding="utf-8"))
                         if isinstance(summary, dict):
                             ant_ok = bool(int(summary.get("antennae_count", 0)) > 0 or len(summary.get("antennae_instances", []) or []) > 0)
                     except Exception:
@@ -2325,7 +2425,7 @@ def _load_or_build_manifest(run_dir: Path) -> dict[str, Any]:
     existing: dict[str, Any] = {}
     if manifest_path.exists():
         try:
-            raw = json.loads(manifest_path.read_text())
+            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
                 existing = raw
         except Exception:
@@ -2350,7 +2450,7 @@ def _load_or_build_manifest(run_dir: Path) -> dict[str, Any]:
     next_raw = json.dumps(manifest, sort_keys=True)
     # Avoid touching file mtimes when manifest content is unchanged.
     if (not manifest_path.exists()) or (prev_raw != next_raw):
-        manifest_path.write_text(json.dumps(manifest, indent=2))
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
 
 
@@ -2387,7 +2487,7 @@ def _infer_run_created_at(run_dir: Path) -> str:
     manifest_path = run_dir / "report_manifest.json"
     if manifest_path.exists():
         try:
-            m = json.loads(manifest_path.read_text())
+            m = json.loads(manifest_path.read_text(encoding="utf-8"))
             ep = _parse_iso_epoch(m.get("created_at"))
             if ep is not None:
                 epochs.append(ep)
@@ -2469,7 +2569,7 @@ def _append_manifest_history(
     manifest["backfill_capabilities"] = _resolve_backfill_capabilities(run_dir, run_type=str(manifest.get("run_type", "unknown")))
     manifest["available_inputs"] = _iter_rel_files(run_dir)
     manifest["available_reports"] = _collect_available_reports(run_dir, manifest["available_inputs"])
-    (run_dir / "report_manifest.json").write_text(json.dumps(manifest, indent=2))
+    (run_dir / "report_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
 def _execute_backfill_module(module_id: str, run_dir: Path, stamp: str, log_path: Path, job_id: str) -> list[str]:
@@ -2782,7 +2882,7 @@ def _result_detail(name: str) -> dict[str, Any]:
     summary_path = target / "summary.json"
     if summary_path.exists():
         try:
-            summary = json.loads(summary_path.read_text())
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
         except Exception:
             summary = {"error": "Failed to parse summary.json"}
 
@@ -2826,8 +2926,16 @@ def _summary_excerpt(summary: dict[str, Any]) -> dict[str, Any]:
         out["mean_phi_part"] = v
     if (v := _pick("mean_rho_rel_part_final", "mean_rho_rel_part")) is not None:
         out["mean_rho_rel_part"] = v
-    if (v := _pick("exposure_time_s", "t_final_s")) is not None:
+    if (v := _pick("exposure_time_s", "t_final_s", "time_final_s")) is not None:
         out["t_final_s"] = v
+    # Energy balance error % = |residual| / max(|E_in|, 1) × 100
+    e_resid = summary.get("energy_balance_residual_final_J_per_m")
+    e_in    = summary.get("energy_doped_total_J_per_m")
+    if e_resid is not None and e_in is not None:
+        try:
+            out["energy_err_pct"] = abs(float(e_resid)) / max(abs(float(e_in)), 1.0) * 100.0
+        except (TypeError, ValueError):
+            pass
     fam = summary.get("model_family", None)
     if fam is not None:
         out["model_family"] = str(fam)
@@ -2895,7 +3003,7 @@ def _collect_run_cards() -> list[dict[str, Any]]:
         summary: dict[str, Any] = {}
         if has_summary:
             try:
-                summary = json.loads((p / "summary.json").read_text())
+                summary = json.loads((p / "summary.json").read_text(encoding="utf-8"))
             except Exception:
                 summary = {}
         images = _collect_images_recursive(p)
@@ -2947,7 +3055,7 @@ def _examples_payload() -> dict[str, Any]:
         wants = tuple(prefixes)
         for rp in reports:
             try:
-                data = json.loads(rp.read_text())
+                data = json.loads(rp.read_text(encoding="utf-8"))
             except Exception:
                 continue
             moved = data.get("moved", [])
@@ -3578,6 +3686,8 @@ class Handler(BaseHTTPRequestHandler):
                     resolved["match_type"] = "new_from_dsc_model"
                 return self._json({"mode": mode, "requested": req_sig, "resolved": resolved})
             except Exception as exc:
+                import traceback
+                print(f"[match-config ERROR] {exc}\n{traceback.format_exc()}", flush=True)
                 return self._json({"error": str(exc)}, status=400)
 
         if path == "/api/effective-config":
