@@ -115,20 +115,7 @@ const PARAM_HELP = {
   placementGaElitism: "Number of top layouts carried unchanged to next generation.",
   placementGaTournamentK: "Tournament selection size for GA parent picks.",
   placementGaSeed: "Random seed for reproducible GA initialization.",
-  antennaeEnabledMode: "Antennae assist toggle. Inherit keeps base config value; enabled/disabled explicitly writes antennae.enabled for this run.",
-  antennaeSizeMode: "Antennae size strategy. Global uses one size; auto maps local Qrf deficit to a size range.",
-  antennaeGlobalSizeMm: "Global antenna size in millimeters when size mode is global.",
-  antennaeAutoMinMm: "Minimum antenna size for auto mode.",
-  antennaeAutoMaxMm: "Maximum antenna size for auto mode.",
-  antennaeMaxPerPart: "Maximum antennae placed per part from underheated boundary regions.",
-  antennaeMinSpacingMm: "Minimum spacing between selected antenna anchors.",
-  antennaeEdgeMarginMm: "Minimum chamber-edge margin for antenna placement.",
-  antennaeAutoQrfPercentileLow: "Lower Qrf percentile used for auto-size deficit normalization.",
-  antennaeAutoQrfPercentileHigh: "Upper Qrf percentile used for auto-size deficit normalization.",
-  antennaeCalibrationSizesMm: "Comma-separated global antenna sizes (mm) used during calibration runs.",
-  antennaeCalibrationTopK: "Number of proxy-ranked antennae candidates promoted to full coupled validation.",
-  antennaeCalibrationIncludeAuto: "If true, includes one auto-size candidate alongside the global-size ladder.",
-  antennaeCalibrationUseTurntable: "If true, validates calibration candidates with turntable enabled (slower).",
+  antennaeEnabled: "When checked, Launch Run opens the interactive Antenna Workshop where you place antennas visually, run a Quick Search, and choose single or size-sweep mode before launching.",
   shellEnabled: "Enables shell geometry generation for selected part(s).",
   shellWallThicknessMm: "Shell wall thickness in millimeters.",
   shellMethod: "Shell generation method (v1 uses inward offset).",
@@ -1219,64 +1206,6 @@ async function refreshMatch() {
     await refreshYamlPreview();
   } catch (err) {
     box.textContent = `Match error: ${err.message}`;
-  }
-}
-
-async function previewAntennae() {
-  const status = byId("serverStatus");
-  const img = byId("antennaePreviewImg");
-  const txt = byId("antennaePreviewText");
-  if (!img || !txt) return;
-  try {
-    if (status) status.textContent = "Generating antennae preview...";
-    const payload = buildPayload(false);
-    payload.antennae_preview_request = true;
-    const data = await fetchJson("/api/tools/antennae-preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!data?.ok) throw new Error(data?.error || "preview failed");
-    img.src = data.image_url || "";
-    img.classList.toggle("hidden", !data.image_url);
-    const rows = Array.isArray(data.instances) ? data.instances : [];
-    const preview = {
-      n_instances: Number(data.n_instances || rows.length),
-      size_mode: data.size_mode || "",
-      part_counts: data.part_counts || {},
-      first_instances: rows.slice(0, 8),
-    };
-    txt.textContent = JSON.stringify(preview, null, 2);
-    txt.classList.remove("hidden");
-    if (status) status.textContent = "Antennae preview ready";
-  } catch (err) {
-    txt.textContent = `Preview error: ${err.message}`;
-    txt.classList.remove("hidden");
-    if (status) status.textContent = "Antennae preview failed";
-  }
-}
-
-async function queueAntennaeCalibration() {
-  const status = byId("serverStatus");
-  try {
-    if (status) status.textContent = "Queueing antennae calibration...";
-    const payload = buildPayload(false);
-    const baseName = String(byId("outputName")?.value || "").trim() || "antennae_calibration";
-    payload.output_name = `${baseName}_antcal`;
-    payload.antennae_enabled = true;
-    payload.antennae_calibration_sizes_mm = parseNumberList(byId("antennaeCalibrationSizesMm")?.value);
-    payload.antennae_calibration_top_k = Number(byId("antennaeCalibrationTopK")?.value);
-    payload.antennae_calibration_include_auto = String(byId("antennaeCalibrationIncludeAuto")?.value || "true").toLowerCase() === "true";
-    payload.antennae_calibration_use_turntable = String(byId("antennaeCalibrationUseTurntable")?.value || "false").toLowerCase() === "true";
-    await fetchJson("/api/tools/antennae-calibrate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await loadJobs();
-    if (status) status.textContent = "Antennae calibration queued";
-  } catch (err) {
-    if (status) status.textContent = `Antennae calibration error: ${err.message}`;
   }
 }
 
