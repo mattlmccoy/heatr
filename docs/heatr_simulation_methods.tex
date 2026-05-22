@@ -1,0 +1,507 @@
+% ============================================================
+%  HEATR Simulation Methods
+%  Discretization, Thermal Model, EQS Solver, and Densification
+% ============================================================
+\documentclass[11pt, letterpaper]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{nicefrac}
+
+\definecolor{heatrblue}{HTML}{3B82F6}
+\definecolor{ruleclr}{HTML}{CBD5E1}
+
+\hypersetup{colorlinks=true, linkcolor=heatrblue, citecolor=heatrblue, urlcolor=heatrblue}
+
+\titleformat{\section}{\large\bfseries}{}{0em}{}[\color{ruleclr}\hrule]
+\titleformat{\subsection}{\normalsize\bfseries\color{heatrblue}}{}{0em}{}
+\titlespacing{\section}{0pt}{1.4em}{0.5em}
+\titlespacing{\subsection}{0pt}{1.0em}{0.3em}
+
+% Shorthand
+\newcommand{\Qrf}{Q_{\mathrm{rf}}}
+\newcommand{\rhorel}{\rho_{\mathrm{rel}}}
+\newcommand{\cpeff}{c_{p,\mathrm{eff}}}
+\newcommand{\phimelt}{\phi_{\mathrm{melt}}}
+\newcommand{\partmask}{\Omega_{\mathrm{part}}}
+
+% ============================================================
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{HEATR: Simulation Methods Reference}}\\[0.4em]
+  {\large High-frequency Electrothermal Additive Thermal Resolver}\\[0.6em]
+  {\small\color{gray}Derived from \texttt{rfam\_eqs\_coupled.py} --- April 2026}
+\end{center}
+
+\vspace{0.3em}\noindent\color{ruleclr}\hrule\vspace{1em}
+
+\noindent
+HEATR is a 2D coupled electroquasistatic--thermal--densification solver for
+Radio-Frequency Additive Manufacturing (RFAM) of polymer powder beds.
+This document describes the mathematical formulation, numerical discretization,
+material models, and time-integration strategy implemented in the solver.
+
+% ============================================================
+\section{Spatial Domain and Discretization}
+
+\subsection{Computational Grid}
+
+The simulation domain is a 2D cross-section of the RF chamber in the $xy$-plane.
+Variation in the depth direction ($z$) is not directly resolved; instead it is
+accounted for by an analytical correction term (Section~\ref{sec:depth}).
+
+The domain is discretized onto a uniform rectangular grid of
+$N_x \times N_y$ nodes (default: $120 \times 120$):
+%
+\begin{equation}
+  x_i = -\tfrac{L_x}{2} + \frac{i\,L_x}{N_x - 1},\quad i = 0,\ldots,N_x-1,
+  \qquad
+  y_j = -\tfrac{L_y}{2} + \frac{j\,L_y}{N_y - 1},\quad j = 0,\ldots,N_y-1,
+\end{equation}
+%
+where $L_x \times L_y$ is the chamber width and height (default: $60\times60$~mm).
+Grid spacings are $\Delta x = L_x/(N_x-1)$ and $\Delta y = L_y/(N_y-1)$,
+giving $\approx 0.5$~mm per cell at the defaults.
+
+\subsection{Part Rasterization}
+
+The part geometry is defined as a closed polygon and rasterized onto the grid
+using a \emph{subpixel fill-fraction} scheme.
+Each cell on or near the part boundary is assigned a fill fraction
+$f_{ij}\in[0,1]$ proportional to the fraction of the cell interior that lies
+inside the polygon.
+This anti-aliasing approach avoids the staircase artifacts that arise from
+hard binary rasterization, and the fill fraction is used directly in the
+material property interpolation and the EQS conductivity field.
+
+% ============================================================
+\section{Electroquasistatic (EQS) Solver}
+
+\subsection{Governing Equation}
+
+At RF frequencies ($\sim$27~MHz), inductive effects and wave propagation
+are negligible at the chamber scale.
+The electric field is governed by the 2D electroquasistatic Laplace equation:
+%
+\begin{equation}
+  \label{eq:eqs}
+  \nabla\cdot\bigl[\gamma(\bm{r})\,\nabla V(\bm{r})\bigr] = 0,
+\end{equation}
+%
+where $V$ is the complex electric potential and $\gamma$ is the
+\emph{complex admittivity}:
+%
+\begin{equation}
+  \gamma = \sigma + j\omega\varepsilon_0\varepsilon_r.
+\end{equation}
+%
+Here $\sigma$~[S/m] is electrical conductivity, $\varepsilon_r$ is the relative
+permittivity, and $\omega = 2\pi f$ is the angular RF frequency.
+Both $\sigma$ and $\varepsilon_r$ vary spatially depending on whether a cell
+is inside the doped part, in the surrounding virgin powder, or at a mixed
+(subpixel) boundary.
+The admittivity field is held constant within each $\Delta t$ interval,
+which is justified because the RF period ($\sim$37~ns) is orders of magnitude
+shorter than the thermal timescale ($\sim$1~s).
+
+\subsection{Discrete Formulation}
+
+Equation~\eqref{eq:eqs} is discretized on the rectangular grid by finite
+differences.
+At each interior node $(i,j)$ that is not an electrode, the divergence is
+replaced by a flux balance over the four face-adjacent neighbours.
+At each cell face, the admittivity is \emph{harmonically averaged}:
+%
+\begin{equation}
+  \gamma_{\mathrm{face}} = \frac{2\,\gamma_{ij}\,\gamma_{\mathrm{nb}}}
+                                {\gamma_{ij} + \gamma_{\mathrm{nb}}},
+\end{equation}
+%
+where $\gamma_{\mathrm{nb}}$ is the admittivity of the adjacent cell.
+Harmonic averaging is used rather than arithmetic averaging because it correctly
+limits conductance when one of the two cells is nearly insulating.
+Arithmetic averaging overestimates interfacial flux across the high-contrast
+doped-part/virgin-powder boundary, which would produce spurious
+corner-heating artifacts.
+
+This yields the sparse complex linear system
+$\mathbf{A}\bm{v} = \bm{b}$,
+where $\mathbf{A}\in\mathbb{C}^{N\times N}$ ($N = N_x N_y$) encodes the
+interior difference stencils and $\bm{b}$ encodes the Dirichlet electrode
+conditions.
+The system is solved \emph{exactly} by direct sparse LU factorization
+(\texttt{scipy.sparse.linalg.spsolve}) with a small diagonal regularization
+$\varepsilon_{\mathrm{reg}}=10^{-18}$ to improve conditioning in nearly-insulating
+regions.
+
+\subsection{Boundary Conditions}
+
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{Top and bottom edges (electrodes) --- Dirichlet.}
+    In \emph{centered} mode: $V_\mathrm{hi}=+V_0/2$, $V_\mathrm{lo}=-V_0/2$.
+    In \emph{grounded} mode: $V_\mathrm{hi}=V_0$, $V_\mathrm{lo}=0$.
+  \item \textbf{Left and right edges --- Neumann} (zero normal flux;
+    electrically insulating walls).
+\end{itemize}
+
+\subsection{Electric Field and Power Density}
+
+The electric field components are recovered by central differences on the
+solved potential:
+%
+\begin{equation}
+  E_x = -\frac{\partial V}{\partial x},\qquad E_y = -\frac{\partial V}{\partial y}.
+\end{equation}
+%
+The time-averaged volumetric RF power density (resistive heating source) is:
+%
+\begin{equation}
+  \label{eq:qrf}
+  \Qrf = \tfrac{1}{2}\,\mathrm{PF}\cdot\mathrm{Re}\!\left[\gamma\,|\bm{E}|^2\right]
+       = \tfrac{1}{2}\,\mathrm{PF}\cdot\sigma\,|\bm{E}|^2
+  \quad[\mathrm{W/m^3}],
+\end{equation}
+%
+where PF is a power-factor correction (default 1.0).
+$\Qrf$ is clipped to zero to suppress sub-zero noise from discretization.
+
+When generator-power enforcement is active, $\Qrf$ is globally rescaled so that
+%
+\begin{equation}
+  \sum_{ij}\Qrf\,\Delta x\,\Delta y\cdot d_{\mathrm{eff}} = P_{\mathrm{gen}}\,\eta,
+\end{equation}
+%
+where $d_{\mathrm{eff}}$ is the effective chamber depth and $\eta$ is the RF
+transfer efficiency.
+
+% ============================================================
+\section{Thermal Solver}
+\label{sec:thermal}
+
+\subsection{Governing Equation}
+
+Inside the part domain $\partmask$, the temperature field evolves according to
+the heat equation with volumetric source and surface sinks:
+%
+\begin{equation}
+  \label{eq:heat}
+  \rho\,\cpeff\,\frac{\partial T}{\partial t}
+  = \nabla\cdot\bigl[k(\bm{r},T)\,\nabla T\bigr]
+    + \Qrf
+    - q_{\mathrm{conv}}
+    - q_z.
+\end{equation}
+%
+Here $\rho$, $k$, and $\cpeff$ are the local effective density, thermal
+conductivity, and effective heat capacity (which folds in latent heat);
+$q_{\mathrm{conv}}$ is convective surface loss; and $q_z$ is the
+depth-direction correction (Section~\ref{sec:depth}).
+Outside $\partmask$, the same equation holds with pure powder-bed properties
+and $\Qrf=0$.
+
+\subsection{Time Integration}
+
+Time integration uses \textbf{explicit forward Euler}:
+%
+\begin{equation}
+  T^{n+1} = T^n + \Delta t\left.\frac{\partial T}{\partial t}\right|^n.
+\end{equation}
+%
+The timestep $\Delta t$ is fixed (default 0.5~s, set via \texttt{thermal.dt\_s}).
+No CFL stability constraint is enforced analytically; instead the temperature
+increment per step is hard-capped:
+%
+\begin{equation}
+  \Delta T_{\mathrm{step}} = \mathrm{clip}\!\left(\Delta t\cdot\dot{T},\;
+    -\Delta T_{\max},\;+\Delta T_{\max}\right),
+\end{equation}
+%
+with default $\Delta T_{\max}=3$~\textdegree C/step.
+Temperature is also bounded globally to $[-50,\,450]$~\textdegree C.
+Total simulated time is $n_{\mathrm{steps}}\times\Delta t$.
+
+\subsection{Thermal Diffusion}
+
+The diffusion term $\nabla\cdot(k\,\nabla T)$ is discretized as a
+second-order central-difference flux divergence.
+At each cell face, thermal conductivity is \emph{arithmetically averaged}:
+%
+\begin{equation}
+  k_{i+\nicefrac{1}{2},j} = \tfrac{1}{2}(k_{ij}+k_{i+1,j}),\qquad
+  k_{i,j+\nicefrac{1}{2}} = \tfrac{1}{2}(k_{ij}+k_{i,j+1}).
+\end{equation}
+%
+Face heat fluxes are:
+%
+\begin{equation}
+  q^x_{i+\nicefrac{1}{2}} = -k_{i+\nicefrac{1}{2},j}\,
+    \frac{T_{i+1,j}-T_{i,j}}{\Delta x},\qquad
+  q^y_{j+\nicefrac{1}{2}} = -k_{i,j+\nicefrac{1}{2}}\,
+    \frac{T_{i,j+1}-T_{i,j}}{\Delta y},
+\end{equation}
+%
+and the divergence at node $(i,j)$ is:
+%
+\begin{equation}
+  \nabla\cdot(k\,\nabla T)\big|_{ij}
+    = \frac{q^x_{i+\nicefrac{1}{2}}-q^x_{i-\nicefrac{1}{2}}}{\Delta x}
+    + \frac{q^y_{j+\nicefrac{1}{2}}-q^y_{j-\nicefrac{1}{2}}}{\Delta y}.
+\end{equation}
+
+\subsection{Convective Surface Loss}
+
+Convective loss is applied as a sink term at all cells on exposed chamber
+boundaries:
+%
+\begin{equation}
+  q_{\mathrm{conv}} = h\,A_{\mathrm{expo}}\,(T-T_\infty),
+\end{equation}
+%
+where $A_{\mathrm{expo}}$~[m$^{-1}$] is the exposed-boundary area per unit
+volume (i.e.\ $1/\Delta x$ or $1/\Delta y$ for cells on a given edge),
+$T_\infty$ is the ambient temperature, and $h$~[W/m$^2$K] is the heat transfer
+coefficient.
+Two models are available:
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{Constant-$h$:} user-specified via \texttt{thermal.convection\_h\_w\_per\_m2k}.
+  \item \textbf{Natural chimney} (parallel-plate Rayleigh correlation):
+    $h$ is computed locally from
+    $\mathrm{Ra} = L^3 g\beta\rho^2 c_p\Delta T/(k_{\mathrm{air}}\mu)$
+    using Sutherland viscosity and $k_{\mathrm{air}}\propto T^{0.9}$,
+    giving $h = k_{\mathrm{air}}\,\mathrm{Ra}/(24H)$, consistent with
+    the COMSOL narrow-chimney parallel-plate formulation.
+\end{itemize}
+
+\subsection{Depth-Direction Correction}
+\label{sec:depth}
+
+Because the simulation is 2D, heat loss through the powder bed above and below
+the part (in $z$) is approximated via a series thermal-resistance slab model:
+%
+\begin{equation}
+  q_z = k\,(T-T_\infty)\,\frac{\pi^2}{4\,L_{\mathrm{eff}}^2}
+  \bigg|_{\partmask},
+\end{equation}
+%
+where
+$L_{\mathrm{eff}} = L_p/2 + L_{\mathrm{pow}}\,(k_{\mathrm{pow}}/k)$
+combines the part half-depth $L_p/2$ and the powder-layer half-thickness
+$L_{\mathrm{pow}}=L_c/2-L_p/2$ weighted by the conductivity ratio.
+This approximates the first-mode solution of 1D slab conduction in $z$.
+
+% ============================================================
+\section{Material Properties}
+
+\subsection{Property Mixing}
+
+All material properties inside $\partmask$ are blended between solid-state and
+liquid-state values using the local melt fraction $\phimelt\in[0,1]$ and the
+relative density $\rhorel\in[0,1]$:
+%
+\begin{align}
+  \rho_{\mathrm{s,eff}} &= \rho_{\mathrm{pow}} + \rhorel(\rho_s - \rho_{\mathrm{pow}}),\\
+  k_{\mathrm{s,eff}}    &= k_{\mathrm{pow}}   + \rhorel(k_s   - k_{\mathrm{pow}}),\\
+  \rho_{\mathrm{local}} &= (1-\phimelt)\,\rho_{\mathrm{s,eff}} + \phimelt\,\rho_\ell,\\
+  k_{\mathrm{local}}    &= (1-\phimelt)\,k_{\mathrm{s,eff}}   + \phimelt\,k_\ell,\\
+  c_{p,\mathrm{base}}   &= (1-\phimelt)\,c_{p,s}              + \phimelt\,c_{p,\ell}.
+\end{align}
+%
+Outside the part, $\rho=\rho_{\mathrm{pow}}$, $k=k_{\mathrm{pow}}$,
+$c_p=c_{p,\mathrm{pow}}$ (virgin powder bed).
+
+\subsection{RF Conductivity}
+
+The RF conductivity field used to build $\gamma$ blends between virgin powder
+and doped-part conductivities via the subpixel fill fraction:
+%
+\begin{equation}
+  \sigma_{ij} = \sigma_{\mathrm{virgin}} + f_{ij}(\sigma_{\mathrm{doped}}-\sigma_{\mathrm{virgin}}).
+\end{equation}
+%
+An optional temperature and density dependence can be applied:
+%
+\begin{equation}
+  \sigma(T,\rhorel) = \sigma_0\,(1+\alpha_T(T-T_{\mathrm{ref}}))\,(1+\alpha_\rho\,\rhorel),
+\end{equation}
+%
+where $\alpha_T$ and $\alpha_\rho$ are the temperature and density coefficients
+(both default to zero).
+
+% ============================================================
+\section{Phase Change and Latent Heat}
+
+The melt fraction $\phimelt$ and its temperature derivative $d\phimelt/dT$
+enter $\cpeff$ through:
+%
+\begin{equation}
+  \cpeff = c_{p,\mathrm{base}} + L\,\frac{d\phimelt}{dT},
+\end{equation}
+%
+so latent heat is captured implicitly via the effective heat capacity
+rather than as a separate enthalpy source term.
+Two phase models are available.
+
+\subsection{Baseline: Smoothed Heaviside}
+
+A linear ramp between solidus $T_s=T_{\mathrm{pc}}-\Delta T_{\mathrm{pc}}/2$
+and liquidus $T_\ell=T_{\mathrm{pc}}+\Delta T_{\mathrm{pc}}/2$:
+%
+\begin{equation}
+  \phimelt =
+  \begin{cases}
+    0 & T < T_s,\\
+    (T-T_s)/\Delta T_{\mathrm{pc}} & T_s\le T\le T_\ell,\\
+    1 & T > T_\ell,
+  \end{cases}
+  \qquad
+  \frac{d\phimelt}{dT} = \frac{1}{\Delta T_{\mathrm{pc}}}\quad\text{(in window)}.
+\end{equation}
+
+\subsection{DSC-Calibrated Apparent Heat Capacity}
+
+A triangular/Gaussian-blended profile is fitted to differential scanning
+calorimetry (DSC) measurements.
+For PA12 the calibrated values are:
+%
+\begin{equation}
+  T_{\mathrm{onset}} = 171\,\mathrm{^\circ C},\quad
+  T_{\mathrm{peak}}  = 180.8\,\mathrm{^\circ C},\quad
+  T_{\mathrm{end}}   = 186\,\mathrm{^\circ C},\quad
+  L = 101.7\;\mathrm{kJ/kg}.
+\end{equation}
+%
+The curve $d\phimelt/dT$ is evaluated directly from the DSC profile and
+fed into $\cpeff$, allowing precise representation of the asymmetric
+melt transition observed in semicrystalline polymers.
+
+% ============================================================
+\section{Densification Model}
+\label{sec:dens}
+
+Relative density $\rhorel$ evolves according to
+$d\rhorel/dt = R(T,\phimelt,\rhorel)$,
+with $\rhorel$ bounded to $[\rho_{\mathrm{pow}}/\rho_s,\,1]$.
+Three rate models are available.
+
+\subsection{Dual-Mechanism (\texttt{physics\_dual})}
+
+Two kinetic mechanisms operate additively.
+
+\paragraph{Solid-state (diffusion/creep):}
+%
+\begin{equation}
+  k_{\mathrm{ss}} = k_{0,\mathrm{ss}}\exp\!\left(-\frac{E_{a,\mathrm{ss}}}{RT}\right),
+  \qquad
+  R_{\mathrm{ss}} = k_{\mathrm{ss}}\,(1-\phimelt)^{n_s}\,\rho_{\mathrm{term}}.
+\end{equation}
+
+\paragraph{Liquid-phase (viscous-capillary):}
+%
+\begin{equation}
+  k_{\mathrm{liq}} = \frac{C\,\gamma_{\mathrm{surf}}}{\eta(T)\,r_p},
+  \qquad
+  R_{\mathrm{liq}} = k_{\mathrm{liq}}\,
+    \left(\frac{\phimelt-\phi_{\mathrm{thr}}}{1-\phi_{\mathrm{thr}}}\right)^{n_\ell}
+    \rho_{\mathrm{term}},
+\end{equation}
+%
+where $\eta(T)=\eta_{\mathrm{ref}}\exp[E_{a,\eta}/R\,(1/T-1/T_{\mathrm{ref}})]$
+is the Arrhenius melt viscosity, $\gamma_{\mathrm{surf}}$ is surface tension,
+$r_p$ is particle radius, and $C$ is a geometric packing factor.
+The net densification rate is $R = R_{\mathrm{ss}} + R_{\mathrm{liq}}$.
+
+\subsection{Experimental PA12 Model (\texttt{experimental\_viscous\_capillary\_pa12})}
+
+Single viscous-capillary mechanism calibrated to PA12.
+Two viscosity sub-models are supported:
+
+\paragraph{Arrhenius:}
+$\eta(T) = \eta_{\mathrm{ref}}\exp\!\left[E_{a,\eta}/R\,(1/T-1/T_{\mathrm{ref}})\right]$.
+
+\paragraph{Williams-Landel-Ferry (WLF):}
+%
+\begin{equation}
+  \log_{10}\eta = \log_{10}\eta_{\mathrm{ref}}
+    - \frac{C_1(T-T_{\mathrm{ref}})}{C_2+(T-T_{\mathrm{ref}})}.
+\end{equation}
+%
+The rate includes a melt-activation drive
+$\phi^*=\bigl((\phimelt-\phi_{\mathrm{thr}})/(1-\phi_{\mathrm{thr}})\bigr)^p$
+and a porosity drive $(1-\rhorel)^q$:
+%
+\begin{equation}
+  R = \frac{C\,\gamma_{\mathrm{surf}}}{\eta(T)\,r_p}\cdot(\phi^*)^p\cdot(1-\rhorel)^q.
+\end{equation}
+
+\subsection{Simple Viscous-Capillary (\texttt{viscous\_capillary})}
+
+Single Arrhenius-viscosity capillary model; intermediate in complexity
+between the baseline and PA12-calibrated variants.
+
+% ============================================================
+\section{Coupled Time-Integration Loop}
+
+The three physical fields --- electric potential, temperature, and relative
+density --- are advanced by a split-operator explicit loop:
+
+\medskip
+\noindent
+\begin{tabular}{ll}
+\textbf{for} $n = 0,1,\ldots,N_{\mathrm{steps}}$: & \\
+\quad\textbf{if} $n \bmod N_{\mathrm{update}}=0$: &
+  solve EQS~\eqref{eq:eqs} $\to \Qrf^n$ \quad(sparse LU)\\
+\quad $T^{n+1} = T^n + \Delta t\,\mathcal{L}_T(T^n,\Qrf^n)$ &
+  (explicit FD, vectorized)\\
+\quad $\rhorel^{n+1} = \rhorel^n + \Delta t\,R(T^{n+1},\phimelt^{n+1},\rhorel^n)$ &
+  (explicit ODE, vectorized)
+\end{tabular}
+
+\medskip
+\noindent
+where $\mathcal{L}_T$ is the full right-hand side of Equation~\eqref{eq:heat}
+and $N_{\mathrm{update}}$ is the EQS re-solve interval
+(default: every step; configurable to re-solve only at rotation events
+for turntable runs).
+
+\paragraph{Computational cost.}
+The EQS sparse direct solve dominates (milliseconds per solve on a
+$120\times120$ grid).
+The thermal and densification updates are vectorized NumPy operations on the
+same grid and are comparatively inexpensive.
+Total wall time for a 6-minute exposure at default grid resolution is
+typically 30--120~s depending on the EQS update interval and densification
+model selected.
+
+% ============================================================
+\section{Summary of Key Parameters}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lllp{5.2cm}}
+\toprule
+\textbf{Parameter} & \textbf{Symbol} & \textbf{Default} & \textbf{Config key} \\
+\midrule
+Grid size         & $N_x\times N_y$        & $120\times120$   & \texttt{geometry.grid\_nx/ny} \\
+Chamber size      & $L_x\times L_y$        & $60\times60$~mm  & \texttt{geometry.chamber\_x/y} \\
+Timestep          & $\Delta t$             & $0.5$~s          & \texttt{thermal.dt\_s} \\
+Max $\Delta T$/step & $\Delta T_{\max}$    & $3$~\textdegree C  & \texttt{thermal.max\_deltaT\_per\_step\_c} \\
+RF frequency      & $f$                    & $27.12$~MHz      & \texttt{electric.frequency\_hz} \\
+EQS update interval & $N_{\mathrm{update}}$ & 1 step          & \texttt{electric.update\_interval} \\
+DSC melt onset    & $T_{\mathrm{onset}}$   & $171$~\textdegree C   & \texttt{dsc\_profile.melt\_onset\_c} \\
+DSC melt peak     & $T_{\mathrm{peak}}$    & $180.8$~\textdegree C & \texttt{dsc\_profile.melt\_peak\_c} \\
+DSC melt end      & $T_{\mathrm{end}}$     & $186$~\textdegree C   & \texttt{dsc\_profile.melt\_end\_c} \\
+Latent heat       & $L$                    & $101.7$~kJ/kg    & \texttt{dsc\_profile.lat\_heat\_j\_per\_kg} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}
