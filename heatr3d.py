@@ -71,6 +71,8 @@ class Params:
     dt_pc_c: float = 10.0
     rho_rel: float = 0.55        # held constant (see header)
     ambient_c: float = 23.0
+    preheat_c: float = 23.0      # bed preheat temp (real SLS holds powder near melt);
+                                 # only doped region absorbs RF, so undoped stays sub-melt
     conv_h: float = 5.0          # top face only
     # numerics
     dt_s: float = 0.05
@@ -146,7 +148,8 @@ def _harmonic(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return out
 
 
-def solve_eqs_3d(gamma: np.ndarray, grid: Grid, p: Params) -> np.ndarray:
+def solve_eqs_3d(gamma: np.ndarray, grid: Grid, p: Params,
+                 iterative: bool | None = None) -> np.ndarray:
     """Solve div(gamma grad V)=0. Electrodes: y_min plane = v_lo, y_max = v_hi.
     Neumann (no-flux) on x and z walls. Returns complex V (nx,ny,nz)."""
     nx, ny, nz = gamma.shape
@@ -199,7 +202,21 @@ def solve_eqs_3d(gamma: np.ndarray, grid: Grid, p: Params) -> np.ndarray:
     A = sp.csr_matrix((np.concatenate(vals),
                        (np.concatenate(rows), np.concatenate(cols))), shape=(N, N))
     A = A + sp.eye(N, format="csr", dtype=np.complex128) * 1e-18
-    V = spla.spsolve(A, b)
+    # Auto: direct (spsolve) is fastest+robust for small grids; for large grids the
+    # 3-D LU fill-in explodes, so use ILU-preconditioned BiCGSTAB. Direct fallback.
+    use_iter = (N > 50_000) if iterative is None else bool(iterative)   # n>=~37 -> iterative
+    V = None
+    if use_iter:
+        try:
+            ilu = spla.spilu(A.tocsc(), drop_tol=1e-4, fill_factor=12)
+            M = spla.LinearOperator(A.shape, ilu.solve, dtype=np.complex128)
+            V, info = spla.bicgstab(A, b, rtol=1e-8, atol=0.0, maxiter=2000, M=M)
+            if info != 0 or not np.all(np.isfinite(V)):
+                V = None       # fall back to direct
+        except Exception:
+            V = None
+    if V is None:
+        V = spla.spsolve(A, b)
     if not np.all(np.isfinite(V)):
         raise RuntimeError("EQS solve produced non-finite values")
     return V.reshape(nx, ny, nz)
@@ -284,10 +301,22 @@ class Result:
 # --------------------------------------------------------------------------- #
 # Main solve
 # --------------------------------------------------------------------------- #
+def _sched_mult(mean_phi: float, schedule) -> float:
+    """RF-power multiplier for a fast->soak schedule = [(until_mean_phi, mult), ...].
+    Returns the first segment's mult whose threshold the current mean melt fraction
+    has not yet passed; last mult thereafter. None/empty => constant 1.0."""
+    if not schedule:
+        return 1.0
+    for thr, m in schedule:
+        if mean_phi < thr:
+            return float(m)
+    return float(schedule[-1][1])
+
+
 def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         max_time_s: float = 1500.0, phi_target: float = 0.90,
         densify: bool = False, stop_mean_rho: float | None = None,
-        verbose: bool = False) -> Result:
+        power_schedule=None, verbose: bool = False) -> Result:
     """Coupled 3-D solve. If densify=False (default): stop at the phi=0.90 crossing
     and report sigma_T (relative density held constant). If densify=True: evolve
     relative density (physics_dual) and run the FULL exposure, capturing T_phi90 in
@@ -296,7 +325,7 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     V = solve_eqs_3d(gamma, grid, p)
     Qrf = compute_qrf_3d(V, gamma, grid, p, part)
 
-    T = np.full(part.shape, p.ambient_c, dtype=np.float64)
+    T = np.full(part.shape, p.preheat_c, dtype=np.float64)       # bed preheat
     rho_rel = np.full(part.shape, p.rho_rel, dtype=np.float64)   # evolving density field
     nsteps = int(max_time_s / p.dt_s)
     top = (slice(None), -1, slice(None))     # open top face (y max)
@@ -306,6 +335,7 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     T_phi90 = None; reached = False; t90 = float("nan"); phi_hist = []
     for it in range(nsteps):
         phi, dphi = phase_fraction(T, p)
+        pmult = _sched_mult(float(phi[part].mean()), power_schedule)
         # property fields (density-dependent solid props, per voxel)
         rho_s_eff = p.rho_powder + rho_rel * (p.rho_solid - p.rho_powder)
         k_s_eff = p.k_powder + rho_rel * (p.k_solid - p.k_powder)
@@ -331,12 +361,12 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
                 div += flux
 
         q_conv = np.zeros(part.shape)
-        q_conv[top] = p.conv_h * (np.array(T[top], copy=True) - p.ambient_c) / h
+        q_conv[top] = p.conv_h * (np.array(T[top], copy=True) - p.preheat_c) / h
 
         # Defensive: build the source in a fresh buffer so NumPy's in-place
         # temporary elision cannot corrupt the persistent Qrf array.
         num = np.array(div, copy=True)
-        num += Qrf
+        num += (Qrf * pmult) if pmult != 1.0 else Qrf
         num -= q_conv
         dTdt = num / np.maximum(rho * cp_eff, 1e-9)
         dT = np.clip(p.dt_s * np.nan_to_num(dTdt), -p.max_dt_step_c, p.max_dt_step_c)
