@@ -39,37 +39,55 @@
     <a class="tab-link" href="/index.html">Operation</a>
     <a class="tab-link active" href="/results">Results</a>
     <a class="tab-link" href="/files">Files</a>
+    <a class="tab-link" href="/heatr3d">HEATR-3D</a>
     <a class="tab-link" href="/theory">Theory</a>
+    <span class="nav-job-badge hidden" id="navJobBadge" title="Running / queued jobs"></span>
   </nav>
 
   <main class="results-page">
     <section class="card dash-card accent-cyan">
       <h2>Runs</h2>
       <div class="run-toolbar">
-        <input id="runSearch" type="text" placeholder="Search by run path..." />
+        <input id="runSearch" type="text" placeholder="Search runs…" title="Filter by run name substring. Supports multi-word AND (space-separated)." />
         <select id="runGroupFilter">
-          <option value="">All groups</option>
+          <option value="">All shapes</option>
         </select>
         <select id="runModeFilter">
           <option value="">All modes</option>
         </select>
         <select id="runStarFilter">
-          <option value="">All stars</option>
+          <option value="">All runs</option>
           <option value="starred">Starred only</option>
           <option value="unstarred">Unstarred only</option>
         </select>
         <select id="runSort">
-          <option value="created_newest" selected>Run created: newest to oldest</option>
-          <option value="created_oldest">Run created: oldest to newest</option>
-          <option value="newest">Last updated: newest to oldest</option>
-          <option value="oldest">Last updated: oldest to newest</option>
-          <option value="rho_desc">Highest rho</option>
-          <option value="tmax_desc">Highest Tmax</option>
+          <option value="created_newest" selected>Created: newest first</option>
+          <option value="created_oldest">Created: oldest first</option>
+          <option value="newest">Updated: newest first</option>
+          <option value="oldest">Updated: oldest first</option>
+          <option value="rho_desc">Best ρ̄ (highest)</option>
+          <option value="sigma_t_asc">Best σ_T (lowest)</option>
+          <option value="score_asc">Best score (lowest)</option>
+          <option value="tmax_desc">Highest T_max</option>
           <option value="images_desc">Most images</option>
-          <option value="name_az">Name A to Z</option>
-          <option value="name_za">Name Z to A</option>
+          <option value="name_az">Name A → Z</option>
+          <option value="name_za">Name Z → A</option>
         </select>
-        <button id="refreshResults" type="button">Refresh</button>
+        <button id="runViewToggle" type="button" title="Toggle between flat list and grouped tree view">📁 Group</button>
+        <button id="runCompareToggle" type="button" title="Enter comparison mode: select up to 4 runs to compare side-by-side">⚖ Compare</button>
+        <button id="refreshResults" type="button">↻ Refresh</button>
+      </div>
+      <!-- Comparison bar — hidden until compare mode is active -->
+      <div id="compareBar" style="display:none;padding:6px 0;border-top:1px solid #1e2d44;
+           margin-top:6px;font-size:12px;color:#90b0d0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="font-weight:bold;color:#c0d0e8;">⚖ Compare mode</span>
+        <span id="compareCount" style="color:#7090b0;">0 selected</span>
+        <button id="compareRunsBtn" type="button" style="padding:3px 10px;font-size:11px;
+                background:#0d2040;border:1px solid #2a5080;border-radius:4px;color:#80c0e0;cursor:pointer;"
+                disabled>Compare selected</button>
+        <button id="compareCancelBtn" type="button" style="padding:3px 10px;font-size:11px;
+                background:#200d0d;border:1px solid #502020;border-radius:4px;color:#e08080;cursor:pointer;">Cancel</button>
+        <span style="color:#4a6080;font-size:11px;">(click cards to select, up to 4)</span>
       </div>
       <div id="runCards" class="run-cards"></div>
     </section>
@@ -78,6 +96,17 @@
       <div id="metricsRunName" class="muted">Select a run card to inspect metrics.</div>
       <div id="metricsMeta" class="muted"></div>
       <div id="metricsTableWrap" class="metrics-table-wrap"></div>
+      <div id="antennaeDetailPanel" class="ant-detail-panel hidden"></div>
+      <div id="profilePanel" class="profile-panel hidden">
+        <div class="profile-panel-head">
+          <span>📈 Centerline Profiles</span>
+          <select id="profileFieldSel" style="font-size:11px;padding:2px 4px;background:#0d1a2e;
+                  border:1px solid #1e3050;border-radius:3px;color:#a0c0e0;"></select>
+        </div>
+        <canvas id="profileHCanvas" class="profile-canvas" height="70"></canvas>
+        <canvas id="profileVCanvas" class="profile-canvas" height="70"></canvas>
+        <div id="profileStats" style="font-size:10px;font-family:monospace;color:#3a5060;margin-top:2px;"></div>
+      </div>
     </aside>
   </main>
 
@@ -94,6 +123,7 @@
   </dialog>
 
   <script src="/static/settings.js"></script>
+  <script src="/static/nav-badge.js"></script>
   <script src="/static/results.js"></script>
 </body>
 </html>

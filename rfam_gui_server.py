@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import yaml
 import numpy as np
-from shapes import make_shapes_from_svg_paths
+from shapes import make_shape_from_svg
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "webui" / "static"
@@ -58,7 +58,6 @@ SUPPORTED_SHAPES = [
     "star6",
     "star8",
     "gt_logo",
-    "spacex_logo",
     "cross",
     "rounded_rect",
     "L_shape",
@@ -438,7 +437,7 @@ def _signatures_match(cfg_sig: dict[str, Any], req_sig: dict[str, Any]) -> bool:
 def _preferred_fallback_name(shape: str, mode: str) -> list[str]:
     names: list[str] = []
     s = str(shape).strip().lower()
-    if s in {"gt_logo", "spacex_logo"}:
+    if s == "gt_logo":
         # Logo imports should inherit the canonical 20 mm baseline unless a user
         # explicitly selects a logo-specific config.
         names.append("rfam_eqs_xz_uniform_500w.yaml")
@@ -605,57 +604,39 @@ def _set_shape(cfg: dict[str, Any], shape: str) -> None:
     geom = cfg.setdefault("geometry", {})
     part = geom.setdefault("part", {})
     s = str(shape).strip().lower()
-    if s in {"gt_logo", "spacex_logo"}:
-        svg_name = "Georgia_Tech_Yellow_Jackets_logo.svg" if s == "gt_logo" else "spacex-svg.svg"
+    if s == "gt_logo":
+        svg_name = "Georgia_Tech_Yellow_Jackets_logo.svg"
         target_w = float(part.get("width", 0.020))
         target_h = float(part.get("height", target_w))
         cx = float(part.get("center_x", 0.0))
         cy = float(part.get("center_y", 0.0))
         rot = float(part.get("rotation_deg", 0.0))
-        polys = make_shapes_from_svg_paths(
+
+        # Raster-contour approach: rasterise all SVG paths onto a bitmap and
+        # extract the single outer contour.  This produces the same kind of
+        # polygon that every other shape uses (circle, star, L-shape, …) and
+        # avoids the multi-piece boolean-union issues of the vector-native path.
+        # The resulting boundary has natural pixel-level roughness ("lumpy") at
+        # the raster resolution, which is physically appropriate.
+        poly = make_shape_from_svg(
             str((ROOT / svg_name).resolve()),
             target_width_m=target_w,
             target_height_m=target_h,
-            n_pts_each=2200,
-            curve_pts=96,
-            min_span_frac=0.0005,
+            n_pts=800,
+            curve_pts=20,
+            raster_res=1024,
         )
 
-        # Logo strokes alias heavily on 120x120 (0.5 mm/cell over 60 mm chamber).
-        # Promote to a finer default grid so curves remain visible in field plots.
-        try:
-            gx = int(geom.get("grid_nx", 120))
-            gy = int(geom.get("grid_ny", 120))
-        except Exception:
-            gx, gy = 120, 120
-        min_logo_grid = 280
-        if gx < min_logo_grid:
-            geom["grid_nx"] = min_logo_grid
-        if gy < min_logo_grid:
-            geom["grid_ny"] = min_logo_grid
-
-        parts: list[dict[str, Any]] = []
-        for p in polys:
-            parts.append(
-                {
-                    "shape": "polygon",
-                    "width": target_w,
-                    "height": target_h,
-                    "center_x": cx,
-                    "center_y": cy,
-                    "rotation_deg": rot,
-                    "n_circle_pts": int(part.get("n_circle_pts", 360)),
-                    "polygon_points": [[float(x), float(y)] for x, y in np.asarray(p, dtype=float)],
-                }
-            )
-        geom["parts"] = parts
-        geom["boolean"] = {"mode": "union"}
-        part["shape"] = s
+        geom.pop("parts", None)
+        geom.pop("boolean", None)
+        part["shape"] = "polygon"
         part["width"] = target_w
         part["height"] = target_h
         part["center_x"] = cx
         part["center_y"] = cy
         part["rotation_deg"] = rot
+        part["n_circle_pts"] = int(part.get("n_circle_pts", 800))
+        part["polygon_points"] = [[float(x), float(y)] for x, y in poly]
         return
     geom.pop("parts", None)
     geom.pop("boolean", None)
@@ -876,6 +857,8 @@ def _apply_advanced_overrides(cfg: dict[str, Any], payload: dict[str, Any]) -> N
         g["grid_nx"] = v
     if (v := _intval("grid_ny")) and v > 8:
         g["grid_ny"] = v
+    if (v := _num("part_rotation_deg")) is not None:
+        g.setdefault("part", {})["rotation_deg"] = v
 
     if (v := _num("frequency_hz")) and v > 0:
         e["frequency_hz"] = v
@@ -1121,7 +1104,7 @@ def _apply_antennae_config(cfg: dict[str, Any], payload: dict[str, Any]) -> None
     }
     ant_cfg["placement"] = {
         "source": "eqs_qrf_underheated",
-        "max_antennae_per_part": int(payload.get("antennae_max_per_part", ant_cfg.get("placement", {}).get("max_antennae_per_part", 4) if isinstance(ant_cfg.get("placement", {}), dict) else 4)),
+        "max_antennae_per_part": int(payload.get("antennae_max_per_part", ant_cfg.get("placement", {}).get("max_antennae_per_part", 1) if isinstance(ant_cfg.get("placement", {}), dict) else 1)),
         "min_anchor_spacing_mm": float(payload.get("antennae_min_spacing_mm", ant_cfg.get("placement", {}).get("min_anchor_spacing_mm", 2.0) if isinstance(ant_cfg.get("placement", {}), dict) else 2.0)),
         "edge_margin_mm": float(payload.get("antennae_edge_margin_mm", ant_cfg.get("placement", {}).get("edge_margin_mm", 1.0) if isinstance(ant_cfg.get("placement", {}), dict) else 1.0)),
     }
@@ -1154,10 +1137,13 @@ def _apply_antennae_config(cfg: dict[str, Any], payload: dict[str, Any]) -> None
                 if pid < len(parts) and isinstance(parts[pid], dict):
                     if not isinstance(parts[pid].get("antennae_instances"), list):
                         parts[pid]["antennae_instances"] = []
+                    size_fallback = float(inst.get("size_mm", 1.0))
                     parts[pid]["antennae_instances"].append({
                         "center_x": float(inst.get("center_x", 0.0)),
                         "center_y": float(inst.get("center_y", 0.0)),
-                        "size_mm": float(inst.get("size_mm", 1.0)),
+                        "size_mm": size_fallback,
+                        "size_x_mm": float(inst.get("size_x_mm", size_fallback)),
+                        "size_y_mm": float(inst.get("size_y_mm", size_fallback)),
                         "anchor_x": float(inst.get("anchor_x", inst.get("center_x", 0.0))),
                         "anchor_y": float(inst.get("anchor_y", inst.get("center_y", 0.0))),
                     })
@@ -1430,6 +1416,12 @@ def _should_skip_result_path(path: Path) -> bool:
         return True
     if "prewarp" in rel:
         return True
+    # Skip individual fgm_iterate child dirs (iterN and opt_probe) — exposed via parent dashboard
+    # e.g. runs/square/fgm_iterate/square_run_20260430/square_run_20260430_iter2  → skip
+    # e.g. runs/square/fgm_iterate/square_run_20260430/square_run_20260430_opt_probe  → skip
+    import re as _re
+    if "/fgm_iterate/" in path.as_posix() and _re.search(r"(_iter\d+|_opt_probe)$", path.name):
+        return True
     return False
 
 
@@ -1457,11 +1449,21 @@ def _build_artifact(output_dir: Path) -> dict[str, Any]:
         except Exception:
             summary = {"error": "Failed to parse summary.json"}
     images = _collect_images_recursive(output_dir)
-    return {
+    placement = None
+    placement_path = output_dir / "antennae_placement.json"
+    if placement_path.exists():
+        try:
+            placement = json.loads(placement_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    artifact = {
         "output_dir": rel,
         "summary": summary,
         "images": images,
     }
+    if placement is not None:
+        artifact["antennae_placement"] = placement
+    return artifact
 
 
 def _register_job_output(job: dict[str, Any], out_dir: Path) -> None:
@@ -1486,6 +1488,56 @@ def _refresh_job_artifacts(job: dict[str, Any]) -> None:
         if out_dir.exists() and out_dir.is_dir():
             artifacts.append(_build_artifact(out_dir))
     job["artifacts"] = artifacts
+
+
+def _parse_heatr_progress(line: str, job_id: str) -> None:
+    """Parse a HEATR_PROGRESS line from rfam_eqs_coupled.py and update job progress.
+
+    Expected format (space-separated key=value pairs after the prefix):
+        HEATR_PROGRESS pct=58.33 step=420 total=720 T=165.2 Tmax=196.1 phi=0.0210 rho=0.5510 err=0.0001 eta=11.3
+    """
+    parts: dict[str, str] = {}
+    for tok in line.split():
+        if "=" in tok:
+            k, _, v = tok.partition("=")
+            parts[k] = v
+    try:
+        pct = float(parts["pct"])
+        step = int(parts["step"])
+        total = int(parts["total"])
+        T_val     = float(parts.get("T",    0.0))
+        T_max_val = float(parts.get("Tmax", T_val))
+        dT_val    = float(parts.get("dT",   max(0.0, T_max_val - T_val)))
+        phi_val   = float(parts.get("phi",  0.0))
+        rho_val   = float(parts.get("rho",  0.0))
+        err_val   = float(parts.get("err",  0.0))
+    except (KeyError, ValueError):
+        return
+    label = (
+        f"Step {step}/{total}"
+        f" \u2022 T\u0305={T_val:.1f}\u00b0C"
+        f" \u2022 T\u2191={T_max_val:.1f}\u00b0C"
+        f" \u2022 \u0394T={dT_val:.1f}\u00b0C"
+        f" \u2022 \u03c6\u0305={phi_val:.3f}"
+        f" \u2022 \u03c1\u0305={rho_val:.3f}"
+        f" \u2022 err={err_val:.3f}%"
+    )
+    _set_job_progress(job_id, progress_pct=pct, progress_label=label)
+    # Persist physics snapshot — survives job completion so the final state
+    # remains visible in the webui after the run finishes.
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if job is not None:
+            job["physics_snapshot"] = {
+                "step":     step,
+                "total":    total,
+                "T_mean_c": T_val,
+                "T_max_c":  T_max_val,
+                "dT_c":     dT_val,
+                "phi_mean": phi_val,
+                "rho_mean": rho_val,
+                "err_pct":  err_val,
+            }
 
 
 def _run_command(cmd: list[str], log_path: Path, job_id: str | None = None) -> int:
@@ -1661,6 +1713,8 @@ def _write_shell_sweep_report_svg(rows: list[dict[str, Any]], report_dir: Path) 
 
 def _write_shell_sweep_report_png(rows: list[dict[str, Any]], report_dir: Path) -> None:
     try:
+        import matplotlib
+        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except Exception:
         return
@@ -1714,13 +1768,1668 @@ def _launch_single_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
 
     cfg_path = _prepare_config(mode=mode, payload=payload, exposure_minutes=exposure_minutes, output_tag=output_name, job=job)
     out_dir = _output_dir_for_request(output_name, payload)
+    out_dir.mkdir(parents=True, exist_ok=True)
     _register_job_output(job, out_dir)
+    # Persist antenna placement so the results tab can offer to reload the workshop
+    explicit_instances = payload.get("antennae_explicit_instances")
+    if explicit_instances and isinstance(explicit_instances, list):
+        placement_rec = {
+            "antennae_enabled": True,
+            "instances": explicit_instances,
+        }
+        (out_dir / "antennae_placement.json").write_text(
+            json.dumps(placement_rec, indent=2), encoding="utf-8"
+        )
     cmd = [sys.executable, "rfam_eqs_coupled.py", "--config", str(cfg_path), "--output-dir", str(out_dir)]
     rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id)
     if rc != 0:
         _set_job_progress(job_id, progress_label="Run failed")
         raise RuntimeError(f"simulation exited with code {rc}")
     _set_job_progress(job_id, completed_runs=1, progress_pct=100.0, progress_label="Run complete")
+
+
+def _launch_fgm_resimulate_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
+    """Re-run a HEATR simulation with an FGM saturation map injected as spatially-varying conductivity.
+
+    Expected payload keys:
+        source_run_dir   — relative path (under OUTPUTS_DIR) of the original run
+        fgm_npz_path     — relative path (under ROOT) to the FGM .npz file
+        output_name      — name for the new run output directory
+        magnitude        — float, FGM magnitude override (optional; default keeps value from NPZ metadata)
+        baseline_saturation — float (optional, default 0.5)
+        iterate          — bool, whether to use iterative feedback (default false)
+    """
+    job_id = str(job["id"])
+    source_rel = str(payload.get("source_run_dir", "")).strip()
+    fgm_rel    = str(payload.get("fgm_npz_path",   "")).strip()
+    output_name = str(payload.get("output_name",   "")).strip()
+
+    if not source_rel:
+        raise ValueError("source_run_dir is required")
+    if not fgm_rel:
+        raise ValueError("fgm_npz_path is required")
+    if not _is_valid_output_name(output_name):
+        raise ValueError("output_name must use only letters, numbers, '_' or '-'")
+
+    source_dir = (OUTPUTS_DIR / source_rel).resolve()
+    try:
+        source_dir.relative_to(OUTPUTS_DIR)
+    except ValueError:
+        raise ValueError("source_run_dir must be inside outputs_eqs/")
+
+    fgm_path = (ROOT / fgm_rel).resolve()
+    try:
+        fgm_path.relative_to(ROOT)
+    except ValueError:
+        raise ValueError("fgm_npz_path must be inside workspace")
+
+    used_cfg_path = source_dir / "used_config.yaml"
+    if not used_cfg_path.exists():
+        # The source dir may be a fgm_iterate parent directory (no used_config.yaml there).
+        # Strategy 1: look for used_config.yaml in the iter subdir that owns the FGM NPZ.
+        #   The NPZ path is like: outputs_eqs/.../parent_iter2/fgm_...npz
+        #   → try the NPZ's parent dir.
+        # Strategy 2: walk iter subdirs (parent_iter0, parent_iter1, …) and use the last one
+        #   that has a used_config.yaml.
+        _found_cfg = None
+        if fgm_path.exists():
+            _npz_parent_cfg = fgm_path.parent / "used_config.yaml"
+            if _npz_parent_cfg.exists():
+                _found_cfg = _npz_parent_cfg
+        if _found_cfg is None:
+            # Walk all iter subdirs in descending order and grab the first found
+            _iter_dirs = sorted(
+                source_dir.glob("*_iter[0-9]*"),
+                key=lambda p: p.name,
+                reverse=True,
+            )
+            for _d in _iter_dirs:
+                _c = _d / "used_config.yaml"
+                if _c.exists():
+                    _found_cfg = _c
+                    break
+        if _found_cfg is None:
+            raise FileNotFoundError(
+                f"used_config.yaml not found in {source_rel} or any iter subdirectory — "
+                f"re-simulation requires a previous run"
+            )
+        used_cfg_path = _found_cfg
+    if not fgm_path.exists():
+        raise FileNotFoundError(f"FGM file not found: {fgm_rel}")
+
+    # Load and patch the original run's config
+    with open(used_cfg_path, "r", encoding="utf-8") as fh:
+        base_cfg = yaml.safe_load(fh) or {}
+
+    # Inject the fgm_feedback block
+    magnitude          = float(payload.get("magnitude",           1.0))
+    baseline_saturation = float(payload.get("baseline_saturation", 0.5))
+    iterate            = bool(payload.get("iterate",              False))
+    base_cfg["fgm_feedback"] = {
+        "enabled":              True,
+        "saturation_map_npz":   str(fgm_path),
+        "magnitude":            magnitude,
+        "baseline_saturation":  baseline_saturation,
+        "iterate":              iterate,
+        "iterate_interval_steps": int(payload.get("iterate_interval_steps", 50)),
+    }
+
+    # Write patched config into GUI_CONFIG_DIR
+    GUI_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    cfg_filename = f"fgm_resim_{job_id}.yaml"
+    cfg_path = GUI_CONFIG_DIR / cfg_filename
+    with open(cfg_path, "w", encoding="utf-8") as fh:
+        yaml.dump(base_cfg, fh, default_flow_style=False, allow_unicode=True)
+
+    # Output dir: sibling of original run, named by output_name
+    # Infer the parent dir pattern from the source
+    parent_dir = source_dir.parent
+    out_dir = parent_dir / output_name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _register_job_output(job, out_dir)
+
+    _set_job_progress(job_id, total_runs=1, completed_runs=0, progress_pct=5.0,
+                      progress_label="FGM re-simulation running")
+
+    cmd = [sys.executable, "rfam_eqs_coupled.py", "--config", str(cfg_path), "--output-dir", str(out_dir)]
+    rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id)
+    if rc != 0:
+        _set_job_progress(job_id, progress_label="Re-simulation failed")
+        raise RuntimeError(f"FGM re-simulation exited with code {rc}")
+    _set_job_progress(job_id, completed_runs=1, progress_pct=100.0, progress_label="Re-simulation complete")
+
+
+def _fgm_iter_extract_optimal_time(log_path: Path, fallback_s: float, target_phi: float = 0.90) -> tuple[float, str, str]:
+    """Parse a completed optimizer-mode sim log for the recommended exposure time.
+
+    The optimizer's generate_optimizer_report() already implements the correct
+    recommendation logic (melt criterion vs. max-density criterion, checking T_max safety).
+    We parse its output from stdout/log rather than reimplementing it here.
+
+    Returns:
+        (time_s, criterion, reason_str)
+        - time_s: chosen time in seconds
+        - criterion: "melt" | "max_density" | "phi_crossing" | "fallback"
+        - reason_str: human-readable explanation
+    """
+    import re
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return fallback_s, "fallback", "log not readable"
+
+    # 1. Parse the recommendation line (highest priority — already incorporates T_max safety)
+    # The solver prints: "[optimizer] ★ Recommendation: melt criterion — 317.1 s ..."
+    # or:                "[optimizer] ★ Recommendation: max density criterion — 350.2 s ..."
+    # Note: recommendation.replace('_',' ') is applied in the solver, so "max_density" → "max density".
+    # We capture everything before " criterion" as the name, then normalise spaces→underscores.
+    rec_pat = re.compile(
+        r"\[optimizer\]\s+★\s+Recommendation:\s+([\w][\w ]*?)\s+criterion\s*[—\-]+\s*([\d.]+)\s+s"
+    )
+    m_rec = rec_pat.search(text)
+    if m_rec:
+        criterion = m_rec.group(1).strip().replace(" ", "_")  # "melt" or "max_density"
+        t_s = float(m_rec.group(2))
+        # Try to also grab the reason line (the line immediately following the recommendation)
+        rec_pos = m_rec.end()
+        rest = text[rec_pos:]
+        reason_line = rest.strip().splitlines()[0].strip() if rest.strip() else ""
+        # Clean up the reason line (may start with whitespace or "  ")
+        reason = reason_line.lstrip() or f"{criterion} criterion selected by optimizer"
+        return t_s, criterion, reason
+
+    # 2. Fall back to φ crossing scan (no recommendation found — older log format)
+    phi_pat = re.compile(
+        r"\[optimizer\]\s+Snapshot\s+@\s+φ_mean≥"
+        + re.escape(f"{target_phi:.2f}")
+        + r":\s+t=([\d.]+)s"
+    )
+    m_phi = phi_pat.search(text)
+    if m_phi:
+        t_s = float(m_phi.group(1))
+        return t_s, "phi_crossing", f"φ={target_phi:.2f} crossing at t={t_s:.1f}s (T_max not checked)"
+
+    # 3. Ultimate fallback
+    return fallback_s, "fallback", f"no optimizer signal found — using input time {fallback_s/60:.1f} min"
+
+
+def _select_best_iter(
+    convergence_log: list[dict],
+    use_optimizer: bool,
+    damage_t_c: float,
+) -> dict:
+    """Select the best iteration from a convergence log.
+
+    Rules (applied in order):
+
+    1. **Exclude iter-0 when use_optimizer=True.**
+       When the optimizer probe IS iter-0, that run is intentionally over-exposed
+       and is never a valid production recommendation — it exists only to find the
+       optimal exposure time for subsequent iterations.
+
+    2. **Hard-disqualify thermally damaged or high-bleed iterations.**
+       - T_max > damage_t_c  → material degradation; cannot recommend this.
+       - frac_bleed > 0.02   → surrounding powder is sintering; geometric fidelity
+         lost. An iteration that "looks uniform" because EVERYTHING heated up is
+         not a good result.
+       If all remaining candidates fail both filters, we fall back to all eligible
+       entries and pick the least-bad one (lowest bleed first, then lowest score).
+
+    3. **Prefer near-final over active regime** within the qualified pool.
+       near-final (ρ̄ ≥ 0.82) and active (ρ̄ < 0.82) scores use different formulas
+       and are numerically incomparable. A genuinely near-final iteration represents
+       more physical progress than an active one. But we ONLY apply this preference
+       among disqualification-passing candidates, so an over-sintered/bleedy
+       near-final entry does not override a clean active-regime one.
+
+    4. Within each regime, lowest score wins.
+
+    5. If the log is empty, return an empty dict (caller should guard).
+    """
+    if not convergence_log:
+        return {}
+
+    BLEED_DISQUALIFY = 0.02   # 2% of outside-part pixels above melt point
+
+    # Step 1: exclude optimizer probe
+    eligible = [
+        e for e in convergence_log
+        if not (use_optimizer and e.get("iter") == 0)
+    ]
+    if not eligible:
+        eligible = list(convergence_log)   # nothing left → use everything
+
+    # Step 2: hard disqualifiers
+    safe = [
+        e for e in eligible
+        if e.get("T_max_c", 0.0) <= damage_t_c
+        and e.get("frac_bleed", 1.0) <= BLEED_DISQUALIFY
+    ]
+
+    if safe:
+        pool = safe
+    else:
+        # All candidates failed — pick least bad: lowest bleed first, then score
+        pool = sorted(
+            eligible,
+            key=lambda e: (e.get("frac_bleed", 1.0), e.get("score", 999.0)),
+        )
+        # Return the top of that sorted list directly (no regime preference when
+        # everything is disqualified — just minimise damage)
+        return pool[0]
+
+    # Step 3 & 4: regime preference among safe candidates
+    # Near-final is PREFERRED over active because the score formulas are incomparable
+    # across regimes AND a near-final run (ρ̄ ≥ 0.82) has done more physical work.
+    # EXCEPTION: if the best-active σ_T is substantially better than the best
+    # near-final σ_T, the active candidate wins — this guards against the case where
+    # the regime crossed into near-final due to a hot over-exposure but uniformity
+    # actually *regressed* (e.g. circle: iter-1 active σ_T=8.76°C is better than
+    # iter-2 near-final σ_T=14.78°C).
+    nf = [e for e in pool if e.get("score_regime") == "near-final"]
+    ac = [e for e in pool if e.get("score_regime") == "active"]
+
+    if nf and ac:
+        best_nf = min(nf, key=lambda e: e.get("score", 999.0))
+        best_ac = min(ac, key=lambda e: e.get("score", 999.0))
+        nf_sigma = best_nf.get("sigma_T", 999.0)
+        ac_sigma = best_ac.get("sigma_T", 999.0)
+        # Prefer active if its σ_T is meaningfully better (>20% lower than near-final best).
+        # The 20% threshold prevents flipping on noise; a 5°C vs 4.8°C difference is not
+        # significant, but 14.78°C vs 8.76°C is clearly a regression in uniformity.
+        if ac_sigma < nf_sigma * 0.80:
+            return best_ac
+        return best_nf
+
+    if nf:
+        return min(nf, key=lambda e: e.get("score", 999.0))
+    if ac:
+        return min(ac, key=lambda e: e.get("score", 999.0))
+    return min(pool, key=lambda e: e.get("score", 999.0))
+
+
+def _launch_fgm_iterate_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
+    """Outer-loop iterative FGM optimization starting from a fresh geometry.
+
+    Flow:
+      iter-0  — vanilla simulation (no FGM); optionally runs optimizer mode first
+                to auto-select exposure time.
+      iter-1+ — each run seeded with the FGM derived from the previous iteration's
+                temperature field:  high-T → low saturation, low-T → high saturation.
+
+    Convergence metric: ΔT = T_max − T_mean (inside the part).
+    The "ideal" FGM is the one where ΔT is minimised, i.e. the saturation map
+    that makes RF power absorption spatially uniform regardless of E-field variation.
+
+    Payload keys:
+        shape                 — geometry shape (required, same as single mode)
+        output_name           — base name; iter-0 dir = <name>_iter0, etc.
+        exposure_minutes      — float, used directly when use_optimizer=false
+        use_optimizer         — bool (default false); if true, runs optimizer mode
+                                for iter-0 and extracts the time when phi≥0.90
+        n_iterations          — total iterations INCLUDING iter-0 (default 4)
+        magnitude             — float (default 1.0)
+        baseline_saturation   — float (default 0.5)
+        bpp                   — 2 or 4 (default 2)
+        proxy_field           — "T"|"Qrf"|"rho_rel" (default "T")
+        invert                — bool (default true)
+        convergence_delta_T   — early-stop when ΔT < this °C (default 5.0)
+        iterate_inner         — bool, intra-run inner-loop (default false)
+        iterate_interval_steps— int (default 50)
+        iterate_damping       — float 0-1 (default 0.5)
+    """
+    job_id = str(job["id"])
+    output_name     = str(payload.get("output_name", "")).strip()
+    n_iterations    = max(2, int(payload.get("n_iterations", 12)))  # 12 covers iter-9 optimum + 2-iter early-stop buffer
+    use_optimizer   = bool(payload.get("use_optimizer", False))
+    exposure_min    = float(payload.get("exposure_minutes", 8.0))
+
+    if not _is_valid_output_name(output_name):
+        raise ValueError("output_name must use only letters, numbers, '_' or '-'")
+
+    shape = str(payload.get("shape", "")).strip()
+    if not shape or shape not in SUPPORTED_SHAPES:
+        raise ValueError(f"invalid shape: {shape!r}")
+
+    # ── FGM parameters ────────────────────────────────────────────────────────
+    # Defaults reflect the empirically-optimal INTEGRAL mode (circle 4bpp I-series):
+    #   magnitude=0.7, decay=1.0, bpp=4, dead_band=0.05, n_iter=12 (catches iter-9
+    #   optimum for circle and allows 2-iter buffer for early-stop detection).
+    # Users should increase magnitude toward 0.8–0.9 for geometries with very large
+    # σ_0 (>30°C), or reduce toward 0.5 for geometries with small σ_0 (10–15°C).
+    magnitude           = float(payload.get("magnitude",           0.7))
+    magnitude_decay     = float(payload.get("magnitude_decay",     1.0))   # 1.0 = no decay (integral mode)
+    baseline_saturation = float(payload.get("baseline_saturation", 0.5))
+    bpp                 = int(payload.get("bpp",                   4))      # 4bpp for maximum resolution
+    proxy_field         = str(payload.get("proxy_field",           "T_phi90")).strip()
+    invert              = bool(payload.get("invert",               True))
+    conv_threshold      = float(payload.get("convergence_sigma_T", 3.0))   # σ_T primary
+    dead_band           = float(payload.get("dead_band",           0.05))
+    fgm_momentum        = float(payload.get("fgm_momentum",        0.0))    # 0.0 = off (not used in integral mode)
+    iterate_inner       = bool(payload.get("iterate_inner",        False))
+    iterate_interval    = int(payload.get("iterate_interval_steps", 50))
+    iterate_damping     = float(payload.get("iterate_damping",     0.5))
+    melt_abort_frac     = float(payload.get("melt_abort_frac",     0.15))  # pre-check threshold
+
+    # ── Stagnation / anti-rut parameters ─────────────────────────────────────
+    # "thorough" mode: run a SEQUENCE of proxy fields in order.  When one proxy
+    # stagnates (σ_T improvement < stagnation_eps for N consecutive iters), the
+    # algorithm switches to the next proxy in the schedule and resets magnitude.
+    # Default schedule: ["T_phi90", "Qrf"] — start with thermal field, switch to
+    # direct RF coupling when thermal-based corrections stop helping.
+    # With thorough=False, only the single proxy_field is used (legacy behaviour).
+    thorough            = bool(payload.get("thorough",             False))
+    _default_schedule   = (["T_phi90", "Qrf", "rho_rel"]
+                            if thorough else [proxy_field])
+    proxy_schedule      = list(payload.get("proxy_schedule",  _default_schedule))
+    # How many consecutive iters without σ_T improving by at least stagnation_eps
+    # before switching proxy (ignored when thorough=False).
+    stagnation_window   = int(payload.get("stagnation_window",    5))
+    stagnation_eps      = float(payload.get("stagnation_eps",     0.5))   # °C
+    # regime-adaptive proxy: in active sintering use Qrf; in near-final use T_phi90
+    # overrides proxy_schedule selection when True
+    regime_adaptive     = bool(payload.get("regime_adaptive",     False))
+
+    # ── Integral control mode ─────────────────────────────────────────────────
+    # When True, each iteration accumulates a delta correction onto the prior
+    # saturation map rather than recomputing from scratch (proportional mode).
+    # Also uses fixed iter-0 normalization bounds to prevent residual re-amplification.
+    use_delta_correction = bool(payload.get("use_delta_correction", True))   # integral mode is now default
+    # TO parameters — only used when use_delta_correction=True in OC-TO mode (move_limit>0)
+    # In pure integral mode (move_limit=0, sensitivity_filter_sigma=0) these are unused.
+    move_limit               = float(payload.get("move_limit",               0.0))   # 0 = pure delta (integral mode)
+    sensitivity_filter_sigma = float(payload.get("sensitivity_filter_sigma", 0.0))   # 0 = off (integral mode)
+    # Stochastic perturbation for local-minimum escape:
+    # When > 0, applied on stagnation events to kick the design out of local minima.
+    # perturbation_amplitude = magnitude of the perturbation (0.05–0.10 recommended).
+    # perturbation_on_stagnation: only perturb when stagnation is detected (default True).
+    perturbation_amplitude        = float(payload.get("perturbation_amplitude",        0.0))
+    perturbation_on_stagnation    = bool( payload.get("perturbation_on_stagnation",    True))
+    # Regression abort sensitivity: score must exceed best-ever × this multiplier
+    # for consecutive_bad to increment.  1.30 = abort if 30% above best.
+    # Increase to 2.0+ for exhaustive / academic runs where we want all iterations.
+    regression_threshold_multiplier = float(payload.get("regression_threshold_multiplier", 10.0))
+    # After a stochastic perturbation, suppress regression-abort for this many iters
+    # so the new seed has time to show whether it found a better basin.
+    post_perturbation_grace         = int(  payload.get("post_perturbation_grace",         4))
+    # Cold-zone overprinting: extend the FGM saturation map outward past the part
+    # boundary in underheated regions only (sat >= overprint_cold_thresh).
+    # 0 = disabled; typical value 2–4 mm for diamond corners.
+    overprint_cold_mm     = float(payload.get("overprint_cold_mm",     0.0))
+    overprint_cold_thresh = float(payload.get("overprint_cold_thresh", 0.6))
+
+    # ── Hybrid mode: proportional iter-1 + OC-TO refinement ──────────────────
+    # When use_hybrid=True:
+    #   Phase 1 (iter-1): proportional correction — full magnitude, no accumulation.
+    #     Provides the large single-step improvement that proportional mode excels at.
+    #   Phase 2 (iter-2+): OC-TO mode with bounded gradient projection.
+    #     Starts from the good iter-1 FGM and refines with small, stable corrections.
+    # Combines proportional's 54-65% single-step reduction with OC-TO's stability.
+    # Note: use_delta_correction is forced True for phase 2; any explicit
+    #       use_delta_correction=True setting simply means the run starts in OC-TO
+    #       from iter-1 (i.e., no hybrid / standard OC-TO mode).
+    use_hybrid                      = bool( payload.get("use_hybrid",                      False))
+    hybrid_phase2_magnitude         = float(payload.get("hybrid_phase2_magnitude",         0.4))
+    hybrid_phase2_move_limit        = float(payload.get("hybrid_phase2_move_limit",        0.15))
+    hybrid_phase2_sensitivity_sigma = float(payload.get("hybrid_phase2_sensitivity_sigma", 0.5))
+    # Minimum magnitude floor — 0.0 for integral mode (decay=1.0 means this is never hit).
+    # For proportional/hybrid runs with decay<1.0, set to 0.001–0.005 to prevent full decay.
+    min_magnitude                   = float(payload.get("min_magnitude",                   0.0))
+
+    # ── EBC — Energy-Budget-Conserving exposure adjustment (M3) ──────────────
+    # When use_ebc=True, each FGM iteration computes the mean saturation inside
+    # the part mask and adjusts t★ proportionally to maintain constant total RF
+    # energy absorbed:
+    #   σ(x,y) = σ₀ × sat_map(x,y)
+    #   P_total ≈ σ₀ × mean(sat_map) × ∫|∇φ|² dA
+    #   → t★ᵢ = t★_base × (mean_sat_iter0 / mean_sat_i)
+    #
+    # This first-order approximation is exact when the FGM doesn't change the
+    # EQS field topology (small perturbations) and approximately correct otherwise.
+    # Solves the hexagon t★ confound: FGM reduces hot-spot saturation (κ=32.7×),
+    # removing disproportionate total power, causing progressive mean_rho drift.
+    # EBC recalibrates t★ so total energy matches the iter-0 baseline every time.
+    #
+    # Parameters:
+    #   ebc_clamp_lo (float, default 0.5): minimum EBC factor (t★ never drops below
+    #       50% of base — prevents runaway under-exposure if FGM over-corrects)
+    #   ebc_clamp_hi (float, default 2.5): maximum EBC factor (t★ never exceeds
+    #       2.5× base — prevents runaway over-exposure if FGM under-corrects)
+    use_ebc       = bool( payload.get("use_ebc",       False))
+    ebc_clamp_lo  = float(payload.get("ebc_clamp_lo",  0.50))
+    ebc_clamp_hi  = float(payload.get("ebc_clamp_hi",  2.50))
+
+    # ── Output layout ─────────────────────────────────────────────────────────
+    # All iteration dirs live under outputs_eqs/runs/<shape>/fgm_iterate/<output_name>/
+    safe_shape   = shape.replace(" ", "_").lower()
+    parent_dir   = OUTPUTS_DIR / "runs" / safe_shape / "fgm_iterate" / output_name
+    parent_dir.mkdir(parents=True, exist_ok=True)
+    _register_job_output(job, parent_dir)
+
+    total_runs = n_iterations  # iter-0 through iter-(n_iterations-1)
+
+    # ── Phase 0a (optional): run time optimizer to find ideal exposure ────────
+    # When use_optimizer=True we first run a dedicated optimizer-mode sim in a
+    # temporary "opt_probe" subdir, extract the optimal time from its log, then
+    # throw away that dir and run a clean single-mode iter-0 at the optimal time.
+    # iter-1+ must run as plain single-mode sims; optimizer key is stripped from base_cfg below.
+    optimizer_criterion: str | None = None   # populated when use_optimizer=True
+    optimizer_reason:    str | None = None
+    optimizer_max_min:   float      = exposure_min   # user's stated upper bound (for reporting)
+
+    # ── iter-0 ───────────────────────────────────────────────────────────────
+    # Two paths:
+    #   a) Resume: a source_run_dir was supplied — skip the simulation, point iter0_dir
+    #      at the existing run so FGM generation proceeds from it.
+    #   b) Fresh: run iter-0 now.
+    #        • use_optimizer=False → single-mode at exposure_min (user's chosen time).
+    #        • use_optimizer=True  → optimizer-mode at exposure_min (user's MAXIMUM time).
+    #          iter-0 IS the diagnostic probe: it runs the full over-exposed duration,
+    #          collects snapshots at each φ crossing and T_max ceiling, then the
+    #          optimizer's recommendation logic picks the ideal exposure time.
+    #          T_max > DAMAGE_T_C in iter-0 is EXPECTED when the user intentionally
+    #          ran long — it is NOT an abort condition in this path.
+    #          All subsequent iterations (1…N) run at the optimizer-chosen time.
+    source_rel = str(payload.get("source_run_dir", "")).strip()
+    _resuming  = bool(source_rel)
+
+    if _resuming:
+        # Validate and resolve the supplied source directory
+        source_iter_dir = (OUTPUTS_DIR / source_rel).resolve()
+        try:
+            source_iter_dir.relative_to(OUTPUTS_DIR)
+        except ValueError:
+            raise ValueError("source_run_dir must be inside outputs_eqs/")
+        if not (source_iter_dir / "used_config.yaml").exists():
+            raise FileNotFoundError(
+                f"used_config.yaml not found in {source_rel} — "
+                f"source_run_dir must be a completed single-mode or fgm_iterate iter dir"
+            )
+        if not (source_iter_dir / "fields.npz").exists():
+            raise FileNotFoundError(f"fields.npz not found in {source_rel}")
+        iter0_dir = source_iter_dir
+        _set_job_progress(
+            job_id, total_runs=total_runs, completed_runs=1, progress_pct=5.0,
+            progress_label=f"FGM continue: using {Path(source_rel).name} as baseline — generating FGM…",
+        )
+    else:
+        # ── Two-phase iter-0 when use_optimizer=True ─────────────────────────
+        # Phase A: optimizer PROBE — runs at the ceiling time to find t★.
+        #          Stored in {output_name}_opt_probe (not counted as iter-0).
+        # Phase B: clean single-mode BASELINE at t★ — stored in {output_name}_iter0.
+        #          This is the true iter-0: correct sigma_T, T_max, rho at t★.
+        #          FGM and all metrics are computed from this clean baseline.
+        #
+        # When use_optimizer=False, only Phase B runs (at the user's fixed time).
+        # ─────────────────────────────────────────────────────────────────────
+
+        if use_optimizer:
+            # ── Phase A: optimizer probe ──────────────────────────────────────
+            _set_job_progress(
+                job_id, total_runs=total_runs, completed_runs=0, progress_pct=3.0,
+                progress_label=f"FGM opt probe: running to {exposure_min:.2f} min ceiling to find t★…",
+            )
+            probe_dir = parent_dir / f"{output_name}_opt_probe"
+            probe_dir.mkdir(parents=True, exist_ok=True)
+            _register_job_output(job, probe_dir)
+
+            probe_payload = dict(payload)
+            probe_payload["mode"] = "optimizer"
+            probe_cfg = _prepare_config(
+                mode="optimizer", payload=probe_payload,
+                exposure_minutes=exposure_min,
+                output_tag=f"{output_name}_opt_probe",
+                job=job,
+            )
+            cmd_probe = [sys.executable, "rfam_eqs_coupled.py",
+                         "--config", str(probe_cfg), "--output-dir", str(probe_dir)]
+            rc_probe = _run_command(cmd_probe, Path(job["log_path"]), job_id=job_id)
+            if rc_probe != 0:
+                _set_job_progress(job_id, progress_label="optimizer probe failed")
+                raise RuntimeError(f"FGM optimizer probe exited with code {rc_probe}")
+
+            # Extract t★ from probe log
+            fallback_s = exposure_min * 60.0
+            opt_t_s, optimizer_criterion, optimizer_reason = _fgm_iter_extract_optimal_time(
+                Path(job["log_path"]), fallback_s=fallback_s, target_phi=0.90
+            )
+            _CRIT_LABELS = {
+                "melt":         "φ=0.90 criterion",
+                "max_density":  "max-density criterion (extended past φ=0.90)",
+                "phi_crossing": "φ=0.90 crossing",
+                "fallback":     "fallback — no snapshot found",
+            }
+            crit_label = _CRIT_LABELS.get(optimizer_criterion, optimizer_criterion)
+            if optimizer_criterion != "fallback":
+                exposure_min = opt_t_s / 60.0
+                _write_job_log(
+                    Path(job["log_path"]),
+                    f"[fgm_iterate] probe → ideal time = {exposure_min:.2f} min "
+                    f"({optimizer_criterion}): {optimizer_reason}",
+                )
+            else:
+                _write_job_log(
+                    Path(job["log_path"]),
+                    f"[fgm_iterate] WARNING: optimizer probe found no usable snapshot in "
+                    f"{optimizer_max_min:.1f} min. Falling back to max time. "
+                    f"If ρ̄ is also low the part is not sintering — check power/material.",
+                )
+
+            # ── Phase B: clean single-mode baseline at t★ ────────────────────
+            _set_job_progress(
+                job_id, total_runs=total_runs, completed_runs=0, progress_pct=5.0,
+                progress_label=(
+                    f"FGM iter-0: clean baseline at t★={exposure_min:.2f} min "
+                    f"({crit_label})…"
+                ),
+            )
+            iter0_dir = parent_dir / f"{output_name}_iter0"
+            iter0_dir.mkdir(parents=True, exist_ok=True)
+            _register_job_output(job, iter0_dir)
+
+            iter0_payload = dict(payload)
+            iter0_payload["mode"] = "single"
+            cfg0_path = _prepare_config(
+                mode="single", payload=iter0_payload,
+                exposure_minutes=exposure_min,
+                output_tag=f"{output_name}_iter0",
+                job=job,
+            )
+            cmd0 = [sys.executable, "rfam_eqs_coupled.py",
+                    "--config", str(cfg0_path), "--output-dir", str(iter0_dir)]
+            rc0 = _run_command(cmd0, Path(job["log_path"]), job_id=job_id)
+            if rc0 != 0:
+                _set_job_progress(job_id, progress_label="iter-0 baseline failed")
+                raise RuntimeError(f"FGM iter-0 baseline exited with code {rc0}")
+
+            _set_job_progress(
+                job_id, completed_runs=1, progress_pct=100.0 / total_runs,
+                progress_label=(
+                    f"iter-0 done at t★={exposure_min:.2f} min — generating FGM…"
+                ),
+            )
+
+        else:
+            # ── No optimizer: single-phase iter-0 at user's fixed time ───────
+            _set_job_progress(
+                job_id, total_runs=total_runs, completed_runs=0, progress_pct=5.0,
+                progress_label=f"FGM iter-0: baseline single run at {exposure_min:.2f} min…",
+            )
+            iter0_dir = parent_dir / f"{output_name}_iter0"
+            iter0_dir.mkdir(parents=True, exist_ok=True)
+            _register_job_output(job, iter0_dir)
+
+            iter0_payload = dict(payload)
+            iter0_payload["mode"] = "single"
+            cfg0_path = _prepare_config(
+                mode="single", payload=iter0_payload,
+                exposure_minutes=exposure_min,
+                output_tag=f"{output_name}_iter0",
+                job=job,
+            )
+            cmd0 = [sys.executable, "rfam_eqs_coupled.py",
+                    "--config", str(cfg0_path), "--output-dir", str(iter0_dir)]
+            rc0 = _run_command(cmd0, Path(job["log_path"]), job_id=job_id)
+            if rc0 != 0:
+                _set_job_progress(job_id, progress_label="iter-0 simulation failed")
+                raise RuntimeError(f"FGM iter-0 exited with code {rc0}")
+            _set_job_progress(
+                job_id, completed_runs=1, progress_pct=100.0 / total_runs,
+                progress_label=f"iter-0 complete ({exposure_min:.2f} min) — generating FGM…",
+            )
+
+    # Load base config from iter-0 for patching in subsequent iterations.
+    # IMPORTANT: strip all optimizer/turntable/orientation modes — iter-1+ must run as
+    # plain single-mode sims at the extracted optimal exposure time.
+    iter0_cfg_file = iter0_dir / "used_config.yaml"
+    if not iter0_cfg_file.exists():
+        raise FileNotFoundError("iter-0 did not write used_config.yaml — cannot continue")
+    with open(iter0_cfg_file, "r", encoding="utf-8") as fh:
+        base_cfg = yaml.safe_load(fh) or {}
+    # Disable any optimizer/sweep modes that were active in iter-0 so subsequent iters
+    # run as straightforward single-mode sims at the (possibly optimizer-extracted) time.
+    for _opt_key in ("optimizer", "orientation_optimizer", "placement_optimizer", "turntable"):
+        if _opt_key in base_cfg:
+            if isinstance(base_cfg[_opt_key], dict):
+                base_cfg[_opt_key]["enabled"] = False
+            else:
+                base_cfg.pop(_opt_key, None)
+
+    # ── Generate FGM from iter-0 fields ──────────────────────────────────────
+    from fgm_generator import generate_fgm  # local import
+    if not (iter0_dir / "fields.npz").exists():
+        raise FileNotFoundError("iter-0 did not write fields.npz — cannot generate FGM")
+
+    # ── Helper: extract full metrics from a completed iteration dir ───────────
+    # Thermal damage threshold: PA12 begins to decompose above ~245°C.
+    # Under-sintering threshold: ρ̄ < 0.60 means the part barely melted.
+    DAMAGE_T_C      = 245.0   # °C — thermal damage onset
+    RHO_TARGET      = 0.92    # target relative density for score computation
+    MIN_RHO_VALID   = 0.60    # below this → under-sintered, abort
+    T_AMBIENT_C     = 25.0    # °C — ambient/initial powder temperature
+    SEL_TARGET      = 2.5     # minimum acceptable thermal selectivity
+
+    def _iter_metrics(it_dir: Path) -> dict[str, Any]:
+        """Read fields.npz + summary.json from an iteration dir and return all metrics.
+
+        Score formula (lower = better):
+          score = 1.0×σ_T  +  20×σ_ρ  +  0.5×|ρ̄ − rho_target|
+                           +  0.5×max(0, T_max − DAMAGE_T_C)    [damage]
+                           +  3.0×max(0, SEL_TARGET − selectivity)  [bleed risk]
+                           +  15×frac_bleed                     [actual bleed]
+
+        Selectivity = (T_mean_inside − T_ambient) / (T_mean_outside − T_ambient)
+          A value >> 1.0 means the part heats selectively vs. surrounding powder.
+          Values near 1.0 indicate bulk heating — the powder bed is also sintering,
+          which destroys geometric fidelity (the part blurs into the surroundings).
+
+        frac_bleed = fraction of outside-mask powder cells above melt_reference_c.
+          Any non-zero value means surrounding loose powder has reached sintering
+          temperature and will fuse to the part, degrading dimensional accuracy.
+        """
+        metrics: dict[str, Any] = {}
+        melt_ref_c = 186.0   # PA12 default; overridden from summary if available
+        sfile = it_dir / "summary.json"
+        if sfile.exists():
+            try:
+                s = json.loads(sfile.read_text(encoding="utf-8"))
+                metrics["frac_melt"]    = float(s.get("frac_part_ge_melt_ref", 0.0))
+                metrics["mean_rho"]     = float(s.get("mean_rho_rel_part_final", 0.0))
+                metrics["T_mean_c"]     = float(s.get("mean_T_part_final_c", 0.0))
+                metrics["T_max_c"]      = float(s.get("max_T_part_final_c", 0.0))
+                metrics["T_p95_c"]      = float(s.get("p95_T_part_final_c", 0.0))
+                metrics["mean_phi"]     = float(s.get("mean_phi_part_final", 0.0))
+                melt_ref_c              = float(s.get("melt_reference_c", melt_ref_c))
+            except Exception:
+                pass
+        ffile = it_dir / "fields.npz"
+        if ffile.exists():
+            try:
+                f     = np.load(ffile)
+                mask  = f["part_mask"].astype(bool)
+                T     = f["T"]
+                T_in  = T[mask]
+                T_out = T[~mask]
+                rho_in= f["rho_rel"][mask]
+
+                metrics["sigma_T"]   = round(float(np.std(T_in)),  3)
+                metrics["sigma_rho"] = round(float(np.std(rho_in)), 4)
+                metrics["dT_c"]      = round(float(T_in.max() - T_in.mean()), 3)
+
+                # Selectivity: how much hotter is inside vs. outside (relative to ambient)
+                dT_in  = float(T_in.mean())  - T_AMBIENT_C
+                dT_out = float(T_out.mean()) - T_AMBIENT_C
+                thermal_sel = dT_in / max(dT_out, 0.1)
+                metrics["T_out_mean_c"]      = round(float(T_out.mean()), 2)
+                metrics["thermal_selectivity"] = round(thermal_sel, 3)
+
+                # Bleed: fraction of outside-mask pixels at or above melt reference
+                frac_bleed = float((T_out >= melt_ref_c).sum()) / max(len(T_out), 1)
+                metrics["frac_bleed"]        = round(frac_bleed, 4)
+
+                # ── Composite score (lower = better) ─────────────────────────
+                #
+                # Two-regime design based on mean density:
+                #
+                # ACTIVE-SINTERING regime (ρ̄ < 0.82):
+                #   The part is still densifying. σ_T fluctuations are expected and
+                #   do NOT indicate failure — they reflect active sintering gradients.
+                #   Primary objectives: (a) keep heat inside the part (zero bleed),
+                #   (b) move ρ̄ toward target, (c) avoid thermal damage.
+                #   σ_rho counts but at reduced weight; σ_T is mostly ignored.
+                #
+                # NEAR-FINAL regime (ρ̄ ≥ 0.82):
+                #   Most sintering is complete. Now uniformity matters: σ_T and σ_rho
+                #   determine whether the final print will have spatial density gradients.
+                #   σ_T is the primary uniformity signal here.
+                #
+                # This prevents the algorithm from rewarding an under-sintered, low-σ_T
+                # state (which looks "uniform" only because nothing has happened yet)
+                # over a well-sintered, slightly higher-σ_T state.
+                #
+                sm   = metrics.get("sigma_T",  0.0)
+                srho = metrics.get("sigma_rho", 0.0)
+                rm   = metrics.get("mean_rho",  0.0)
+                tmax = metrics.get("T_max_c",   0.0)
+                dmg      = max(0.0, tmax - DAMAGE_T_C) * 0.5
+                bleed_pen = frac_bleed * 15.0   # zero bleed is critical
+                sel_pen   = max(0.0, SEL_TARGET - thermal_sel) * 2.0
+
+                RHO_ACTIVE_THRESH = 0.82   # boundary between regimes
+                if rm < RHO_ACTIVE_THRESH:
+                    # Active-sintering regime: drive density up, keep bleed zero.
+                    # σ_T not penalised (it will naturally be non-zero during sintering).
+                    # σ_rho weight kept LOW (2.0) so that a density gain (rho_pen decrease of
+                    #   15×Δρ̄) beats a σ_rho increase whenever Δρ̄ > (2/15)×Δσ_rho — i.e.
+                    #   small density improvements win even when variance ticks up slightly,
+                    #   which is the physically correct ordering for active sintering.
+                    #   (With 5.0× weight the cross-over was too easy to hit, causing iter-1 to
+                    #   beat iter-2/3 even when iter-2/3 had higher density AND zero bleed.)
+                    rho_pen  = (RHO_ACTIVE_THRESH - rm) * 15.0
+                    # 0.3×σ_T added as tiebreaker: when density gain is identical,
+                    # prefer the iteration with lower temperature non-uniformity.
+                    metrics["score"] = round(
+                        0.3 * sm + 2.0 * srho + rho_pen + bleed_pen + sel_pen + dmg,
+                        3
+                    )
+                    metrics["score_regime"] = "active"
+                else:
+                    # Near-final regime: uniformity is the primary objective.
+                    # σ_T is the dominant term; σ_rho adds density-uniformity signal.
+                    # Light penalty for deviation from target density.
+                    rho_pen = abs(rm - RHO_TARGET) * 1.0
+                    metrics["score"] = round(
+                        2.0 * sm + 25.0 * srho + rho_pen + bleed_pen + sel_pen + dmg,
+                        3
+                    )
+                    metrics["score_regime"] = "near-final"
+            except Exception:
+                pass
+        return metrics
+
+    # ── Pre-check iter-0: abort only on REAL problems ─────────────────────────
+    #
+    # Manual mode (use_optimizer=False):
+    #   Abort only if the part is under-sintered OR T_max exceeds the PA12 hard
+    #   decomposition limit (~350°C).  T_max between DAMAGE_T_C (245°C) and
+    #   HARD_DECOMP_T_C (350°C) means the part is in the melt/densification
+    #   regime — the hot spots are exactly what FGM iteration is designed to fix.
+    #   Aborting here would prevent FGM from ever running on geometries (e.g.
+    #   L-shape) whose hot corners naturally exceed 245°C even at short exposures.
+    #
+    # Optimizer mode (use_optimizer=True):
+    #   iter-0 was intentionally run LONGER than the ideal time so the optimizer could
+    #   collect intermediate snapshots.  T_max > DAMAGE_T_C at the END of iter-0 is
+    #   completely expected — the ideal time chosen by the optimizer is BEFORE that point.
+    #   → Do NOT abort on T_max.
+    #   → DO abort if ρ̄ < MIN_RHO_VALID — this means sintering never even started
+    #     (under-powered, wrong material, or probe too short to see any densification).
+    #   → DO abort if optimizer gave "fallback" AND ρ̄ is also low (doubly bad signal).
+    HARD_DECOMP_T_C = 350.0   # PA12 decomposition onset; abort if exceeded even at iter-0
+
+    iter0_metrics  = _iter_metrics(iter0_dir)
+    iter0_rho      = iter0_metrics.get("mean_rho",  0.0)
+    iter0_T_max    = iter0_metrics.get("T_max_c",   0.0)
+
+    abort_reason: str | None = None
+    iter0_hot_warning: str | None = None   # warn but do NOT abort
+    if use_optimizer:
+        # Optimizer path: T_max check suppressed (over-exposure is by design)
+        if iter0_rho < MIN_RHO_VALID:
+            abort_reason = (
+                f"ρ̄={iter0_rho:.3f} < {MIN_RHO_VALID} even after {optimizer_max_min:.1f} min — "
+                f"part is not sintering at all. Check RF power and material properties."
+            )
+    else:
+        # Manual path: hard decomposition check; soft check is warning only
+        if iter0_rho < MIN_RHO_VALID:
+            abort_reason = (
+                f"ρ̄={iter0_rho:.3f} < {MIN_RHO_VALID} — part is severely under-sintered. "
+                f"Increase exposure time and re-run."
+            )
+        elif iter0_T_max > HARD_DECOMP_T_C:
+            abort_reason = (
+                f"T_max={iter0_T_max:.1f}°C > {HARD_DECOMP_T_C:.0f}°C — thermal decomposition "
+                f"risk (PA12 hard limit). Reduce exposure time significantly."
+            )
+        elif iter0_T_max > DAMAGE_T_C:
+            # Hot but not decomposing: the part is in the melt regime.
+            # FGM will redistribute energy to cool the hot spots — continue.
+            iter0_hot_warning = (
+                f"⚠ iter-0 T_max={iter0_T_max:.1f}°C > {DAMAGE_T_C:.0f}°C (melt/damage onset) "
+                f"but < {HARD_DECOMP_T_C:.0f}°C (decomposition limit) — proceeding with FGM "
+                f"iteration to correct hot spots."
+            )
+
+    if abort_reason:
+        warn_label = f"⚠ {abort_reason} FGM cannot fix operating-point errors."
+        _write_job_log(Path(job["log_path"]), warn_label)
+        _set_job_progress(job_id, progress_label=warn_label)
+        (parent_dir / "convergence.json").write_text(json.dumps({
+            "shape": shape, "exposure_minutes": round(exposure_min, 3),
+            "proxy_field": proxy_field, "warning": warn_label, "aborted": True,
+            "abort_reason": abort_reason,
+            "optimizer_chosen_time_min": round(exposure_min, 3) if use_optimizer else None,
+            "optimizer_criterion": optimizer_criterion,
+            "optimizer_reason": optimizer_reason,
+            "iterations": [{"iter": 0, **iter0_metrics,
+                             "output_dir": iter0_dir.relative_to(OUTPUTS_DIR).as_posix(),
+                             "note": f"baseline (no FGM) — ABORTED: {abort_reason}"}],
+        }, indent=2), encoding="utf-8")
+        return
+
+    # Log soft warning (T_max in melt regime but below decomposition limit) without aborting
+    if iter0_hot_warning:
+        _write_job_log(Path(job["log_path"]), iter0_hot_warning)
+        print(f"  [fgm_iterate] {iter0_hot_warning}", flush=True)
+
+    # Generate iter-0 FGM at full magnitude (always proportional — no prior exists yet)
+    init_result = generate_fgm(
+        run_output_dir      = iter0_dir,
+        bpp                 = bpp,
+        proxy_field         = proxy_field,
+        invert              = invert,
+        magnitude           = magnitude,
+        baseline_saturation = baseline_saturation,
+        dead_band           = dead_band,
+        emit_formats        = ("npz", "png"),  # include PNG so dashboard can show it
+        overprint_cold_mm     = overprint_cold_mm,
+        overprint_cold_thresh = overprint_cold_thresh,
+    )
+    current_fgm_npz = Path(init_result["npz_path"])
+
+    # Capture iter-0 normalization bounds for fixed-reference normalization in
+    # integral control mode.  These bounds define the scale of the original problem;
+    # subsequent iterations normalize against this fixed range so that a smaller
+    # residual field stays proportionally small rather than being re-amplified.
+    iter0_ref_lo: float | None = init_result.get("ref_lo")
+    iter0_ref_hi: float | None = init_result.get("ref_hi")
+
+    # ── EBC: capture iter-0 mean saturation as the power-budget reference ─────
+    # mean_sat = mean(sat_map[part_mask]) — the effective mean σ-scaling factor.
+    # Saved once here; subsequent iterations compute their own mean_sat and adjust
+    # t★ to keep total absorbed power ≈ constant.
+    exposure_min_base: float = exposure_min   # save t★ (possibly optimizer-chosen)
+    iter0_mean_sat:    float | None = None
+    if use_ebc:
+        try:
+            _s0_data  = np.load(str(current_fgm_npz))
+            _s0_map   = _s0_data["sat_map"].astype(np.float32)
+            _f0_path  = iter0_dir / "fields.npz"
+            if _f0_path.exists():
+                _mask0 = np.load(str(_f0_path))["part_mask"].astype(bool)
+                iter0_mean_sat = float(_s0_map[_mask0].mean())
+            else:
+                _inside0 = _s0_map[_s0_map > 1e-6]
+                iter0_mean_sat = float(_inside0.mean()) if len(_inside0) > 0 else None
+            if iter0_mean_sat is not None:
+                print(
+                    f"  [fgm_iterate] EBC enabled — iter-0 mean_sat={iter0_mean_sat:.4f}  "
+                    f"t★_base={exposure_min_base:.3f} min",
+                    flush=True,
+                )
+            else:
+                print("  [fgm_iterate] EBC: sat_map empty — disabling EBC", flush=True)
+                use_ebc = False
+        except Exception as _ebc_init_exc:
+            print(
+                f"  [fgm_iterate] EBC init failed ({_ebc_init_exc}); "
+                f"EBC disabled for this run",
+                flush=True,
+            )
+            use_ebc = False
+
+    convergence_log: list[dict[str, Any]] = []
+    iter0_sigma_T = iter0_metrics.get("sigma_T", iter0_metrics.get("dT_c", 999.0))
+
+    # ── Early-stop: part already sufficiently uniform at baseline ─────────────
+    # If σ_T < MIN_SIGMA_T_FOR_FGM at iter-0, the spatial non-uniformity is too
+    # small to correct reliably — any FGM will mostly amplify noise and degrade
+    # uniformity.  In this case, skip all FGM iterations and return iter-0 as best.
+    MIN_SIGMA_T_FOR_FGM = 4.0   # °C — below this, FGM makes things worse
+    if iter0_sigma_T < MIN_SIGMA_T_FOR_FGM and not _resuming:
+        early_abort_msg = (
+            f"Baseline σ_T={iter0_sigma_T:.2f}°C < {MIN_SIGMA_T_FOR_FGM}°C threshold — "
+            f"part is already highly uniform. FGM iterations would amplify noise "
+            f"and degrade uniformity. Iter-0 IS the best result."
+        )
+        print(f"  [fgm_iterate] {early_abort_msg}", flush=True)
+        conv_data_early: dict[str, Any] = {
+            "shape": shape, "exposure_minutes": round(exposure_min, 3),
+            "proxy_field": proxy_field, "magnitude_base": magnitude,
+            "bpp": bpp, "n_iterations_run": 1,
+            "iterations": [{
+                "iter": 0,
+                "output_dir": iter0_dir.relative_to(OUTPUTS_DIR).as_posix(),
+                "note": "baseline — part already uniform, FGM skipped",
+                **iter0_metrics,
+            }],
+            "best_iter": 0, "best_score": iter0_metrics.get("score"),
+            "best_sigma_T": iter0_sigma_T, "best_score_regime": iter0_metrics.get("score_regime"),
+            "converged": True, "convergence_type": "already_uniform",
+            "convergence_note": early_abort_msg,
+            "aborted": False,
+        }
+        (parent_dir / "convergence.json").write_text(
+            json.dumps(conv_data_early, indent=2), encoding="utf-8")
+        _set_job_progress(
+            job_id, completed_runs=1, progress_pct=100.0,
+            progress_label=f"FGM skipped — part already uniform (σ_T={iter0_sigma_T:.2f}°C < {MIN_SIGMA_T_FOR_FGM}°C)",
+        )
+        return
+
+    # ── Auto-scale initial magnitude by severity of baseline non-uniformity ──
+    # Rationale: magnitude=1.0 on an already-uniform field (σ_T≈4°C) creates huge
+    # saturation swings → frac_melt explosion.  Full magnitude is only warranted when
+    # σ_T ≥ 15°C.  For smaller gradients we scale down proportionally.
+    severity_scale = min(1.0, max(0.1, iter0_sigma_T / 15.0))
+    current_mag    = magnitude * severity_scale
+    print(
+        f"  [fgm_iterate] baseline σ_T={iter0_sigma_T:.2f}°C "
+        f"→ severity_scale={severity_scale:.3f} → initial mag={current_mag:.3f}",
+        flush=True,
+    )
+
+    # Build iter-0 note: describe what kind of run it was
+    if use_optimizer and optimizer_criterion and optimizer_criterion != "fallback":
+        _crit_str = {"melt": "φ=0.90", "max_density": "max-density (extended)",
+                     "phi_crossing": "φ=0.90"}.get(optimizer_criterion, optimizer_criterion)
+        iter0_note = (
+            f"optimizer probe at {optimizer_max_min:.1f} min — "
+            f"ideal time = {exposure_min:.2f} min ({_crit_str}); "
+            f"iter-1+ use the ideal time"
+        )
+    elif use_optimizer:
+        iter0_note = (
+            f"optimizer probe at {optimizer_max_min:.1f} min — no ideal time found; "
+            f"iter-1+ use max time {exposure_min:.1f} min"
+        )
+    else:
+        iter0_note = "baseline (no FGM applied) — FGM generated for iter-1"
+
+    convergence_log.append({
+        "iter":       0,
+        "output_dir": iter0_dir.relative_to(OUTPUTS_DIR).as_posix(),
+        "fgm_npz":    str(current_fgm_npz.relative_to(ROOT)),
+        "fgm_png":    (str(Path(init_result.get("png_path","")).relative_to(ROOT))
+                       if init_result.get("png_path") else None),
+        "note":       iter0_note,
+        "magnitude_used": round(current_mag, 4),
+        "optimizer_probe_min": round(optimizer_max_min, 3) if use_optimizer else None,
+        **iter0_metrics,
+    })
+    prev_sigma_T    = iter0_sigma_T
+    prev_rho        = iter0_metrics.get("mean_rho", 0.0)
+    prev_score      = iter0_metrics.get("score", 999.0)
+    iter0_regime    = iter0_metrics.get("score_regime", "active")
+    # ── Per-regime best tracking ──────────────────────────────────────────────
+    # Active-regime and near-final scores use DIFFERENT formulas and are
+    # INCOMPARABLE.  If best_score_ever is set from an active-regime iteration
+    # (score ≈ 0.3) and then a near-final iteration (score ≈ 20) is compared
+    # against it, the near-final run appears to "regress" catastrophically —
+    # even when it is physically BETTER (higher ρ̄, lower bleed, more sintered).
+    # Fix: track best scores PER REGIME.  Reset best_score_ever each time the
+    # regime transitions; the final best_entry prefers near-final over active.
+    best_score_active     = prev_score if iter0_regime == "active"     else 999.0
+    best_score_near_final = prev_score if iter0_regime == "near-final" else 999.0
+    best_score_ever       = prev_score   # kept for backward compatibility, updated per regime
+    prev_regime           = iter0_regime
+    consecutive_bad = 0   # count iterations where score is significantly worse than best-ever
+    # Active-regime convergence: ρ̄ change below threshold for N consecutive iters
+    RHO_PLATEAU_DELTA  = 0.002   # ρ̄ change smaller than this is considered "plateau"
+    consecutive_plateau = 0     # consecutive iters where |Δρ̄| < RHO_PLATEAU_DELTA
+
+    # ── Anti-rut / proxy-switching state ─────────────────────────────────────
+    # proxy_schedule is a list of proxy fields to try in sequence.
+    # When thorough=True (or regime_adaptive=True) the active proxy can change
+    # mid-run.  proxy_schedule_idx tracks which schedule entry is current.
+    proxy_schedule_idx  = 0
+    proxy_field         = proxy_schedule[0]       # active proxy (may change per iter)
+    stagnation_counter  = 0                       # iters without meaningful σ_T improvement
+    best_sigma_T_this_proxy = iter0_sigma_T       # reset each time proxy switches
+    proxy_switch_log    = []                      # record of when/why proxy switched
+    # How many iters each proxy has been active (for reporting)
+    proxy_iter_count    = {p: 0 for p in proxy_schedule}
+
+    # ── Stochastic perturbation state ────────────────────────────────────────
+    # _gen_stagnation_counter tracks how many consecutive iterations have failed
+    # to improve σ_T by at least stagnation_eps.  When it reaches stagnation_window,
+    # the NEXT generate_fgm() call will include random noise to escape local minima.
+    # This is independent of the proxy-switching logic (both can fire simultaneously).
+    _gen_stagnation_counter   = 0
+    _gen_best_sigma_T         = iter0_sigma_T
+    _next_perturbation_amp    = 0.0          # perturbation to apply at the NEXT FGM gen
+    _post_perturb_grace       = 0            # counts down after each perturbation fires
+    _min_sigma_T_ever         = iter0_sigma_T  # true minimum σ_T across all iterations
+    _min_sigma_T_iter         = 0            # iteration that achieved it
+
+    # ── Hybrid mode phase state ───────────────────────────────────────────────
+    # Phase 1 (proportional) runs for exactly iter-1; phase 2 (OC-TO) for all
+    # subsequent iterations.  _hybrid_phase2_active is set True at the first
+    # FGM generation after iter-1 completes and stays True for the remainder.
+    _hybrid_phase2_active           = False
+    _hybrid_phase2_baseline_sigma_T = iter0_sigma_T  # updated when phase switches
+
+    # ── Outer loop: iterations 1 … n_iterations-1 ────────────────────────────
+    fgm_iters     = n_iterations - 1
+
+    for i in range(1, fgm_iters + 1):
+        abs_iter  = i
+        iter_label = f"FGM iter-{abs_iter}/{fgm_iters} | σ_T was {prev_sigma_T:.1f}°C"
+        _set_job_progress(
+            job_id,
+            completed_runs=i,
+            progress_pct=max(5.0, 100.0 * i / total_runs),
+            progress_label=iter_label,
+        )
+
+        # Build iter config: base + fgm_feedback block + exposure time
+        iter_cfg = dict(base_cfg)
+        iter_cfg["fgm_feedback"] = {
+            "enabled":                True,
+            "saturation_map_npz":     str(current_fgm_npz),
+            "magnitude":              current_mag,
+            "baseline_saturation":    baseline_saturation,
+            "proxy_field":            proxy_field,
+            "invert":                 invert,
+            "iterate":                iterate_inner,
+            "iterate_interval_steps": iterate_interval,
+            "iterate_damping":        iterate_damping,
+        }
+
+        # ── EBC: adjust t★ to conserve total absorbed energy ─────────────────
+        # σ(x,y) = σ₀ × sat_map(x,y)  →  P ∝ mean(sat_map)
+        # t★ᵢ = t★_base × (mean_sat₀ / mean_satᵢ)   [first-order EBC]
+        exposure_for_iter = exposure_min   # default: unchanged
+        ebc_ratio_used: float | None = None
+        if use_ebc and iter0_mean_sat is not None and iter0_mean_sat > 1e-6:
+            try:
+                _si_data  = np.load(str(current_fgm_npz))
+                _si_map   = _si_data["sat_map"].astype(np.float32)
+                _fi_path  = current_fgm_npz.parent / "fields.npz"
+                if _fi_path.exists():
+                    _maski = np.load(str(_fi_path))["part_mask"].astype(bool)
+                    iter_mean_sat_i = float(_si_map[_maski].mean())
+                else:
+                    _insi = _si_map[_si_map > 1e-6]
+                    iter_mean_sat_i = float(_insi.mean()) if len(_insi) > 0 else iter0_mean_sat
+                if iter_mean_sat_i > 1e-6:
+                    raw_ratio = iter0_mean_sat / iter_mean_sat_i
+                    ebc_ratio_used = max(ebc_clamp_lo, min(ebc_clamp_hi, raw_ratio))
+                    exposure_for_iter = exposure_min_base * ebc_ratio_used
+                    print(
+                        f"  [fgm_iterate] EBC iter-{i}: "
+                        f"mean_sat {iter0_mean_sat:.4f}→{iter_mean_sat_i:.4f}  "
+                        f"raw_ratio={raw_ratio:.3f}  clamped={ebc_ratio_used:.3f}  "
+                        f"t★={exposure_min_base:.3f}→{exposure_for_iter:.3f} min",
+                        flush=True,
+                    )
+            except Exception as _ebc_exc:
+                print(
+                    f"  [fgm_iterate] EBC iter-{i} failed ({_ebc_exc}); "
+                    f"using base exposure",
+                    flush=True,
+                )
+
+        _set_exposure_minutes(iter_cfg, exposure_for_iter)
+
+        GUI_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        cfg_path = GUI_CONFIG_DIR / f"fgm_iter_{job_id}_i{i}.yaml"
+        with open(cfg_path, "w", encoding="utf-8") as fh:
+            yaml.dump(iter_cfg, fh, default_flow_style=False, allow_unicode=True)
+
+        iter_dir = parent_dir / f"{output_name}_iter{i}"
+        iter_dir.mkdir(parents=True, exist_ok=True)
+        _register_job_output(job, iter_dir)
+
+        cmd = [sys.executable, "rfam_eqs_coupled.py",
+               "--config", str(cfg_path), "--output-dir", str(iter_dir)]
+        rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id)
+        if rc != 0:
+            _set_job_progress(job_id, progress_label=f"{iter_label} — simulation failed")
+            raise RuntimeError(f"FGM iteration {i} exited with code {rc}")
+
+        # Compute full metrics from this iter's output
+        metrics = _iter_metrics(iter_dir)
+        sigma_T    = metrics.get("sigma_T", metrics.get("dT_c", 999.0))
+        this_score = metrics.get("score", 999.0)
+
+        convergence_log.append({
+            "iter":           abs_iter,
+            "output_dir":     iter_dir.relative_to(OUTPUTS_DIR).as_posix(),
+            "fgm_npz":        str(current_fgm_npz.relative_to(ROOT)),
+            "fgm_png":        None,   # filled in below after next FGM generated
+            "magnitude_used": round(current_mag, 4),
+            "proxy_field":    proxy_field,   # record active proxy for this iter
+            # TO parameters used for this iteration's FGM correction
+            "move_limit":               round(move_limit, 4) if use_delta_correction else None,
+            "sensitivity_filter_sigma": round(sensitivity_filter_sigma, 3) if use_delta_correction else None,
+            # EBC fields: actual exposure used and the power-ratio that drove it
+            "exposure_min_used": round(exposure_for_iter, 4),
+            "ebc_ratio":         round(ebc_ratio_used, 4) if ebc_ratio_used is not None else None,
+            **metrics,
+        })
+
+        # ── Track true minimum σ_T across all iterations ─────────────────────
+        _st_this = metrics.get("sigma_T")
+        if isinstance(_st_this, (int, float)) and _st_this < _min_sigma_T_ever:
+            _min_sigma_T_ever = _st_this
+            _min_sigma_T_iter = abs_iter
+
+        # ── Check for divergence / thermal damage before generating next FGM ──
+        early_stop_reason: str | None = None
+
+        # (a) Thermal damage abort: T_max crossed the decomposition threshold.
+        # Threshold is adaptive: max(DAMAGE_T_C, iter0_T_max * 1.15).
+        # Geometries that naturally run hot at their optimal exposure (e.g. L-shape
+        # with inner concavity) have iter0_T_max >> DAMAGE_T_C even without FGM.
+        # In those cases we only abort if the FGM-corrected run RAISES T_max by
+        # more than 15% above the baseline — a true FGM-driven runaway, not a
+        # pre-existing geometry characteristic.
+        this_T_max     = metrics.get("T_max_c", 0.0)
+        damage_ceiling = max(DAMAGE_T_C, iter0_T_max * 1.15)
+        if this_T_max > damage_ceiling:
+            early_stop_reason = (
+                f"iter-{abs_iter} T_max={this_T_max:.1f}°C exceeded "
+                f"thermal damage ceiling {damage_ceiling:.0f}°C "
+                f"(max({DAMAGE_T_C:.0f}, iter0={iter0_T_max:.0f}°C × 1.15))"
+            )
+            convergence_log[-1]["note"] = f"thermal damage abort at iter-{abs_iter}"
+
+        # (b) Regime-aware regression abort.
+        #
+        # The two scoring regimes have different expectations:
+        #
+        #   ACTIVE (ρ̄ < 0.82): score CAN rise while ρ̄ rises — the FGM is concentrating
+        #   heat in under-sintered regions, which naturally increases σ_T temporarily.
+        #   This is NOT a regression — it's expected physics.  We only abort if ρ̄ is
+        #   actually declining (FGM pushing a well-sintered region into the under-sintered
+        #   zone) or bleed is growing (FGM over-correcting and burning surrounding powder).
+        #
+        #   NEAR-FINAL (ρ̄ ≥ 0.82): sintering is mostly complete.  Score should now be
+        #   trending downward (lower σ_T, lower bleed).  Two consecutive score rises
+        #   > 30% above best-ever → abort.
+        #
+        this_regime   = metrics.get("score_regime", "near-final")
+        this_rho      = metrics.get("mean_rho", 0.0)
+        this_bleed    = metrics.get("frac_bleed", 0.0)
+        prev_entry    = convergence_log[-2] if len(convergence_log) >= 2 else {}
+        prev_rho      = prev_entry.get("mean_rho", this_rho)
+        prev_bleed    = prev_entry.get("frac_bleed", 0.0)
+
+        # ── Update per-regime best tracking ─────────────────────────────────────
+        # When the regime transitions from active → near-final, reset consecutive_bad
+        # and best_score_ever to the current near-final score so the regression check
+        # doesn't compare near-final scores (typically 15–25) against active-regime
+        # scores (typically 0.3–2.0).  The two formulas are dimensionally incomparable.
+        regime_just_crossed = (prev_regime == "active" and this_regime == "near-final")
+        if regime_just_crossed:
+            best_score_ever       = this_score   # fresh start for near-final tracking
+            best_score_near_final = this_score
+            consecutive_bad       = 0            # prior active-regime streak is irrelevant
+            print(
+                f"  [fgm_iterate] regime transition active→near-final at iter-{abs_iter} "
+                f"(ρ̄={this_rho:.3f}) — resetting best_score_ever to {this_score:.3f}",
+                flush=True,
+            )
+        elif this_score < best_score_ever:
+            best_score_ever = this_score
+
+        if this_regime == "active":
+            if this_score < best_score_active:
+                best_score_active = this_score
+            # In active regime: abort only if density dropped or bleed grew 2× in a row
+            rho_declined  = this_rho < prev_rho - 0.02        # meaningful drop
+            bleed_grew    = this_bleed > prev_bleed + 0.005   # >0.5pp new bleed
+            if rho_declined and bleed_grew:
+                consecutive_bad += 1
+            elif rho_declined and not bleed_grew and consecutive_bad > 0:
+                # partial recovery — don't reset fully but slow count
+                consecutive_bad = max(0, consecutive_bad - 1)
+            else:
+                consecutive_bad = 0
+            regression_threshold = None   # not used in active regime
+        else:
+            if this_score < best_score_near_final:
+                best_score_near_final = this_score
+            # Near-final regime: score-based regression check within same regime only.
+            # Grace period suppresses regression counting immediately after a perturbation
+            # so the new seed gets post_perturbation_grace iters to show improvement.
+            regression_threshold = best_score_ever * regression_threshold_multiplier
+            _in_grace = _post_perturb_grace > 0
+            if _post_perturb_grace > 0:
+                _post_perturb_grace -= 1
+            if this_score > regression_threshold and not regime_just_crossed and not _in_grace:
+                consecutive_bad += 1
+            elif not _in_grace:
+                consecutive_bad = 0
+
+        if consecutive_bad >= 2 and early_stop_reason is None:
+            if this_regime == "active":
+                early_stop_reason = (
+                    f"iter-{abs_iter} ρ̄ declined and bleed grew for "
+                    f"{consecutive_bad} consecutive iterations "
+                    f"(ρ̄ {prev_rho:.3f}→{this_rho:.3f}, "
+                    f"bleed {prev_bleed*100:.2f}%→{this_bleed*100:.2f}%)"
+                )
+            else:
+                early_stop_reason = (
+                    f"score regressed for {consecutive_bad} consecutive iterations "
+                    f"({this_score:.2f} vs best-ever {best_score_ever:.2f}, "
+                    f"threshold {regression_threshold:.2f})"
+                )
+            convergence_log[-1]["note"] = f"regression abort at iter-{abs_iter}"
+
+        # ── Best iteration selection ──────────────────────────────────────────────
+        best_entry = _select_best_iter(convergence_log, use_optimizer, DAMAGE_T_C)
+        conv_data: dict[str, Any] = {
+            "shape":            shape,
+            "exposure_minutes": round(exposure_min, 3),
+            "proxy_field":      proxy_field,        # current active proxy (may have switched)
+            "proxy_schedule":   proxy_schedule,     # full schedule used
+            "thorough":         thorough,
+            "regime_adaptive":  regime_adaptive,
+            "proxy_switch_log": proxy_switch_log,
+            "proxy_iter_count": {k: v for k, v in proxy_iter_count.items() if v > 0},
+            "magnitude_base":   magnitude,
+            "severity_scale":   round(severity_scale, 3),
+            "magnitude_decay":  magnitude_decay,
+            "dead_band":        dead_band,
+            "fgm_momentum":     fgm_momentum,
+            "bpp":              bpp,
+            "n_iterations_run": abs_iter + 1,
+            "iterations":       convergence_log,
+            "best_iter":         best_entry["iter"],
+            "best_score":        best_entry.get("score"),
+            "best_sigma_T":      best_entry.get("sigma_T"),
+            "best_score_regime": best_entry.get("score_regime", "near-final"),
+            # True minimum σ_T observed (may differ from best_iter when active-regime
+            # score formula prioritises density over uniformity).
+            "min_sigma_T":       round(_min_sigma_T_ever, 3),
+            "min_sigma_T_iter":  _min_sigma_T_iter,
+            # Converged = either σ_T convergence (near-final) or ρ̄ plateau (active).
+            # Filled in after break below; during the loop it stays False.
+            "converged":         False,
+            "convergence_type":  None,
+            "optimizer_chosen_time_min": round(exposure_min, 3) if use_optimizer else None,
+            "optimizer_criterion": optimizer_criterion,
+            "optimizer_reason": optimizer_reason,
+            # OC-TO integral mode metadata
+            "use_delta_correction":     use_delta_correction,
+            "iter0_ref_lo":             iter0_ref_lo,
+            "iter0_ref_hi":             iter0_ref_hi,
+            "move_limit":               move_limit,
+            "sensitivity_filter_sigma": sensitivity_filter_sigma,
+            # EBC metadata (M3 — Energy-Budget-Conserving exposure adjustment)
+            "use_ebc":              use_ebc,
+            "iter0_mean_sat":       round(iter0_mean_sat, 4) if iter0_mean_sat is not None else None,
+            "exposure_min_base":    round(exposure_min_base, 3),
+            "ebc_clamp_lo":         ebc_clamp_lo,
+            "ebc_clamp_hi":         ebc_clamp_hi,
+            # Hybrid mode metadata
+            "use_hybrid":               use_hybrid,
+            "hybrid_phase2_active":     _hybrid_phase2_active,
+            "hybrid_phase2_magnitude":  hybrid_phase2_magnitude   if use_hybrid else None,
+            "hybrid_phase2_move_limit": hybrid_phase2_move_limit  if use_hybrid else None,
+            "hybrid_phase2_sensitivity_sigma": hybrid_phase2_sensitivity_sigma if use_hybrid else None,
+            "hybrid_phase2_baseline_sigma_T":  round(_hybrid_phase2_baseline_sigma_T, 3) if use_hybrid else None,
+            # Cold-zone overprinting
+            "overprint_cold_mm":     overprint_cold_mm,
+            "overprint_cold_thresh": overprint_cold_thresh,
+            "min_magnitude":         min_magnitude,
+        }
+        if early_stop_reason:
+            conv_data["aborted"]      = True
+            conv_data["abort_reason"] = early_stop_reason
+        (parent_dir / "convergence.json").write_text(
+            json.dumps(conv_data, indent=2), encoding="utf-8"
+        )
+
+        direction = "↓" if sigma_T < prev_sigma_T else "↑"
+        progress_label = (f"FGM iter-{abs_iter}/{fgm_iters} done | "
+                          f"σ_T: {prev_sigma_T:.1f}°C → {sigma_T:.1f}°C {direction}  "
+                          f"mag={current_mag:.2f}")
+        _set_job_progress(job_id, completed_runs=i + 1, progress_label=progress_label)
+
+        # ── FGM generation — ALWAYS runs, even for aborted iterations ────────
+        # Generating the FGM before the abort break means every iteration has a
+        # diagnostic saturation map visible in the convergence dashboard, even when
+        # the run stopped early.  The FGM from an aborted iter is NOT used to seed
+        # the next run (there is no next run), but it is useful for understanding
+        # what correction was being attempted.
+        if (iter_dir / "fields.npz").exists():
+            # ── Hybrid phase transition ────────────────────────────────────────
+            # When use_hybrid=True and we just completed iter-1 (abs_iter == 1):
+            # switch from proportional to OC-TO mode.  This fires exactly once.
+            _switching_to_octo = use_hybrid and abs_iter == 1 and not _hybrid_phase2_active
+            if _switching_to_octo:
+                _hybrid_phase2_active           = True
+                _hybrid_phase2_baseline_sigma_T = sigma_T   # iter-1 σ_T is new baseline
+                # Reset regression tracking so phase-2 scores don't compare against
+                # the favorable active/proportional iter-1 score (dimensionally incomparable)
+                best_score_ever       = this_score
+                best_score_near_final = this_score
+                consecutive_bad       = 0
+                print(
+                    f"  [fgm_iterate] HYBRID → switching to OC-TO phase after iter-{abs_iter} "
+                    f"(σ_T={sigma_T:.2f}°C — new phase-2 baseline); "
+                    f"phase-2 mag={hybrid_phase2_magnitude:.3f}, "
+                    f"move_limit={hybrid_phase2_move_limit:.3f}",
+                    flush=True,
+                )
+
+            # ── Adaptive magnitude schedule ────────────────────────────────────
+            # Three cases:
+            #   (A) Hybrid phase 2 just starting (switching_to_octo): reset to
+            #       hybrid_phase2_magnitude, scaled by σ_T severity within phase 2.
+            #   (B) Already in hybrid phase 2: decay from current_mag, cap by σ_T
+            #       ratio relative to phase-2 baseline (not iter-0 baseline).
+            #   (C) Standard proportional or non-hybrid OC-TO: existing schedule.
+            if _switching_to_octo:
+                # Fresh start for OC-TO phase — scale starting magnitude by how much
+                # σ_T was already reduced in phase-1 so OC-TO doesn't overshoot the
+                # now-smaller residual.  E.g. if iter-1 got σ_T from 19→8.8°C (55%
+                # reduction), we scale: m_phase2 × (8.8/19) ≈ 0.4 × 0.46 ≈ 0.18.
+                _residual_scale = sigma_T / max(iter0_sigma_T, 0.1)
+                _scaled_phase2_mag = hybrid_phase2_magnitude * _residual_scale
+                next_mag = max(min_magnitude, _scaled_phase2_mag)
+                print(
+                    f"  [fgm_iterate] [hybrid phase-2] mag reset to {next_mag:.3f} "
+                    f"(phase2_mag={hybrid_phase2_magnitude:.3f} × residual_scale={_residual_scale:.3f})",
+                    flush=True,
+                )
+            elif _hybrid_phase2_active:
+                _geom_decay_mag  = current_mag * magnitude_decay
+                _sigma_ratio_cap = sigma_T / max(_hybrid_phase2_baseline_sigma_T, 0.1)
+                _phase2_prop_mag = hybrid_phase2_magnitude * _sigma_ratio_cap
+                next_mag = max(min_magnitude, min(_geom_decay_mag, _phase2_prop_mag))
+                print(
+                    f"  [fgm_iterate] [hybrid phase-2] mag: "
+                    f"geom={_geom_decay_mag:.3f} σ_T_cap={_phase2_prop_mag:.3f} "
+                    f"→ {next_mag:.3f}  "
+                    f"(σ_T={sigma_T:.2f}°C vs phase-2 baseline "
+                    f"{_hybrid_phase2_baseline_sigma_T:.2f}°C)",
+                    flush=True,
+                )
+            else:
+                # Standard magnitude schedule (proportional phase or pure OC-TO mode)
+                # Pure geometric decay only — no sigma_T_cap to prevent contrast collapse
+                # after a strong iter-1 correction (the cap was permanently locking magnitude
+                # at ~37% of initial because sigma_T/iter0_sigma_T < 0.4 after iter-1).
+                next_mag = max(min_magnitude, current_mag * magnitude_decay)
+                print(
+                    f"  [fgm_iterate] mag schedule: geom_decay → next_mag={next_mag:.3f}"
+                    f" (current={current_mag:.3f} × decay={magnitude_decay:.3f},"
+                    f" σ_T={sigma_T:.2f}°C)",
+                    flush=True,
+                )
+
+            # ── Effective correction parameters ───────────────────────────────
+            # Hybrid phase 2 forces OC-TO with its own move_limit and sensitivity_sigma.
+            # Non-hybrid: use the explicit use_delta_correction flag.
+            _in_octo_phase   = use_delta_correction or _hybrid_phase2_active
+            _eff_move_limit  = (
+                hybrid_phase2_move_limit        if _hybrid_phase2_active else
+                (move_limit                     if use_delta_correction  else 0.0)
+            )
+            _eff_sens_sigma  = (
+                hybrid_phase2_sensitivity_sigma if _hybrid_phase2_active else
+                (sensitivity_filter_sigma       if use_delta_correction  else 0.0)
+            )
+
+            try:
+                _has_prior = not early_stop_reason and current_fgm_npz is not None
+                # Consume the pending perturbation amplitude (set by stagnation detector
+                # in the PREVIOUS iteration; reset to 0 immediately so only one iter is
+                # perturbed per stagnation event).
+                _this_perturbation = _next_perturbation_amp
+                _next_perturbation_amp = 0.0
+                if _this_perturbation > 0.0:
+                    # Give the new seed post_perturbation_grace iters before
+                    # regression-abort tracking resumes.
+                    consecutive_bad       = 0
+                    _post_perturb_grace   = post_perturbation_grace
+                    print(
+                        f"  [fgm_iterate] Applying stochastic perturbation "
+                        f"amplitude={_this_perturbation:.3f} to escape local minimum; "
+                        f"regression abort suspended for {post_perturbation_grace} iters",
+                        flush=True,
+                    )
+                next_fgm = generate_fgm(
+                    run_output_dir      = iter_dir,
+                    bpp                 = bpp,
+                    proxy_field         = proxy_field,
+                    invert              = invert,
+                    magnitude           = next_mag,
+                    baseline_saturation = baseline_saturation,
+                    dead_band           = dead_band,
+                    emit_formats        = ("npz", "png"),
+                    # OC-TO integral mode: accumulate corrections with move limits and
+                    # sensitivity filter (adaptive normalization, no fixed ref bounds).
+                    # In hybrid mode, _in_octo_phase is True from phase-2 onwards.
+                    use_delta_correction     = _in_octo_phase,
+                    ref_lo                   = None,   # always adaptive normalization
+                    ref_hi                   = None,
+                    prior_sat_npz            = current_fgm_npz if _has_prior else None,
+                    move_limit               = _eff_move_limit,
+                    sensitivity_filter_sigma = _eff_sens_sigma,
+                    # Stochastic perturbation for local-minimum escape
+                    perturbation_amplitude   = _this_perturbation,
+                    # Momentum blending (proportional mode only; bypassed in OC-TO).
+                    momentum = (0.0 if _in_octo_phase
+                                else (fgm_momentum if _has_prior else 0.0)),
+                    # Cold-zone overprinting
+                    overprint_cold_mm     = overprint_cold_mm,
+                    overprint_cold_thresh = overprint_cold_thresh,
+                )
+                # Advance current_fgm_npz only when continuing (not aborting, not final iter)
+                if i < fgm_iters and not early_stop_reason:
+                    current_mag     = next_mag
+                    current_fgm_npz = Path(next_fgm["npz_path"])
+                # Update this iter's log entry with its OUTPUT FGM path + PNG
+                if convergence_log:
+                    convergence_log[-1]["fgm_npz"] = str(
+                        Path(next_fgm["npz_path"]).relative_to(ROOT))
+                    convergence_log[-1]["fgm_png"] = (
+                        str(Path(next_fgm.get("png_path", "")).relative_to(ROOT))
+                        if next_fgm.get("png_path") else None
+                    )
+                    # Record which correction algorithm generated the FGM OUTPUT
+                    # by this iteration (i.e., what seeds the NEXT iteration):
+                    # phase-2 = OC-TO (just switched or already active), else proportional.
+                    convergence_log[-1]["fgm_algo"] = (
+                        "OC-TO"        if (_switching_to_octo or _hybrid_phase2_active) else
+                        "proportional"
+                    )
+                # Patch convergence.json on disk with the updated FGM paths
+                if (parent_dir / "convergence.json").exists():
+                    try:
+                        _cd = json.loads(
+                            (parent_dir / "convergence.json").read_text(encoding="utf-8"))
+                        for entry in _cd.get("iterations", []):
+                            if entry.get("iter") == abs_iter:
+                                entry["fgm_npz"] = convergence_log[-1]["fgm_npz"]
+                                entry["fgm_png"] = convergence_log[-1]["fgm_png"]
+                                break
+                        (parent_dir / "convergence.json").write_text(
+                            json.dumps(_cd, indent=2), encoding="utf-8")
+                    except Exception as _patch_exc:
+                        _write_job_log(
+                            Path(job["log_path"]),
+                            f"[fgm_iterate] WARNING: could not patch convergence.json: {_patch_exc}",
+                        )
+            except Exception as _fgm_exc:
+                _write_job_log(
+                    Path(job["log_path"]),
+                    f"[fgm_iterate] WARNING: FGM generation failed for iter-{abs_iter}: {_fgm_exc}",
+                )
+        else:
+            _write_job_log(
+                Path(job["log_path"]),
+                f"[fgm_iterate] WARNING: fields.npz not in iter-{i} output; skipping FGM generation",
+            )
+
+        # ── Abort break ───────────────────────────────────────────────────────
+        if early_stop_reason:
+            _set_job_progress(
+                job_id,
+                progress_label=f"FGM early stop — {early_stop_reason}",
+            )
+            break
+
+        prev_sigma_T = sigma_T
+        prev_score   = this_score   # for progress label display only (abort uses best_score_ever)
+        prev_regime  = this_regime  # track regime transitions
+        proxy_iter_count[proxy_field] = proxy_iter_count.get(proxy_field, 0) + 1
+
+        # ── General stagnation tracking (for perturbation, applies in all modes) ─
+        # Update BEFORE proxy-switching so the counter captures true σ_T stagnation.
+        if sigma_T < _gen_best_sigma_T - stagnation_eps:
+            _gen_best_sigma_T       = sigma_T
+            _gen_stagnation_counter = 0
+        else:
+            _gen_stagnation_counter += 1
+
+        # When perturbation is enabled and we've been stuck, flag the NEXT FGM
+        # generation to add stochastic noise (mean-zero, so volume-neutral).
+        if (perturbation_amplitude > 0.0
+                and perturbation_on_stagnation
+                and _gen_stagnation_counter >= stagnation_window):
+            _next_perturbation_amp = perturbation_amplitude
+            _gen_stagnation_counter = 0          # reset so we don't perturb every iter
+            print(
+                f"  [fgm_iterate] STAGNATION detected — will perturb next FGM "
+                f"with amplitude={_next_perturbation_amp:.3f} "
+                f"(σ_T stagnant at ~{sigma_T:.1f}°C)",
+                flush=True,
+            )
+
+        # ── Stagnation detection & proxy switching (thorough / regime_adaptive) ─
+        # Check whether the current proxy is still making progress.  If σ_T has
+        # not improved by at least stagnation_eps°C for stagnation_window consecutive
+        # iterations, try switching to the next proxy in the schedule.
+        if thorough or regime_adaptive:
+            # Regime-adaptive override: use Qrf during active sintering, T_phi90 when
+            # near-final.  This takes priority over the schedule-based rotation when
+            # regime_adaptive=True.
+            if regime_adaptive:
+                if this_regime == "active":
+                    desired_proxy = "Qrf"
+                else:
+                    desired_proxy = "T_phi90"
+                if desired_proxy != proxy_field:
+                    old_proxy = proxy_field
+                    proxy_field = desired_proxy
+                    stagnation_counter = 0
+                    best_sigma_T_this_proxy = sigma_T
+                    current_mag = min(current_mag * 1.5, magnitude)  # small boost on switch
+                    switch_note = (
+                        f"regime-adaptive switch {old_proxy}→{proxy_field} "
+                        f"at iter-{abs_iter} (regime={this_regime}, ρ̄={this_rho:.3f})"
+                    )
+                    proxy_switch_log.append({"iter": abs_iter, "from": old_proxy,
+                                             "to": proxy_field, "reason": "regime"})
+                    convergence_log[-1]["proxy_switch"] = switch_note
+                    print(f"  [fgm_iterate] {switch_note}", flush=True)
+
+            elif thorough:  # schedule-based rotation
+                improved = sigma_T < best_sigma_T_this_proxy - stagnation_eps
+                if improved:
+                    best_sigma_T_this_proxy = sigma_T
+                    stagnation_counter = 0
+                else:
+                    stagnation_counter += 1
+
+                if (stagnation_counter >= stagnation_window
+                        and proxy_schedule_idx < len(proxy_schedule) - 1):
+                    proxy_schedule_idx += 1
+                    old_proxy  = proxy_field
+                    proxy_field = proxy_schedule[proxy_schedule_idx]
+                    stagnation_counter = 0
+                    best_sigma_T_this_proxy = sigma_T
+                    # Reset magnitude to a moderate value on proxy switch so the new
+                    # proxy gets a fair chance with reasonable correction amplitude.
+                    current_mag = min(current_mag * 1.5, magnitude * severity_scale)
+                    switch_note = (
+                        f"stagnation switch {old_proxy}→{proxy_field} "
+                        f"at iter-{abs_iter} (σ_T unchanged for "
+                        f"{stagnation_window} iters)"
+                    )
+                    proxy_switch_log.append({"iter": abs_iter, "from": old_proxy,
+                                             "to": proxy_field, "reason": "stagnation"})
+                    convergence_log[-1]["proxy_switch"] = switch_note
+                    print(f"  [fgm_iterate] {switch_note}", flush=True)
+                    # Also update the current-proxy label in the progress bar
+                    _set_job_progress(
+                        job_id,
+                        progress_label=(f"FGM iter-{abs_iter}: switched proxy "
+                                        f"{old_proxy}→{proxy_field} (stagnation escape)"),
+                    )
+
+        # ── Convergence check 1: near-final regime — σ_T below threshold ─────
+        if sigma_T < conv_threshold and this_regime == "near-final":
+            conv_data["converged"] = True
+            (parent_dir / "convergence.json").write_text(
+                json.dumps(conv_data, indent=2), encoding="utf-8"
+            )
+            _set_job_progress(
+                job_id,
+                progress_label=(
+                    f"Converged after {abs_iter} FGM iteration(s) — "
+                    f"σ_T={sigma_T:.1f}°C < {conv_threshold}°C threshold"
+                ),
+            )
+            break
+
+        # ── Convergence check 2: active regime — ρ̄ plateau ──────────────────
+        # If the FGM can no longer improve density (|Δρ̄| < RHO_PLATEAU_DELTA for
+        # 2 consecutive iters) AND bleed is zero, the FGM has done all it can at
+        # this operating point.  The part needs longer exposure to reach near-final.
+        rho_delta = abs(this_rho - prev_rho)
+        if this_regime == "active" and rho_delta < RHO_PLATEAU_DELTA and this_bleed < 0.002:
+            consecutive_plateau += 1
+        else:
+            consecutive_plateau = 0
+
+        if consecutive_plateau >= 2:
+            plateau_msg = (
+                f"ρ̄ plateau in active regime: |Δρ̄|={rho_delta:.4f} < {RHO_PLATEAU_DELTA} "
+                f"for {consecutive_plateau} consecutive iters (ρ̄={this_rho:.3f}). "
+                f"FGM has maximally redistributed energy at this exposure time. "
+                f"To reach near-final regime (ρ̄≥0.82), increase exposure time."
+            )
+            conv_data["converged"]         = True
+            conv_data["convergence_type"]  = "rho_plateau"
+            conv_data["convergence_note"]  = plateau_msg
+            (parent_dir / "convergence.json").write_text(
+                json.dumps(conv_data, indent=2), encoding="utf-8"
+            )
+            _set_job_progress(
+                job_id,
+                progress_label=f"Converged (ρ̄ plateau) after {abs_iter} iters — {plateau_msg[:80]}…",
+            )
+            break
+
+        prev_rho = this_rho
+
+    best_entry = _select_best_iter(convergence_log, use_optimizer, DAMAGE_T_C)
+    # Recompute true min_sigma_T across all finished iterations (catches last iter too)
+    for _e in convergence_log:
+        _st = _e.get("sigma_T")
+        if isinstance(_st, (int, float)) and _st < _min_sigma_T_ever:
+            _min_sigma_T_ever = _st
+            _min_sigma_T_iter = _e["iter"]
+
+    # Write final convergence.json with all metadata
+    _final_conv: dict[str, Any] = {
+        k: v for k, v in {
+            **conv_data,
+            "n_iterations_run": abs_iter + 1 if "abs_iter" in dir() else 1,
+            "best_iter":         best_entry["iter"],
+            "best_score":        best_entry.get("score"),
+            "best_sigma_T":      best_entry.get("sigma_T"),
+            "best_score_regime": best_entry.get("score_regime", "near-final"),
+            "min_sigma_T":       round(_min_sigma_T_ever, 3),
+            "min_sigma_T_iter":  _min_sigma_T_iter,
+        }.items()
+    }
+    if (parent_dir / "convergence.json").exists():
+        try:
+            _existing = json.loads((parent_dir / "convergence.json").read_text(encoding="utf-8"))
+            _existing.update(_final_conv)
+            (parent_dir / "convergence.json").write_text(
+                json.dumps(_existing, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+    _set_job_progress(
+        job_id, completed_runs=total_runs, progress_pct=100.0,
+        progress_label=(
+            f"FGM optimize complete — min σ_T={_min_sigma_T_ever:.1f}°C at iter-{_min_sigma_T_iter} "
+            f"(baseline {iter0_sigma_T:.1f}°C, {100*(1-_min_sigma_T_ever/iter0_sigma_T):.0f}% reduction)"
+        ),
+    )
 
 
 def _launch_sweep_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
@@ -1981,6 +3690,360 @@ def _launch_antennae_size_sweep_mode(payload: dict[str, Any], job: dict[str, Any
         )
 
 
+def _launch_fgm_gradient_descent(payload: dict[str, Any], job: dict[str, Any]) -> None:
+    """Finite-difference gradient descent for FGM optimization.
+
+    Starts from an existing FGM result (typically proportional iter-1 at σ_T≈7°C),
+    estimates the true sensitivity dσ_T/ds_k for K spatial zones by running K small
+    perturbation simulations, then takes a gradient step to improve σ_T below the
+    proportional fixed point.
+
+    Required payload keys:
+        source_fgm_dir  — path to existing iter dir (relative to outputs_eqs/, has
+                          fields.npz and a .npz FGM file in it).
+        output_name     — base name for this run's output directory.
+        shape           — part shape (circle, square, …).
+
+    Optional keys:
+        n_zones         (default 6)   — number of spatial zones.
+        zone_type       (default "radial") — "radial" or "grid".
+        perturbation_delta (default 0.10) — sat perturbation per zone (0.05–0.15).
+        step_size       (default 0.8)  — gradient step size α.
+        n_gradient_steps (default 3)  — outer iterations.
+        bpp             (default 4).
+    """
+    from fgm_generator import (
+        define_spatial_zones,
+        apply_fd_gradient_step,
+        save_fgm_from_sat_map,
+    )
+
+    job_id    = job["id"]
+    shape     = str(payload.get("shape", "")).strip()
+    if not shape or shape not in SUPPORTED_SHAPES:
+        raise ValueError(f"invalid shape: {shape!r}")
+
+    output_name = str(payload.get("output_name", "")).strip()
+    if not _is_valid_output_name(output_name):
+        raise ValueError("output_name must use only letters, numbers, '_' or '-'")
+
+    # ── Source FGM dir ────────────────────────────────────────────────────────
+    source_rel = str(payload.get("source_fgm_dir", "")).strip()
+    if not source_rel:
+        raise ValueError("source_fgm_dir is required")
+    source_dir = (OUTPUTS_DIR / source_rel) if not Path(source_rel).is_absolute() else Path(source_rel)
+    if not source_dir.exists():
+        source_dir = ROOT / source_rel
+    if not source_dir.exists():
+        raise ValueError(f"source_fgm_dir not found: {source_rel!r}")
+    if not (source_dir / "fields.npz").exists():
+        raise ValueError(f"source_fgm_dir has no fields.npz: {source_dir}")
+
+    # ── Parameters ────────────────────────────────────────────────────────────
+    n_zones             = int(  payload.get("n_zones",             6))
+    zone_type           = str(  payload.get("zone_type",           "radial")).strip()
+    perturbation_delta  = float(payload.get("perturbation_delta",  0.10))
+    step_size           = float(payload.get("step_size",           0.80))
+    n_gradient_steps    = int(  payload.get("n_gradient_steps",    3))
+    bpp                 = int(  payload.get("bpp",                 4))
+    exposure_min        = float(payload.get("exposure_minutes",    8.0))
+
+    safe_shape = shape.replace(" ", "_").lower()
+    parent_dir = OUTPUTS_DIR / "runs" / safe_shape / "fgm_iterate" / output_name
+    parent_dir.mkdir(parents=True, exist_ok=True)
+    _register_job_output(job, parent_dir)
+
+    # ── Load base config from source dir's parent chain ───────────────────────
+    # Walk up to find used_config.yaml or convergence.json
+    base_cfg: dict[str, Any] | None = None
+    _search = source_dir
+    for _ in range(6):
+        if (_search / "used_config.yaml").exists():
+            with open(_search / "used_config.yaml", encoding="utf-8") as fh:
+                base_cfg = yaml.safe_load(fh)
+            break
+        _search = _search.parent
+    if base_cfg is None:
+        raise ValueError(f"could not find used_config.yaml near {source_dir}")
+
+    # ── Load base FGM sat_map ─────────────────────────────────────────────────
+    base_fgm_npz: Path | None = None
+    for candidate in sorted(source_dir.glob("fgm_*.npz")):
+        if "_preview" not in candidate.name:
+            base_fgm_npz = candidate
+            break
+    if base_fgm_npz is None:
+        raise ValueError(f"no fgm_*.npz found in {source_dir}")
+
+    base_data    = np.load(base_fgm_npz, allow_pickle=True)
+    sat_map_base = base_data["sat_map"].astype(np.float32)   # (ny_sim, nx_sim)
+
+    # ── Load part_mask from source fields.npz ─────────────────────────────────
+    src_fields    = np.load(source_dir / "fields.npz")
+    part_mask     = src_fields["part_mask"].astype(bool)
+    x_mm          = src_fields["x"] * 1000.0
+    y_mm          = src_fields["y"] * 1000.0
+
+    # ── Read base σ_T ─────────────────────────────────────────────────────────
+    base_metrics  = _iter_metrics_from_dir(source_dir)
+    sigma_T_base  = base_metrics.get("sigma_T", 999.0)
+
+    print(
+        f"  [fgm_gd] Starting FD gradient descent from {source_dir.name}  "
+        f"σ_T_base={sigma_T_base:.3f}°C  "
+        f"n_zones={n_zones}  zone_type={zone_type}  Δ={perturbation_delta}  "
+        f"step={step_size}  n_iters={n_gradient_steps}",
+        flush=True,
+    )
+
+    # ── Define spatial zones ──────────────────────────────────────────────────
+    zone_masks = define_spatial_zones(part_mask, n_zones=n_zones, zone_type=zone_type)
+    n_zones_actual = len(zone_masks)
+    print(f"  [fgm_gd] Defined {n_zones_actual} zones:", flush=True)
+    for k, zm in enumerate(zone_masks):
+        print(f"    zone-{k}: {zm.sum()} pixels", flush=True)
+
+    # Write base FGM into parent_dir for reference
+    base_copy_npz = parent_dir / f"fgm_gd_base.npz"
+    import shutil
+    shutil.copy2(base_fgm_npz, base_copy_npz)
+
+    convergence_log: list[dict[str, Any]] = [{
+        "iter": "base",
+        "output_dir": source_dir.relative_to(OUTPUTS_DIR).as_posix(),
+        "sigma_T": sigma_T_base,
+        "fgm_npz": str(base_fgm_npz.relative_to(ROOT)),
+        "note": "starting point (proportional iter-1)",
+        **base_metrics,
+    }]
+    best_sigma_T   = sigma_T_base
+    best_sat_map   = sat_map_base.copy()
+    current_sat    = sat_map_base.copy()
+
+    total_sims = n_gradient_steps * (n_zones_actual + 1)
+    completed  = 0
+
+    _set_job_progress(
+        job_id,
+        total_runs=total_sims,
+        completed_runs=0,
+        progress_label=f"FD-GD | base σ_T={sigma_T_base:.2f}°C | {n_zones_actual} zones × {n_gradient_steps} steps",
+    )
+
+    for gd_step in range(n_gradient_steps):
+        step_label = f"GD step {gd_step + 1}/{n_gradient_steps}"
+        print(f"\n  [fgm_gd] === {step_label} ===", flush=True)
+
+        # ── K perturbation simulations ────────────────────────────────────────
+        zone_sigma_T: list[float] = []
+        for k, zone_mask in enumerate(zone_masks):
+            pert_dir = parent_dir / f"gd{gd_step}_zone{k}"
+            pert_dir.mkdir(parents=True, exist_ok=True)
+            _register_job_output(job, pert_dir)
+
+            # Create perturbed sat_map
+            sat_pert = current_sat.copy()
+            sat_pert[zone_mask] = np.clip(sat_pert[zone_mask] + perturbation_delta, 0.0, 1.0)
+            sat_pert[~part_mask] = 0.0
+            pert_npz = pert_dir / f"fgm_pert_zone{k}.npz"
+            save_result = save_fgm_from_sat_map(
+                sat_pert, bpp=bpp, output_path=pert_npz,
+                x_mm=x_mm, y_mm=y_mm, part_mask=part_mask, emit_png=False,
+            )
+            pert_npz = Path(save_result["npz_path"])
+
+            # Build config
+            pert_cfg = dict(base_cfg)
+            pert_cfg["fgm_feedback"] = {
+                "enabled":             True,
+                "saturation_map_npz":  str(pert_npz),
+                "magnitude":           1.0,
+                "baseline_saturation": 0.5,
+            }
+            _set_exposure_minutes(pert_cfg, exposure_min)
+            cfg_path = GUI_CONFIG_DIR / f"fgm_gd_{job_id}_s{gd_step}_z{k}.yaml"
+            with open(cfg_path, "w", encoding="utf-8") as fh:
+                yaml.dump(pert_cfg, fh, default_flow_style=False, allow_unicode=True)
+
+            # Run simulation
+            cmd = [sys.executable, "rfam_eqs_coupled.py",
+                   "--config", str(cfg_path), "--output-dir", str(pert_dir)]
+            completed += 1
+            _set_job_progress(
+                job_id, completed_runs=completed, total_runs=total_sims,
+                progress_label=f"{step_label} | perturbing zone {k+1}/{n_zones_actual}",
+            )
+            rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id)
+            if rc != 0:
+                raise RuntimeError(f"Perturbation sim gd{gd_step}_zone{k} failed (rc={rc})")
+
+            m = _iter_metrics_from_dir(pert_dir)
+            st = m.get("sigma_T", 999.0)
+            zone_sigma_T.append(st)
+            print(
+                f"  [fgm_gd] zone-{k} pert: σ_T={st:.3f}°C  "
+                f"(base={sigma_T_base:.3f}°C  Δ={st - sigma_T_base:+.3f}°C)",
+                flush=True,
+            )
+
+        # ── Compute gradients ─────────────────────────────────────────────────
+        gradients = [(st - sigma_T_base) / perturbation_delta for st in zone_sigma_T]
+        print(
+            f"  [fgm_gd] Gradients: {[f'{g:+.3f}' for g in gradients]}  "
+            f"(dσ_T/dsat per zone)",
+            flush=True,
+        )
+
+        # ── Apply gradient step ───────────────────────────────────────────────
+        eval_dir = parent_dir / f"gd{gd_step}_eval"
+        eval_dir.mkdir(parents=True, exist_ok=True)
+        _register_job_output(job, eval_dir)
+
+        eval_npz = eval_dir / "fgm_gd_step.npz"
+        apply_fd_gradient_step(
+            sat_map=current_sat,
+            zone_masks=zone_masks,
+            zone_gradients=gradients,
+            step_size=step_size,
+            part_mask=part_mask,
+            bpp=bpp,
+            output_path=eval_npz,
+            emit_png=True,
+        )
+        eval_npz = Path(str(eval_npz))
+
+        # Build eval config
+        eval_cfg = dict(base_cfg)
+        eval_cfg["fgm_feedback"] = {
+            "enabled":             True,
+            "saturation_map_npz":  str(eval_npz),
+            "magnitude":           1.0,
+            "baseline_saturation": 0.5,
+        }
+        _set_exposure_minutes(eval_cfg, exposure_min)
+        cfg_path = GUI_CONFIG_DIR / f"fgm_gd_{job_id}_s{gd_step}_eval.yaml"
+        with open(cfg_path, "w", encoding="utf-8") as fh:
+            yaml.dump(eval_cfg, fh, default_flow_style=False, allow_unicode=True)
+
+        # Run evaluation simulation
+        cmd = [sys.executable, "rfam_eqs_coupled.py",
+               "--config", str(cfg_path), "--output-dir", str(eval_dir)]
+        completed += 1
+        _set_job_progress(
+            job_id, completed_runs=completed, total_runs=total_sims,
+            progress_label=f"{step_label} | evaluating gradient step",
+        )
+        rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id)
+        if rc != 0:
+            raise RuntimeError(f"Eval sim gd{gd_step}_eval failed (rc={rc})")
+
+        eval_metrics = _iter_metrics_from_dir(eval_dir)
+        sigma_T_new  = eval_metrics.get("sigma_T", 999.0)
+        improved     = sigma_T_new < sigma_T_base
+
+        print(
+            f"  [fgm_gd] {step_label} eval: σ_T={sigma_T_new:.3f}°C  "
+            f"(was {sigma_T_base:.3f}°C  Δ={sigma_T_new - sigma_T_base:+.3f}°C  "
+            f"{'IMPROVED ✓' if improved else 'DEGRADED ✗'})",
+            flush=True,
+        )
+
+        convergence_log.append({
+            "iter": gd_step + 1,
+            "output_dir": eval_dir.relative_to(OUTPUTS_DIR).as_posix(),
+            "sigma_T": sigma_T_new,
+            "sigma_T_base_this_step": sigma_T_base,
+            "zone_sigma_T_perturbed": zone_sigma_T,
+            "zone_gradients": gradients,
+            "step_size": step_size,
+            "improved": improved,
+            "fgm_npz": str(eval_npz.relative_to(ROOT)),
+            **eval_metrics,
+        })
+
+        if improved:
+            # Accept and update for next step
+            best_sigma_T  = sigma_T_new
+            best_sat_map  = np.load(eval_npz)["sat_map"].astype(np.float32)
+            current_sat   = best_sat_map.copy()
+            sigma_T_base  = sigma_T_new
+        else:
+            # Halve step size and retry direction next iteration
+            step_size *= 0.5
+            print(
+                f"  [fgm_gd] No improvement → halving step_size to {step_size:.3f} for next step",
+                flush=True,
+            )
+            # Keep current_sat unchanged (don't accept the degraded step)
+
+        # Write convergence.json incrementally
+        conv_data: dict[str, Any] = {
+            "source_fgm_dir":    source_rel,
+            "shape":             shape,
+            "n_zones":           n_zones_actual,
+            "zone_type":         zone_type,
+            "perturbation_delta": perturbation_delta,
+            "step_size_initial": float(payload.get("step_size", 0.80)),
+            "bpp":               bpp,
+            "n_gradient_steps":  n_gradient_steps,
+            "iterations":        convergence_log,
+            "best_sigma_T":      best_sigma_T,
+            "best_step":         (max(i for i, e in enumerate(convergence_log)
+                                     if e.get("sigma_T", 999) == best_sigma_T)
+                                  if convergence_log else 0),
+        }
+        (parent_dir / "convergence.json").write_text(
+            json.dumps(conv_data, indent=2), encoding="utf-8"
+        )
+
+    _set_job_progress(
+        job_id,
+        progress_pct=100.0,
+        progress_label=f"FD-GD done | best σ_T={best_sigma_T:.2f}°C (base={float(payload.get('base_sigma_T', sigma_T_base)):.2f}°C)",
+    )
+
+
+def _iter_metrics_from_dir(it_dir: Path) -> dict[str, Any]:
+    """Thin wrapper: compute iteration metrics from a directory.
+    Needed because _iter_metrics is defined inside _launch_fgm_iterate_mode.
+    """
+    metrics: dict[str, Any] = {}
+    T_AMBIENT_C = 20.0
+    DAMAGE_T_C  = 300.0
+    SEL_TARGET  = 2.0
+    melt_ref_c  = 186.0
+    sfile = it_dir / "summary.json"
+    if sfile.exists():
+        try:
+            s = json.loads(sfile.read_text(encoding="utf-8"))
+            metrics["frac_melt"]    = float(s.get("frac_part_ge_melt_ref", 0.0))
+            metrics["mean_rho"]     = float(s.get("mean_rho_rel_part_final", 0.0))
+            metrics["T_mean_c"]     = float(s.get("mean_T_part_final_c", 0.0))
+            metrics["T_max_c"]      = float(s.get("max_T_part_final_c", 0.0))
+            melt_ref_c              = float(s.get("melt_reference_c", melt_ref_c))
+        except Exception:
+            pass
+    ffile = it_dir / "fields.npz"
+    if ffile.exists():
+        try:
+            f      = np.load(ffile)
+            mask   = f["part_mask"].astype(bool)
+            T_in   = f["T"][mask]
+            T_out  = f["T"][~mask]
+            rho_in = f["rho_rel"][mask]
+            metrics["sigma_T"]   = round(float(np.std(T_in)),   3)
+            metrics["sigma_rho"] = round(float(np.std(rho_in)), 4)
+            metrics["dT_c"]      = round(float(T_in.max() - T_in.mean()), 3)
+            dT_in  = float(T_in.mean())  - T_AMBIENT_C
+            dT_out = float(T_out.mean()) - T_AMBIENT_C
+            metrics["thermal_selectivity"] = round(dT_in / max(dT_out, 0.1), 3)
+            frac_bleed = float((T_out >= melt_ref_c).sum()) / max(len(T_out), 1)
+            metrics["frac_bleed"] = round(frac_bleed, 4)
+        except Exception:
+            pass
+    return metrics
+
+
 def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
     job = JOBS[job_id]
     try:
@@ -1995,6 +4058,12 @@ def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
             _launch_sweep_mode(payload, job)
         elif mode == "shell_sweep":
             _launch_shell_sweep_mode(payload, job)
+        elif mode == "fgm_resimulate":
+            _launch_fgm_resimulate_mode(payload, job)
+        elif mode == "fgm_iterate":
+            _launch_fgm_iterate_mode(payload, job)
+        elif mode == "fgm_gradient_descent":
+            _launch_fgm_gradient_descent(payload, job)
         else:
             _launch_single_mode(payload, job)
         _refresh_job_artifacts(job)
@@ -2146,6 +4215,8 @@ def _get_run_type(path: Path) -> str:
             detected_rt = "placement_optimizer"
         elif (path / "turntable_density.gif").exists() or (path / "turntable_thermal.gif").exists():
             detected_rt = "turntable"
+        elif (path / "convergence.json").exists():
+            detected_rt = "fgm_iterate"
         elif (path / "shell_sweep_summary.json").exists():
             detected_rt = "shell_sweep"
         elif (path / "optimizer_report.png").exists():
@@ -2888,7 +4959,8 @@ def _collect_run_cards() -> list[dict[str, Any]]:
             continue
         has_summary = (p / "summary.json").exists()
         has_media = any(p.glob("*.png")) or any(p.glob("*.gif")) or any(p.glob("*.svg"))
-        if not (has_summary or has_media):
+        has_convergence = (p / "convergence.json").exists()
+        if not (has_summary or has_media or has_convergence):
             continue
 
         rel = p.relative_to(OUTPUTS_DIR).as_posix()
@@ -2899,6 +4971,10 @@ def _collect_run_cards() -> list[dict[str, Any]]:
             except Exception:
                 summary = {}
         images = _collect_images_recursive(p)
+        try:
+            disk_bytes = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+        except Exception:
+            disk_bytes = 0
         hero = _preferred_images(p, limit=3)
         if rel.startswith("runs/"):
             toks = rel.split("/")
@@ -2908,6 +4984,33 @@ def _collect_run_cards() -> list[dict[str, Any]]:
         manifest = _load_or_build_manifest(p)
         run_type = str(manifest.get("run_type", _get_run_type(p)))
         caps = [str(v) for v in manifest.get("backfill_capabilities", []) if str(v)]
+
+        # For fgm_iterate runs, attach best-iteration metrics for richer card display.
+        fgm_best: dict[str, Any] = {}
+        if run_type == "fgm_iterate" and has_convergence:
+            try:
+                _cd = json.loads((p / "convergence.json").read_text(encoding="utf-8"))
+                _bi = int(_cd.get("best_iter", -1))
+                _iters = _cd.get("iterations", [])
+                _best = next((it for it in _iters if int(it.get("iter", -99)) == _bi), None)
+                if _best:
+                    fgm_best = {
+                        "best_iter":    _bi,
+                        "n_iters":      len(_iters),
+                        "sigma_T":      _best.get("sigma_T"),
+                        "sigma_rho":    _best.get("sigma_rho"),
+                        "mean_rho":     _best.get("mean_rho"),
+                        "frac_melt":    _best.get("frac_melt"),
+                        "frac_bleed":   _best.get("frac_bleed"),
+                        "score":        _best.get("score"),
+                        "score_regime": _best.get("score_regime"),
+                        "converged":    bool(_cd.get("converged", False)),
+                        "aborted":      bool(_cd.get("aborted", False)),
+                        "exposure_minutes": float(_cd.get("exposure_minutes", 0)),
+                    }
+            except Exception:
+                fgm_best = {}
+
         cards.append({
             "name": rel,
             "group": group,
@@ -2922,6 +5025,8 @@ def _collect_run_cards() -> list[dict[str, Any]]:
             "hero_images": hero,
             "image_count": len(images),
             "images": images,
+            "fgm_best": fgm_best,
+            "disk_bytes": disk_bytes,
         })
     return cards
 
@@ -3058,14 +5163,119 @@ def _experimental_model_info() -> dict[str, Any]:
     }
 
 
+# ── HEATR-3D integration ──────────────────────────────────────────────────────
+# The 3-D solver (heatr3d.py) must run under a numpy<2.2 interpreter (system numpy
+# 2.2 + py3.14 has a buffer-elision bug). We run heatr3d_job.py as a SUBPROCESS
+# under a dedicated venv; the GUI just spawns/monitors it.
+import base64 as _b64
+
+_H3D_OUT = OUTPUTS_DIR / "_heatr3d"
+_H3D_JOBS: dict[str, dict] = {}
+
+
+def _h3d_python() -> str:
+    """Resolve the interpreter for heatr3d (prefer the local venv)."""
+    cands = [
+        ROOT / ".venv-heatr3d" / "bin" / "python",
+        Path.home() / "GaTech Dropbox" / "Matthew McCoy" / "mattmccoy-research" /
+        "research" / "dissertation_materials" / "analysis-3dfgm" / ".venv312" / "bin" / "python",
+    ]
+    for c in cands:
+        if c.exists():
+            return str(c)
+    return sys.executable
+
+
+def _h3d_write_config(payload: dict) -> Path:
+    out = _H3D_OUT / uuid.uuid4().hex[:12]
+    out.mkdir(parents=True, exist_ok=True)
+    keys = ("shape", "diam", "zspan", "n", "exposure_s", "densify", "stop_mean_rho", "fgm", "magnitude")
+    cfg = {k: payload[k] for k in keys if payload.get(k) is not None}
+    if payload.get("src") == "stl" and payload.get("stl_b64"):
+        stl = out / "input.stl"
+        stl.write_bytes(_b64.b64decode(payload["stl_b64"]))
+        cfg["stl"] = str(stl)
+        cfg.pop("shape", None)
+    cfg["out_dir"] = str(out)
+    (out / "config.json").write_text(json.dumps(cfg))
+    return out
+
+
+def _h3d_preview(payload: dict) -> dict:
+    out = _h3d_write_config(payload)
+    proc = subprocess.run(
+        [_h3d_python(), str(ROOT / "heatr3d_job.py"), str(out / "config.json"), "--preview"],
+        cwd=str(ROOT), capture_output=True, text=True, timeout=120)
+    geo = out / "geometry.json"
+    if not geo.exists():
+        raise RuntimeError((proc.stderr or proc.stdout or "preview failed")[-800:])
+    return json.loads(geo.read_text())
+
+
+def _h3d_spawn(payload: dict) -> str:
+    out = _h3d_write_config(payload)
+    jid = out.name
+    logf = open(out / "job.log", "w")
+    proc = subprocess.Popen(
+        [_h3d_python(), str(ROOT / "heatr3d_job.py"), str(out / "config.json")],
+        cwd=str(ROOT), stdout=logf, stderr=subprocess.STDOUT, text=True)
+    _H3D_JOBS[jid] = {"proc": proc, "out": out, "log": logf}
+    return jid
+
+
+def _h3d_status(jid: str) -> dict:
+    job = _H3D_JOBS.get(jid)
+    if not job:
+        # fall back to disk (survives server restart): a finished job has results.
+        disk = _H3D_OUT / jid
+        if (disk / "results.json").exists():
+            resp = {"progress": 100, "done": True,
+                    "results": json.loads((disk / "results.json").read_text())}
+            geo = disk / "geometry.json"
+            if geo.exists():
+                resp["geometry"] = json.loads(geo.read_text())
+            return resp
+        return {"done": True, "error": "unknown job"}
+    out = job["out"]
+    prog = 0
+    try:
+        for line in (out / "job.log").read_text().splitlines():
+            if line.startswith("PROGRESS"):
+                prog = int(float(line.split()[1]))
+    except Exception:
+        pass
+    rc = job["proc"].poll()
+    resp: dict = {"progress": prog, "done": rc is not None}
+    geo = out / "geometry.json"
+    if geo.exists():
+        try:
+            resp["geometry"] = json.loads(geo.read_text())
+        except Exception:
+            pass
+    if rc is not None:
+        res = out / "results.json"
+        if res.exists():
+            resp["results"] = json.loads(res.read_text())
+            resp["progress"] = 100
+        else:
+            try:
+                resp["error"] = (out / "job.log").read_text()[-800:]
+            except Exception:
+                resp["error"] = f"job exited rc={rc} with no results"
+    return resp
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "rfam-gui/0.2"
+    timeout = None   # disable per-connection idle timeout in BaseHTTPRequestHandler
 
     def _json(self, data: Any, status: int = 200) -> None:
         raw = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Keep-Alive", "timeout=65, max=10000")
         self.end_headers()
         self.wfile.write(raw)
 
@@ -3074,6 +5284,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Keep-Alive", "timeout=65, max=10000")
         self.end_headers()
         self.wfile.write(raw)
 
@@ -3090,8 +5302,24 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_static("theory.html")
         if path == "/examples" or path == "/examples.html":
             return self._serve_static("examples.html")
+        if path == "/heatr3d" or path == "/heatr3d.html":
+            return self._serve_static("heatr3d.html")
         if path.startswith("/static/"):
             return self._serve_static(path[len("/static/"):])
+        if path == "/api/ping":
+            return self._json({"ok": True, "ts": time.time()})
+
+        if path == "/api/heatr3d/status":
+            query = urlparse(self.path).query
+            jid = ""
+            for kv in query.split("&"):
+                if kv.startswith("id="):
+                    jid = kv[3:]
+            try:
+                return self._json(_h3d_status(jid))
+            except Exception as e:
+                return self._json({"done": True, "error": str(e)}, status=500)
+
         if path == "/api/meta":
             model_info = _experimental_model_info()
             return self._json({
@@ -3120,6 +5348,27 @@ class Handler(BaseHTTPRequestHandler):
                     jobs.append(out)
             for j in jobs:
                 _refresh_job_artifacts(j)
+                # Attach live convergence iteration data for fgm_iterate jobs so the
+                # job card can render a real-time convergence sparkline.
+                if j.get("mode") == "fgm_iterate" and j.get("status") in ("running", "paused", "completed"):
+                    _output_dirs = j.get("output_dirs", [])
+                    for _od in _output_dirs:
+                        _conv = (OUTPUTS_DIR / _od / "convergence.json").resolve()
+                        if not _conv.exists():
+                            # Try parent dir (the fgm_iterate parent, not an iter subdir)
+                            _conv = (OUTPUTS_DIR / Path(_od).parent / "convergence.json").resolve()
+                        if _conv.exists():
+                            try:
+                                _cd = json.loads(_conv.read_text(encoding="utf-8"))
+                                j["convergence_iters"] = [
+                                    {k: v for k, v in it.items()
+                                     if k in ("iter", "sigma_T", "mean_rho", "score",
+                                              "frac_bleed", "score_regime", "magnitude_used")}
+                                    for it in _cd.get("iterations", [])
+                                ]
+                                break
+                            except Exception:
+                                pass
             def _job_sort_key(j: dict[str, Any]) -> tuple[int, str]:
                 status = str(j.get("status", ""))
                 if status == "running":
@@ -3150,6 +5399,255 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(_collect_run_cards())
         if path == "/api/examples":
             return self._json(_examples_payload())
+        if path.startswith("/api/convergence/"):
+            # Return convergence.json enriched with per-iter FGM PNG as base64
+            rel = unquote(path[len("/api/convergence/"):])
+            conv_dir = (OUTPUTS_DIR / rel).resolve()
+            try:
+                conv_dir.relative_to(OUTPUTS_DIR)
+            except ValueError:
+                return self._json({"error": "path outside outputs"}, status=400)
+            conv_file = conv_dir / "convergence.json"
+            if not conv_file.exists():
+                return self._json({"error": "convergence.json not found"}, status=404)
+            try:
+                data = json.loads(conv_file.read_text(encoding="utf-8"))
+                # Enrich each iteration entry with FGM PNG base64 if available.
+                # Primary: use the stored fgm_png path from convergence.json.
+                # Fallback: scan the iter output_dir for any fgm_*.png file.
+                import base64 as _b64
+                for entry in data.get("iterations", []):
+                    png_path_obj: Path | None = None
+
+                    png_rel = entry.get("fgm_png")
+                    if png_rel:
+                        candidate = (ROOT / png_rel).resolve()
+                        if candidate.exists():
+                            png_path_obj = candidate
+
+                    # Fallback: look in the iter dir for any fgm_*.png
+                    if png_path_obj is None:
+                        out_dir_rel = entry.get("output_dir", "")
+                        if out_dir_rel:
+                            iter_dir = (OUTPUTS_DIR / out_dir_rel).resolve()
+                            if iter_dir.is_dir():
+                                candidates = sorted(iter_dir.glob("fgm_*.png"),
+                                                    key=lambda p: p.stat().st_mtime,
+                                                    reverse=True)
+                                if candidates:
+                                    png_path_obj = candidates[0]
+
+                    if png_path_obj is not None:
+                        try:
+                            entry["fgm_png_b64"] = _b64.b64encode(
+                                png_path_obj.read_bytes()
+                            ).decode()
+                        except Exception:
+                            pass
+                        # Also serve the Meteor-import PNG (inverted: black=max ink).
+                        # It lives alongside the preview PNG with the _meteor_import suffix.
+                        # Naming: fgm_..._preview.png → fgm_..._meteor_import.png
+                        meteor_candidate = Path(str(png_path_obj).replace(
+                            "_preview.png", "_meteor_import.png"
+                        ))
+                        if not meteor_candidate.exists():
+                            # Fallback: scan same directory for *_meteor_import.png
+                            _mdir = png_path_obj.parent
+                            _mc_list = sorted(_mdir.glob("fgm_*_meteor_import.png"),
+                                              key=lambda p: p.stat().st_mtime, reverse=True)
+                            if _mc_list:
+                                meteor_candidate = _mc_list[0]
+                        if meteor_candidate.exists():
+                            try:
+                                entry["fgm_meteor_png_b64"] = _b64.b64encode(
+                                    meteor_candidate.read_bytes()
+                                ).decode()
+                            except Exception:
+                                pass
+
+                    # Also serve thermal_fields_final.png from the iter output dir
+                    out_dir_rel2 = entry.get("output_dir", "")
+                    if out_dir_rel2:
+                        thermal_p = (OUTPUTS_DIR / out_dir_rel2 / "thermal_fields_final.png").resolve()
+                        if thermal_p.exists():
+                            try:
+                                entry["thermal_png_b64"] = _b64.b64encode(
+                                    thermal_p.read_bytes()
+                                ).decode()
+                            except Exception:
+                                pass
+
+                # ── Re-apply best-iter selection using current logic ─────────
+                # Historical convergence.json files may have stale best_iter
+                # values computed by older code (e.g. before bleed/T_max
+                # disqualification was added).  Re-select on every read so the
+                # dashboard always reflects the current algorithm.
+                try:
+                    _iters_for_sel = data.get("iterations", [])
+                    if _iters_for_sel:
+                        _use_opt = bool(data.get("optimizer_chosen_time_min"))
+                        _dmg_t   = float(data.get("damage_t_c", 245.0))
+                        _best    = _select_best_iter(
+                            _iters_for_sel, _use_opt, _dmg_t
+                        )
+                        if _best:
+                            data["best_iter"]         = _best.get("iter", data.get("best_iter"))
+                            data["best_score"]        = _best.get("score", data.get("best_score"))
+                            data["best_sigma_T"]      = _best.get("sigma_T", data.get("best_sigma_T"))
+                            data["best_score_regime"] = _best.get("score_regime", data.get("best_score_regime"))
+                except Exception:
+                    pass  # never break serving on a selection error
+
+                return self._json(data)
+            except Exception as exc:
+                return self._json({"error": str(exc)}, status=500)
+        if path.startswith("/api/profile/"):
+            # Return horizontal and vertical centerline profiles from fields.npz.
+            # GET /api/profile/<rel_run_path>
+            rel = unquote(path[len("/api/profile/"):])
+            run_dir = (OUTPUTS_DIR / rel).resolve()
+            try:
+                run_dir.relative_to(OUTPUTS_DIR)
+            except ValueError:
+                return self._json({"error": "path outside outputs"}, status=400)
+            npz_path = run_dir / "fields.npz"
+            if not npz_path.exists():
+                # For fgm_iterate parent dirs: look in best iter, then any iter dir
+                _conv_f = run_dir / "convergence.json"
+                if _conv_f.exists():
+                    try:
+                        _cd = json.loads(_conv_f.read_text(encoding="utf-8"))
+                        _bi = int(_cd.get("best_iter", -1))
+                        _iters = _cd.get("iterations", [])
+                        # Try best iter first, then descending
+                        _ordered = sorted(_iters, key=lambda x: -(1 if int(x.get("iter",-1))==_bi else int(x.get("iter",-1))))
+                        for _it in _ordered:
+                            _od = _it.get("output_dir", "")
+                            if _od:
+                                _cand = (OUTPUTS_DIR / _od / "fields.npz").resolve()
+                                if _cand.exists():
+                                    npz_path = _cand
+                                    break
+                    except Exception:
+                        pass
+                if not npz_path.exists():
+                    return self._json({"error": "fields.npz not found"}, status=404)
+            try:
+                import numpy as _np
+                fdata = _np.load(str(npz_path), allow_pickle=False)
+                mask  = fdata["part_mask"].astype(bool) if "part_mask" in fdata.files else None
+                x_m   = fdata["x"].tolist() if "x" in fdata.files else None
+                y_m   = fdata["y"].tolist() if "y" in fdata.files else None
+                ny, nx_sz = (fdata["part_mask"].shape if "part_mask" in fdata.files
+                             else (len(y_m or []), len(x_m or [])))
+
+                def _profile(field_name):
+                    if field_name not in fdata.files:
+                        return None
+                    arr = fdata[field_name].astype(float)
+                    # Horizontal centerline: row closest to Y center of part bbox
+                    rows = _np.any(mask, axis=1) if mask is not None else _np.ones(ny, dtype=bool)
+                    row_idxs = _np.where(rows)[0]
+                    if len(row_idxs) == 0:
+                        return None
+                    cy = int(row_idxs[len(row_idxs)//2])
+                    h_vals = arr[cy, :].tolist()
+                    h_mask = mask[cy, :].tolist() if mask is not None else [True]*nx_sz
+                    # Vertical centerline: col closest to X center of part bbox
+                    cols = _np.any(mask, axis=0) if mask is not None else _np.ones(nx_sz, dtype=bool)
+                    col_idxs = _np.where(cols)[0]
+                    if len(col_idxs) == 0:
+                        return None
+                    cx = int(col_idxs[len(col_idxs)//2])
+                    v_vals = arr[:, cx].tolist()
+                    v_mask = mask[:, cx].tolist() if mask is not None else [True]*ny
+                    return {"h": h_vals, "h_mask": h_mask, "h_row": cy,
+                            "v": v_vals, "v_mask": v_mask, "v_col": cx}
+
+                result = {}
+                for fname in ["T", "T_phi90", "rho_rel", "Qrf"]:
+                    p = _profile(fname)
+                    if p is not None:
+                        result[fname] = p
+                return self._json({
+                    "run": rel,
+                    "x_m": x_m, "y_m": y_m,
+                    "profiles": result,
+                    "available": list(result.keys()),
+                })
+            except Exception as exc:
+                return self._json({"error": str(exc)}, status=500)
+
+        if path.startswith("/api/fields/"):
+            # Return field data from fields.npz for the interactive field viewer.
+            # GET /api/fields/<rel_run_path>?field=T_phi90&maxpx=256
+            from urllib.parse import parse_qs
+            rel = unquote(path[len("/api/fields/"):])
+            qs  = parse_qs(urlparse(self.path).query)
+            field_name  = qs.get("field",  ["T_phi90"])[0]
+            max_px      = int(qs.get("maxpx", ["256"])[0])
+            run_dir = (OUTPUTS_DIR / rel).resolve()
+            try:
+                run_dir.relative_to(OUTPUTS_DIR)
+            except ValueError:
+                return self._json({"error": "path outside outputs"}, status=400)
+            npz_path = run_dir / "fields.npz"
+            if not npz_path.exists():
+                # For fgm_iterate parent dirs: look in best iter, then any iter dir
+                _conv_f = run_dir / "convergence.json"
+                if _conv_f.exists():
+                    try:
+                        _cd = json.loads(_conv_f.read_text(encoding="utf-8"))
+                        _bi = int(_cd.get("best_iter", -1))
+                        _iters = _cd.get("iterations", [])
+                        # Try best iter first, then descending
+                        _ordered = sorted(_iters, key=lambda x: -(1 if int(x.get("iter",-1))==_bi else int(x.get("iter",-1))))
+                        for _it in _ordered:
+                            _od = _it.get("output_dir", "")
+                            if _od:
+                                _cand = (OUTPUTS_DIR / _od / "fields.npz").resolve()
+                                if _cand.exists():
+                                    npz_path = _cand
+                                    break
+                    except Exception:
+                        pass
+                if not npz_path.exists():
+                    return self._json({"error": "fields.npz not found"}, status=404)
+            try:
+                import numpy as _np
+                fdata = _np.load(str(npz_path), allow_pickle=False)
+                available = [k for k in fdata.files if k != "part_mask"]
+                if field_name not in fdata.files:
+                    field_name = available[0] if available else "T"
+                arr = fdata[field_name].astype(float)
+                mask = fdata["part_mask"].astype(bool) if "part_mask" in fdata.files else _np.ones(arr.shape, dtype=bool)
+                x_m = fdata["x"].tolist() if "x" in fdata.files else list(range(arr.shape[1]))
+                y_m = fdata["y"].tolist() if "y" in fdata.files else list(range(arr.shape[0]))
+                # Downsample to max_px for fast transfer
+                ny, nx = arr.shape
+                step_y = max(1, ny // max_px)
+                step_x = max(1, nx // max_px)
+                arr_ds   = arr[::step_y, ::step_x]
+                mask_ds  = mask[::step_y, ::step_x]
+                x_ds = x_m[::step_x]
+                y_ds = y_m[::step_y]
+                inside = arr_ds[mask_ds]
+                lo  = float(inside.min())  if inside.size > 0 else 0.0
+                hi  = float(inside.max())  if inside.size > 0 else 1.0
+                mean_val = float(inside.mean()) if inside.size > 0 else 0.0
+                return self._json({
+                    "field": field_name,
+                    "available_fields": available,
+                    "shape": list(arr_ds.shape),
+                    "x_m": x_ds,
+                    "y_m": y_ds,
+                    "data": arr_ds.tolist(),
+                    "mask": mask_ds.tolist(),
+                    "vmin": lo, "vmax": hi, "vmean": mean_val,
+                })
+            except Exception as exc:
+                return self._json({"error": str(exc)}, status=500)
+
         if path.startswith("/api/results/"):
             name = unquote(path[len("/api/results/"):])
             try:
@@ -3167,6 +5665,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+
+        # ── QUIT endpoint — handled before allowlist check ────────────────────
+        if path == "/api/quit":
+            def _shutdown():
+                time.sleep(0.2)
+                _SERVER_REF.shutdown()
+            t = threading.Thread(target=_shutdown, daemon=True)
+            t.start()
+            return self._json({"ok": True, "msg": "HEATR server shutting down"})
+
         if path not in {
             "/api/run",
             "/api/match-config",
@@ -3183,6 +5691,14 @@ class Handler(BaseHTTPRequestHandler):
             "/api/tools/antennae-calibrate",
             "/api/tools/antennae-geometry",
             "/api/tools/antennae-quick-search",
+            "/api/tools/generate-fgm",
+            "/api/tools/fgm-resimulate",
+            "/api/tools/fgm-to-rip",
+            "/api/tools/fgm-iterate",
+            "/api/tools/fgm-continue",
+            "/api/tools/fgm-gradient-descent",
+            "/api/heatr3d/preview",
+            "/api/heatr3d/run",
         }:
             return self._json({"error": "not found"}, status=404)
 
@@ -3192,6 +5708,17 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw.decode("utf-8"))
         except Exception:
             return self._json({"error": "invalid json"}, status=400)
+
+        if path == "/api/heatr3d/preview":
+            try:
+                return self._json(_h3d_preview(payload))
+            except Exception as e:
+                return self._text(str(e), status=500)
+        if path == "/api/heatr3d/run":
+            try:
+                return self._json({"id": _h3d_spawn(payload)})
+            except Exception as e:
+                return self._text(str(e), status=500)
 
         if path == "/api/queue/reorder":
             job_id = str(payload.get("job_id", "")).strip()
@@ -3379,6 +5906,505 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 return self._json({"error": str(exc)}, status=400)
             return self._json({"ok": True})
+
+        if path == "/api/tools/generate-fgm":
+            # Payload keys (all optional except output_dir):
+            #   output_dir         — relative path under ROOT (e.g. "outputs_eqs/runs/.../my_run")
+            #   bpp                — 2 or 4 (default 2)
+            #   proxy_field        — "Qrf" | "T" | "rho_rel" (default "Qrf")
+            #   invert             — bool (default true)
+            #   magnitude          — float 0–2 (default 1.0)
+            #   baseline_saturation— float 0–1 (default 0.5)
+            #   dpi                — int (default 720)
+            #   smoothing_sigma    — float (default 1.5)
+            output_dir_rel = str(payload.get("output_dir", "")).strip()
+            if not output_dir_rel:
+                return self._json({"error": "missing output_dir"}, status=400)
+            run_dir = (ROOT / output_dir_rel).resolve()
+            try:
+                run_dir.relative_to(ROOT)
+            except ValueError:
+                return self._json({"error": "output_dir outside workspace"}, status=400)
+            if not run_dir.is_dir():
+                return self._json({"error": f"directory not found: {output_dir_rel}"}, status=404)
+            # If this is an fgm_iterate parent dir (has convergence.json but no fields.npz),
+            # automatically redirect to the best iteration's subdir so the user can generate
+            # a fresh FGM from its fields without having to know the internal layout.
+            if not (run_dir / "fields.npz").exists():
+                conv_path = run_dir / "convergence.json"
+                if conv_path.exists():
+                    try:
+                        _conv = json.loads(conv_path.read_text(encoding="utf-8"))
+                        _best_iter = int(_conv.get("best_iter", 0))
+                        _iters = _conv.get("iterations", [])
+                        _best_entry = next(
+                            (e for e in _iters if e.get("iter") == _best_iter), None
+                        )
+                        if _best_entry and _best_entry.get("output_dir"):
+                            _iter_dir = (OUTPUTS_DIR / _best_entry["output_dir"]).resolve()
+                            if (_iter_dir / "fields.npz").exists():
+                                run_dir = _iter_dir
+                    except Exception:
+                        pass
+            if not (run_dir / "fields.npz").exists():
+                return self._json({"error": "fields.npz not found in output_dir"}, status=404)
+            try:
+                from fgm_generator import generate_fgm  # local import for fast server startup
+                import base64 as _b64
+                bpp               = int(payload.get("bpp", 2))
+                proxy_field       = str(payload.get("proxy_field", "Qrf")).strip()
+                invert            = bool(payload.get("invert", True))
+                magnitude         = float(payload.get("magnitude", 1.0))
+                baseline          = float(payload.get("baseline_saturation", 0.5))
+                dpi               = int(payload.get("dpi", 720))
+                sigma             = float(payload.get("smoothing_sigma", 1.5))
+
+                result = generate_fgm(
+                    run_output_dir      = run_dir,
+                    bpp                 = bpp,
+                    proxy_field         = proxy_field,
+                    invert              = invert,
+                    magnitude           = magnitude,
+                    baseline_saturation = baseline,
+                    dpi                 = dpi,
+                    smoothing_sigma     = sigma,
+                    emit_formats        = ("npz", "json", "png"),
+                )
+
+                # Convert output paths to workspace-relative for the client
+                def _rel(p: str | None) -> str | None:
+                    if not p:
+                        return None
+                    try:
+                        return Path(p).relative_to(ROOT).as_posix()
+                    except ValueError:
+                        return p
+
+                # Encode preview PNG as base64 so the client can display it inline
+                png_b64: str | None = None
+                if result.get("png_path") and Path(result["png_path"]).exists():
+                    png_b64 = _b64.b64encode(Path(result["png_path"]).read_bytes()).decode()
+
+                # Level distribution stats for display
+                lm = result["level_map"]
+                import numpy as _np
+                inside = lm[lm > 0]
+                level_stats = {
+                    "min":    int(inside.min())  if inside.size else 0,
+                    "max":    int(inside.max())  if inside.size else 0,
+                    "mean":   round(float(inside.mean()), 3) if inside.size else 0.0,
+                    "unique": sorted(int(v) for v in _np.unique(inside).tolist()) if inside.size else [],
+                    "shape":  list(lm.shape),
+                }
+
+                return self._json({
+                    "ok":           True,
+                    "npz_path":     _rel(result.get("npz_path")),
+                    "json_path":    _rel(result.get("json_path")),
+                    "png_path":     _rel(result.get("png_path")),
+                    "png_b64":      png_b64,
+                    "bpp":          result["bpp"],
+                    "n_levels":     result["n_levels"],
+                    "proxy_field":  result["proxy_field"],
+                    "magnitude":    result["magnitude"],
+                    "level_stats":  level_stats,
+                })
+            except (KeyError, ValueError, FileNotFoundError) as exc:
+                return self._json({"error": str(exc)}, status=400)
+            except Exception as exc:
+                import traceback
+                return self._json({"error": str(exc), "traceback": traceback.format_exc()}, status=500)
+
+        if path == "/api/tools/import-fgm-png":
+            # Import an externally-created FGM PNG and run a single simulation with it.
+            # Payload keys:
+            #   source_run_dir  — relative path under outputs_eqs/  (provides used_config.yaml)
+            #   png_b64         — base64-encoded PNG of the FGM (grayscale, printer-DPI)
+            #   bpp             — 2 or 4 (default 2; determines how pixel values map to levels)
+            #   output_name     — optional; auto-generated if blank
+            #   invert_vis      — bool (default true): if true, treat PNG as visualisation
+            #                     where white=no-dopant, black=full-dopant (matches fgm_generator
+            #                     preview output); if false, treat white=full-dopant, black=none
+            try:
+                import base64 as _b64, io as _io
+                from PIL import Image as _Image
+
+                source_rel  = str(payload.get("source_run_dir", "")).strip()
+                png_b64_str = str(payload.get("png_b64", "")).strip()
+                bpp_imp     = int(payload.get("bpp", 2))
+                output_name = str(payload.get("output_name", "")).strip()
+                invert_vis  = bool(payload.get("invert_vis", True))
+
+                if not source_rel:
+                    return self._json({"error": "missing source_run_dir"}, status=400)
+                if not png_b64_str:
+                    return self._json({"error": "missing png_b64"}, status=400)
+                if bpp_imp not in (2, 4):
+                    return self._json({"error": "bpp must be 2 or 4"}, status=400)
+
+                source_dir = (OUTPUTS_DIR / source_rel).resolve()
+                try:
+                    source_dir.relative_to(OUTPUTS_DIR)
+                except ValueError:
+                    return self._json({"error": "source_run_dir must be inside outputs_eqs/"}, status=400)
+
+                # Decode PNG → level_map
+                png_bytes = _b64.b64decode(png_b64_str)
+                img = _Image.open(_io.BytesIO(png_bytes)).convert("L")
+                pix = np.array(img, dtype=np.uint8)   # (H, W) grayscale
+
+                n_levels_imp = 1 << bpp_imp
+                max_val_imp  = n_levels_imp - 1
+
+                # fgm_generator saves: vis = 255 - (level/maxval * 255), so white=no-dopant
+                # Invert that to recover level_map:
+                if invert_vis:
+                    level_map_imp = np.round((255 - pix.astype(np.float32)) / 255.0 * max_val_imp)
+                else:
+                    level_map_imp = np.round(pix.astype(np.float32) / 255.0 * max_val_imp)
+                level_map_imp = np.clip(level_map_imp, 0, max_val_imp).astype(np.uint8)
+
+                # Generate a safe output name
+                if not output_name:
+                    output_name = Path(source_rel).name + "_imported_fgm"
+                if not _is_valid_output_name(output_name):
+                    return self._json({"error": "output_name contains invalid characters"}, status=400)
+
+                # Save as NPZ in the source run's directory (or a scratch subdir)
+                npz_dir = source_dir
+                npz_dir.mkdir(parents=True, exist_ok=True)
+                npz_filename = f"imported_fgm_{bpp_imp}bpp_{output_name}.npz"
+                npz_path = npz_dir / npz_filename
+                np.savez_compressed(
+                    npz_path,
+                    level_map = level_map_imp,
+                    bpp       = np.array(bpp_imp),
+                    magnitude = np.array(1.0),
+                    proxy_field = np.array("imported"),
+                )
+
+                # Relative path for fgm_resimulate payload (relative to ROOT)
+                npz_rel = str(npz_path.relative_to(ROOT))
+
+                # Launch fgm_resimulate job
+                job_payload = {
+                    "mode":           "fgm_resimulate",
+                    "source_run_dir": source_rel,
+                    "fgm_npz_path":   npz_rel,
+                    "output_name":    output_name,
+                    "magnitude":      float(payload.get("magnitude", 1.0)),
+                    "baseline_saturation": float(payload.get("baseline_saturation", 0.5)),
+                    "iterate":        bool(payload.get("iterate", False)),
+                }
+                job = _make_job(mode="fgm_resimulate", output_name=output_name)
+                with JOBS_LOCK:
+                    JOBS[job["id"]]["_payload"] = job_payload
+                _enqueue_job(job["id"])
+                _maybe_start_next_job()
+                with JOBS_LOCK:
+                    status = str(JOBS[job["id"]]["status"])
+                    qpos   = JOBS[job["id"]].get("queue_position", None)
+                return self._json({
+                    "ok":          True,
+                    "job_id":      job["id"],
+                    "status":      status,
+                    "queue_position": qpos,
+                    "output_name": output_name,
+                    "npz_path":    npz_rel,
+                    "level_map_shape": list(level_map_imp.shape),
+                    "bpp":         bpp_imp,
+                }, status=202)
+            except Exception as exc:
+                import traceback
+                return self._json({"error": str(exc), "traceback": traceback.format_exc()}, status=500)
+
+        if path == "/api/tools/fgm-resimulate":
+            # Payload keys:
+            #   source_run_dir   — "runs/square/single/my_run"  (relative to outputs_eqs/)
+            #   fgm_npz_path     — "outputs_eqs/runs/…/fgm_…_2bpp_mag1.00.npz" (relative to ROOT)
+            #   output_name      — e.g. "my_run_fgm"  (valid identifier chars only)
+            #   magnitude        — float 0–2 (default 1.0)
+            #   baseline_saturation — float 0–1 (default 0.5)
+            #   iterate          — bool (default false)
+            source_rel  = str(payload.get("source_run_dir", "")).strip()
+            fgm_rel     = str(payload.get("fgm_npz_path",   "")).strip()
+            output_name = str(payload.get("output_name",    "")).strip()
+            if not source_rel:
+                return self._json({"error": "missing source_run_dir"}, status=400)
+            if not fgm_rel:
+                return self._json({"error": "missing fgm_npz_path"}, status=400)
+            if not output_name:
+                # Auto-generate: append _fgm to the source leaf name
+                output_name = Path(source_rel).name + "_fgm"
+            if not _is_valid_output_name(output_name):
+                return self._json({"error": "output_name contains invalid characters"}, status=400)
+            job_payload = dict(payload)
+            job_payload["mode"]        = "fgm_resimulate"
+            job_payload["output_name"] = output_name
+            job = _make_job(mode="fgm_resimulate", output_name=output_name)
+            with JOBS_LOCK:
+                JOBS[job["id"]]["_payload"] = job_payload
+            _enqueue_job(job["id"])
+            _maybe_start_next_job()
+            with JOBS_LOCK:
+                status = str(JOBS[job["id"]]["status"])
+                qpos   = JOBS[job["id"]].get("queue_position", None)
+            return self._json({"ok": True, "job_id": job["id"], "status": status,
+                               "queue_position": qpos, "output_name": output_name}, status=202)
+
+        if path == "/api/tools/fgm-iterate":
+            # Outer-loop iterative FGM optimisation starting from a fresh geometry.
+            # Payload keys: shape, output_name, exposure_minutes, use_optimizer,
+            #   n_iterations, magnitude, bpp, proxy_field, convergence_delta_T,
+            #   iterate_inner, iterate_interval_steps, iterate_damping
+            shape       = str(payload.get("shape", "")).strip()
+            output_name = str(payload.get("output_name", "")).strip()
+            if not shape or shape not in SUPPORTED_SHAPES:
+                return self._json({"error": f"invalid shape: {shape!r}"}, status=400)
+            if not output_name:
+                output_name = f"{shape}_fgmopt"
+            if not _is_valid_output_name(output_name):
+                return self._json({"error": "output_name contains invalid characters"}, status=400)
+            job_payload = dict(payload)
+            job_payload["mode"]        = "fgm_iterate"
+            job_payload["output_name"] = output_name
+            job = _make_job(mode="fgm_iterate", output_name=output_name)
+            with JOBS_LOCK:
+                JOBS[job["id"]]["_payload"] = job_payload
+            _enqueue_job(job["id"])
+            _maybe_start_next_job()
+            with JOBS_LOCK:
+                status = str(JOBS[job["id"]]["status"])
+                qpos   = JOBS[job["id"]].get("queue_position", None)
+            return self._json({
+                "ok": True, "job_id": job["id"], "status": status,
+                "queue_position": qpos, "output_name": output_name,
+            }, status=202)
+
+        if path == "/api/tools/fgm-gradient-descent":
+            # Finite-difference gradient descent starting from an existing FGM result.
+            # Payload keys: source_fgm_dir, output_name, shape, n_zones, zone_type,
+            #   perturbation_delta, step_size, n_gradient_steps, bpp, exposure_minutes
+            shape       = str(payload.get("shape", "")).strip()
+            output_name = str(payload.get("output_name", "")).strip()
+            if not shape or shape not in SUPPORTED_SHAPES:
+                return self._json({"error": f"invalid shape: {shape!r}"}, status=400)
+            if not output_name:
+                output_name = f"{shape}_fgm_gd"
+            if not _is_valid_output_name(output_name):
+                return self._json({"error": "output_name contains invalid characters"}, status=400)
+            source_fgm_dir = str(payload.get("source_fgm_dir", "")).strip()
+            if not source_fgm_dir:
+                return self._json({"error": "source_fgm_dir is required"}, status=400)
+            job_payload = dict(payload)
+            job_payload["mode"]        = "fgm_gradient_descent"
+            job_payload["output_name"] = output_name
+            job = _make_job(mode="fgm_gradient_descent", output_name=output_name)
+            with JOBS_LOCK:
+                JOBS[job["id"]]["_payload"] = job_payload
+            _enqueue_job(job["id"])
+            _maybe_start_next_job()
+            with JOBS_LOCK:
+                status = str(JOBS[job["id"]]["status"])
+                qpos   = JOBS[job["id"]].get("queue_position", None)
+            return self._json({
+                "ok": True, "job_id": job["id"], "status": status,
+                "queue_position": qpos, "output_name": output_name,
+            }, status=202)
+
+        if path == "/api/tools/fgm-continue":
+            # Resume a non-converged fgm_iterate run from its best iteration.
+            # The best iter's used_config.yaml + fields.npz seed a new fgm_iterate run.
+            # All FGM params are inherited from the existing convergence.json so the
+            # continuation is consistent with the prior run.
+            run_name    = str(payload.get("run_name",    "")).strip()
+            n_more      = int(payload.get("n_iterations", 4))
+            output_name = str(payload.get("output_name", "")).strip()
+
+            if not run_name:
+                return self._json({"error": "run_name is required"}, status=400)
+
+            conv_path = (OUTPUTS_DIR / run_name / "convergence.json").resolve()
+            if not conv_path.exists():
+                return self._json({"error": f"convergence.json not found for {run_name}"}, status=404)
+
+            try:
+                conv_data = json.loads(conv_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                return self._json({"error": f"could not read convergence.json: {exc}"}, status=500)
+
+            iters = conv_data.get("iterations", [])
+            if not iters:
+                return self._json({"error": "no iterations found in convergence.json"}, status=400)
+
+            best_entry = min(iters, key=lambda e: e.get("score", 999))
+            best_iter_rel = best_entry.get("output_dir", "")
+            if not best_iter_rel:
+                return self._json({"error": "best iteration has no output_dir"}, status=400)
+
+            best_iter_dir = (OUTPUTS_DIR / best_iter_rel).resolve()
+            if not (best_iter_dir / "used_config.yaml").exists():
+                return self._json({"error": f"used_config.yaml not found in best iter dir {best_iter_rel}"}, status=400)
+            if not (best_iter_dir / "fields.npz").exists():
+                return self._json({"error": f"fields.npz not found in best iter dir {best_iter_rel}"}, status=400)
+
+            # Auto-generate output name: original run name + _cont (+ _2, _3 if already taken)
+            if not output_name:
+                base = Path(run_name).name + "_cont"
+                output_name = base
+                _suffix = 2
+                parent_candidate = OUTPUTS_DIR / "runs" / conv_data.get("shape", "square") / "fgm_iterate"
+                while (parent_candidate / output_name).exists():
+                    output_name = f"{base}_{_suffix}"
+                    _suffix += 1
+            if not _is_valid_output_name(output_name):
+                return self._json({"error": "output_name contains invalid characters"}, status=400)
+
+            # Build payload that mirrors a fresh fgm_iterate but seeded from best iter dir
+            job_payload = {
+                "mode":                  "fgm_iterate",
+                "shape":                 str(conv_data.get("shape", "")),
+                "output_name":           output_name,
+                # Use best iter dir as the source so iter-0 runs from its config/fields
+                "source_run_dir":        best_iter_rel,
+                "resume_from_best_iter": best_entry.get("iter", 0),
+                "n_iterations":          n_more,
+                # Inherit all FGM params from the prior run
+                "proxy_field":           str(conv_data.get("proxy_field",      "T_phi90")),
+                "magnitude":             float(conv_data.get("magnitude_base",  1.0)),
+                "magnitude_decay":       float(conv_data.get("magnitude_decay", 0.7)),
+                "dead_band":             float(conv_data.get("dead_band",        0.05)),
+                "fgm_momentum":          float(conv_data.get("fgm_momentum",    0.3)),
+                "bpp":                   int(conv_data.get("bpp",               2)),
+                "baseline_saturation":   0.5,
+                "invert":                True,
+                "exposure_minutes":      float(conv_data.get("exposure_minutes", 7.0)),
+                "use_optimizer":         False,   # exposure already found; don't re-probe
+                "iterate_inner":         False,
+                "convergence_delta_T":   float(payload.get("convergence_delta_T", 5.0)),
+                "convergence_sigma_T":   float(payload.get("convergence_sigma_T", 3.0)),
+            }
+            job = _make_job(mode="fgm_iterate", output_name=output_name)
+            with JOBS_LOCK:
+                JOBS[job["id"]]["_payload"] = job_payload
+            _enqueue_job(job["id"])
+            _maybe_start_next_job()
+            with JOBS_LOCK:
+                status = str(JOBS[job["id"]]["status"])
+                qpos   = JOBS[job["id"]].get("queue_position", None)
+            return self._json({
+                "ok":                True,
+                "job_id":            job["id"],
+                "status":            status,
+                "queue_position":    qpos,
+                "output_name":       output_name,
+                "resumed_from_iter": best_entry.get("iter", 0),
+                "best_score":        best_entry.get("score"),
+            }, status=202)
+
+        if path == "/api/tools/fgm-to-rip":
+            # Synchronous bridge — converts an FGM NPZ into MetPrint TIFF stack immediately.
+            # Payload keys:
+            #   fgm_npz_path  — relative path (under ROOT) to the FGM .npz file (required)
+            #   output_dir    — absolute or relative path for TIFF output (default: sibling "rip_output" next to NPZ)
+            #   n_layers      — int (default 1)
+            #   job_name      — string prefix for TIFF filenames (default: npz stem)
+            #   dpi           — int (default 720)
+            #   bpp           — int or null (inferred from NPZ)
+            #   rotate_deg    — 0/90/180/270 (default 0)
+            #   compression   — "lzw" | "none" (default "lzw")
+            fgm_rel = str(payload.get("fgm_npz_path", "")).strip()
+            if not fgm_rel:
+                return self._json({"error": "missing fgm_npz_path"}, status=400)
+            fgm_path = (ROOT / fgm_rel).resolve()
+            try:
+                fgm_path.relative_to(ROOT)
+            except ValueError:
+                return self._json({"error": "fgm_npz_path outside workspace"}, status=400)
+            if not fgm_path.exists():
+                return self._json({"error": f"FGM file not found: {fgm_rel}"}, status=404)
+
+            # Determine output directory
+            out_dir_raw = str(payload.get("output_dir", "")).strip()
+            if out_dir_raw:
+                out_dir = Path(out_dir_raw)
+                if not out_dir.is_absolute():
+                    out_dir = (ROOT / out_dir_raw).resolve()
+            else:
+                out_dir = fgm_path.parent / "rip_output"
+
+            try:
+                # Add meteor/tools/ to sys.path for this server session so that
+                # fgm_to_rip.py can find meteor_rip.py when its lazy import runs.
+                # We keep it on the path permanently (no removal) because the server
+                # is long-lived and fgm_to_rip uses a deferred `from meteor_rip import`
+                # that fires at call time, not import time.
+                import sys as _sys
+                meteor_tools = ROOT.parent.parent / "software" / "meteor" / "tools"
+                if not meteor_tools.is_dir():
+                    meteor_tools = ROOT.parent / "software" / "meteor" / "tools"
+                if not meteor_tools.is_dir():
+                    raise ImportError(f"meteor/tools not found (tried {meteor_tools})")
+                _mt_str = str(meteor_tools)
+                if _mt_str not in _sys.path:
+                    _sys.path.insert(0, _mt_str)
+
+                from fgm_to_rip import fgm_to_tiff_stack
+
+                n_layers    = int(payload.get("n_layers",    1))
+                job_name    = str(payload.get("job_name",    fgm_path.stem)).strip() or fgm_path.stem
+                dpi         = int(payload.get("dpi",         720))
+                bpp         = payload.get("bpp", None)
+                if bpp is not None:
+                    bpp = int(bpp)
+                rotate_deg  = int(payload.get("rotate_deg",  0))
+                compression = str(payload.get("compression", "lzw")).strip()
+
+                tiff_paths = fgm_to_tiff_stack(
+                    fgm_path    = fgm_path,
+                    output_dir  = out_dir,
+                    n_layers    = n_layers,
+                    job_name    = job_name,
+                    dpi         = dpi,
+                    bpp         = bpp,
+                    compression = compression,
+                    rotate_deg  = rotate_deg,
+                )
+
+                # Return paths relative to ROOT where possible
+                def _rel(p: str) -> str:
+                    try:
+                        return Path(p).relative_to(ROOT).as_posix()
+                    except ValueError:
+                        return p
+
+                # Read physical dimensions from NPZ for UI confirmation
+                _dim_info = {}
+                try:
+                    import numpy as _np_dim
+                    _npz_check = _np_dim.load(fgm_path, allow_pickle=True)
+                    if "width_mm"  in _npz_check: _dim_info["width_mm"]  = float(_npz_check["width_mm"])
+                    if "height_mm" in _npz_check: _dim_info["height_mm"] = float(_npz_check["height_mm"])
+                    if "dpi"       in _npz_check: _dim_info["dpi_npz"]   = int(_npz_check["dpi"])
+                    _npz_check.close()
+                except Exception:
+                    pass
+
+                return self._json({
+                    "ok":         True,
+                    "tiff_paths": [_rel(p) for p in tiff_paths],
+                    "output_dir": _rel(str(out_dir)),
+                    "n_layers":   len(tiff_paths),
+                    **_dim_info,   # width_mm, height_mm, dpi_npz if available
+                })
+            except ImportError as exc:
+                return self._json({
+                    "error": f"fgm_to_rip module not available: {exc}. "
+                             "Ensure meteor/tools/ is present alongside the geo-prewarp directory.",
+                }, status=500)
+            except Exception as exc:
+                import traceback
+                return self._json({"error": str(exc), "traceback": traceback.format_exc()}, status=500)
 
         if path == "/api/tools/backfill-reports":
             try:
@@ -3663,13 +6689,30 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write(f"[{stamp}] {self.address_string()} {fmt % args}\n")
 
 
+_SERVER_REF: ThreadingHTTPServer | None = None   # global so /api/quit can reach it
+
+
 def main() -> None:
+    global _SERVER_REF
+    import socket as _socket
     host = os.environ.get("RFAM_GUI_HOST", "127.0.0.1")
     port = int(os.environ.get("RFAM_GUI_PORT", "8080"))
     server = ThreadingHTTPServer((host, port), Handler)
+    # Enable TCP keepalive so idle connections survive NAT/proxy timeouts
+    server.socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)
+    # Also disable HTTP request timeout — the default BaseHTTPServer uses a 5-minute
+    # timeout; set to 0 (disable) so long-poll loops never get disconnected server-side.
+    server.timeout = None
+    _SERVER_REF = server
     print(f"RFAM GUI running at http://{host}:{port}")
     print("Prewarp flows are disabled in this interface.")
-    server.serve_forever()
+    print("Stop via the ⏻ Quit button in the UI or Ctrl-C.")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print("HEATR server stopped.")
 
 
 if __name__ == "__main__":

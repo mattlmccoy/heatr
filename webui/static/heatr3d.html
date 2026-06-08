@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HEATR-3D: Volumetric Sintering &amp; 3-D FGM</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/design-b.css" />
+  <link rel="stylesheet" href="/static/hub-theme.css" />
+  <style>
+    .h3d-grid { display:grid; grid-template-columns: 360px 1fr; gap:16px; align-items:start; }
+    @media (max-width:980px){ .h3d-grid{ grid-template-columns:1fr; } }
+    .h3d-field { display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
+    .h3d-field label { font-size:.78rem; opacity:.85; }
+    .h3d-row { display:flex; gap:10px; }
+    .h3d-row .h3d-field { flex:1; }
+    #h3dViewport { width:100%; height:520px; border-radius:8px; background:#0b0e14;
+      border:1px solid rgba(255,255,255,.08); position:relative; overflow:hidden; }
+    #h3dViewport canvas { display:block; }
+    .h3d-vp-hint { position:absolute; left:10px; bottom:8px; font-size:.72rem; opacity:.5; pointer-events:none; }
+    .h3d-progress { height:8px; border-radius:5px; background:rgba(255,255,255,.1); overflow:hidden; margin:8px 0; }
+    .h3d-progress > div { height:100%; width:0%; background:linear-gradient(90deg,#0a84ff,#30d158); transition:width .3s; }
+    .h3d-results { display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:.82rem; }
+    .h3d-results .k { opacity:.7; } .h3d-results .v { text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+    .h3d-legend { display:flex; align-items:center; gap:8px; font-size:.72rem; opacity:.8; margin-top:6px; }
+    .h3d-legend .bar { height:10px; width:120px; border-radius:3px;
+      background:linear-gradient(90deg,#440154,#21918c,#fde725); }
+    .h3d-status { font-size:.78rem; opacity:.8; min-height:1.1em; }
+    .h3d-color-select { margin-top:8px; }
+  </style>
+</head>
+<body class="layout-b ids-inspired">
+  <header class="topbar topbar-ids">
+    <div>
+      <h1>HEATR-3D: Volumetric Sintering &amp; 3-D FGM</h1>
+      <p>Genuine 3-D coupled EQS → RF heating → thermal → melt → densification</p>
+    </div>
+    <div class="header-tools">
+      <a class="heatr-hub-link" href="/index.html" title="Back to HEATR Operation">← HEATR</a>
+      <div class="status-pill" id="serverStatus">HEATR-3D ready</div>
+    </div>
+  </header>
+
+  <nav class="tabs-nav">
+    <a class="tab-link" href="/index.html">Operation</a>
+    <a class="tab-link" href="/results">Results</a>
+    <a class="tab-link" href="/files">Files</a>
+    <a class="tab-link active" href="/heatr3d">HEATR-3D</a>
+    <a class="tab-link" href="/theory">Theory</a>
+  </nav>
+
+  <main class="grid design-grid-b">
+    <div class="h3d-grid">
+      <!-- ── controls ── -->
+      <section class="card form-card dash-card accent-blue">
+        <h2 style="margin-top:0;">Geometry &amp; Run</h2>
+
+        <div class="h3d-field">
+          <label>Geometry source</label>
+          <select id="srcSel">
+            <option value="parametric">Parametric primitive</option>
+            <option value="stl">Import STL</option>
+          </select>
+        </div>
+
+        <div id="paramBlock">
+          <div class="h3d-field">
+            <label>Shape</label>
+            <select id="shapeSel">
+              <option value="sphere">Sphere</option>
+              <option value="cone">Cone (tapered)</option>
+              <option value="cylinder">Cylinder (extruded)</option>
+              <option value="dumbbell">Dumbbell (lobes + neck)</option>
+            </select>
+          </div>
+          <div class="h3d-row">
+            <div class="h3d-field"><label>Diameter (mm)</label>
+              <input id="diam" type="number" value="28" min="4" max="50" step="1"></div>
+            <div class="h3d-field"><label>Z span (mm)</label>
+              <input id="zspan" type="number" value="30" min="4" max="55" step="1"></div>
+          </div>
+        </div>
+
+        <div id="stlBlock" style="display:none;">
+          <div class="h3d-field">
+            <label>STL file (mm units)</label>
+            <input id="stlFile" type="file" accept=".stl">
+          </div>
+          <p style="font-size:.74rem;opacity:.65;">STL is voxelized onto the sim grid. Large meshes use coarser grids.</p>
+        </div>
+
+        <div class="h3d-row">
+          <div class="h3d-field"><label>Grid n (per axis)</label>
+            <select id="gridN"><option>32</option><option selected>40</option><option>48</option></select></div>
+          <div class="h3d-field"><label>FGM mode</label>
+            <select id="fgmMode">
+              <option value="none">None (baseline)</option>
+              <option value="melt">Melt-onset 3-D FGM</option>
+              <option value="density">Density-targeted FGM</option>
+            </select></div>
+        </div>
+
+        <div class="h3d-field">
+          <label><input type="checkbox" id="densify"> Model densification &amp; shrinkage (slower)</label>
+        </div>
+        <div class="h3d-row">
+          <div class="h3d-field"><label>Exposure (s)</label>
+            <input id="exposure" type="number" value="1200" min="60" max="3000" step="60"></div>
+          <div class="h3d-field"><label>Stop mean density</label>
+            <input id="stopRho" type="number" value="0.85" min="0.6" max="1.0" step="0.05"></div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button id="previewBtn" class="btn">Preview geometry</button>
+          <button id="runBtn" class="btn btn-primary">Run simulation</button>
+        </div>
+        <div class="h3d-progress"><div id="progBar"></div></div>
+        <div class="h3d-status" id="statusLine">Configure a geometry and preview it.</div>
+      </section>
+
+      <!-- ── viewport + results ── -->
+      <section class="card dash-card accent-blue">
+        <div id="h3dViewport"><div class="h3d-vp-hint">drag to orbit · scroll to zoom</div></div>
+        <div class="h3d-color-select h3d-row" style="align-items:flex-end;">
+          <div class="h3d-field" style="max-width:200px;">
+            <label>Color surface by</label>
+            <select id="colorBy">
+              <option value="geom">Geometry (uniform)</option>
+              <option value="sat">FGM saturation</option>
+            </select>
+          </div>
+          <div class="h3d-legend"><span>low</span><span class="bar"></span><span>high</span></div>
+        </div>
+        <h3 style="margin:14px 0 6px;">Results</h3>
+        <div class="h3d-results" id="resultsGrid">
+          <span class="k">—</span><span class="v">run a simulation</span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script type="importmap">
+  { "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  } }
+  </script>
+  <script type="module" src="/static/heatr3d.js"></script>
+</body>
+</html>
