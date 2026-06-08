@@ -316,7 +316,8 @@ def make_rf_summary_v5(out_dir: str,
     rho_disp = rho.copy()
     rho_disp[~pm] = 0.55   # undoped powder → maps to grey band in colormap
     rho_plot = gaussian_filter(rho_disp.astype(float), sigma=_sig_f)
-    rho_vmin, rho_vmax = _heatmap_limits(rho_plot)
+    rho_vmin, _ = _heatmap_limits(rho_plot)
+    rho_vmax = 1.0   # always 1.0 — fully dense is a fixed physical maximum
 
     im_rho = ax_rho.pcolormesh(
         X, Y, rho_plot,

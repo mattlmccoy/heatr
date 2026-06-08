@@ -15,6 +15,10 @@
       <p>Browse, move, and delete local workspace files.</p>
     </div>
     <div class="header-tools">
+      <a class="heatr-hub-link" href="http://localhost:5050" title="Back to Research Toolkit Hub">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Hub
+      </a>
       <div class="status-pill" id="serverStatus">HEATR service connected</div>
       <details class="settings-menu">
         <summary>Settings</summary>
@@ -99,5 +103,8 @@
 
   <script src="/static/settings.js"></script>
   <script src="/static/file_manager.js"></script>
+  <script>/* Keep Research Toolkit Hub alive while this tool is open */
+  (function(){function p(){fetch('http://localhost:5050/api/heartbeat',{method:'POST'}).catch(function(){});}p();setInterval(p,5000);})();
+  </script>
 </body>
 </html>

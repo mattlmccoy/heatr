@@ -22,6 +22,10 @@
       <p>From EQS field solve to heat transfer, phase change, and densification</p>
     </div>
     <div class="header-tools">
+      <a class="heatr-hub-link" href="http://localhost:5050" title="Back to Research Toolkit Hub">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Hub
+      </a>
       <div class="status-pill">LaTeX Rendered</div>
       <details class="settings-menu">
         <summary>Settings</summary>
@@ -177,7 +181,157 @@
         <code>baseline</code> selectable for legacy comparison and reproducibility.
       </p>
 
-      <h2>8. Data Sources and References</h2>
+      <h2>8. Energy Balance Formulation &amp; Validation</h2>
+      <p>
+        HEATR tracks cumulative energy conservation at every outer time step using an
+        <strong>incremental energy accumulator</strong> that is consistent with the Forward
+        Euler PDE time-integration scheme.
+      </p>
+
+      <h3>8.1 Conservation identity</h3>
+      <p>
+        At every simulated time $t$, the following identity must hold:
+      </p>
+      $$
+      E_{\mathrm{in}}(t) \;=\; E_{\mathrm{stored}}(t) \;+\; E_{\mathrm{out}}(t) \;+\; \varepsilon(t)
+      $$
+      <ul>
+        <li>$E_{\mathrm{in}}$ — cumulative RF energy deposited in the doped region $\left[\mathrm{J/m}\right]$</li>
+        <li>$E_{\mathrm{stored}}$ — total internal energy increase in the domain (sensible + latent) $\left[\mathrm{J/m}\right]$</li>
+        <li>$E_{\mathrm{out}}$ — cumulative boundary losses (convection + depth correction) $\left[\mathrm{J/m}\right]$</li>
+        <li>$\varepsilon$ — residual; target $|\varepsilon| / E_{\mathrm{in}} &lt; 1\%$</li>
+      </ul>
+
+      <h3>8.2 Incremental stored-energy accumulator</h3>
+      <p>
+        At each outer time step $n$, material properties are evaluated at the
+        <em>beginning-of-step</em> (BOS) state $(T^n,\, \phi^n,\, \rho_{\mathrm{rel}}^n)$.
+        The energy increment is:
+      </p>
+      $$
+      \Delta E^n_{\mathrm{stored}}
+        = \sum_{i,j} \Bigl[
+            \rho_{\mathrm{eff},ij}^n \, c_{p,\mathrm{eff},ij}^n \,\Delta T_{ij}
+          \;+\;
+            \rho_{\mathrm{eff},ij}^n \, L \,\Delta\phi_{ij}
+          \Bigr]\,\Delta A
+      $$
+      <p>
+        where $\rho_{\mathrm{eff}} = (1-\phi)\rho_s(\rho_{\mathrm{rel}}) + \phi\rho_{\ell}$
+        is the blended density at the BOS phase fraction, and $L$ is the latent heat of fusion.
+        Accumulated over all steps:
+      </p>
+      $$
+      E_{\mathrm{stored}}(t) = \sum_{n=1}^{N(t)} \Delta E^n_{\mathrm{stored}}
+      $$
+      <p>
+        This approach is consistent with the Forward Euler time-stepping scheme: both the PDE
+        and the energy tracker evaluate $\rho_{\mathrm{eff}}$ and $c_{p,\mathrm{eff}}$ at the
+        beginning of each time step, ensuring that no artificial energy is introduced or removed
+        by the discretisation.
+      </p>
+
+      <h3>8.3 Validation report panels</h3>
+      <p>
+        Every run produces a <strong>Validation Report</strong>
+        (<code>validation_report.png</code>) with six diagnostic panels:
+      </p>
+      <table class="theory-table">
+        <thead>
+          <tr>
+            <th>Panel</th>
+            <th>Title</th>
+            <th>What it checks</th>
+            <th>Acceptance criterion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>[0,0]</strong></td>
+            <td>Cumulative energy balance [kJ/m]</td>
+            <td>
+              Plots $E_{\mathrm{in}}$, $E_{\mathrm{out}}$, $E_{\mathrm{stored}}$, and the
+              closure sum $E_{\mathrm{stored}} + E_{\mathrm{out}}$ on a single axis.
+              Visual overlap of the closure sum with $E_{\mathrm{in}}$ confirms
+              energy conservation.
+            </td>
+            <td>Closure curve visually indistinguishable from $E_{\mathrm{in}}$ curve.</td>
+          </tr>
+          <tr>
+            <td><strong>[0,1]</strong></td>
+            <td>Energy balance residual</td>
+            <td>
+              Left axis: absolute residual $\varepsilon(t)$ [J/m].
+              Right axis: relative residual $\varepsilon / E_{\mathrm{in}} \times 100$ [%].
+              Dashed reference lines at $\pm 1\%$ and $\pm 5\%$.
+              Residual growth during rapid phase change reflects Forward Euler
+              outer-step integration error and is expected.
+            </td>
+            <td>$|\varepsilon| / E_{\mathrm{in}} &lt; 1\%$ throughout the run.</td>
+          </tr>
+          <tr>
+            <td><strong>[1,0]</strong></td>
+            <td>RF power &amp; generator control</td>
+            <td>
+              Confirms that the RF power deposited in the doped region ($P_{\mathrm{RF}}$)
+              tracks the target power $P_{\mathrm{target}} = \eta \cdot P_{\mathrm{gen}}$
+              at every step.
+              The QRF scale factor quantifies the multiplicative correction applied to the
+              raw EQS field to enforce the generator power constraint.
+            </td>
+            <td>
+              $P_{\mathrm{RF}} \approx P_{\mathrm{target}}$ at all times; scale factor
+              constant (field geometry unchanged between EQS updates).
+            </td>
+          </tr>
+          <tr>
+            <td><strong>[1,1]</strong></td>
+            <td>Numerical stability (ΔT per outer step)</td>
+            <td>
+              Maximum temperature change across all cells per outer time step, before
+              and after CFL sub-step clipping. A large gap between raw and used ΔT
+              indicates that the CFL limiter is frequently active, which may introduce
+              additional numerical diffusion.
+              The clipped-cell fraction quantifies how many cells are affected.
+            </td>
+            <td>
+              $\Delta T_{\mathrm{used}} \ll T_{\mathrm{pc}}$; clipped fraction near zero
+              after the initial transient.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>[2,0]</strong></td>
+            <td>Temperature statistics &amp; uniformity</td>
+            <td>
+              Mean and maximum part temperature over time (left axis), and the
+              uniformity indices UI<sub>abs</sub> and UI<sub>rms</sub> (right axis).
+              UI is defined as the normalised deviation from mean temperature:
+              $\mathrm{UI_{abs}} = \overline{|T - \bar{T}|} / (\bar{T} - T_\infty)$.
+              Low UI at high $\bar{T}$ confirms spatially uniform heating.
+            </td>
+            <td>
+              UI &lt; 0.05 by end of exposure; $T_{\max} - \bar{T}$ limited.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>[2,1]</strong></td>
+            <td>Densification kinetics</td>
+            <td>
+              Mean melt fraction $\bar{\phi}$ and mean relative density $\bar{\rho}_{\mathrm{rel}}$
+              (left axis). Densification rate $d\rho_{\mathrm{rel}}/dt$ and liquid-regime
+              kinetic coefficient $k_{\mathrm{dens,liq}}$ (right axis, [s$^{-1}$]).
+              Together these confirm that the sintering kinetics are physically plausible
+              and that densification accelerates only after significant melting.
+            </td>
+            <td>
+              Monotonic $\bar{\rho}_{\mathrm{rel}}$ increase; $k_{\mathrm{dens,liq}}$
+              non-zero only when $\bar{\phi} \gtrsim 0.01$.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>9. Data Sources and References</h2>
       <p>
         HEATR stores source provenance in:
       </p>
@@ -196,5 +350,8 @@
   </main>
 
   <script src="/static/settings.js"></script>
+  <script>/* Keep Research Toolkit Hub alive while this tool is open */
+  (function(){function p(){fetch('http://localhost:5050/api/heartbeat',{method:'POST'}).catch(function(){});}p();setInterval(p,5000);})();
+  </script>
 </body>
 </html>

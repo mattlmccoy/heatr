@@ -15,8 +15,11 @@
       <p>Operational control for electrothermal simulation runs</p>
     </div>
     <div class="header-tools">
+      <a class="heatr-hub-link" href="http://localhost:5050" title="Back to Research Toolkit Hub">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Hub
+      </a>
       <div class="status-pill" id="serverStatus">HEATR service connected</div>
-      <button id="quitServerBtn" title="Gracefully stop the HEATR server" style="background:#b33;color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:0.8rem;margin-left:6px;">⏻ Quit Server</button>
       <details class="settings-menu">
         <summary>Settings</summary>
         <div class="settings-grid">
@@ -59,7 +62,6 @@
     <a class="tab-link" href="/files">Files</a>
     <a class="tab-link" href="/heatr3d">HEATR-3D</a>
     <a class="tab-link" href="/theory">Theory</a>
-    <span class="nav-job-badge hidden" id="navJobBadge" title="Running / queued jobs"></span>
   </nav>
 
   <main class="grid design-grid-b run-layout">
@@ -75,14 +77,6 @@
         <button id="runBtnTop" type="submit" class="primary compact" form="runForm">Launch Run</button>
       </div>
       <form id="runForm">
-        <div class="preset-row">
-          <span class="preset-label">Presets</span>
-          <select id="presetSelect" title="Saved launch presets"><option value="">— select —</option></select>
-          <button id="presetLoadBtn" type="button" title="Load selected preset">📂 Load</button>
-          <button id="presetSaveBtn" type="button" title="Save current form as a new preset">💾 Save</button>
-          <button id="presetDeleteBtn" type="button" title="Delete selected preset">🗑</button>
-        </div>
-
         <label>Mode
           <select id="mode" name="mode">
             <option value="single">◎ │ Single Exposure</option>
@@ -92,15 +86,13 @@
             <option value="orientation_optimizer">⤾ │ Orientation Optimizer</option>
             <option value="placement_optimizer">◫ │ Placement Optimizer</option>
             <option value="shell_sweep">◌ │ Shell Thickness Sweep</option>
-            <option value="fgm_iterate">⟳ │ FGM Iterative Optimize</option>
-            <option value="fgm_import">📥 │ Import FGM PNG</option>
           </select>
         </label>
 
         <label>Shape
           <select id="shape" name="shape"></select>
         </label>
-        <div class="mode-section" data-mode="single sweep optimizer turntable orientation_optimizer placement_optimizer shell_sweep fgm_iterate">
+        <div class="mode-section" data-mode="single sweep optimizer turntable orientation_optimizer placement_optimizer shell_sweep">
           <details class="advanced-panel">
             <summary>Geometry Size</summary>
             <div class="adv-grid">
@@ -137,11 +129,10 @@
           <input id="outputName" name="output_name" type="text" placeholder="e.g. circle_6min_gui" required />
         </label>
 
-        <div class="mode-section" data-mode="single optimizer turntable orientation_optimizer placement_optimizer shell_sweep fgm_iterate">
+        <div class="mode-section" data-mode="single optimizer turntable orientation_optimizer placement_optimizer shell_sweep">
           <label>Exposure (minutes)
             <input id="exposureMinutes" name="exposure_minutes" type="number" min="0.1" step="0.1" value="6" />
           </label>
-          <div id="expCalcChip" class="exp-calc-chip hidden" aria-live="polite"></div>
         </div>
 
         <div class="mode-section hidden" data-mode="sweep">
@@ -326,7 +317,6 @@
             <input type="checkbox" id="antennaeEnabled" />
             <span class="antennae-toggle-text">Enable Antennae Assist</span>
           </label>
-          <button id="antReopenBtn" type="button" class="ant-reopen-btn hidden">&#9881; Reopen Workshop</button>
           <span class="antennae-toggle-hint" id="antennaeToggleHint">When enabled, "Launch Run" will open the interactive Antenna Workshop.</span>
         </div>
 
@@ -613,342 +603,9 @@
           <pre id="yamlPreview" class="summary yaml-preview">Select a config to preview.</pre>
         </details>
 
-        <!-- ── FGM Iterative Optimize ────────────────────────────────────── -->
-        <div class="mode-section" data-mode="fgm_iterate">
-          <p class="field-help" style="margin-bottom:8px;">
-            Runs <em>K</em> simulations on the selected geometry. Iter-0 is a baseline
-            uniform-saturation run. Each subsequent iteration uses <strong>integral accumulation</strong>:
-            a small correction <em>Δs = −m × (T̃ − 0.5)</em> is added to the prior saturation
-            map using the <strong>iter-0 normalization as a fixed reference</strong>.
-            This prevents residual re-amplification (the "glass ceiling" of proportional mode)
-            and avoids the hot/cold field inversion that drives oscillation.
-            <br><br>
-            <strong>Empirical optimum (circle, 4 bpp):</strong> m = 0.7, n = 12, decay = 1.0 →
-            σ<sub>T</sub> = <strong>4.43°C at iter-9</strong> (77% reduction; 37% below
-            the best single proportional step of 7.05°C).
-            An early-stop triggers automatically when σ<sub>T</sub> rises for 2 consecutive iters
-            — the best map is used.
-            <br><br>
-            <strong>Geometry guidance:</strong> convex shapes (circle, hexagon) respond best.
-            Diamond and re-entrant geometries are better handled by turntable rotation.
-            Near-uniform shapes (σ<sub>T</sub> &lt; 6°C at iter-0) should not use FGM.
-          </p>
-
-          <label>Exposure time source
-            <select id="fgmIterTimeSource">
-              <option value="manual">Manual — use Exposure (minutes) above</option>
-              <option value="optimizer" selected>Auto — iter-0 probes to max, ideal time used for iter-1+ (recommended)</option>
-            </select>
-            <span class="field-help" id="fgmIterTimeSourceHelp">
-              <strong>Auto (recommended)</strong> — iter-0 runs to the Exposure maximum as an
-              over-exposure probe. The optimizer detects the time when φ first crosses 0.90
-              (90% sintering completion), then all FGM iterations run at exactly this time.
-              This ensures every iteration operates at a consistent sintering state, making
-              σ<sub>T</sub> comparisons between iterations valid.
-              Set "Exposure (minutes)" to 8–10 min as the probe ceiling; the actual run time
-              will be 5–7 min for most 30mm shapes at nominal power.
-              T_max &gt; threshold at iter-0 is expected and intentional — do not abort.
-              <br>
-              <strong>Manual</strong> — use if you already know the ideal exposure time from
-              a prior optimizer run. Consistent results require using the exact same time
-              for all iterations.
-            </span>
-          </label>
-
-          <label>Iterations
-            <input id="fgmIterN" type="number" min="2" max="30" value="12" />
-            <span class="field-help"><strong>Integral mode (default):</strong> 12 iterations covers the
-              typical optimum (iter-9 for circle) plus a 2-iter buffer for early-stop detection.
-              Runs stop earlier if σ<sub>T</sub> rises 2 consecutive iters.
-              For geometries with large σ<sub>0</sub> (&gt;30°C, e.g. equilateral triangle) try 15–20.
-              For near-uniform shapes (σ<sub>0</sub> &lt; 10°C) the early-stop should trigger
-              by iter-3 or abort entirely.
-              <em>Proportional mode:</em> 1 iteration (iter-1) is optimal; additional iters provide
-              no benefit and run into the glass-ceiling attractor at σ<sub>T</sub> ≈ 15–16°C.</span>
-          </label>
-
-          <div id="fgmThoroughOpts" style="display:none">
-            <label>Stagnation window (iters before proxy switch)
-              <input id="fgmIterStagnWindow" type="number" min="1" max="5" value="2" />
-              <span class="field-help">Switch to next proxy if σ_T does not improve by &gt; Stagnation ε for this many consecutive iterations.</span>
-            </label>
-            <label>Stagnation ε (°C)
-              <input id="fgmIterStagnEps" type="number" min="0.1" max="5.0" step="0.1" value="0.5" />
-              <span class="field-help">Minimum σ_T improvement to count as progress; smaller = more patient.</span>
-            </label>
-          </div>
-
-          <label>Proxy Field
-            <select id="fgmIterProxy" onchange="updateFgmProxyHelp()">
-              <option value="T_phi90" selected>T_phi90 — T snapshot at φ=0.90 sintering completion (recommended)</option>
-              <option value="T">T — final temperature (more diffused, less contrast)</option>
-              <option value="Qrf">Qrf — instantaneous RF power deposition</option>
-              <option value="rho_rel">rho_rel — relative density (integrated sintering history)</option>
-              <option value="__thorough__">⟳ Thorough — T_phi90 → Qrf → rho_rel (auto-switch on stagnation)</option>
-              <option value="__regime_adaptive__">⚡ Regime-adaptive — Qrf during active sintering, T_phi90 near-final</option>
-            </select>
-            <span class="field-help" id="fgmProxyHelp">
-              <strong>T_phi90 (recommended)</strong> — temperature captured when mean sintering fraction
-              φ first crosses 0.90. This is the maximum-contrast moment: heating differences are
-              largest before thermal diffusion has had time to equilibrate. Retains sharper spatial
-              gradients than T_final.
-              <br>
-              Experimental results (THOROUGH T1–T3, 20 iter each): proxy rotation
-              T_phi90 → Qrf → rho_rel does not improve on T_phi90 alone for proportional mode —
-              best result is always at iter-1 regardless of proxy. T_phi90 remains the default.
-              <br>
-              <em>Use Qrf</em> if you want to correct the instantaneous EM coupling pattern directly
-              (useful if thermal diffusion is masking the coupling geometry).
-              <em>Use rho_rel</em> if the goal is to equalize final density rather than peak temperature.
-            </span>
-          </label>
-
-          <label>Magnitude (m)
-            <input id="fgmIterMagnitude" type="number" min="0" max="2" step="0.05" value="0.7" />
-            <span class="field-help">
-              <strong>Integral mode step size</strong> — how much correction is accumulated per iteration.
-              Each iteration adds <em>Δs = −m × (T̃ − 0.5)</em> to the saturation map, where T̃ is
-              the normalized proxy field (relative to iter-0 reference bounds, not current bounds).
-              <br>
-              <strong>0.7 (default)</strong> — empirically optimal for circle 4bpp (σ<sub>0</sub> ≈ 19°C):
-              reaches the quantization snap at iter-9 (4.43°C) without early overshoot.
-              <br>
-              <strong>Adjust by geometry / σ<sub>0</sub>:</strong><br>
-              • σ<sub>0</sub> = 10–15°C → try 0.5–0.6 (more conservative steps needed)<br>
-              • σ<sub>0</sub> = 15–22°C → 0.7 (default, calibrated here)<br>
-              • σ<sub>0</sub> = 22–35°C → try 0.7–0.8 (larger initial non-uniformity needs slightly larger steps)<br>
-              • σ<sub>0</sub> &gt; 35°C (e.g. equilateral triangle) → 0.8–0.9, or consider power reduction first<br>
-              <em>If best iter is iter-2 or earlier, m is too large — reduce. If σ<sub>T</sub> plateau
-              is still &gt;7°C after 10 iters, m may be too small — increase.</em>
-            </span>
-          </label>
-
-          <label>Magnitude Decay (per iteration)
-            <input id="fgmIterMagDecay" type="number" min="0.3" max="1.0" step="0.01" value="1.0" />
-            <span class="field-help">
-              <strong>1.0 (default for integral mode)</strong> — no decay; keep m constant across all
-              iterations. Integral mode's fixed normalization reference provides its own implicit
-              reduction in correction amplitude as the field improves (the residual shrinks relative
-              to the iter-0 reference), so geometric decay is not needed.
-              <br>
-              <em>Only set &lt; 1.0 for proportional or hybrid mode</em>, where the current-field
-              normalization re-amplifies small residuals each iteration and you need explicit damping
-              to prevent oscillation. Typical proportional value: 0.70–0.85.
-            </span>
-          </label>
-
-          <label>Min Magnitude Floor
-            <input id="fgmIterMinMag" type="number" min="0.0" max="0.1" step="0.001" value="0.0" />
-            <span class="field-help">
-              <strong>0.0 (default for integral mode)</strong> — not needed when decay = 1.0.
-              For proportional/hybrid runs with decay &lt; 1.0, set to 0.001–0.005 to prevent
-              magnitude from decaying to zero and freezing the algorithm on long runs.
-            </span>
-          </label>
-
-          <label>Dead-band (fraction)
-            <input id="fgmIterDeadBand" type="number" min="0" max="0.3" step="0.01" value="0.05" />
-            <span class="field-help">
-              <strong>0.05 (default)</strong> — pixels within ±5% of the mean normalized T̃ field
-              are treated as "uniform enough" and receive no correction (held at baseline saturation).
-              This suppresses noise amplification from simulation grid artefacts in nearly-flat zones.
-              <br>
-              <strong>Adjust:</strong> reduce to 0.02 if the FGM appears too flat (most pixels at
-              baseline). Increase to 0.10 for noisy fields or irregular geometries where small
-              artefacts are being over-corrected. At dead_band = 0, every pixel is corrected
-              regardless of its proximity to the mean.
-            </span>
-          </label>
-
-          <label>FGM Momentum (blend with prior)
-            <input id="fgmIterMomentum" type="number" min="0" max="0.8" step="0.05" value="0.0" />
-            <span class="field-help">
-              <strong>0.0 (default for integral mode)</strong> — momentum is not applicable to
-              integral accumulation (the delta is already accumulated, adding an additional
-              blend with the prior map would double-count it).
-              <br>
-              <em>Only enable for proportional mode</em> to damp oscillation: 0.3–0.5 blends
-              the prior FGM into the new one, smoothing the iter-1→iter-2 jump. Has no effect
-              in integral mode and should be left at 0.
-            </span>
-          </label>
-
-          <label>bpp (ink levels)
-            <select id="fgmIterBpp">
-              <option value="2">2 bpp — 4 levels (coarser, faster, less precise)</option>
-              <option value="4" selected>4 bpp — 16 levels (recommended)</option>
-            </select>
-            <span class="field-help">
-              <strong>4 bpp (default)</strong> — 16 saturation levels (0%, 6.7%, …, 100%).
-              Provides the fine resolution that allows the integral mode's quantization snap to
-              occur: borderline pixels crossing between adjacent 4bpp levels produces the
-              sudden σ<sub>T</sub> improvement at the optimal iteration.
-              <br>
-              <strong>2 bpp</strong> — only 4 levels (0%, 33%, 67%, 100%). Coarser steps mean
-              fewer borderline pixels can snap, limiting the integral mode benefit. Use 2bpp
-              only if printer capability or job constraints require it;
-              expect σ<sub>T,best</sub> ≈ 1–2°C worse than 4bpp for the same geometry.
-            </span>
-          </label>
-
-          <label>Correction Mode
-            <select id="fgmIterCorrMode" onchange="updateFgmIterCorrModeHelp()">
-              <option value="integral" selected>Integral — accumulate corrections, fixed iter-0 reference (recommended)</option>
-              <option value="proportional">Proportional — full remap each iteration (single iter-1 only)</option>
-              <option value="hybrid">Hybrid — proportional iter-1, OC-TO phase-2 refinement</option>
-            </select>
-            <small id="fgmIterCorrModeHelp" style="color:#aaa;display:block;margin-top:3px;line-height:1.35;"></small>
-          </label>
-
-          <!-- OC-TO parameters (shown for 'integral' and 'hybrid' modes) -->
-          <div id="fgmIterToParams" style="display:none;border-left:2px solid #3a6090;
-               padding-left:10px;margin-top:4px;">
-            <label style="margin-top:6px;">Move Limit (per pixel per iter)
-              <input id="fgmIterMoveLimit" type="number" min="0" max="1" step="0.05" value="0.15" />
-              <span class="field-help">Max |Δs| per pixel per OC-TO iteration. 0.15 is recommended.
-                In hybrid mode this applies to phase-2 (iter-2+) only.</span>
-            </label>
-            <label>Sensitivity Filter σ (sim pixels)
-              <input id="fgmIterSensFilter" type="number" min="0" max="5" step="0.5" value="0.5" />
-              <span class="field-help">Gaussian blur on sensitivity field. 0.5–1.5 recommended.
-                0 = off.</span>
-            </label>
-          </div>
-
-          <!-- Hybrid-only parameters (shown only for 'hybrid' mode) -->
-          <div id="fgmIterHybridParams" style="display:none;border-left:2px solid #4a9;
-               padding-left:10px;margin-top:4px;">
-            <label style="margin-top:6px;font-weight:600;color:#4a9;">Phase-2 (OC-TO) parameters</label>
-            <label style="margin-top:4px;">Phase-2 initial magnitude
-              <input id="fgmIterHybridMag" type="number" min="0.05" max="1.0" step="0.05" value="0.4" />
-              <span class="field-help">Magnitude for the first OC-TO iteration (iter-2). Decays at
-                Magnitude Decay rate. 0.3–0.5 recommended — large enough to refine, small enough
-                not to overshoot the good iter-1 result.</span>
-            </label>
-            <label>Phase-2 move limit (per pixel per iter)
-              <input id="fgmIterHybridMoveLimit" type="number" min="0.01" max="0.5" step="0.02" value="0.15" />
-              <span class="field-help">OC-TO move limit for phase-2 refinement. 0.10–0.20 recommended.</span>
-            </label>
-          </div>
-
-          <label>Early-stop when σ_T &lt;
-            <input id="fgmIterConvThresh" type="number" min="0" step="0.5" value="3.0" />°C
-            <span class="field-help">
-              <strong>Hard convergence threshold</strong> — stop immediately if σ<sub>T</sub> drops
-              below this value (part is already very uniform; further iterations risk divergence).
-              Default 3.0°C is below any recorded optimum in this study; in practice, early-stop
-              is triggered by the rising-σ<sub>T</sub> condition (2 consecutive increases) well
-              before this threshold is reached for circle and hexagon geometries.
-              <br>
-              Reduce to 2.0°C if you have reason to believe a tighter result is achievable
-              (large σ<sub>0</sub>, 4bpp). Do not set below 1.5°C — simulation noise at that
-              level makes the metric unreliable.
-            </span>
-          </label>
-
-          <label>Abort if iter-0 melt fraction &gt;
-            <input id="fgmIterMeltAbort" type="number" min="0.05" max="1.0" step="0.05" value="0.15" />
-            <span class="field-help">
-              <strong>0.15 (default)</strong> — if more than 15% of the part exceeds the melt
-              temperature at iter-0 (uniform saturation), the operating point is fundamentally
-              wrong (over-powered). FGM redistributes energy but cannot reduce total energy
-              deposition — aborting prevents wasting 10+ simulation runs on an unfixable setup.
-              <br>
-              <strong>What to do if aborted:</strong> reduce exposure time, reduce power, or
-              use a lower-absorption ink formulation. Once iter-0 melt fraction is &lt; 10%,
-              FGM is safe to apply.
-              <br>
-              Increase this threshold (e.g. to 0.30) only for geometries with sharp EM hot spots
-              (equilateral triangle, star) where mild local melting at tips is acceptable.
-            </span>
-          </label>
-
-          <details>
-            <summary>Cold-zone overprinting</summary>
-            <div class="adv-grid">
-              <label>Overprint radius (mm)
-                <input id="fgmIterOverprintMm" type="number" min="0" max="10" step="0.5" value="0" />
-                <span class="field-help">Extend the FGM saturation map outward past the nominal part boundary, but ONLY in underheated edge zones. Cold boundary pixels get their high-saturation values printed a few mm further out, bringing more material (and thus more RF energy absorption) into cold corners. 0 = disabled. Recommended: 2–4 mm for geometries with dead-zone corners (e.g. diamond left/right peaks). Hot edges are unaffected — the saturation there is already near zero so no extra material is added.</span>
-              </label>
-              <label>Cold threshold (sat ≥ this gets overprinted)
-                <input id="fgmIterOverprintThresh" type="number" min="0.1" max="1.0" step="0.05" value="0.6" />
-                <span class="field-help">Boundary pixels with saturation above this threshold are considered "cold" and eligible for overprinting. Default 0.6 = top 40% of saturation range. Increase to 0.8 to be more selective (only the coldest zones). Decrease to 0.4 to overprint more of the boundary.</span>
-              </label>
-            </div>
-          </details>
-
-          <details>
-            <summary>Inner-loop (intra-run FGM updates)</summary>
-            <div class="adv-grid">
-              <label>Enable inner loop
-                <select id="fgmIterInner">
-                  <option value="false" selected>false</option>
-                  <option value="true">true</option>
-                </select>
-              </label>
-              <label>Update every N steps
-                <input id="fgmIterInterval" type="number" min="10" value="50" />
-              </label>
-              <label>Damping (0=frozen, 1=full replace)
-                <input id="fgmIterDamping" type="number" min="0" max="1" step="0.05" value="0.5" />
-              </label>
-            </div>
-          </details>
-        </div>
-
-        <!-- ── FGM Import PNG mode ──────────────────────────────────────── -->
-        <div class="mode-section hidden" data-mode="fgm_import">
-          <p style="color:#aaa;font-size:12px;margin:0 0 8px;">
-            Import an externally-created FGM PNG and run a single simulation with it.
-            The PNG must be grayscale — white&nbsp;=&nbsp;no&nbsp;dopant, black&nbsp;=&nbsp;full&nbsp;dopant
-            (matches the preview images from&nbsp;🎨&nbsp;FGM in the Results tab).
-          </p>
-          <label>Source Run
-            <input id="fgmImportSourceRun" type="text"
-                   placeholder="runs/circle/single/my_run or full path under outputs_eqs/"
-                   list="fgmImportRunList" />
-            <datalist id="fgmImportRunList"></datalist>
-            <small style="color:#888;display:block;margin-top:2px;">
-              Provides the simulation config (geometry, materials, exposure) to re-run with the imported FGM.
-            </small>
-          </label>
-          <label>FGM PNG File
-            <input id="fgmImportFile" type="file" accept=".png,image/png" style="margin-top:4px;" />
-          </label>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <label style="flex:0 0 auto;">bits-per-pixel
-              <select id="fgmImportBpp">
-                <option value="2" selected>2 bpp (4 levels)</option>
-                <option value="4">4 bpp (16 levels)</option>
-              </select>
-            </label>
-            <label style="flex:1;min-width:120px;">Output Run Name
-              <input id="fgmImportOutputName" type="text"
-                     placeholder="auto-generated if blank" />
-            </label>
-          </div>
-          <details style="margin-top:6px;">
-            <summary style="cursor:pointer;color:#aaa;font-size:12px;">Advanced</summary>
-            <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px;">
-              <label style="font-size:12px;">Visualization convention
-                <select id="fgmImportInvertVis">
-                  <option value="true" selected>White = no dopant, Black = full (standard FGM preview)</option>
-                  <option value="false">White = full dopant, Black = none (raw level image)</option>
-                </select>
-              </label>
-              <label style="font-size:12px;">Magnitude override (1.0 = use PNG as-is)
-                <input id="fgmImportMagnitude" type="number" min="0" max="2" step="0.1" value="1.0" />
-              </label>
-            </div>
-          </details>
-          <button id="fgmImportLaunchBtn" type="button" class="primary" style="margin-top:12px;">
-            📥 Import &amp; Run
-          </button>
-          <div id="fgmImportStatus" style="margin-top:6px;font-size:12px;color:#aaa;"></div>
-        </div>
-
         <button id="runBtnBottom" type="submit" class="primary">Launch Run</button>
       </form>
+      <p class="muted">Prewarp scripts are intentionally excluded.</p>
     </section>
 
     <section class="card jobs-card dash-card accent-purple">
@@ -993,18 +650,8 @@
             <span class="ant-legend-item ant-legend-electrode">Electrodes</span>
             <span class="ant-legend-item ant-legend-antenna">Antenna</span>
           </div>
-          <div class="ant-toolbar">
-            <button id="antToolSelect" class="ant-tool-btn ant-tool-active" title="Select / move (S)">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1.5 1.5 L5.5 10.5 L7 6.5 L11 5 Z" fill="currentColor"/></svg>
-              Select
-            </button>
-            <button id="antToolAdd" class="ant-tool-btn" title="Add antenna (A)">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-              Add
-            </button>
-          </div>
           <div class="ant-canvas-wrap" id="antCanvasWrap">
-            <svg id="antCanvas" class="ant-canvas" data-tool="select" xmlns="http://www.w3.org/2000/svg"></svg>
+            <svg id="antCanvas" class="ant-canvas" xmlns="http://www.w3.org/2000/svg"></svg>
           </div>
           <div class="ant-canvas-status" id="antCanvasStatus">Loading geometry&hellip;</div>
         </div>
@@ -1020,25 +667,14 @@
           </section>
 
           <section class="ant-ctrl-section">
-            <h3 class="ant-ctrl-heading">Default Antenna Size</h3>
-            <div class="ant-size-pair">
-              <label class="ant-ctrl-label">W — X (mm)
-                <input id="antDefaultSizeXMm" type="number" min="0.1" max="20" step="0.1" value="4.0" class="ant-ctrl-input" />
-              </label>
-              <label class="ant-ctrl-label">H — Y (mm)
-                <input id="antDefaultSizeYMm" type="number" min="0.1" max="20" step="0.1" value="4.0" class="ant-ctrl-input" />
-              </label>
-            </div>
+            <h3 class="ant-ctrl-heading">Antenna Size</h3>
+            <label class="ant-ctrl-label">Default size (mm)
+              <input id="antDefaultSizeMm" type="number" min="0.1" max="20" step="0.1" value="1.0" class="ant-ctrl-input" />
+            </label>
             <div id="antSelectedSizeRow" class="hidden">
-              <p class="ant-ctrl-desc" style="margin:0 0 0.25rem;">Selected antenna</p>
-              <div class="ant-size-pair">
-                <label class="ant-ctrl-label">W — X (mm)
-                  <input id="antSelectedSizeXMm" type="number" min="0.1" max="20" step="0.1" value="1.0" class="ant-ctrl-input" />
-                </label>
-                <label class="ant-ctrl-label">H — Y (mm)
-                  <input id="antSelectedSizeYMm" type="number" min="0.1" max="20" step="0.1" value="1.0" class="ant-ctrl-input" />
-                </label>
-              </div>
+              <label class="ant-ctrl-label">Selected antenna size (mm)
+                <input id="antSelectedSizeMm" type="number" min="0.1" max="20" step="0.1" value="1.0" class="ant-ctrl-input" />
+              </label>
             </div>
             <button id="antClearAllBtn" type="button" class="ant-btn-danger">Clear All</button>
           </section>
@@ -1077,8 +713,7 @@
           </section>
 
           <div class="ant-ctrl-hint">
-            <strong>Select (S):</strong> click to select &bull; drag to move &bull; scroll to resize &bull; Delete to remove<br>
-            <strong>Add (A):</strong> click part edge to place &bull; right-click to delete
+            <strong>Canvas controls:</strong> Click to place &bull; Drag to move &bull; Right-click to remove &bull; Scroll over antenna to resize
           </div>
 
         </div>
@@ -1096,7 +731,9 @@
   </dialog>
 
   <script src="/static/settings.js"></script>
-  <script src="/static/nav-badge.js"></script>
   <script src="/static/app.js"></script>
+  <script>/* Keep Research Toolkit Hub alive while this tool is open */
+  (function(){function p(){fetch('http://localhost:5050/api/heartbeat',{method:'POST'}).catch(function(){});}p();setInterval(p,5000);})();
+  </script>
 </body>
 </html>
