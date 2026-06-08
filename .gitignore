@@ -19,3 +19,5 @@ archive/
 .env
 **/.env
 .env.*
+.venv-heatr3d/
+outputs_eqs/_heatr3d/
