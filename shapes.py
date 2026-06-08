@@ -888,3 +888,227 @@ def make_shape(shape: str,
         "trapezoid, star/star5/star6/star8, cross, rounded_rect, L_shape, "
         "T_shape, H_shape, arrow, from_svg, from_image, polygon"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Infill geometry reconstruction
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fill_region_with_primitives(
+    region_polygon: np.ndarray,
+    primitive_type: str = "circle",
+    primitive_size_m: float = 2e-3,
+    packing_density: float = 0.60,
+    arrangement: str = "hexagonal",
+    size_gradient: Optional[np.ndarray] = None,
+    size_gradient_x: Optional[np.ndarray] = None,
+    size_gradient_y: Optional[np.ndarray] = None,
+    orientation_deg: float = 0.0,
+    n_circle_pts: int = 48,
+    clip_to_region: bool = True,
+) -> list[np.ndarray]:
+    """Place an ensemble of geometric primitives inside a region polygon.
+
+    This is the core of the EM-coupling-tuned infill strategy: instead of a
+    solid filled region, the part cross-section is reconstructed with small
+    primitives whose geometry controls local field enhancement.
+
+    EM coupling guide (at RF/microwave frequencies):
+      - ``"circle"``             — smooth, uniform coupling; minimal tip enhancement
+      - ``"equilateral_triangle"``— moderate tip field enhancement (~3–5× E-field)
+      - ``"triangle"``           — sharper tips than equilateral; stronger enhancement
+      - ``"star5"`` / ``"star8"``— multiple tips; distributed high-field regions
+      - ``"hexagon"``            — intermediate between circle and triangle
+
+    Parameters
+    ----------
+    region_polygon:
+        (N, 2) float64 closed polygon defining the fill zone, in metres.
+    primitive_type:
+        Name of the primitive (passed to :func:`make_shape`).
+    primitive_size_m:
+        Characteristic size of each primitive in metres (diameter for circles,
+        side length for polygons).
+    packing_density:
+        Target fractional area coverage (0–1).  The number of primitives is
+        estimated from ``(region_area * packing_density) / primitive_area``.
+        Actual coverage may differ slightly depending on arrangement and clipping.
+    arrangement:
+        Lattice type for placing primitive centres:
+        ``"hexagonal"`` (default, highest packing), ``"square"``, ``"random"``.
+    size_gradient:
+        Optional (ny, nx) float32 array of size multipliers (values typically
+        0.5–1.5) defined on the simulation grid.  Requires ``size_gradient_x``
+        and ``size_gradient_y`` (1-D metre arrays).  Allows making primitives
+        larger in regions that need more EM coupling (e.g. feed from FGM map).
+    size_gradient_x / size_gradient_y:
+        1-D coordinate arrays (metres) for the ``size_gradient`` grid.
+    orientation_deg:
+        Global rotation applied to every primitive (degrees CCW).
+        For triangles, 0° = apex pointing up.  Use 180° to flip.
+    n_circle_pts:
+        Number of polygon vertices for curved primitives (circles, stars).
+    clip_to_region:
+        If True (default), clip each primitive to the region boundary using
+        shapely.  Primitives entirely outside are discarded.
+
+    Returns
+    -------
+    list[np.ndarray]
+        Each element is an (M, 2) float64 array defining one primitive polygon
+        in metres.  Primitives are closed (first == last point).
+        May be empty if the region is too small to fit any primitive.
+    """
+    try:
+        from shapely.geometry import Polygon as ShapelyPolygon
+        from shapely.ops import unary_union
+        _HAS_SHAPELY = True
+    except ImportError:
+        _HAS_SHAPELY = False
+
+    # ── Build region as shapely polygon (for containment + clipping) ──────────
+    poly_closed = _close(region_polygon)
+    if _HAS_SHAPELY:
+        region_sh = ShapelyPolygon(poly_closed)
+        if not region_sh.is_valid:
+            region_sh = region_sh.buffer(0)
+        region_area = region_sh.area
+        bounds = region_sh.bounds    # (minx, miny, maxx, maxy)
+    else:
+        # Fallback: use bounding-box area and MplPath for containment
+        xs, ys = poly_closed[:, 0], poly_closed[:, 1]
+        region_area = 0.5 * abs(np.dot(xs, np.roll(ys, 1)) - np.dot(ys, np.roll(xs, 1)))
+        bounds = (xs.min(), ys.min(), xs.max(), ys.max())
+
+    if region_area <= 0:
+        return []
+
+    # ── Estimate primitive area and number to place ───────────────────────────
+    r       = primitive_size_m / 2.0
+    prim_area = math.pi * r ** 2   # approximate as circle area for count estimate
+
+    n_target = max(1, int(round(region_area * packing_density / max(prim_area, 1e-20))))
+    centre_spacing = primitive_size_m / max(math.sqrt(packing_density), 1e-6)
+
+    # ── Generate centre lattice ───────────────────────────────────────────────
+    minx, miny, maxx, maxy = bounds
+    centres: list[tuple[float, float]] = []
+
+    if arrangement in ("hexagonal", "hex"):
+        row_h  = centre_spacing * math.sqrt(3.0) / 2.0
+        col_w  = centre_spacing
+        y = miny
+        row_idx = 0
+        while y <= maxy + row_h:
+            x_off = (col_w / 2.0) if (row_idx % 2) else 0.0
+            x = minx + x_off
+            while x <= maxx + col_w:
+                centres.append((x, y))
+                x += col_w
+            y += row_h
+            row_idx += 1
+    elif arrangement == "square":
+        y = miny
+        while y <= maxy + centre_spacing:
+            x = minx
+            while x <= maxx + centre_spacing:
+                centres.append((x, y))
+                x += centre_spacing
+            y += centre_spacing
+    elif arrangement == "random":
+        rng = np.random.default_rng(seed=42)
+        n_candidates = max(n_target * 4, 200)
+        xs_r = rng.uniform(minx, maxx, n_candidates)
+        ys_r = rng.uniform(miny, maxy, n_candidates)
+        centres = list(zip(xs_r.tolist(), ys_r.tolist()))
+    else:
+        raise ValueError(f"arrangement must be 'hexagonal', 'square', or 'random'; got {arrangement!r}")
+
+    # ── Containment check: keep only centres inside region ───────────────────
+    if _HAS_SHAPELY:
+        from shapely.geometry import MultiPoint
+        if centres:
+            mp       = MultiPoint(centres)
+            inside_g = region_sh.buffer(-primitive_size_m * 0.3)   # slight inset to avoid edge-only hits
+            if inside_g.is_empty:
+                inside_g = region_sh
+            # Filter via prepared geometry for speed
+            from shapely import prepare
+            prepare(inside_g)
+            centres = [c for c in centres if inside_g.contains(inside_g.__class__(c)
+                                                                 if False else
+                                                                 ShapelyPolygon([(c[0]-1e-15, c[1]-1e-15),
+                                                                                 (c[0]+1e-15, c[1]-1e-15),
+                                                                                 (c[0]+1e-15, c[1]+1e-15)]))]
+    else:
+        mpl_path = MplPath(poly_closed)
+        centres  = [c for c in centres if mpl_path.contains_point(c)]
+
+    # ── Orient rotation ───────────────────────────────────────────────────────
+    theta = math.radians(orientation_deg)
+
+    # ── Build size-gradient interpolator (optional) ───────────────────────────
+    use_gradient = (
+        size_gradient is not None
+        and size_gradient_x is not None
+        and size_gradient_y is not None
+    )
+    if use_gradient:
+        from scipy.interpolate import RegularGridInterpolator
+        sg_interp = RegularGridInterpolator(
+            (size_gradient_y, size_gradient_x),
+            size_gradient.astype(np.float32),
+            method="linear",
+            bounds_error=False,
+            fill_value=1.0,
+        )
+
+    # ── Place primitives ──────────────────────────────────────────────────────
+    result: list[np.ndarray] = []
+
+    for cx, cy in centres:
+        # Local size multiplier from gradient map
+        if use_gradient:
+            mult = float(sg_interp([[cy, cx]])[0])
+            mult = max(0.1, min(3.0, mult))
+        else:
+            mult = 1.0
+
+        local_size = primitive_size_m * mult
+
+        # Build primitive centred at origin, then translate
+        prim = make_shape(primitive_type, width=local_size, n_circle_pts=n_circle_pts)
+
+        # Rotate
+        if abs(theta) > 1e-9:
+            prim = rotate(prim, theta)
+
+        # Translate to centre
+        prim = prim + np.array([cx, cy])
+        prim = _close(prim)
+
+        # Clip to region boundary
+        if clip_to_region:
+            if _HAS_SHAPELY:
+                try:
+                    prim_sh    = ShapelyPolygon(prim)
+                    clipped_sh = prim_sh.intersection(region_sh)
+                    if clipped_sh.is_empty:
+                        continue
+                    # Support multi-polygon result (rare, but can happen at edges)
+                    geoms = list(clipped_sh.geoms) if hasattr(clipped_sh, "geoms") else [clipped_sh]
+                    for g in geoms:
+                        if g.is_empty or not hasattr(g, "exterior"):
+                            continue
+                        arr = np.array(g.exterior.coords, dtype=np.float64)
+                        if len(arr) >= 3:
+                            result.append(_close(arr))
+                    continue
+                except Exception:
+                    pass  # fall through to no-clip path
+            # No shapely: include without clipping
+            result.append(prim)
+        else:
+            result.append(prim)
+
+    return result

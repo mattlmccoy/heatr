@@ -62,6 +62,12 @@ body {
   border-radius: 999px;
   padding: 0.35rem 0.7rem;
   font-size: 0.85rem;
+  transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+.status-pill.status-disconnected {
+  background: #4a1010;
+  color: #ffaaaa;
+  border-color: #883333;
 }
 
 .grid {
@@ -230,6 +236,10 @@ button.primary.compact {
 }
 .job-progress-label {
   color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .job-progress-meta {
   color: var(--muted);
@@ -247,7 +257,7 @@ button.primary.compact {
   width: 0%;
   border-radius: inherit;
   background: linear-gradient(90deg, #3c83ef, #57a7ff);
-  transition: width 240ms ease;
+  transition: width 0.95s linear;
 }
 .job-progress-fill.running { background: linear-gradient(90deg, #f0b43f, #ffd278); }
 .job-progress-fill.completed { background: linear-gradient(90deg, #21a66d, #5fd69f); }
@@ -684,4 +694,443 @@ body[data-theme="sunset"] {
   margin: 0 0 0.6rem;
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+/* ── Theory page validation table ───────────────────────────────────────── */
+.theory-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.87rem;
+  margin: 1rem 0 1.5rem;
+}
+.theory-table th,
+.theory-table td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line, #ddd);
+  vertical-align: top;
+  text-align: left;
+}
+.theory-table th {
+  background: var(--bg-1, #e8dfcc);
+  color: var(--ink, #1f2329);
+  font-weight: 600;
+}
+.theory-table tbody tr:nth-child(even) {
+  background: var(--bg-0, #f5f2ea);
+}
+.theory-table td:first-child {
+  white-space: nowrap;
+  font-family: monospace;
+}
+.theory-doc h3 {
+  margin-top: 1.2rem;
+  margin-bottom: 0.4rem;
+  font-size: 1rem;
+  color: var(--ink, #1f2329);
+}
+
+/* ── Dark-mode overrides for theory table (ids-inspired theme) ───────────── */
+.ids-inspired .theory-table th,
+.ids-inspired .theory-table td {
+  border-color: var(--border-color, #2a2e3a);
+  color: var(--text-primary, #e8eaed);
+}
+.ids-inspired .theory-table th {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 700;
+}
+.ids-inspired .theory-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.04);
+}
+.ids-inspired .theory-table tbody tr:nth-child(odd) {
+  background: transparent;
+}
+.ids-inspired .theory-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.ids-inspired .theory-doc h3 {
+  color: var(--text-primary, #e8eaed);
+}
+
+/* ── Physics snapshot panel (live metrics inside job cards) ─────────────── */
+.job-physics {
+  margin-top: 0.35rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.3rem;
+}
+.job-physics-summary {
+  font-size: 0.74rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 0;
+}
+.job-physics-summary::-webkit-details-marker { display: none; }
+.job-physics-summary::before {
+  content: "\25B6";    /* ▶ */
+  font-size: 0.55rem;
+  flex-shrink: 0;
+  transition: transform 120ms ease;
+  color: var(--muted);
+  opacity: 0.7;
+}
+.job-physics[open] > .job-physics-summary::before {
+  transform: rotate(90deg);
+}
+.physics-gauges {
+  margin-top: 0.28rem;
+  display: grid;
+  gap: 0.18rem;
+}
+.gauge-row {
+  display: grid;
+  grid-template-columns: 1.55rem 1fr 4.2rem;
+  align-items: center;
+  gap: 0.3rem;
+}
+.gauge-label {
+  color: var(--muted);
+  font-family: monospace;
+  font-size: 0.67rem;
+  text-align: right;
+}
+.gauge-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.09);
+  overflow: hidden;
+}
+.ids-inspired .gauge-track {
+  background: rgba(255, 255, 255, 0.12);
+}
+.gauge-fill {
+  height: 100%;
+  border-radius: inherit;
+  width: 0%;
+  transition: width 0.95s linear;
+}
+/* Temperature: blue (cold) → amber (warm) → red (hot) */
+.gauge-temp-fill { background: linear-gradient(90deg, #60a5fa, #f59e0b, #ef4444); }
+/* Melt fraction: indigo → violet */
+.gauge-melt-fill { background: linear-gradient(90deg, #818cf8, #a855f7); }
+/* Relative density: cool grey → warm gold */
+.gauge-dens-fill { background: linear-gradient(90deg, #9ca3af, #d97706); }
+/* Energy error: green (good) → amber → red (bad) */
+.gauge-err-fill  { background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444); }
+/* T_max: amber → red → dark red (hotter than mean T̄ gradient) */
+.gauge-tmax-fill { background: linear-gradient(90deg, #f59e0b, #ef4444, #b91c1c); }
+/* ΔT = T_max − T_mean: amber (low uniformity concern) → deep orange (high) */
+.gauge-dT-fill   { background: linear-gradient(90deg, #e0922a, #c2410c); }
+
+/* ── DSC milestone tick marks on temperature gauge bars ─────────────────────
+   Three 1px ticks at Nylon 12 DSC temperatures (25–240 °C scale):
+     onset  175 °C → (175-25)/(240-25) = 69.77 %
+     peak   180 °C → (180-25)/(240-25) = 72.09 %
+     end    185 °C → (185-25)/(240-25) = 74.42 %
+   The ::after pseudo-element overlays the fill on top via position:absolute.
+   Light-mode: subtle dark ticks   Dark-mode (.ids-inspired): bright white ticks
+   ────────────────────────────────────────────────────────────────────────── */
+.gauge-track:has(.gauge-temp-fill),
+.gauge-track:has(.gauge-tmax-fill) {
+  position: relative;   /* establishes containing block for ::after */
+}
+.gauge-track:has(.gauge-temp-fill)::after,
+.gauge-track:has(.gauge-tmax-fill)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Three hairline ticks: onset (dim) · peak (bright) · end (dim) */
+  background:
+    linear-gradient(90deg,
+      transparent calc(69.77% - 0.5px),
+      rgba(0,0,0,0.28) calc(69.77% - 0.5px),
+      rgba(0,0,0,0.28) calc(69.77% + 0.5px),
+      transparent      calc(69.77% + 0.5px)
+    ),
+    linear-gradient(90deg,
+      transparent calc(72.09% - 0.5px),
+      rgba(0,0,0,0.50) calc(72.09% - 0.5px),
+      rgba(0,0,0,0.50) calc(72.09% + 0.5px),
+      transparent      calc(72.09% + 0.5px)
+    ),
+    linear-gradient(90deg,
+      transparent calc(74.42% - 0.5px),
+      rgba(0,0,0,0.28) calc(74.42% - 0.5px),
+      rgba(0,0,0,0.28) calc(74.42% + 0.5px),
+      transparent      calc(74.42% + 0.5px)
+    );
+}
+.ids-inspired .gauge-track:has(.gauge-temp-fill)::after,
+.ids-inspired .gauge-track:has(.gauge-tmax-fill)::after {
+  background:
+    linear-gradient(90deg,
+      transparent calc(69.77% - 0.5px),
+      rgba(255,255,255,0.55) calc(69.77% - 0.5px),
+      rgba(255,255,255,0.55) calc(69.77% + 0.5px),
+      transparent            calc(69.77% + 0.5px)
+    ),
+    linear-gradient(90deg,
+      transparent calc(72.09% - 0.5px),
+      rgba(255,255,255,0.85) calc(72.09% - 0.5px),
+      rgba(255,255,255,0.85) calc(72.09% + 0.5px),
+      transparent            calc(72.09% + 0.5px)
+    ),
+    linear-gradient(90deg,
+      transparent calc(74.42% - 0.5px),
+      rgba(255,255,255,0.55) calc(74.42% - 0.5px),
+      rgba(255,255,255,0.55) calc(74.42% + 0.5px),
+      transparent            calc(74.42% + 0.5px)
+    );
+}
+/* Static run-card gauges (results page) — no transition, widths set directly in HTML */
+.run-gauges {
+  margin-top: 0.4rem;
+}
+.run-gauges .gauge-row {
+  display: grid;
+  grid-template-columns: 1.55rem 1fr 4.2rem;
+  align-items: center;
+  gap: 0.22rem;
+  margin-bottom: 0.12rem;
+}
+.run-gauges .gauge-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.09);
+  overflow: hidden;
+}
+.ids-inspired .run-gauges .gauge-track {
+  background: rgba(255, 255, 255, 0.12);
+}
+.run-gauges .gauge-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: none;   /* static — no animation */
+}
+.run-gauges .gauge-label {
+  font-size: 0.64rem;
+  font-family: monospace;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+.run-gauges .gauge-val {
+  text-align: right;
+  font-family: monospace;
+  font-size: 0.64rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.gauge-val {
+  text-align: right;
+  font-family: monospace;
+  font-size: 0.67rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.job-physics-step {
+  margin-top: 0.18rem;
+  font-size: 0.67rem;
+  color: var(--muted);
+  font-family: monospace;
+  opacity: 0.75;
+}
+
+/* ── Antenna detail panel (results page) ── */
+.ant-detail-panel {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border-color);
+  padding-top: 0.65rem;
+}
+.ant-detail-heading {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4ade80;
+  margin-bottom: 0.4rem;
+}
+.ant-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+.ant-detail-table th,
+.ant-detail-table td {
+  padding: 0.18rem 0.4rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--muted);
+}
+.ant-detail-table thead th {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* ── Preset row (operation form) ── */
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0 8px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.preset-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  min-width: 46px;
+}
+.preset-row select {
+  flex: 1;
+  min-width: 140px;
+  max-width: 260px;
+  font-size: 0.78rem;
+  padding: 3px 6px;
+  background: var(--input-bg, #0d1a2e);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+.preset-row button {
+  font-size: 0.75rem;
+  padding: 3px 9px;
+  background: var(--card-bg, #0d1a2e);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.preset-row button:hover {
+  border-color: var(--accent-color, #2a7fff);
+  color: var(--accent-color, #2a7fff);
+}
+
+/* ── Centerline profile panel (metrics sidebar) ── */
+.profile-panel {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border-color);
+  padding-top: 0.65rem;
+}
+.profile-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4ade80;
+  margin-bottom: 0.4rem;
+}
+.profile-canvas {
+  display: block;
+  width: 100%;
+  background: #060e1a;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  margin-bottom: 4px;
+  image-rendering: pixelated;
+}
+
+/* ── Nav job-count badge ── */
+.nav-job-badge {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 10px;
+  background: #1e3050;
+  color: #6090b0;
+  border: 1px solid #2a5080;
+  letter-spacing: 0.03em;
+  cursor: default;
+  transition: background 0.3s, color 0.3s;
+}
+.nav-job-badge.hidden {
+  display: none;
+}
+@keyframes badgePulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+.badge-pulse {
+  animation: badgePulse 1.2s ease-in-out infinite;
+}
+
+/* ── Live exposure calculator chip ── */
+.exp-calc-chip {
+  margin-top: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-family: monospace;
+  background: #0d1a2e;
+  border: 1px solid #1e3050;
+  color: #7090b0;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.exp-calc-chip.hidden { display: none; }
+.exp-calc-chip .exp-est-val { color: #c0d8f0; font-weight: 600; }
+.exp-calc-chip .exp-est-warn { color: #f0b040; }
+.exp-calc-chip .exp-est-danger { color: #f07070; }
+
+/* ── Print / PDF export styles ── */
+@media print {
+  /* Hide interactive chrome */
+  .topbar, .tabs-nav, .run-toolbar, .run-actions, .run-star-btn,
+  .run-fgm-btn, .run-conv-btn, .run-fields-btn, .run-compare-chk,
+  .run-delete-btn, .run-backfill-btn, .run-backfill-adv-btn,
+  #compareBar, #runCards, .metrics-card, .preset-row,
+  button, details summary { display: none !important; }
+
+  /* Make overlays / modals fill the print page cleanly */
+  #convDashOverlay, #fgmOverlayModal, #fieldViewerOverlay {
+    position: static !important;
+    background: white !important;
+    color: #111 !important;
+    padding: 0 !important;
+  }
+
+  /* Convergence dashboard panel */
+  #convDashOverlay > div, #fgmOverlayModal > div {
+    max-width: 100% !important;
+    width: 100% !important;
+    background: white !important;
+    border: none !important;
+    padding: 8px !important;
+    box-shadow: none !important;
+  }
+
+  /* Table styling for print */
+  table { border-collapse: collapse; width: 100%; font-size: 10pt; }
+  th, td { border: 1px solid #aaa; padding: 4px 6px; }
+  thead th { background: #e8e8e8 !important; color: #111 !important; }
+  tr:nth-child(even) td { background: #f5f5f5 !important; }
+
+  /* Convergence chart SVG: let it scale to page width */
+  svg { max-width: 100% !important; height: auto !important; }
+
+  /* Color all text dark for print */
+  * { color: #111 !important; background: transparent !important; }
+  a { text-decoration: none; color: #222 !important; }
+
+  /* Show export bar content but hide the buttons */
+  #convExportCSV, #convExportJSON, #convFgmGallery,
+  #convFgmAnimate, #convFgmOverlay, #convContinueBtn { display: none !important; }
+
+  /* Page margins */
+  @page { margin: 15mm 12mm; }
 }

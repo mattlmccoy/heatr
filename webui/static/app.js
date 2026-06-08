@@ -7,6 +7,41 @@ const state = {
 };
 const byId = (id) => document.getElementById(id);
 
+// ── Job ETA tracker ────────────────────────────────────────────────────────
+// Maps job_id → { startTime, startPct, samples: [{t, pct}] }
+const JOB_ETA = new Map();
+const OPEN_LOGS = new Set(); // job IDs whose inline log panel is currently open
+
+function _updateEta(jobId, pct) {
+  if (!Number.isFinite(pct) || pct <= 0) return;
+  const now = Date.now();
+  if (!JOB_ETA.has(jobId)) {
+    JOB_ETA.set(jobId, { startTime: now, startPct: pct, samples: [{ t: now, pct }] });
+    return;
+  }
+  const entry = JOB_ETA.get(jobId);
+  entry.samples.push({ t: now, pct });
+  // Keep only last 10 samples for rolling window
+  if (entry.samples.length > 10) entry.samples.shift();
+}
+
+function _getEtaLabel(jobId, pct) {
+  if (!Number.isFinite(pct) || pct >= 100) return "";
+  const entry = JOB_ETA.get(jobId);
+  if (!entry || entry.samples.length < 2) return "";
+  const first = entry.samples[0];
+  const last  = entry.samples[entry.samples.length - 1];
+  const dPct  = last.pct - first.pct;
+  const dT    = (last.t  - first.t) / 1000; // seconds
+  if (dPct <= 0 || dT <= 0) return "";
+  const ratePctPerSec = dPct / dT;
+  const remainingSec  = (100 - pct) / ratePctPerSec;
+  if (remainingSec > 7200 || remainingSec < 5) return "";
+  const mins = Math.floor(remainingSec / 60);
+  const secs = Math.round(remainingSec % 60);
+  return `ETA: ~${mins}m ${secs}s`;
+}
+
 const viewer = {
   items: [],
   index: 0,
@@ -32,7 +67,6 @@ const SHAPE_NOMINAL_MM = {
   T_shape: 24.0,
   trapezoid: 20.0,
   gt_logo: 20.0,
-  spacex_logo: 20.0,
 };
 
 const FREQ_PROFILES = {
@@ -622,14 +656,33 @@ function buildPayload(includeOutput = true) {
     }
   }
   if (mode === "orientation_optimizer") {
+    const targetExposureS = Number(byId("exposureMinutes")?.value) * 60.0;
+    let orientationExposureMinS = Number(byId("orientationExposureMinS")?.value);
+    let orientationExposureMaxS = Number(byId("orientationExposureMaxS")?.value);
+    let orientationExposureStepS = Number(byId("orientationExposureStepS")?.value);
+    // Preserve advanced behavior when user customizes this range; otherwise, if the
+    // stock broad sweep is still present, lock to the requested main exposure.
+    if (
+      Number.isFinite(targetExposureS) && targetExposureS > 0 &&
+      orientationExposureMinS === 240 &&
+      orientationExposureMaxS === 720 &&
+      orientationExposureStepS === 60
+    ) {
+      orientationExposureMinS = targetExposureS;
+      orientationExposureMaxS = targetExposureS;
+      orientationExposureStepS = Math.max(targetExposureS, 1);
+      if (byId("orientationExposureMinS")) byId("orientationExposureMinS").value = String(orientationExposureMinS);
+      if (byId("orientationExposureMaxS")) byId("orientationExposureMaxS").value = String(orientationExposureMaxS);
+      if (byId("orientationExposureStepS")) byId("orientationExposureStepS").value = String(orientationExposureStepS);
+    }
     payload.orientation_angle_min_deg = Number(byId("orientationAngleMinDeg")?.value);
     payload.orientation_angle_max_deg = Number(byId("orientationAngleMaxDeg")?.value);
     payload.orientation_angle_step_deg = Number(byId("orientationAngleStepDeg")?.value);
     payload.orientation_refine_window_deg = Number(byId("orientationRefineWindowDeg")?.value);
     payload.orientation_refine_step_deg = Number(byId("orientationRefineStepDeg")?.value);
-    payload.orientation_exposure_min_s = Number(byId("orientationExposureMinS")?.value);
-    payload.orientation_exposure_max_s = Number(byId("orientationExposureMaxS")?.value);
-    payload.orientation_exposure_step_s = Number(byId("orientationExposureStepS")?.value);
+    payload.orientation_exposure_min_s = orientationExposureMinS;
+    payload.orientation_exposure_max_s = orientationExposureMaxS;
+    payload.orientation_exposure_step_s = orientationExposureStepS;
     payload.orientation_temp_ceiling_c = Number(byId("orientationTempCeilingC")?.value);
     payload.orientation_min_rho_floor = Number(byId("orientationMinRhoFloor")?.value);
     payload.orientation_angle_gif_enabled = String(byId("orientationAngleGifEnabled")?.value || "false").toLowerCase() === "true";
@@ -665,6 +718,58 @@ function buildPayload(includeOutput = true) {
     payload.placement_min_rho_floor = Number(byId("placementMinRhoFloor")?.value);
   }
 
+  if (mode === "fgm_iterate") {
+    // Geometry + exposure come from the shared form fields (shape, exposureMinutes, etc.)
+    // already in payload above. Add iterative-specific params:
+    const timeSource = byId("fgmIterTimeSource")?.value || "manual";
+    const rawProxy   = byId("fgmIterProxy")?.value || "T_phi90";
+
+    payload.use_optimizer           = timeSource === "optimizer";
+    payload.exposure_minutes        = Number(byId("exposureMinutes")?.value) || 8;
+    payload.n_iterations            = parseInt(byId("fgmIterN")?.value) || 7;
+    payload.magnitude               = parseFloat(byId("fgmIterMagnitude")?.value) || 1.0;
+    payload.magnitude_decay         = parseFloat(byId("fgmIterMagDecay")?.value) || 0.7;
+    payload.min_magnitude           = parseFloat(byId("fgmIterMinMag")?.value   ?? 0.005);
+    payload.dead_band               = parseFloat(byId("fgmIterDeadBand")?.value) || 0.05;
+    payload.fgm_momentum            = parseFloat(byId("fgmIterMomentum")?.value ?? 0.3);
+    payload.bpp                     = parseInt(byId("fgmIterBpp")?.value) || 2;
+    const _corrMode = byId("fgmIterCorrMode")?.value || "proportional";
+    payload.use_delta_correction    = (_corrMode === "integral");
+    payload.use_hybrid              = (_corrMode === "hybrid");
+    // OC-TO parameters (used in 'integral' and 'hybrid' modes)
+    if (payload.use_delta_correction || payload.use_hybrid) {
+      payload.move_limit               = parseFloat(byId("fgmIterMoveLimit")?.value ?? 0.15);
+      payload.sensitivity_filter_sigma = parseFloat(byId("fgmIterSensFilter")?.value ?? 0.5);
+    }
+    // Hybrid-only phase-2 parameters
+    if (payload.use_hybrid) {
+      payload.hybrid_phase2_magnitude      = parseFloat(byId("fgmIterHybridMag")?.value ?? 0.4);
+      payload.hybrid_phase2_move_limit     = parseFloat(byId("fgmIterHybridMoveLimit")?.value ?? 0.15);
+      payload.hybrid_phase2_sensitivity_sigma = parseFloat(byId("fgmIterSensFilter")?.value ?? 0.5);
+    }
+    payload.convergence_sigma_T     = parseFloat(byId("fgmIterConvThresh")?.value) || 3.0;
+    payload.melt_abort_frac         = parseFloat(byId("fgmIterMeltAbort")?.value) || 0.15;
+    payload.iterate_inner           = String(byId("fgmIterInner")?.value || "false").toLowerCase() === "true";
+    payload.iterate_interval_steps  = parseInt(byId("fgmIterInterval")?.value) || 50;
+    payload.iterate_damping         = parseFloat(byId("fgmIterDamping")?.value) || 0.5;
+    payload.overprint_cold_mm       = parseFloat(byId("fgmIterOverprintMm")?.value    || "0") || 0.0;
+    payload.overprint_cold_thresh   = parseFloat(byId("fgmIterOverprintThresh")?.value || "0.6") || 0.6;
+
+    // Thorough / regime-adaptive proxy modes
+    if (rawProxy === "__thorough__") {
+      payload.thorough    = true;
+      payload.proxy_field = "T_phi90";   // schedule starts here; server auto-rotates
+      payload.proxy_schedule = ["T_phi90", "Qrf", "rho_rel"];
+      payload.stagnation_window = parseInt(byId("fgmIterStagnWindow")?.value) || 2;
+      payload.stagnation_eps    = parseFloat(byId("fgmIterStagnEps")?.value)  || 0.5;
+    } else if (rawProxy === "__regime_adaptive__") {
+      payload.regime_adaptive = true;
+      payload.proxy_field = "Qrf";  // starting proxy; server switches on regime change
+    } else {
+      payload.proxy_field = rawProxy;
+    }
+  }
+
   // Antennae enable state is read from the simple checkbox.
   // Placement details are configured in the Antenna Workshop modal, not here.
 
@@ -681,7 +786,120 @@ function setModeSections() {
     const modes = el.dataset.mode.split(/\s+/);
     el.classList.toggle("hidden", !modes.includes(mode));
   });
+  // Hide the main Launch Run button for fgm_import (has its own dedicated button)
+  const runBtn = byId("runBtnBottom");
+  if (runBtn) runBtn.style.display = (mode === "fgm_import") ? "none" : "";
   updateDependentVisibility();
+  updateFgmIterTimeSourceHelp();
+}
+
+function updateFgmProxyHelp() {
+  const val  = byId("fgmIterProxy")?.value || "T_phi90";
+  const help = byId("fgmProxyHelp");
+  const thoroughOpts = byId("fgmThoroughOpts");
+  const msgs = {
+    "T_phi90":            "T_phi90 captures heating at the optimal sintering moment (φ=0.90), not the cooled final state. Best all-round proxy.",
+    "T":                  "Final temperature field. Blurred by diffusion — use T_phi90 instead if available.",
+    "Qrf":                "Direct RF power deposition (σ|E|²). Not confounded by latent heat or diffusion. Best proxy during active sintering (ρ̄ < 0.82).",
+    "rho_rel":            "Relative density. Corrects under-dense regions directly. Useful when density uniformity (not temperature) is the primary goal.",
+    "__thorough__":       "⟳ Thorough: runs T_phi90 first, then automatically switches to Qrf and rho_rel when the current proxy stagnates. Most thorough — needs more iterations (10–15).",
+    "__regime_adaptive__":"⚡ Regime-adaptive: uses Qrf during active sintering (fast, direct) and switches to T_phi90 when near-final (ρ̄ ≥ 0.82). Automatically adjusts to the sintering phase.",
+  };
+  if (help) help.textContent = msgs[val] || "";
+  if (thoroughOpts) {
+    thoroughOpts.style.display = (val === "__thorough__") ? "" : "none";
+  }
+}
+
+function updateFgmIterCorrModeHelp() {
+  const el          = byId("fgmIterCorrModeHelp");
+  const octoPanel   = byId("fgmIterToParams");
+  const hybridPanel = byId("fgmIterHybridParams");
+  if (!el) return;
+  const v = byId("fgmIterCorrMode")?.value || "integral";
+  if (v === "integral") {
+    el.innerHTML =
+      "<strong>Integral (recommended)</strong> — Δs = −m × (T̃ − 0.5) is accumulated " +
+      "onto the prior map each iteration. The normalization reference is <em>fixed</em> at " +
+      "iter-0 bounds, so small residuals stay small rather than being re-amplified to full range. " +
+      "Best empirical result: σ_T = 4.43°C at iter-9 for circle 4bpp (m=0.7, 77% reduction). " +
+      "Best iter depends on geometry — early-stop detects it automatically. " +
+      "Use m=0.7, decay=1.0, n=12 (defaults). " +
+      "No move limit (set Move Limit to 0) and no sensitivity filter needed.";
+    if (octoPanel)   octoPanel.style.display   = "none";   // OC-TO params not needed for pure integral
+    if (hybridPanel) hybridPanel.style.display = "none";
+  } else if (v === "hybrid") {
+    el.innerHTML =
+      "<strong>Hybrid</strong> — Phase 1: proportional correction at iter-1 (full m=1.0, " +
+      "strongest single-step). Phase 2: OC-TO bounded delta refinement from the iter-1 baseline. " +
+      "Empirically, best result is still at iter-1; OC-TO phase-2 consistently converges to " +
+      "σ_T ≈ 15–16°C attractor above iter-1. " +
+      "Use as a comparison baseline or when you need phase-2 move limits for stability.";
+    if (octoPanel)   octoPanel.style.display   = "";
+    if (hybridPanel) hybridPanel.style.display = "";
+  } else {
+    el.innerHTML =
+      "<strong>Proportional</strong> — each iteration recomputes the full saturation map " +
+      "from scratch (no accumulation). Strong single-step improvement at iter-1 " +
+      "(54–67% σ_T reduction), then diverges to glass-ceiling attractor at σ_T ≈ 15–16°C " +
+      "from iter-2 onward. Best result is <em>always</em> at iter-1. " +
+      "Use only for single-iteration corrections or baseline comparison. " +
+      "Set n=2 and read iter-1 result.";
+    if (octoPanel)   octoPanel.style.display   = "none";
+    if (hybridPanel) hybridPanel.style.display = "none";
+  }
+}
+
+function updateFgmIterTimeSourceHelp() {
+  const src  = byId("fgmIterTimeSource")?.value || "manual";
+  const help = byId("fgmIterTimeSourceHelp");
+  const expRow = byId("exposureMinutes")?.closest("label") ||
+                 byId("exposureMinutes")?.closest(".mode-section");
+  if (help) {
+    if (src === "optimizer") {
+      help.innerHTML =
+        '<strong>Iter-0 runs in optimizer mode</strong> to the "Exposure (minutes)" limit — ' +
+        'intentionally over-exposed so the optimizer can collect snapshots across the full ' +
+        'sintering curve. The ideal safe time is extracted from those snapshots ' +
+        '(T_max ceiling check included). Iter-1+ all run at that ideal time. ' +
+        '<em>T_max &gt; 245°C in iter-0 is expected and will not abort the run.</em>';
+    } else {
+      help.textContent = 'Set "Exposure (minutes)" above — this exact time is used for every FGM iteration.';
+    }
+  }
+  // Dim the manual exposure field when optimizer is selected
+  const expLabel = byId("exposureMinutes")?.closest("label");
+  if (expLabel) expLabel.style.opacity = src === "optimizer" ? "0.4" : "";
+}
+
+async function populateFgmIterRunList() {
+  const sel = byId("fgmIterSourceRun");
+  if (!sel) return;
+  try {
+    const runs = await fetchJson("/api/results-runview");
+    const list = Array.isArray(runs) ? runs : [];
+    _buildExpCalibFromRuns(list);  // calibrate exposure calculator from run history
+    if (list.length === 0) {
+      sel.innerHTML = '<option value="">— no completed runs found —</option>';
+      return;
+    }
+    // Prefer runs that have fields.npz (completed sims); fall back to all runs
+    const current = sel.value;
+    sel.innerHTML =
+      '<option value="">— select a run —</option>' +
+      list
+        .map((r) => {
+          const name = r.name || r;
+          return `<option value="${name}">${name}</option>`;
+        })
+        .join("");
+    // Restore previous selection if still valid
+    if (current && [...sel.options].some((o) => o.value === current)) {
+      sel.value = current;
+    }
+  } catch (err) {
+    sel.innerHTML = `<option value="">— error loading runs: ${err.message} —</option>`;
+  }
 }
 
 async function fetchJson(url, opts = {}) {
@@ -781,7 +999,6 @@ function shapeOptionLabel(shapeName) {
     T_shape: "┬",
     trapezoid: "⏢",
     gt_logo: "GT",
-    spacex_logo: "SPX",
   }[s] || "◻";
   return `${icon} │ ${s}`;
 }
@@ -826,9 +1043,6 @@ function renderShapePreview(shapeName) {
   }
   else if (s === "gt_logo") {
     inner = `<text x='50' y='58' text-anchor='middle' font-size='34' font-weight='700' fill='${stroke}' font-family='Avenir Next, Inter, sans-serif'>GT</text>`;
-  }
-  else if (s === "spacex_logo") {
-    inner = `<text x='50' y='58' text-anchor='middle' font-size='20' font-weight='700' fill='${stroke}' font-family='Avenir Next, Inter, sans-serif'>SPX</text>`;
   }
   else inner = `<rect x='20' y='20' width='60' height='60' rx='4' ${common} />`;
   glyph.innerHTML = inner;
@@ -989,112 +1203,446 @@ function openViewer(items, index) {
   if (!dlg.open) dlg.showModal();
 }
 
+// ── Persistent animation state for job cards ─────────────────────────────
+// Keyed by job ID.  Each entry holds references to animated DOM elements so
+// they survive the innerHTML rebuild and CSS transitions keep firing.
+const _jobAnimState = new Map();
+
+function _getJobAnim(jobId) {
+  if (!_jobAnimState.has(jobId)) {
+    _jobAnimState.set(jobId, {
+      progressFill: null,
+      tempFill: null,
+      tmaxFill: null,
+      meltFill: null,
+      densFill: null,
+      errFill: null,
+      dTFill: null,
+      physicsOpen: null,   // null = use default; true/false = user chose
+      wasRunning: false,
+    });
+  }
+  return _jobAnimState.get(jobId);
+}
+
+// Build the physics-snapshot <details> panel HTML.
+// All gauge fill widths start at 0% — they are set live via rAF after paint.
+function _buildPhysicsPanel(snap, isOpen) {
+  if (!snap) return "";
+  const T    = Number(snap.T_mean_c || 0);
+  const Tmax = Number(snap.T_max_c  || snap.T_mean_c || 0);
+  const dT   = Number(snap.dT_c != null ? snap.dT_c : Math.max(0, Tmax - T));
+  const phi  = Number(snap.phi_mean || 0);
+  const rho  = Number(snap.rho_mean || 0);
+  const err  = Number(snap.err_pct  || 0);
+  const step  = Number(snap.step  || 0);
+  const total = Number(snap.total || 1);
+  const summary =
+    `T\u0305\u00a0${T.toFixed(1)}\u00b0C` +
+    `\u2002\u00b7\u2002T\u2191\u00a0${Tmax.toFixed(1)}\u00b0C` +
+    `\u2002\u00b7\u2002\u0394T\u00a0${dT.toFixed(1)}\u00b0C` +
+    `\u2002\u00b7\u2002\u03c6\u0305\u00a0${phi.toFixed(3)}` +
+    `\u2002\u00b7\u2002\u03c1\u0305\u00a0${rho.toFixed(3)}` +
+    `\u2002\u00b7\u2002err\u00a0${err.toFixed(3)}%`;
+  return `<details class="job-physics"${isOpen ? " open" : ""}>
+  <summary class="job-physics-summary">${summary}</summary>
+  <div class="physics-gauges">
+    <div class="gauge-row">
+      <span class="gauge-label">T\u2191</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-tmax-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${Tmax.toFixed(1)}\u00b0C</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">T\u0305</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-temp-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${T.toFixed(1)}\u00b0C</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">\u0394T</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-dT-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${dT.toFixed(1)}\u00b0C</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">\u03c6\u0305</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-melt-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${phi.toFixed(3)}</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">\u03c1\u0305</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-dens-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${rho.toFixed(3)}</span>
+    </div>
+    <div class="gauge-row">
+      <span class="gauge-label">err</span>
+      <div class="gauge-track"><div class="gauge-fill gauge-err-fill" style="width:0%"></div></div>
+      <span class="gauge-val">${err.toFixed(3)}%</span>
+    </div>
+  </div>
+  <div class="job-physics-step">Step ${step}\u2009/\u2009${total}</div>
+</details>`;
+}
+
+/**
+ * Build an inline SVG sparkline chart for FGM iterate convergence data.
+ * Shows σ_T (primary), ρ̄, and the ρ̄=0.82 regime boundary as reference lines.
+ * Used live in the job card while fgm_iterate is running.
+ */
+function _buildFgmConvergenceSparkline(iters) {
+  if (!iters || iters.length < 1) return "";
+  const W = 240, H = 72, padL = 32, padR = 8, padT = 8, padB = 20;
+  const cW = W - padL - padR;
+  const cH = H - padT - padB;
+  const n  = iters.length;
+
+  const sigTs = iters.map((it) => Number(it.sigma_T ?? 0));
+  const rhos  = iters.map((it) => Number(it.mean_rho ?? 0));
+  const iNums = iters.map((it) => Number(it.iter ?? 0));
+
+  const sigTMax = Math.max(...sigTs, 1);
+  const sigTMin = 0;
+  const rhoMax  = Math.max(...rhos, 0.82);
+  const rhoMin  = Math.min(...rhos, 0.55);
+  const rhoSpan = Math.max(rhoMax - rhoMin, 0.05);
+  const iterMax = Math.max(...iNums, n - 1);
+
+  function ix(iter)  { return padL + (iter / Math.max(iterMax, 1)) * cW; }
+  function iyT(v)    { return padT + (1 - (v - sigTMin) / (sigTMax - sigTMin || 1)) * cH; }
+  function iyR(v)    { return padT + (1 - (v - rhoMin) / rhoSpan) * cH; }
+
+  // Polylines
+  const ptT = iters.map((it) => `${ix(it.iter).toFixed(1)},${iyT(Number(it.sigma_T??0)).toFixed(1)}`).join(" ");
+  const ptR = iters.map((it) => `${ix(it.iter).toFixed(1)},${iyR(Number(it.mean_rho??0)).toFixed(1)}`).join(" ");
+
+  // ρ̄=0.82 threshold line
+  const thresh82Y = iyR(0.82).toFixed(1);
+  const threshLine = rhoMin <= 0.82 && 0.82 <= rhoMax
+    ? `<line x1="${padL}" y1="${thresh82Y}" x2="${W - padR}" y2="${thresh82Y}"
+            stroke="#6050a0" stroke-width="1" stroke-dasharray="3,3" opacity="0.6"/>`
+    : "";
+
+  // Dots — gold on best iter
+  const bestIter = iters.reduce((b, it) => (it.sigma_T??999) < (b.sigma_T??999) ? it : b, iters[0]);
+  const dotsT = iters.map((it) => {
+    const isBest = it.iter === bestIter.iter;
+    return `<circle cx="${ix(it.iter).toFixed(1)}" cy="${iyT(Number(it.sigma_T??0)).toFixed(1)}"
+                    r="${isBest?3.5:2}" fill="${isBest?'#f0c060':'#5090e0'}" opacity="0.9"/>`;
+  }).join("");
+
+  // Y-axis labels (σ_T)
+  const yLabels = [0, sigTMax / 2, sigTMax].map((v) =>
+    `<text x="${padL - 3}" y="${(iyT(v) + 4).toFixed(1)}" text-anchor="end"
+            font-size="8" fill="#607080">${v.toFixed(0)}</text>`
+  ).join("");
+
+  // X-axis iter labels
+  const xLabels = iters.map((it) =>
+    `<text x="${ix(it.iter).toFixed(1)}" y="${(H - 5).toFixed(1)}" text-anchor="middle"
+            font-size="8" fill="#607080">${it.iter}</text>`
+  ).join("");
+
+  const lastT = sigTs[sigTs.length - 1];
+  const lastR = rhos[rhos.length - 1];
+
+  return `
+    <div style="margin-top:6px;padding:6px 8px;background:#0a0f1a;border-radius:6px;
+                border:1px solid #1e2d44;">
+      <div style="font-size:10px;color:#7090b0;margin-bottom:4px;display:flex;justify-content:space-between;">
+        <span>FGM Convergence — ${n} iter${n!==1?'s':''}</span>
+        <span style="color:#5090e0;">σ_T=${lastT.toFixed(1)}°C</span>
+        <span style="color:#60c880;">ρ̄=${lastR.toFixed(3)}</span>
+      </div>
+      <svg width="${W}" height="${H}" style="display:block;">
+        <!-- background -->
+        <rect x="${padL}" y="${padT}" width="${cW}" height="${cH}"
+              fill="#0d1520" rx="2"/>
+        <!-- ρ̄=0.82 threshold -->
+        ${threshLine}
+        <!-- ρ̄ line (right axis, green) -->
+        ${ptR.includes(" ") ? `<polyline points="${ptR}" fill="none" stroke="#40a060" stroke-width="1.5" opacity="0.7"/>` : ""}
+        <!-- σ_T line (blue) -->
+        <polyline points="${ptT}" fill="none" stroke="#5090e0" stroke-width="2"/>
+        ${dotsT}
+        ${yLabels}
+        ${xLabels}
+        <!-- axis labels -->
+        <text x="${padL - 3}" y="${(padT - 1).toFixed(1)}" text-anchor="end"
+              font-size="7" fill="#5090e0">σT</text>
+        <text x="${(W - padR + 2).toFixed(1)}" y="${(padT + 4).toFixed(1)}" text-anchor="start"
+              font-size="7" fill="#40a060">ρ̄</text>
+        <!-- convergence target zone hint if no near-final reached -->
+        <text x="${(padL + cW / 2).toFixed(1)}" y="${(H - 5).toFixed(1)}" text-anchor="middle"
+              font-size="7" fill="#405060">iter →</text>
+      </svg>
+    </div>`;
+}
+
+function _buildJobCardHTML(j, pct, snap, physicsOpen) {
+  const statusCls = j.status;
+  const cfg = j.config_resolution?.[0]?.resolved;
+  const cfgLine = cfg?.config_name ? `${cfg.match_type}: ${cfg.config_name}` : "";
+  const outputs = (j.output_dirs || []).join(", ");
+  const totalRuns = Number.isFinite(Number(j.total_runs)) ? Math.max(1, Number(j.total_runs)) : 1;
+  const doneRuns = Number.isFinite(Number(j.completed_runs)) ? Math.max(0, Number(j.completed_runs)) : 0;
+  const progressLabel = String(j.progress_label || (j.status === "completed" ? "Completed" : "Running"));
+  const createdMs = parseIsoMs(j.created_at);
+  const startedMs = parseIsoMs(j.started_at);
+  const endedMs   = parseIsoMs(j.ended_at);
+  let timerLabel = "";
+  if (startedMs !== null) {
+    const endRef = endedMs !== null ? endedMs : Date.now();
+    timerLabel = (endedMs !== null || ["completed", "failed", "cancelled"].includes(String(j.status)))
+      ? `Duration: ${formatDuration((endRef - startedMs) / 1000)}`
+      : `Elapsed: ${formatDuration((endRef - startedMs) / 1000)}`;
+  } else if (createdMs !== null && (String(j.status) === "queued" || String(j.status) === "paused")) {
+    timerLabel = `Waiting: ${formatDuration((Date.now() - createdMs) / 1000)}`;
+  }
+  const queuePos = Number.isFinite(Number(j.queue_position)) ? Number(j.queue_position) : null;
+  const queueControls = (j.status === "queued")
+    ? `<div class="queue-controls">
+        <span class="muted">Queue #${queuePos ?? "?"}</span>
+        <button class="queue-btn" data-jobid="${j.id}" data-dir="up" type="button">Up</button>
+        <button class="queue-btn" data-jobid="${j.id}" data-dir="down" type="button">Down</button>
+      </div>`
+    : "";
+  let controlButtons = "";
+  if (j.status === "queued") {
+    controlButtons = `<div class="job-controls">
+      <button class="job-ctl-btn" data-jobid="${j.id}" data-action="pause" type="button">Pause</button>
+      <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
+    </div>`;
+  } else if (j.status === "running") {
+    controlButtons = `<div class="job-controls">
+      <button class="job-ctl-btn" data-jobid="${j.id}" data-action="pause" type="button">Pause</button>
+      <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
+    </div>`;
+  } else if (j.status === "paused") {
+    controlButtons = `<div class="job-controls">
+      <button class="job-ctl-btn" data-jobid="${j.id}" data-action="resume" type="button">Resume</button>
+      <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
+    </div>`;
+  } else if (j.status === "cancelling") {
+    controlButtons = `<div class="job-controls"><span class="muted">Cancelling...</span></div>`;
+  }
+  // ETA (running jobs only)
+  const etaLabel = (j.status === "running") ? _getEtaLabel(j.id, pct) : "";
+  const etaHTML  = etaLabel
+    ? `<span style="color:#80d0c0;font-size:11px;font-family:monospace;margin-left:8px;">${etaLabel}</span>`
+    : "";
+
+  return `
+    <div class="job-head">
+      <strong>${j.id}</strong>
+      <span class="badge ${statusCls}">${j.status}</span>
+      ${etaHTML}
+    </div>
+    <div class="job-progress-wrap">
+      <div class="job-progress-label">${progressLabel}</div>
+      <div class="job-progress-meta">${doneRuns}/${totalRuns} \u2022 ${pct.toFixed(0)}%</div>
+    </div>
+    <div class="job-progress-track">
+      <div class="job-progress-fill ${statusCls}" style="width:0%"></div>
+    </div>
+    ${_buildPhysicsPanel(snap, physicsOpen)}
+    ${j.mode === "fgm_iterate" && Array.isArray(j.convergence_iters) && j.convergence_iters.length
+        ? _buildFgmConvergenceSparkline(j.convergence_iters)
+        : ""}
+    <div>${j.mode} \u2022 ${j.output_name || "(batch)"}</div>
+    <div>${j.started_at || j.created_at || ""}</div>
+    <div class="muted">${timerLabel}</div>
+    <div class="muted">${cfgLine}</div>
+    ${queueControls}
+    ${controlButtons}
+    <div class="muted">${outputs || "No outputs yet"}</div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <a href="${j.log_url}" target="_blank" style="font-size:11px;">\ud83d\udcc4 Open log</a>
+      <button class="job-log-toggle" data-jobid="${j.id}" data-logurl="${j.log_url}"
+              type="button" style="font-size:11px;padding:2px 8px;border-radius:3px;
+              background:#0d1a2a;border:1px solid #1e3a50;color:#7090b0;cursor:pointer;">
+        \ud83d\udccb Inline log
+      </button>
+    </div>
+    <div class="job-inline-log" style="display:none;"></div>
+  `;
+}
+
+function _attachJobCardListeners(el, j) {
+  el.querySelectorAll(".queue-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id  = btn.getAttribute("data-jobid");
+      const dir = btn.getAttribute("data-dir");
+      if (!id || !dir) return;
+      try { await reorderQueuedJob(id, dir); } catch (err) { console.error(err); }
+    });
+  });
+  el.querySelectorAll(".job-ctl-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id     = btn.getAttribute("data-jobid");
+      const action = btn.getAttribute("data-action");
+      if (!id || !action) return;
+      try { await controlJob(id, action); } catch (err) { console.error(err); }
+    });
+  });
+
+  // ── Inline log panel ────────────────────────────────────────────────────
+  const logToggle = el.querySelector(".job-log-toggle");
+  const logPanel  = el.querySelector(".job-inline-log");
+  if (logToggle && logPanel) {
+    let logPollId = null;
+
+    async function fetchLog() {
+      const logUrl = logToggle.getAttribute("data-logurl");
+      if (!logUrl) return;
+      try {
+        const res = await fetch(logUrl);
+        if (!res.ok) { logPanel.textContent = "Log unavailable."; return; }
+        const text = await res.text();
+        const lines = text.split("\n");
+        const tail  = lines.slice(-80).join("\n");
+        // Preserve scroll position: only auto-scroll if user is near bottom
+        const atBottom = logPanel.scrollHeight - logPanel.scrollTop - logPanel.clientHeight < 40;
+        logPanel.textContent = tail;
+        if (atBottom) logPanel.scrollTop = logPanel.scrollHeight;
+      } catch (_) { logPanel.textContent = "Could not fetch log."; }
+    }
+
+    function openLog() {
+      OPEN_LOGS.add(j.id);
+      logToggle.textContent = "📋 Hide log";
+      logPanel.style.cssText = "display:block;max-height:200px;overflow-y:auto;" +
+        "background:#050a10;border:1px solid #1e2d44;border-radius:4px;" +
+        "padding:8px;margin-top:6px;font-family:monospace;font-size:10px;color:#7090b0;";
+      if (!logPanel.textContent || logPanel.textContent === "Loading…") {
+        logPanel.textContent = "Loading…";
+        fetchLog();
+      }
+      if (!logPollId && j.status === "running") {
+        logPollId = setInterval(fetchLog, 3000);
+      }
+    }
+
+    function closeLog() {
+      OPEN_LOGS.delete(j.id);
+      logToggle.textContent = "📋 Inline log";
+      logPanel.style.display = "none";
+      if (logPollId) { clearInterval(logPollId); logPollId = null; }
+    }
+
+    logToggle.addEventListener("click", () => {
+      if (OPEN_LOGS.has(j.id)) closeLog(); else openLog();
+    });
+
+    // Restore open state if this job had its log open before re-render
+    if (OPEN_LOGS.has(j.id)) openLog();
+  }
+}
+
 function renderJobs(jobs) {
   const root = byId("jobs");
   if (!root) return;
   root.innerHTML = "";
+
   if (!jobs.length) {
     root.textContent = "No jobs yet.";
+    _jobAnimState.clear();
     return;
   }
 
+  const hasRunning = jobs.some((j) => j.status === "running");
+  const seenIds = new Set(jobs.map((j) => j.id));
+  _jobAnimState.forEach((_, id) => { if (!seenIds.has(id)) _jobAnimState.delete(id); });
+  // Clean up OPEN_LOGS for jobs no longer in the list
+  OPEN_LOGS.forEach((id) => { if (!seenIds.has(id)) OPEN_LOGS.delete(id); });
+
   jobs.forEach((j) => {
+    const rawPct = Number.isFinite(Number(j.progress_pct))
+      ? Number(j.progress_pct)
+      : (j.status === "completed" ? 100 : 0);
+    const pct  = Math.max(0, Math.min(100, rawPct));
+    const snap = j.physics_snapshot || null;
+    const anim = _getJobAnim(j.id);
+
+    // Default open state: open for running/paused jobs, closed for everything else.
+    // Once the user toggles the panel we respect their choice.
+    if (anim.physicsOpen === null) {
+      anim.physicsOpen = (j.status === "running" || j.status === "paused");
+    } else if (!anim.wasRunning && hasRunning && j.status !== "running" && j.status !== "paused") {
+      // Auto-collapse queued/completed jobs that were never running when another
+      // job starts (only fires once per job, then user controls it).
+      anim.physicsOpen = false;
+    }
+    anim.wasRunning = anim.wasRunning || (j.status === "running");
+
+    // Update ETA tracker for running jobs
+    if (j.status === "running") _updateEta(j.id, pct);
+    // Clean up ETA state for finished jobs
+    if (["completed","failed","cancelled"].includes(j.status)) JOB_ETA.delete(j.id);
+
     const el = document.createElement("div");
     el.className = "job";
-    const statusCls = j.status;
-    const cfg = j.config_resolution?.[0]?.resolved;
-    const cfgLine = cfg?.config_name ? `${cfg.match_type}: ${cfg.config_name}` : "";
-    const outputs = (j.output_dirs || []).join(", ");
-    const totalRuns = Number.isFinite(Number(j.total_runs)) ? Math.max(1, Number(j.total_runs)) : 1;
-    const doneRuns = Number.isFinite(Number(j.completed_runs)) ? Math.max(0, Number(j.completed_runs)) : 0;
-    const rawPct = Number.isFinite(Number(j.progress_pct)) ? Number(j.progress_pct) : (j.status === "completed" ? 100 : 0);
-    const pct = Math.max(0, Math.min(100, rawPct));
-    const progressLabel = String(j.progress_label || (j.status === "completed" ? "Completed" : "Running"));
-    const createdMs = parseIsoMs(j.created_at);
-    const startedMs = parseIsoMs(j.started_at);
-    const endedMs = parseIsoMs(j.ended_at);
-    let timerLabel = "";
-    if (startedMs !== null) {
-      const endRef = endedMs !== null ? endedMs : Date.now();
-      timerLabel = (endedMs !== null || ["completed", "failed", "cancelled"].includes(String(j.status)))
-        ? `Duration: ${formatDuration((endRef - startedMs) / 1000)}`
-        : `Elapsed: ${formatDuration((endRef - startedMs) / 1000)}`;
-    } else if (createdMs !== null && (String(j.status) === "queued" || String(j.status) === "paused")) {
-      timerLabel = `Waiting: ${formatDuration((Date.now() - createdMs) / 1000)}`;
+    el.innerHTML = _buildJobCardHTML(j, pct, snap, !!anim.physicsOpen);
+
+    // ── Transplant persistent animated fill elements ──────────────────────
+    // By reusing the same DOM node across renders the CSS `transition` fires
+    // properly (it sees a change on an existing element instead of a new one).
+    function transplant(selector, animKey, newClass) {
+      const placeholder = el.querySelector(selector);
+      if (!placeholder) return;
+      if (anim[animKey]) {
+        if (newClass) anim[animKey].className = newClass;
+        placeholder.parentNode.replaceChild(anim[animKey], placeholder);
+      } else {
+        anim[animKey] = placeholder;
+      }
     }
-    const queuePos = Number.isFinite(Number(j.queue_position)) ? Number(j.queue_position) : null;
-    const queueControls = (j.status === "queued")
-      ? `<div class="queue-controls">
-          <span class="muted">Queue #${queuePos ?? "?"}</span>
-          <button class="queue-btn" data-jobid="${j.id}" data-dir="up" type="button">Up</button>
-          <button class="queue-btn" data-jobid="${j.id}" data-dir="down" type="button">Down</button>
-        </div>`
-      : "";
-    let controlButtons = "";
-    if (j.status === "queued") {
-      controlButtons = `<div class="job-controls">
-        <button class="job-ctl-btn" data-jobid="${j.id}" data-action="pause" type="button">Pause</button>
-        <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
-      </div>`;
-    } else if (j.status === "running") {
-      controlButtons = `<div class="job-controls">
-        <button class="job-ctl-btn" data-jobid="${j.id}" data-action="pause" type="button">Pause</button>
-        <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
-      </div>`;
-    } else if (j.status === "paused") {
-      controlButtons = `<div class="job-controls">
-        <button class="job-ctl-btn" data-jobid="${j.id}" data-action="resume" type="button">Resume</button>
-        <button class="job-ctl-btn danger" data-jobid="${j.id}" data-action="cancel" type="button">Cancel</button>
-      </div>`;
-    } else if (j.status === "cancelling") {
-      controlButtons = `<div class="job-controls"><span class="muted">Cancelling...</span></div>`;
-    }
-    el.innerHTML = `
-      <div class="job-head">
-        <strong>${j.id}</strong>
-        <span class="badge ${statusCls}">${j.status}</span>
-      </div>
-      <div class="job-progress-wrap">
-        <div class="job-progress-label">${progressLabel}</div>
-        <div class="job-progress-meta">${doneRuns}/${totalRuns} • ${pct.toFixed(0)}%</div>
-      </div>
-      <div class="job-progress-track">
-        <div class="job-progress-fill ${statusCls}" style="width:${pct.toFixed(1)}%"></div>
-      </div>
-      <div>${j.mode} • ${j.output_name || "(batch)"}</div>
-      <div>${j.started_at || j.created_at || ""}</div>
-      <div class="muted">${timerLabel}</div>
-      <div class="muted">${cfgLine}</div>
-      ${queueControls}
-      ${controlButtons}
-      <div class="muted">${outputs || "No outputs yet"}</div>
-      <div><a href="${j.log_url}" target="_blank">log</a></div>
-    `;
-    el.querySelectorAll(".queue-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const id = btn.getAttribute("data-jobid");
-        const dir = btn.getAttribute("data-dir");
-        if (!id || !dir) return;
-        try {
-          await reorderQueuedJob(id, dir);
-        } catch (err) {
-          console.error(err);
-        }
-      });
-    });
-    el.querySelectorAll(".job-ctl-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const id = btn.getAttribute("data-jobid");
-        const action = btn.getAttribute("data-action");
-        if (!id || !action) return;
-        try {
-          await controlJob(id, action);
-        } catch (err) {
-          console.error(err);
-        }
-      });
-    });
+    transplant(".job-progress-fill", "progressFill", `job-progress-fill ${j.status}`);
+    transplant(".gauge-temp-fill",   "tempFill");
+    transplant(".gauge-tmax-fill",   "tmaxFill");
+    transplant(".gauge-dT-fill",     "dTFill");
+    transplant(".gauge-melt-fill",   "meltFill");
+    transplant(".gauge-dens-fill",   "densFill");
+    transplant(".gauge-err-fill",    "errFill");
+
+    _attachJobCardListeners(el, j);
     root.appendChild(el);
+
+    // ── Animate fill widths after first paint ─────────────────────────────
+    requestAnimationFrame(() => {
+      if (anim.progressFill) anim.progressFill.style.width = `${pct.toFixed(1)}%`;
+      if (snap) {
+        const T    = Number(snap.T_mean_c || 0);
+        const Tmax = Number(snap.T_max_c  || snap.T_mean_c || 0);
+        const dT   = Number(snap.dT_c != null ? snap.dT_c : Math.max(0, Tmax - T));
+        const phi  = Number(snap.phi_mean || 0);
+        const rho  = Number(snap.rho_mean || 0);
+        const err  = Number(snap.err_pct  || 0);
+        // Temperature: 25 °C (ambient) → 240 °C (headroom above 231 °C max observed)
+        // DSC ticks at 175 / 180 / 185 °C are rendered via CSS ::after on the track.
+        if (anim.tempFill) anim.tempFill.style.width =
+          `${Math.min(100, Math.max(0, (T - 25) / (240 - 25) * 100)).toFixed(1)}%`;
+        if (anim.tmaxFill) anim.tmaxFill.style.width =
+          `${Math.min(100, Math.max(0, (Tmax - 25) / (240 - 25) * 100)).toFixed(1)}%`;
+        // ΔT = T_max − T_mean: 0 °C → 50 °C scale; amber bar; lower is better
+        if (anim.dTFill) anim.dTFill.style.width =
+          `${Math.min(100, Math.max(0, dT / 50.0 * 100)).toFixed(1)}%`;
+        // Melt fraction: 0 → 1
+        if (anim.meltFill) anim.meltFill.style.width =
+          `${Math.min(100, Math.max(0, phi * 100)).toFixed(1)}%`;
+        // Relative density: powder (~0.45) → fully dense (1.0)
+        if (anim.densFill) anim.densFill.style.width =
+          `${Math.min(100, Math.max(0, (rho - 0.45) / 0.55 * 100)).toFixed(1)}%`;
+        // Energy error: 0 % → 2 % cap
+        if (anim.errFill) anim.errFill.style.width =
+          `${Math.min(100, Math.max(0, err / 2.0 * 100)).toFixed(1)}%`;
+      }
+    });
+
+    // ── Track user open/close toggle ──────────────────────────────────────
+    const details = el.querySelector(".job-physics");
+    if (details) {
+      details.addEventListener("toggle", () => {
+        anim.physicsOpen = details.open;
+      });
+    }
   });
 }
 
@@ -1171,10 +1719,30 @@ async function loadMeta() {
   renderShapePreview(byId("shape")?.value || "square");
 }
 
+let _loadJobsFailCount = 0;
+
 async function loadJobs() {
-  state.jobs = await fetchJson("/api/jobs");
-  renderJobs(state.jobs);
-  renderLiveArtifacts(state.jobs);
+  try {
+    state.jobs = await fetchJson("/api/jobs");
+    renderJobs(state.jobs);
+    renderLiveArtifacts(state.jobs);
+    if (_loadJobsFailCount > 0) {
+      // Reconnected — restore status pill
+      _loadJobsFailCount = 0;
+      const s = byId("serverStatus");
+      if (s) { s.textContent = "HEATR service connected"; s.classList.remove("status-disconnected"); }
+    }
+  } catch (e) {
+    _loadJobsFailCount++;
+    const s = byId("serverStatus");
+    if (s) {
+      s.textContent = _loadJobsFailCount < 5
+        ? `Reconnecting… (${_loadJobsFailCount})`
+        : "HEATR service unreachable";
+      s.classList.add("status-disconnected");
+    }
+    throw e;
+  }
 }
 
 function renderMatchInfo(data) {
@@ -1192,6 +1760,90 @@ function renderMatchInfo(data) {
   state.matchedConfigName = resolved.config_name || "";
 }
 
+// ── Live Exposure Calculator ──────────────────────────────────────────────────
+// Shows a T_max estimate as the user adjusts exposure time.
+// Strategy (priority order):
+//   1. If a completed run for the same shape exists in the run list, scale its
+//      T_max proportionally: T_rise ∝ t^0.55  (simple thermal diffusion model)
+//   2. Otherwise hide the chip — we have no reliable anchor for the heuristic.
+//
+// Note: match-config returns only a matched YAML, not temperature data, so it
+// cannot provide a calibration anchor on its own.
+
+const _EXP_T_AMB  = 25.0;   // °C ambient
+const _EXP_T_MELT = 185.0;  // PA12 melt onset
+const _EXP_T_CRIT = 220.0;  // over-melt danger threshold
+
+let _expCalcLastMatch  = null;  // match-config response (YAML only — no T data)
+let _expCalibCache     = {};    // shape → { refTmax, refExpMin } from run list
+
+// Called once after the run list loads; extracts the most recent completed
+// single run for each shape to use as a calibration anchor.
+function _buildExpCalibFromRuns(runs) {
+  const byShape = {};
+  for (const r of runs) {
+    if (r.run_type !== "single") continue;
+    const shape = r.group || "";
+    const ex = r.summary_excerpt || {};
+    const tmax = ex.max_T_part_c;
+    const tFinalS = ex.t_final_s;
+    if (!tmax || !tFinalS) continue;
+    const expMin = tFinalS / 60.0;
+    if (expMin <= 0 || tmax <= _EXP_T_AMB) continue;
+    // Keep the most recent (first encountered, list is newest-first)
+    if (!byShape[shape]) {
+      byShape[shape] = { refTmax: tmax, refExpMin: expMin };
+    }
+  }
+  _expCalibCache = byShape;
+  _updateExpCalc();  // re-render chip with new calibration
+}
+
+function _updateExpCalc() {
+  const chip = byId("expCalcChip");
+  if (!chip) return;
+
+  const expMin = parseFloat(byId("exposureMinutes")?.value);
+  const shape  = byId("shape")?.value || "square";
+  if (!expMin || expMin <= 0) { chip.classList.add("hidden"); return; }
+
+  const calib = _expCalibCache[shape];
+  if (!calib) {
+    // No completed run for this shape — hide rather than show a wrong number
+    chip.classList.add("hidden");
+    return;
+  }
+
+  // Scale from calibration anchor: T_rise ∝ t^0.55
+  const { refTmax, refExpMin } = calib;
+  const refRise = refTmax - _EXP_T_AMB;
+  const tMaxEst = _EXP_T_AMB + refRise * Math.pow(expMin / refExpMin, 0.55);
+  const deltaT  = tMaxEst - _EXP_T_AMB;
+
+  let tClass = "exp-est-val";
+  let tHint  = "";
+  if (tMaxEst >= _EXP_T_CRIT) {
+    tClass = "exp-est-danger";
+    tHint  = " ⚠ over-melt risk";
+  } else if (tMaxEst >= _EXP_T_MELT + 10) {
+    tClass = "exp-est-warn";
+    tHint  = " above melt onset";
+  } else if (tMaxEst >= _EXP_T_MELT - 5) {
+    tHint  = " near melt onset";
+  } else if (tMaxEst < _EXP_T_MELT - 20) {
+    tHint  = " below melt";
+  }
+
+  chip.classList.remove("hidden");
+  chip.innerHTML =
+    `<span>Est. T_max</span>` +
+    `<span class="${tClass}">${tMaxEst.toFixed(0)}°C${tHint}</span>` +
+    `<span>ΔT≈${deltaT.toFixed(0)}°C rise</span>` +
+    `<span style="color:#2a4a60;font-size:10px;" title="Scaled from ${shape} run: ` +
+    `${refTmax.toFixed(0)}°C @ ${refExpMin.toFixed(1)}min using T_rise∝t^0.55">` +
+    `(±30°C · scaled from prior ${shape} run)</span>`;
+}
+
 async function refreshMatch() {
   const box = byId("configMatch");
   if (!box) return;
@@ -1202,6 +1854,7 @@ async function refreshMatch() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    _expCalcLastMatch = data;
     renderMatchInfo(data);
     await refreshYamlPreview();
   } catch (err) {
@@ -1211,24 +1864,156 @@ async function refreshMatch() {
 
 async function launchRun(ev) {
   ev.preventDefault();
-  const antennaeEnabled = byId("antennaeEnabled")?.checked || false;
   const payload = buildPayload(true);
+  const mode = payload.mode || "single";
+
+  // fgm_import uses a dedicated endpoint (not /api/run)
+  if (mode === "fgm_import") {
+    // Handled entirely by #fgmImportLaunchBtn — the submit button is hidden for this mode
+    return;
+  }
+
+  // fgm_iterate uses a dedicated endpoint (not /api/run)
+  if (mode === "fgm_iterate") {
+    const btn = ev.target?.querySelector('[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = "Queuing…"; }
+    try {
+      const resp = await fetchJson("/api/tools/fgm-iterate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
+      await loadJobs();
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
+      alert("FGM Iterate error: " + err.message);
+    }
+    return;
+  }
+
+  const antennaeEnabled = byId("antennaeEnabled")?.checked || false;
   if (antennaeEnabled) {
     payload.antennae_enabled = true;
     AntennaWorkshop.open(payload);
   } else {
-    await fetchJson("/api/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    try {
+      await fetchJson("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await loadJobs();
+    } catch (err) {
+      alert("Launch error: " + err.message);
+    }
+  }
+}
+
+// ── Quick-launch Preset System ────────────────────────────────────────────────
+// Captures all named form inputs + selects at save time; restores at load time.
+// Stored in localStorage under key "heatr_presets" as JSON array of {name, ts, values}.
+
+const PRESET_KEY = "heatr_presets";
+
+function _getPresets() {
+  try { return JSON.parse(localStorage.getItem(PRESET_KEY) || "[]"); } catch (_) { return []; }
+}
+function _savePresets(ps) {
+  localStorage.setItem(PRESET_KEY, JSON.stringify(ps.slice(-20))); // cap at 20
+}
+
+function _captureFormValues() {
+  const form = byId("runForm");
+  if (!form) return {};
+  const vals = {};
+  form.querySelectorAll("input[id],select[id],textarea[id]").forEach((el) => {
+    if (!el.id) return;
+    if (el.type === "checkbox") vals[el.id] = el.checked;
+    else vals[el.id] = el.value;
+  });
+  return vals;
+}
+
+function _applyFormValues(vals) {
+  if (!vals || typeof vals !== "object") return;
+  Object.entries(vals).forEach(([id, val]) => {
+    const el = byId(id);
+    if (!el) return;
+    if (el.type === "checkbox") el.checked = Boolean(val);
+    else el.value = String(val);
+    // Fire change events so dependent UI updates
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+function _renderPresetDropdown() {
+  const sel = byId("presetSelect");
+  if (!sel) return;
+  const ps = _getPresets();
+  sel.innerHTML = '<option value="">— Load preset —</option>' +
+    ps.map((p, i) => `<option value="${i}">${p.name} (${new Date(p.ts).toLocaleDateString()})</option>`).join("");
+}
+
+function _initPresets() {
+  _renderPresetDropdown();
+
+  const saveBtn = byId("presetSaveBtn");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      const name = window.prompt("Preset name:", `${byId("shape")?.value || "run"}_${byId("mode")?.value || "single"}`);
+      if (!name?.trim()) return;
+      const ps = _getPresets();
+      ps.push({ name: name.trim(), ts: Date.now(), values: _captureFormValues() });
+      _savePresets(ps);
+      _renderPresetDropdown();
+      saveBtn.textContent = "✓ Saved";
+      setTimeout(() => { saveBtn.textContent = "💾 Save Preset"; }, 1500);
     });
-    await loadJobs();
+  }
+
+  const loadBtn = byId("presetLoadBtn");
+  if (loadBtn) {
+    loadBtn.addEventListener("click", () => {
+      const sel = byId("presetSelect");
+      if (!sel || sel.value === "") return;
+      const idx = parseInt(sel.value);
+      const ps  = _getPresets();
+      if (!ps[idx]) return;
+      _applyFormValues(ps[idx].values);
+      loadBtn.textContent = "✓ Loaded";
+      setTimeout(() => { loadBtn.textContent = "📂 Load"; }, 1500);
+      // Re-run dependent UI refresh
+      void (async () => {
+        setModeSections();
+        refreshOutputNamePrefix();
+        renderShapePreview(byId("shape")?.value || "square");
+        await refreshMatch();
+      })();
+    });
+  }
+
+  const deleteBtn = byId("presetDeleteBtn");
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", () => {
+      const sel = byId("presetSelect");
+      if (!sel || sel.value === "") return;
+      const idx = parseInt(sel.value);
+      const ps  = _getPresets();
+      if (!ps[idx]) return;
+      if (!window.confirm(`Delete preset "${ps[idx].name}"?`)) return;
+      ps.splice(idx, 1);
+      _savePresets(ps);
+      _renderPresetDropdown();
+    });
   }
 }
 
 async function init() {
   const form = byId("runForm");
   if (!form) return;
+
+  _initPresets();
 
   byId("mode")?.addEventListener("change", async () => {
     setModeSections();
@@ -1252,6 +2037,8 @@ async function init() {
   });
   byId("geometrySizeMm")?.addEventListener("input", refreshMatch);
   byId("geometrySizeMm")?.addEventListener("change", refreshMatch);
+  byId("exposureMinutes")?.addEventListener("input", _updateExpCalc);
+  byId("exposureMinutes")?.addEventListener("change", _updateExpCalc);
   byId("geometryLockAspect")?.addEventListener("change", refreshMatch);
   byId("physicsModelFamily")?.addEventListener("change", () => {
     syncExperimentalControls();
@@ -1335,16 +2122,125 @@ async function init() {
   applyFrequencyProfile();
   refreshOutputNamePrefix();
   refreshTurntableInfo();
+  byId("fgmIterTimeSource")?.addEventListener("change", updateFgmIterTimeSourceHelp);
+  byId("fgmIterProxy")?.addEventListener("change", updateFgmProxyHelp);
+  byId("fgmIterCorrMode")?.addEventListener("change", updateFgmIterCorrModeHelp);
+  updateFgmProxyHelp();          // set initial help text and show/hide thorough opts
+  updateFgmIterCorrModeHelp();   // set initial correction mode help text
+
+  // ── FGM Import PNG mode ───────────────────────────────────────────────────
+  // Populate the source-run datalist for fgm_import
+  (async () => {
+    try {
+      const runs = await fetchJson("/api/results-runview");
+      const list = Array.isArray(runs) ? runs : [];
+      const dl = byId("fgmImportRunList");
+      if (dl) {
+        dl.innerHTML = list.map((r) => {
+          const name = r.name || r;
+          return `<option value="${name}">`;
+        }).join("");
+      }
+    } catch (_) {}
+  })();
+
+  byId("fgmImportLaunchBtn")?.addEventListener("click", async () => {
+    const statusEl = byId("fgmImportStatus");
+    const btn = byId("fgmImportLaunchBtn");
+    const sourceRun = (byId("fgmImportSourceRun")?.value || "").trim();
+    const fileInput = byId("fgmImportFile");
+    const file = fileInput?.files?.[0];
+    const bpp = parseInt(byId("fgmImportBpp")?.value || "2", 10);
+    const outputName = (byId("fgmImportOutputName")?.value || "").trim();
+    const invertVis = (byId("fgmImportInvertVis")?.value || "true") === "true";
+    const magnitude = parseFloat(byId("fgmImportMagnitude")?.value || "1.0") || 1.0;
+
+    if (!sourceRun) {
+      if (statusEl) statusEl.textContent = "⚠ Please specify a source run.";
+      return;
+    }
+    if (!file) {
+      if (statusEl) statusEl.textContent = "⚠ Please select a PNG file.";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Importing…";
+    if (statusEl) statusEl.textContent = `Reading ${file.name}…`;
+
+    try {
+      // Read PNG as base64
+      const png_b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      if (statusEl) statusEl.textContent = "Uploading to server…";
+
+      const resp = await fetchJson("/api/tools/import-fgm-png", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_run_dir: sourceRun,
+          png_b64,
+          bpp,
+          output_name: outputName,
+          invert_vis:  invertVis,
+          magnitude,
+        }),
+      });
+
+      if (!resp.ok) throw new Error(resp.error || "import-fgm-png failed");
+      const msg =
+        `✓ Job ${resp.job_id} queued (${resp.status})\n` +
+        `  Output: ${resp.output_name}   ${resp.bpp}bpp   ` +
+        `${(resp.level_map_shape || []).join("×")} px`;
+      if (statusEl) statusEl.textContent = msg;
+      await loadJobs();
+      // Clear the file input for next use
+      if (fileInput) fileInput.value = "";
+    } catch (err) {
+      if (statusEl) statusEl.textContent = `✗ Error: ${err.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "📥 Import & Run";
+    }
+  });
+
   await Promise.all([loadJobs(), refreshMatch()]);
 
+  // Poll jobs every second — this also acts as the primary liveness check.
   setInterval(async () => {
-    try {
-      await loadJobs();
-    } catch {
-      const s = byId("serverStatus");
-      if (s) s.textContent = "HEATR service unreachable";
-    }
-  }, 3000);
+    try { await loadJobs(); } catch { /* status updated inside loadJobs */ }
+  }, 1000);
+
+  // Dedicated heartbeat every 30 s — keeps the TCP connection alive through
+  // NAT/proxy idle-timeout windows that are longer than 1 s but shorter than
+  // the browser's own idle-tab throttle (which can slow setInterval to ~1 min).
+  setInterval(async () => {
+    try { await fetch("/api/ping"); } catch { /* ignore — loadJobs handles status */ }
+  }, 30_000);
+
+  // QUIT button — graceful server shutdown
+  const quitBtn = byId("quitServerBtn");
+  if (quitBtn) {
+    quitBtn.addEventListener("click", async () => {
+      if (!confirm("Stop the HEATR server?\n\nRunning jobs will be allowed to finish, but queued jobs will be lost.")) return;
+      quitBtn.disabled = true;
+      quitBtn.textContent = "Stopping…";
+      try {
+        await fetch("/api/quit", { method: "POST" });
+        const s = byId("serverStatus");
+        if (s) { s.textContent = "Server stopped"; s.classList.add("status-disconnected"); }
+        quitBtn.textContent = "Stopped";
+      } catch {
+        quitBtn.disabled = false;
+        quitBtn.textContent = "⏻ Quit Server";
+      }
+    });
+  }
 
   setInterval(() => {
     try {
@@ -1360,11 +2256,14 @@ const AntennaWorkshop = {
   // Runtime state
   formPayload: null,
   geometry: null,       // {chamber_x_m, chamber_y_m, parts:[{polygon_m,center_x,center_y,...}]}
-  antennas: [],         // [{id, center_x, center_y, size_mm}]  — all in metres
+  antennas: [],         // [{id, center_x, center_y, size_x_mm, size_y_mm}]  — positions in metres
   selectedIdx: -1,
   drag: null,           // {idx, svgStartX, svgStartY, simStartX, simStartY}
   heatmapUrl: null,
   nextId: 0,
+  toolMode: "select",   // "select" | "add"
+  _dlg: null,           // cached <dialog> element ref
+  savedSession: null,   // {antennas, geometry} preserved after launch for reopen
 
   SVG_W: 500,
   SVG_H: 500,
@@ -1409,19 +2308,38 @@ const AntennaWorkshop = {
       y: g.chamber_y_m / 2 - (vy - off.y) / (1000 * sc),
     };
   },
+  // Use SVG CTM so coordinates are exact regardless of how CSS scales the element
   getSvgPoint(evt) {
     const svg = byId("antCanvas");
     if (!svg) return { x: 0, y: 0 };
-    const rect = svg.getBoundingClientRect();
-    return {
-      x: ((evt.clientX - rect.left) / rect.width) * this.SVG_W,
-      y: ((evt.clientY - rect.top) / rect.height) * this.SVG_H,
-    };
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+    const svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return { x: svgPt.x, y: svgPt.y };
   },
-  // px radius for an antenna in the SVG
-  antRadiusPx(sizeMm) {
-    const sc = this._scale();
-    return Math.max((sizeMm / 2) * sc, 5);  // at least 5px for click targets
+
+  // ── snap click to nearest point on any part surface edge ───────────────────
+  _snapToPartSurface(sx, sy) {
+    const g = this.geometry;
+    if (!g || !g.parts || g.parts.length === 0) return { x: sx, y: sy };
+    let bestDist = Infinity, bestX = sx, bestY = sy;
+    for (const part of g.parts) {
+      const poly = part.polygon_m || [];
+      const n = poly.length;
+      for (let i = 0; i < n; i++) {
+        const [ax, ay] = poly[i];
+        const [bx, by] = poly[(i + 1) % n];
+        const edx = bx - ax, edy = by - ay;
+        const len2 = edx * edx + edy * edy;
+        if (len2 < 1e-20) continue;
+        const t = Math.max(0, Math.min(1, ((sx - ax) * edx + (sy - ay) * edy) / len2));
+        const px = ax + t * edx, py = ay + t * edy;
+        const d = Math.hypot(px - sx, py - sy);
+        if (d < bestDist) { bestDist = d; bestX = px; bestY = py; }
+      }
+    }
+    return { x: bestX, y: bestY };
   },
 
   // ── open / close ────────────────────────────────────────────────────────────
@@ -1433,10 +2351,11 @@ const AntennaWorkshop = {
     this.heatmapUrl = null;
     this.geometry = null;
     this.nextId = 0;
+    this.toolMode = "select";
 
-    const dlg = byId("antennaWorkshop");
-    if (!dlg) return;
-    dlg.showModal();
+    this._dlg = byId("antennaWorkshop");
+    if (!this._dlg) return;
+    this._dlg.showModal();
 
     this._setStatus("Loading geometry\u2026");
     this._renderPlaceholder();
@@ -1449,19 +2368,33 @@ const AntennaWorkshop = {
       if (!data?.ok) throw new Error(data?.error || "geometry failed");
       this.geometry = data;
       this.render();
-      this._setStatus("Click canvas to place antennas \u2022 Drag to move \u2022 Right-click to remove \u2022 Scroll to resize");
+      this.setToolMode("select");
     } catch (err) {
       this._setStatus(`Error loading geometry: ${err.message}`);
     }
   },
 
   close() {
-    byId("antennaWorkshop")?.close();
+    const dlg = this._dlg || byId("antennaWorkshop");
+    if (dlg && dlg.open) dlg.close();
   },
 
   _setStatus(text) {
     const el = byId("antCanvasStatus");
     if (el) el.textContent = text;
+  },
+
+  setToolMode(mode) {
+    this.toolMode = mode;
+    const svg = byId("antCanvas");
+    if (svg) svg.setAttribute("data-tool", mode);
+    byId("antToolSelect")?.classList.toggle("ant-tool-active", mode === "select");
+    byId("antToolAdd")?.classList.toggle("ant-tool-active", mode === "add");
+    if (mode === "add") {
+      this._setStatus("Add mode \u2022 click a part edge to place \u2022 right-click to delete");
+    } else {
+      this._setStatus("Select mode \u2022 click to select \u2022 drag to move \u2022 scroll to resize \u2022 Delete to remove");
+    }
   },
 
   _renderPlaceholder() {
@@ -1479,6 +2412,7 @@ const AntennaWorkshop = {
     if (!svg || !this.geometry) return;
     const g = this.geometry;
     const ns = "http://www.w3.org/2000/svg";
+    const sc = this._scale();
 
     svg.setAttribute("width", this.SVG_W);
     svg.setAttribute("height", this.SVG_H);
@@ -1522,7 +2456,7 @@ const AntennaWorkshop = {
 
     // Electrode strips (top and bottom of chamber)
     const elecH = 5;
-    for (const [ey, fy] of [[tl.y - elecH, tl.y], [br.y, br.y + elecH]]) {
+    for (const ey of [tl.y - elecH, br.y]) {
       const el = document.createElementNS(ns, "rect");
       el.setAttribute("x", tl.x);
       el.setAttribute("y", ey);
@@ -1556,36 +2490,38 @@ const AntennaWorkshop = {
     label.textContent = `${(g.chamber_x_m * 1000).toFixed(0)}\u00d7${(g.chamber_y_m * 1000).toFixed(0)} mm`;
     svg.appendChild(label);
 
-    // Antennas
+    // Antennas — rectangles with W\u00d7H label
     this.antennas.forEach((ant, idx) => {
       const pos = this.simToSvg(ant.center_x, ant.center_y);
-      const r = this.antRadiusPx(ant.size_mm);
+      const wPx = Math.max(ant.size_x_mm * sc, 6);
+      const hPx = Math.max(ant.size_y_mm * sc, 6);
       const sel = idx === this.selectedIdx;
 
       const g_el = document.createElementNS(ns, "g");
       g_el.setAttribute("data-ant-idx", idx);
-      g_el.style.cursor = "move";
 
-      const circle = document.createElementNS(ns, "circle");
-      circle.setAttribute("cx", pos.x);
-      circle.setAttribute("cy", pos.y);
-      circle.setAttribute("r", r);
-      circle.setAttribute("fill", sel ? "rgba(34,197,94,0.45)" : "rgba(34,197,94,0.25)");
-      circle.setAttribute("stroke", sel ? "#22c55e" : "#16a34a");
-      circle.setAttribute("stroke-width", sel ? "2.5" : "1.5");
-      g_el.appendChild(circle);
+      const rectEl = document.createElementNS(ns, "rect");
+      rectEl.setAttribute("x", pos.x - wPx / 2);
+      rectEl.setAttribute("y", pos.y - hPx / 2);
+      rectEl.setAttribute("width", wPx);
+      rectEl.setAttribute("height", hPx);
+      rectEl.setAttribute("rx", "2");
+      rectEl.setAttribute("fill", sel ? "rgba(34,197,94,0.45)" : "rgba(34,197,94,0.25)");
+      rectEl.setAttribute("stroke", sel ? "#22c55e" : "#16a34a");
+      rectEl.setAttribute("stroke-width", sel ? "2.5" : "1.5");
+      g_el.appendChild(rectEl);
 
-      // Size label
+      // W\u00d7H size label below the rectangle
       const txt = document.createElementNS(ns, "text");
       txt.setAttribute("x", pos.x);
-      txt.setAttribute("y", pos.y + r + 10);
+      txt.setAttribute("y", pos.y + hPx / 2 + 10);
       txt.setAttribute("text-anchor", "middle");
       txt.setAttribute("fill", sel ? "#86efac" : "#4ade80");
       txt.setAttribute("font-size", "9");
-      txt.textContent = `${ant.size_mm.toFixed(1)}mm`;
+      txt.textContent = `${ant.size_x_mm.toFixed(1)}\u00d7${ant.size_y_mm.toFixed(1)}`;
       g_el.appendChild(txt);
 
-      // Cross-hair dot
+      // Centre dot
       const dot = document.createElementNS(ns, "circle");
       dot.setAttribute("cx", pos.x);
       dot.setAttribute("cy", pos.y);
@@ -1601,13 +2537,14 @@ const AntennaWorkshop = {
 
   // ── canvas interaction ───────────────────────────────────────────────────────
   _hitTest(svgPt) {
+    const sc = this._scale();
+    const TOL = 5;
     for (let i = this.antennas.length - 1; i >= 0; i--) {
       const ant = this.antennas[i];
       const pos = this.simToSvg(ant.center_x, ant.center_y);
-      const r = this.antRadiusPx(ant.size_mm);
-      const dx = svgPt.x - pos.x;
-      const dy = svgPt.y - pos.y;
-      if (Math.sqrt(dx * dx + dy * dy) <= r + 3) return i;
+      const hw = Math.max(ant.size_x_mm * sc / 2, 4) + TOL;
+      const hh = Math.max(ant.size_y_mm * sc / 2, 4) + TOL;
+      if (Math.abs(svgPt.x - pos.x) <= hw && Math.abs(svgPt.y - pos.y) <= hh) return i;
     }
     return -1;
   },
@@ -1619,7 +2556,7 @@ const AntennaWorkshop = {
     const hit = this._hitTest(pt);
 
     if (evt.button === 2) {
-      // Right-click → delete
+      // Right-click \u2192 delete in either mode
       if (hit >= 0) {
         this.antennas.splice(hit, 1);
         if (this.selectedIdx === hit) this.selectedIdx = -1;
@@ -1630,26 +2567,31 @@ const AntennaWorkshop = {
     }
 
     if (hit >= 0) {
-      // Click existing → select and prepare drag
+      // Hit existing antenna \u2192 select and arm drag (both modes)
       this.selectedIdx = hit;
       const ant = this.antennas[hit];
       this.drag = { idx: hit, svgStartX: pt.x, svgStartY: pt.y, simStartX: ant.center_x, simStartY: ant.center_y };
       this.render();
       this._syncSelectedSizeInput();
-    } else {
-      // Click empty → place new antenna
-      const sim = this.svgToSim(pt.x, pt.y);
-      const g = this.geometry;
-      const halfX = g.chamber_x_m / 2;
-      const halfY = g.chamber_y_m / 2;
-      if (Math.abs(sim.x) > halfX || Math.abs(sim.y) > halfY) return;  // outside chamber
-      const sizeMm = Number(byId("antDefaultSizeMm")?.value || 1.0);
-      this.antennas.push({ id: this.nextId++, center_x: sim.x, center_y: sim.y, size_mm: sizeMm });
-      this.selectedIdx = this.antennas.length - 1;
-      this.drag = null;
-      this.render();
-      this._syncSelectedSizeInput();
+      return;
     }
+
+    // Miss \u2192 only place in add mode
+    if (this.toolMode !== "add") return;
+
+    const rawSim = this.svgToSim(pt.x, pt.y);
+    const g = this.geometry;
+    if (Math.abs(rawSim.x) > g.chamber_x_m / 2 || Math.abs(rawSim.y) > g.chamber_y_m / 2) return;
+
+    // Snap to nearest part-surface edge
+    const snapped = this._snapToPartSurface(rawSim.x, rawSim.y);
+    const sizeXMm = Math.max(Number(byId("antDefaultSizeXMm")?.value) || 1.0, 0.1);
+    const sizeYMm = Math.max(Number(byId("antDefaultSizeYMm")?.value) || 1.0, 0.1);
+    this.antennas.push({ id: this.nextId++, center_x: snapped.x, center_y: snapped.y, size_x_mm: sizeXMm, size_y_mm: sizeYMm });
+    this.selectedIdx = this.antennas.length - 1;
+    this.drag = null;
+    this.render();
+    this._syncSelectedSizeInput();
   },
 
   onMouseMove(evt) {
@@ -1672,7 +2614,7 @@ const AntennaWorkshop = {
   },
 
   onContextMenu(evt) {
-    evt.preventDefault();  // prevent browser menu; actual delete happens in onMouseDown
+    evt.preventDefault();
   },
 
   onWheel(evt) {
@@ -1682,8 +2624,9 @@ const AntennaWorkshop = {
     if (hit < 0) return;
     evt.preventDefault();
     const ant = this.antennas[hit];
-    const delta = evt.deltaY < 0 ? 0.1 : -0.1;
-    ant.size_mm = Math.max(0.1, Math.round((ant.size_mm + delta) * 10) / 10);
+    const factor = evt.deltaY < 0 ? 1.1 : 0.9;
+    ant.size_x_mm = Math.max(0.1, Math.round(ant.size_x_mm * factor * 10) / 10);
+    ant.size_y_mm = Math.max(0.1, Math.round(ant.size_y_mm * factor * 10) / 10);
     if (hit === this.selectedIdx) this._syncSelectedSizeInput();
     this.render();
   },
@@ -1705,18 +2648,16 @@ const AntennaWorkshop = {
       });
       if (!data?.ok) throw new Error(data?.error || "search failed");
       this.heatmapUrl = data.heatmap_data_url || null;
-      // Populate antennas from suggestion, but keep any the user already placed
       const rows = Array.isArray(data.instances) ? data.instances : [];
-      this.antennas = rows.map((r) => ({
-        id: this.nextId++,
-        center_x: Number(r.center_x),
-        center_y: Number(r.center_y),
-        size_mm: Number(r.size_mm) || 1.0,
-      }));
+      this.antennas = rows.map((r) => {
+        const szX = Number(r.size_x_mm || r.size_mm) || 1.0;
+        const szY = Number(r.size_y_mm || r.size_mm) || 1.0;
+        return { id: this.nextId++, center_x: Number(r.center_x), center_y: Number(r.center_y), size_x_mm: szX, size_y_mm: szY };
+      });
       this.selectedIdx = -1;
       this.render();
-      if (status) status.textContent = `Quick Search found ${this.antennas.length} candidate position${this.antennas.length !== 1 ? "s" : ""}. Adjust as needed.`;
-      this._setStatus("Quick Search complete \u2022 Adjust positions by dragging \u2022 Resize with scroll wheel");
+      if (status) status.textContent = `Quick Search found ${this.antennas.length} candidate position${this.antennas.length !== 1 ? "s" : ""}. Switch to Select mode to adjust.`;
+      this.setToolMode("select");
     } catch (err) {
       if (status) status.textContent = `Search failed: ${err.message}`;
       this._setStatus("Quick Search failed.");
@@ -1725,14 +2666,14 @@ const AntennaWorkshop = {
     }
   },
 
-  // ── instance list (right-panel) ──────────────────────────────────────────────
+  // ── instance list ────────────────────────────────────────────────────────────
   _updateInstanceList() {
     const list = byId("antInstanceList");
     const count = byId("antCountLabel");
     if (count) count.textContent = this.antennas.length;
     if (!list) return;
     if (this.antennas.length === 0) {
-      list.innerHTML = '<p class="ant-instance-empty">No antennas placed yet.<br>Click on the canvas or use Quick Search.</p>';
+      list.innerHTML = '<p class="ant-instance-empty">No antennas placed yet.<br>Switch to Add mode and click a part edge.</p>';
       return;
     }
     list.innerHTML = this.antennas.map((ant, idx) => {
@@ -1740,7 +2681,7 @@ const AntennaWorkshop = {
       const ymm = (ant.center_y * 1000).toFixed(1);
       const sel = idx === this.selectedIdx;
       return `<div class="ant-instance-item${sel ? " ant-instance-selected" : ""}" data-ant-idx="${idx}">
-        <span class="ant-instance-info">Ant ${idx + 1}: (${xmm}, ${ymm}) mm &bull; ${ant.size_mm.toFixed(1)}mm</span>
+        <span class="ant-instance-info">Ant ${idx + 1}: (${xmm}, ${ymm}) mm \u2022 ${ant.size_x_mm.toFixed(1)}\u00d7${ant.size_y_mm.toFixed(1)} mm</span>
         <button class="ant-instance-del" data-del-idx="${idx}" title="Remove">&#x2715;</button>
       </div>`;
     }).join("");
@@ -1764,18 +2705,20 @@ const AntennaWorkshop = {
       });
     });
 
-    // Update selected-size row visibility
     const selRow = byId("antSelectedSizeRow");
     if (selRow) selRow.classList.toggle("hidden", this.selectedIdx < 0);
   },
 
   _syncSelectedSizeInput() {
     const selRow = byId("antSelectedSizeRow");
-    const selInput = byId("antSelectedSizeMm");
-    if (!selRow || !selInput) return;
+    if (!selRow) return;
     if (this.selectedIdx >= 0 && this.selectedIdx < this.antennas.length) {
       selRow.classList.remove("hidden");
-      selInput.value = this.antennas[this.selectedIdx].size_mm.toFixed(1);
+      const ant = this.antennas[this.selectedIdx];
+      const xIn = byId("antSelectedSizeXMm");
+      const yIn = byId("antSelectedSizeYMm");
+      if (xIn) xIn.value = ant.size_x_mm.toFixed(1);
+      if (yIn) yIn.value = ant.size_y_mm.toFixed(1);
     } else {
       selRow.classList.add("hidden");
     }
@@ -1788,7 +2731,9 @@ const AntennaWorkshop = {
     payload.antennae_explicit_instances = this.antennas.map((ant) => ({
       center_x: ant.center_x,
       center_y: ant.center_y,
-      size_mm: ant.size_mm,
+      size_x_mm: ant.size_x_mm,
+      size_y_mm: ant.size_y_mm,
+      size_mm: (ant.size_x_mm + ant.size_y_mm) / 2,
       anchor_x: ant.center_x,
       anchor_y: ant.center_y,
       part_id: 1,
@@ -1807,11 +2752,35 @@ const AntennaWorkshop = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      this.savedSession = { antennas: this.antennas.map(a => Object.assign({}, a)), geometry: this.geometry };
+      this._showReopenBtn(true);
       this.close();
       await loadJobs();
     } catch (err) {
       this._setStatus(`Launch failed: ${err.message}`);
     }
+  },
+
+  // ── session persistence ──────────────────────────────────────────────────────
+  reopen() {
+    if (!this.savedSession) return;
+    const { antennas, geometry } = this.savedSession;
+    // Restore state
+    this.geometry = geometry;
+    this.antennas = antennas.map(a => Object.assign({}, a));
+    this.selectedIdx = -1;
+    this.drag = null;
+    this.heatmapUrl = null;
+    this._dlg = byId("antennaWorkshop");
+    if (!this._dlg) return;
+    this._dlg.showModal();
+    this.render();
+    this.setToolMode("select");
+  },
+
+  _showReopenBtn(visible) {
+    const btn = byId("antReopenBtn");
+    if (btn) btn.classList.toggle("hidden", !visible);
   },
 
   // ── wiring (called from init) ────────────────────────────────────────────────
@@ -1825,8 +2794,26 @@ const AntennaWorkshop = {
       window.addEventListener("mouseup", () => this.onMouseUp());
     }
 
+    // Tool mode buttons
+    byId("antToolSelect")?.addEventListener("click", () => this.setToolMode("select"));
+    byId("antToolAdd")?.addEventListener("click", () => this.setToolMode("add"));
+
+    // Keyboard shortcuts: S = select, A = add, Delete/Backspace = remove selected
+    byId("antennaWorkshop")?.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.key === "s" || e.key === "S") { e.preventDefault(); this.setToolMode("select"); }
+      if (e.key === "a" || e.key === "A") { e.preventDefault(); this.setToolMode("add"); }
+      if ((e.key === "Delete" || e.key === "Backspace") && this.selectedIdx >= 0) {
+        e.preventDefault();
+        this.antennas.splice(this.selectedIdx, 1);
+        this.selectedIdx = -1;
+        this.render();
+      }
+    });
+
     byId("antWorkshopCloseBtn")?.addEventListener("click", () => this.close());
     byId("antCancelBtn")?.addEventListener("click", () => this.close());
+    byId("antReopenBtn")?.addEventListener("click", () => this.reopen());
     byId("antQuickSearchBtn")?.addEventListener("click", () => this.runQuickSearch());
 
     byId("antClearAllBtn")?.addEventListener("click", () => {
@@ -1836,29 +2823,43 @@ const AntennaWorkshop = {
       this.render();
     });
 
-    byId("antDefaultSizeMm")?.addEventListener("input", () => {
-      // Apply to selected antenna if one is selected
+    // Default size inputs \u2014 immediately apply to any selected antenna
+    byId("antDefaultSizeXMm")?.addEventListener("input", () => {
       if (this.selectedIdx >= 0 && this.selectedIdx < this.antennas.length) {
-        const v = Number(byId("antDefaultSizeMm")?.value);
-        if (v > 0) {
-          this.antennas[this.selectedIdx].size_mm = v;
-          byId("antSelectedSizeMm") && (byId("antSelectedSizeMm").value = v.toFixed(1));
-          this.render();
-        }
+        const v = Math.max(Number(byId("antDefaultSizeXMm")?.value) || 0, 0.1);
+        this.antennas[this.selectedIdx].size_x_mm = v;
+        const xIn = byId("antSelectedSizeXMm");
+        if (xIn) xIn.value = v.toFixed(1);
+        this.render();
+      }
+    });
+    byId("antDefaultSizeYMm")?.addEventListener("input", () => {
+      if (this.selectedIdx >= 0 && this.selectedIdx < this.antennas.length) {
+        const v = Math.max(Number(byId("antDefaultSizeYMm")?.value) || 0, 0.1);
+        this.antennas[this.selectedIdx].size_y_mm = v;
+        const yIn = byId("antSelectedSizeYMm");
+        if (yIn) yIn.value = v.toFixed(1);
+        this.render();
       }
     });
 
-    byId("antSelectedSizeMm")?.addEventListener("input", () => {
+    // Selected-antenna size inputs
+    byId("antSelectedSizeXMm")?.addEventListener("input", () => {
       if (this.selectedIdx >= 0 && this.selectedIdx < this.antennas.length) {
-        const v = Number(byId("antSelectedSizeMm")?.value);
-        if (v > 0) {
-          this.antennas[this.selectedIdx].size_mm = v;
-          this.render();
-        }
+        const v = Math.max(Number(byId("antSelectedSizeXMm")?.value) || 0, 0.1);
+        this.antennas[this.selectedIdx].size_x_mm = v;
+        this.render();
+      }
+    });
+    byId("antSelectedSizeYMm")?.addEventListener("input", () => {
+      if (this.selectedIdx >= 0 && this.selectedIdx < this.antennas.length) {
+        const v = Math.max(Number(byId("antSelectedSizeYMm")?.value) || 0, 0.1);
+        this.antennas[this.selectedIdx].size_y_mm = v;
+        this.render();
       }
     });
 
-    // Launch mode radio buttons toggle sweep controls
+    // Launch mode radio buttons
     document.querySelectorAll('input[name="antLaunchMode"]').forEach((radio) => {
       radio.addEventListener("change", () => {
         const isSweep = byId("antModeSweep")?.checked;

@@ -20,91 +20,6 @@
   color-scheme: dark;
 }
 
-.ids-inspired.spacex-mode {
-  --bg-body: #06080d;
-  --bg-surface: #0a0f19;
-  --bg-card: #0d1420;
-  --bg-input: #0b111b;
-  --border-color: #1f2b3d;
-  --text-primary: #f2f5fb;
-  --text-secondary: #9aa9bf;
-  --accent-main: #e31d2b;
-  --accent-blue: #b6c6df;
-  --accent-green: #f2f5fb;
-  --accent-amber: #e31d2b;
-  --accent-purple: #9aa9bf;
-  --accent-cyan: #f2f5fb;
-  background:
-    radial-gradient(1200px 600px at 85% -10%, rgba(227, 29, 43, 0.10), transparent 55%),
-    linear-gradient(180deg, #05070c 0%, #0a0e16 100%);
-}
-.ids-inspired.spacex-mode::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    repeating-linear-gradient(
-      60deg,
-      rgba(232, 241, 255, 0.14) 0 1px,
-      transparent 1px 28px
-    ),
-    repeating-linear-gradient(
-      -60deg,
-      rgba(232, 241, 255, 0.14) 0 1px,
-      transparent 1px 28px
-    ),
-    repeating-linear-gradient(
-      0deg,
-      rgba(232, 241, 255, 0.10) 0 1px,
-      transparent 1px 24px
-    );
-  opacity: 0.5;
-  z-index: 0;
-}
-.ids-inspired.spacex-mode .card {
-  position: relative;
-  z-index: 1;
-}
-.ids-inspired.spacex-mode .topbar-ids {
-  position: relative;
-  z-index: 3000;
-}
-.ids-inspired.spacex-mode .tabs-nav {
-  position: relative;
-  z-index: 2000;
-}
-.ids-inspired.spacex-mode .settings-menu,
-.ids-inspired.spacex-mode .settings-grid {
-  z-index: 4000;
-}
-.ids-inspired.spacex-mode .status-pill {
-  background: rgba(227,29,43,0.12);
-  border-color: rgba(227,29,43,0.45);
-  color: #ffd2d6;
-}
-.ids-inspired.spacex-mode .primary {
-  background: linear-gradient(135deg, #e31d2b, #8f0f19);
-}
-.ids-inspired.spacex-mode #runBtnTop::before,
-.ids-inspired.spacex-mode #runBtnBottom::before {
-  content: "🚀";
-}
-.ids-inspired.spacex-mode #runBtnTop::after,
-.ids-inspired.spacex-mode #runBtnBottom::after {
-  content: "🚀";
-}
-.ids-inspired.spacex-mode #runBtnTop,
-.ids-inspired.spacex-mode #runBtnBottom {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.42rem;
-}
-.ids-inspired.spacex-mode .tab-link.active {
-  color: #ffd2d6;
-  border-bottom-color: #e31d2b;
-}
 
 .ids-inspired .bg-orb { display: none; }
 
@@ -622,14 +537,6 @@ body.ids-inspired[data-bgstyle="aurora"] {
     radial-gradient(900px 420px at 95% 0%, rgba(34,197,94,0.17), transparent),
     var(--bg-body);
 }
-body.ids-inspired.spacex-mode,
-body.ids-inspired.spacex-mode[data-bgstyle="plain"],
-body.ids-inspired.spacex-mode[data-bgstyle="grid"],
-body.ids-inspired.spacex-mode[data-bgstyle="aurora"] {
-  background:
-    radial-gradient(1200px 600px at 85% -10%, rgba(227, 29, 43, 0.10), transparent 55%),
-    linear-gradient(180deg, #05070c 0%, #0a0e16 100%) !important;
-}
 
 body.ids-inspired .tab-link.active {
   color: var(--accent-main);
@@ -876,11 +783,16 @@ body.ids-inspired[data-layout="layout-3"] .results-page .gallery {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-main) 32%, transparent);
 }
 
+:root {
+  --metrics-stick-top: 5.25rem;
+}
+
 .metrics-card {
   position: sticky;
-  top: 0.65rem;
-  max-height: calc(100vh - 1.3rem);
-  overflow: auto;
+  top: var(--metrics-stick-top);
+  align-self: start;
+  max-height: calc(100vh - var(--metrics-stick-top) - 0.65rem);
+  overflow: hidden;
 }
 
 .metrics-table-wrap {
@@ -889,7 +801,7 @@ body.ids-inspired[data-layout="layout-3"] .results-page .gallery {
   border-radius: 8px;
   background: var(--bg-surface);
   overflow: auto;
-  max-height: min(68vh, 720px);
+  max-height: calc(100vh - var(--metrics-stick-top) - 8.5rem);
 }
 
 .metrics-table {
@@ -998,7 +910,9 @@ body.ids-inspired[data-layout="layout-3"] .results-page .gallery {
   }
   .metrics-card {
     position: static;
+    max-height: none;
   }
+  .metrics-table-wrap { max-height: none; }
   .run-toolbar {
     grid-template-columns: 1fr;
   }
@@ -1038,9 +952,26 @@ body.ids-inspired[data-layout="layout-3"] .results-page .gallery {
   color: var(--text-secondary);
   line-height: 1.4;
 }
+.ant-reopen-btn {
+  background: rgba(34,197,94,0.12);
+  border: 1px solid #16a34a;
+  color: #4ade80;
+  border-radius: 5px;
+  padding: 0.22rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ant-reopen-btn:hover { background: rgba(34,197,94,0.22); }
 
 /* ─── Antenna Workshop Modal ────────────────────────────────────────────────── */
+/* dialog[open] selector is critical — bare .ant-workshop-dialog { display:flex }
+   would override the browser's display:none when .close() is called, making the
+   X / Cancel buttons appear to do nothing. */
 .ant-workshop-dialog {
+  display: none;
   width: min(98vw, 1180px);
   height: min(96vh, 800px);
   border: 1px solid #2a2e3a;
@@ -1049,6 +980,12 @@ body.ids-inspired[data-layout="layout-3"] .results-page .gallery {
   border-radius: 12px;
   padding: 0;
   overflow: hidden;
+  /* Centre in viewport — works on all major browsers */
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  margin: auto;
+}
+.ant-workshop-dialog[open] {
   display: flex;
   flex-direction: column;
 }
@@ -1135,7 +1072,48 @@ body.ids-inspired[data-layout="layout-3"] .results-page .gallery {
 .ant-legend-chamber::before { background: transparent; border: 1.5px solid #334155; }
 .ant-legend-part::before    { background: rgba(59,130,246,0.25); border: 1.5px solid #3b82f6; }
 .ant-legend-electrode::before { background: #f59e0b; }
-.ant-legend-antenna::before { background: rgba(34,197,94,0.3); border: 1.5px solid #22c55e; border-radius: 50%; }
+.ant-legend-antenna::before { background: rgba(34,197,94,0.3); border: 1.5px solid #22c55e; border-radius: 2px; }
+
+/* Toolbar (Select / Add tool buttons) */
+.ant-toolbar {
+  display: flex;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  padding: 0 0.1rem;
+}
+.ant-tool-btn {
+  background: #1e2230;
+  border: 1px solid #2a2e3a;
+  border-radius: 5px;
+  color: #8b8fa3;
+  cursor: pointer;
+  padding: 0.28rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.ant-tool-btn:hover { border-color: #4c8dff; color: #e8eaed; }
+.ant-tool-btn.ant-tool-active {
+  border-color: #4c8dff;
+  background: rgba(76,141,255,0.15);
+  color: #e8eaed;
+}
+
+/* Canvas cursor based on active tool */
+.ant-canvas[data-tool="select"] { cursor: default; }
+.ant-canvas[data-tool="add"]    { cursor: crosshair; }
+
+/* Paired W/H size inputs */
+.ant-size-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
 .ant-canvas-wrap {
   flex: 1;
   min-height: 0;
@@ -1345,4 +1323,49 @@ body.ids-inspired[data-layout="layout-3"] .results-page .gallery {
   }
   .ant-canvas-col { border-right: none; border-bottom: 1px solid #2a2e3a; }
   .ant-controls-col { max-height: 260px; }
+}
+
+/* ── Dark theme consistency aliases (added for new components) ── */
+/* Map legacy variable names used in older components to the canonical palette */
+.ids-inspired {
+  --input-bg:     var(--bg-input);       /* used by preset-row, field-viewer inputs */
+  --card-bg:      var(--bg-card);        /* used by preset-row buttons */
+  --accent-color: var(--accent-main);    /* used by preset-row hover */
+  --muted:        var(--text-secondary); /* bridge to styles.css .muted class */
+}
+
+/* ── Standardise inline hardcoded card backgrounds that appear in JS-rendered HTML ── */
+/* Run card + gauge elements */
+.ids-inspired .run-card {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+}
+.ids-inspired .run-card.selected {
+  border-color: var(--accent-main) !important;
+}
+.ids-inspired .run-card.compare-selected {
+  border-color: var(--accent-purple) !important;
+}
+/* Metrics table in sidebar */
+.ids-inspired .metrics-table th {
+  color: var(--text-secondary);
+  background: #141720;
+}
+.ids-inspired .metrics-table tr:nth-child(even) td {
+  background: #161920;
+}
+/* Profile panel canvases — dark fill already set inline, just ensure border */
+.ids-inspired .profile-canvas {
+  border-color: var(--border-color);
+}
+/* Preset row inputs/buttons inherit from bg-input */
+.ids-inspired .preset-row select,
+.ids-inspired .preset-row button {
+  background: var(--bg-input);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+.ids-inspired .preset-row button:hover {
+  border-color: var(--accent-main);
+  color: var(--accent-main);
 }

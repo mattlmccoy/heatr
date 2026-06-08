@@ -7,6 +7,8 @@ import csv
 import io
 import json
 import math
+import sys
+import time
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +22,8 @@ from scipy.ndimage import gaussian_filter, binary_erosion, distance_transform_ed
 import os
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path("./.mplconfig").resolve()))
-os.environ.setdefault("MPLBACKEND", "Agg")
+import matplotlib
+matplotlib.use("Agg")  # must be before pyplot import; overrides env/system backend
 import matplotlib.pyplot as plt
 from matplotlib.path import Path as MplPath
 from matplotlib.ticker import FuncFormatter
@@ -30,7 +33,7 @@ except Exception:  # pragma: no cover - optional dependency guard
     Image = None
     ImageDraw = None
 
-from shapes import make_shape, rotate
+from shapes import make_shape, rotate, fill_region_with_primitives
 
 EPS0 = 8.8541878128e-12
 R_GAS = 8.31446261815324
@@ -149,6 +152,7 @@ class ThermalParams:
     k_liquid: float
     cp_solid: float
     cp_liquid: float
+    rho_rel_initial: float
     dens_k0: float
     dens_ea: float
     dens_model: str
@@ -190,6 +194,249 @@ class ThermalParams:
     crystallization_exponent: float = 2.0
     crystallization_liquid_suppression: float = 0.25
     debug: bool = False
+
+
+# ---------------------------------------------------------------------------
+# FGM Feedback — spatially-varying binder saturation map for re-simulation
+# ---------------------------------------------------------------------------
+
+class _FgmFeedback:
+    """Holds the FGM binder-saturation map for closed-loop feedback runs.
+
+    Fixed-start mode (iterate=False, default)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    The saturation map is loaded from a pre-generated FGM NPZ file once at
+    simulation startup and stays constant for the entire run.  Every pixel
+    inside the part gets conductivity scaled by its local saturation:
+
+        sigma(x,y) = sigma_v + sat(x,y) * fill_frac(x,y) * (sigma_d0 - sigma_v)
+
+    where sat(x,y)=1 at full 25 wt% CB doping and sat(x,y)=0 at undoped.
+
+    This directly encodes the "print this FGM map, then sinter" experiment:
+    lower-saturation pixels absorb less RF energy, redistributing Qrf toward
+    previously under-heated regions.
+
+    Iterative mode (iterate=True, NOT YET ACTIVE)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Placeholder infrastructure is present in maybe_update().  When activated
+    it will regenerate sat_map from the live Qrf field every
+    `iterate_interval_steps` outer steps using fgm_generator.generate_fgm(),
+    allowing the simulation to track how the FGM correction evolves as the
+    thermal state changes during the run.
+
+    YAML config (add to any existing run config):
+
+        fgm_feedback:
+          enabled: true
+          saturation_map_npz: "outputs_eqs/runs/.../fgm_<run>_Qrf_2bpp_mag1p00.npz"
+          # Optional overrides (same semantics as fgm_generator.py):
+          magnitude: 1.0            # 0.0=flat, 1.0=full gradient, >1=amplified
+          baseline_saturation: 0.5  # saturation at magnitude=0
+          # Future iterative-mode keys (no effect yet):
+          iterate: false
+          iterate_interval_steps: 50
+          bpp: 2
+    """
+
+    def __init__(self, sat_map: np.ndarray | None, cfg_block: dict) -> None:
+        # sat_map: (ny, nx) float32 in [0, 1], or None when FGM is disabled.
+        self.sat_map  = sat_map
+        self.enabled  = sat_map is not None
+        self._cfg     = cfg_block
+        # Iterative-mode parameters (parsed now; active when iterate=True).
+        self.iterate           = bool(cfg_block.get("iterate", False))
+        self.iterate_interval  = int(cfg_block.get("iterate_interval_steps", 50))
+        self._iteration_count  = 0
+
+    # ------------------------------------------------------------------
+    # Construction
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_config(
+        cls,
+        cfg: dict,
+        x: np.ndarray,
+        y: np.ndarray,
+        part_mask: np.ndarray,
+    ) -> "_FgmFeedback":
+        """Build an _FgmFeedback from a simulation config dict.
+
+        If ``fgm_feedback.enabled`` is False (or the key is absent), returns
+        a disabled instance that is a no-op everywhere it is used.
+        """
+        fgm_cfg = cfg.get("fgm_feedback", {})
+        if not (isinstance(fgm_cfg, dict) and bool(fgm_cfg.get("enabled", False))):
+            return cls(None, {})
+
+        npz_raw = str(fgm_cfg.get("saturation_map_npz", "")).strip()
+        if not npz_raw:
+            raise ValueError(
+                "fgm_feedback.enabled=true requires fgm_feedback.saturation_map_npz "
+                "to point to an FGM NPZ file produced by fgm_generator.py."
+            )
+        p = Path(npz_raw)
+        if not p.is_absolute():
+            p = Path(__file__).resolve().parent / p
+        if not p.exists():
+            raise FileNotFoundError(
+                f"fgm_feedback: saturation_map_npz not found: {p}"
+            )
+
+        data  = np.load(p, allow_pickle=True)
+        lm    = data["level_map"].astype(np.float32)
+        bpp   = int(data.get("bpp", np.array(2)))
+        maxv  = float((1 << bpp) - 1)
+        sat   = lm / maxv   # (ny_fgm, nx_fgm) in [0, 1]
+
+        # Resample from FGM printer-DPI grid → simulation grid.
+        # The FGM was upsampled to printer DPI; we invert that here.
+        ny_sim, nx_sim = len(y), len(x)
+        from scipy.ndimage import zoom as _zoom
+        zy = ny_sim / sat.shape[0]
+        zx = nx_sim / sat.shape[1]
+        if abs(zy - 1.0) > 0.01 or abs(zx - 1.0) > 0.01:
+            sat = _zoom(sat, (zy, zx), order=1)
+        sat = np.clip(sat, 0.0, 1.0).astype(np.float32)
+
+        # Optional magnitude / baseline re-scaling.
+        magnitude = float(fgm_cfg.get("magnitude", 1.0))
+        baseline  = float(fgm_cfg.get("baseline_saturation", 0.5))
+        if abs(magnitude - 1.0) > 1e-6 or abs(baseline - 0.5) > 1e-6:
+            sat = np.clip(
+                baseline + magnitude * (sat - baseline), 0.0, 1.0
+            ).astype(np.float32)
+
+        v_in = sat[part_mask]
+        print(
+            f"  [fgm_feedback] loaded {p.name}\n"
+            f"    sat_inside=[{v_in.min():.3f}, {v_in.max():.3f}]"
+            f"  mean={v_in.mean():.3f}"
+            f"  magnitude={magnitude:.2f}"
+            f"  iterate={bool(fgm_cfg.get('iterate', False))}"
+        )
+        return cls(sat, fgm_cfg)
+
+    # ------------------------------------------------------------------
+    # Per-timestep helpers
+    # ------------------------------------------------------------------
+
+    def effective_fill(self, fill_frac: np.ndarray) -> np.ndarray:
+        """Combined geometry x saturation blending factor for sigma/eps_r.
+
+        fill_frac handles sub-pixel geometry anti-aliasing (always present,
+        values in [0, 1] at part boundary cells, 1.0 deep inside).
+        sat_map scales local doping concentration (FGM modulation).
+
+        Returns an array with the same shape as fill_frac.  When FGM is
+        disabled the return value is fill_frac itself (zero-copy).
+        """
+        if not self.enabled:
+            return fill_frac
+        return (fill_frac * self.sat_map).astype(np.float32)
+
+    def sigma_at_mask(
+        self,
+        mask: np.ndarray,
+        sigma_d0: float,
+        T_field: np.ndarray,
+        rho_field: np.ndarray,
+        sigma_temp_coeff: float,
+        sigma_density_coeff: float,
+        sigma_ref_temp: float,
+        rho_rel_init: float,
+    ) -> np.ndarray:
+        """Compute doped-side sigma for all pixels selected by *mask*.
+
+        Incorporates temperature/density corrections (sigma_temp_coeff,
+        sigma_density_coeff) **and** the FGM saturation scaling, so the
+        result can be clipped and assigned directly:
+
+            sigma[mask] = np.clip(fb.sigma_at_mask(...), lo, hi)
+        """
+        base = (
+            sigma_d0
+            * (1.0 + sigma_temp_coeff * (T_field[mask] - sigma_ref_temp))
+            * (1.0 + sigma_density_coeff * (rho_field[mask] - rho_rel_init))
+        )
+        if self.enabled:
+            base = base * self.sat_map[mask]
+        return np.nan_to_num(
+            base,
+            nan=sigma_d0,
+            posinf=25.0 * sigma_d0,
+            neginf=1e-4 * sigma_d0,
+        )
+
+    def maybe_update(
+        self,
+        step_idx: int,
+        Qrf: np.ndarray,
+        T: np.ndarray,
+        part_mask: np.ndarray,
+    ) -> bool:
+        """Intra-run iterative FGM feedback hook.
+
+        In fixed-start mode (``iterate=False``, the default) this is always a
+        no-op and returns False.
+
+        When ``iterate=True`` every ``iterate_interval_steps`` outer timesteps:
+          1. Re-derive a new sat_map from the live T (or Qrf) field using the
+             same normalise → invert → magnitude-scale pipeline as
+             fgm_generator.generate_fgm().
+          2. Blend with the previous sat_map using ``iterate_damping`` to damp
+             oscillation (0 = frozen, 1 = full replace).
+          3. Return True so the caller re-solves the EQS with the new sigma.
+
+        Config keys in ``fgm_feedback``:
+            iterate: true
+            iterate_interval_steps: 50   # re-derive every N outer steps
+            iterate_damping: 0.5         # 0=frozen, 1=full replace
+            proxy_field: "T"             # "T" (default) or "Qrf"
+        """
+        if not (self.enabled and self.iterate):
+            return False
+        if step_idx == 0 or (step_idx % self.iterate_interval) != 0:
+            return False
+
+        # ── Choose proxy field ────────────────────────────────────────────────
+        proxy = str(self._cfg.get("proxy_field", "Qrf")).strip()
+        raw   = T if proxy == "T" else Qrf
+
+        # ── Normalise using part-interior percentiles ─────────────────────────
+        vals    = raw[part_mask]
+        lo, hi  = np.percentile(vals, (2.0, 98.0))
+        span    = max(float(hi - lo), 1e-12)
+        norm    = np.clip((raw - lo) / span, 0.0, 1.0)
+
+        # ── Invert + magnitude-scale around baseline ──────────────────────────
+        invert    = bool(self._cfg.get("invert", True))
+        baseline  = float(self._cfg.get("baseline_saturation", 0.5))
+        magnitude = float(self._cfg.get("magnitude", 1.0))
+        sat_raw   = (1.0 - norm) if invert else norm
+        sat_new   = np.clip(
+            baseline + magnitude * (sat_raw - baseline), 0.0, 1.0
+        ).astype(np.float32)
+        sat_new[~part_mask] = 0.0
+
+        # ── Damped blend: prevents oscillation ───────────────────────────────
+        damping = float(self._cfg.get("iterate_damping", 0.5))
+        self.sat_map = (
+            (1.0 - damping) * self.sat_map + damping * sat_new
+        ).astype(np.float32)
+
+        self._iteration_count += 1
+        T_inside = T[part_mask]
+        delta_T  = float(T_inside.max() - T_inside.mean())
+        print(
+            f"  [fgm_iterate] inner step={step_idx}"
+            f"  iter={self._iteration_count}"
+            f"  ΔT={delta_T:.2f}°C"
+            f"  damping={damping}",
+            flush=True,
+        )
+        return True
 
 
 def load_config(path: Path) -> dict:
@@ -730,6 +977,74 @@ def _single_part_mask_and_fill(
     poly[:, 0] += cx
     poly[:, 1] += cy
 
+    # ── Infill geometry reconstruction (optional) ─────────────────────────────
+    # When cfg.infill_geometry.enabled is True, replace the solid cross-section
+    # with an ensemble of smaller geometric primitives to tune EM coupling.
+    #
+    # Config schema (in part dict, passed through from the run YAML):
+    #   infill_geometry:
+    #     enabled: true
+    #     primitive: "equilateral_triangle"   # or "circle", "star5", "star8", etc.
+    #     primitive_size_mm: 2.0
+    #     packing_density: 0.55
+    #     arrangement: "hexagonal"            # "hexagonal" | "square" | "random"
+    #     orientation_deg: 0.0
+    #
+    # Physical rationale: triangles and stars have sharp tips that produce
+    # local E-field enhancement (E_tip ~ 5–10× E_background), increasing Qrf
+    # in those regions by 25–100×.  Circles give uniform coupling.
+    infill_cfg = part.get("infill_geometry", {})
+    _infill_enabled = (
+        isinstance(infill_cfg, dict)
+        and bool(infill_cfg.get("enabled", False))
+    )
+
+    if _infill_enabled:
+        _prim_type   = str(infill_cfg.get("primitive", "equilateral_triangle"))
+        _prim_size_m = float(infill_cfg.get("primitive_size_mm", 2.0)) * 1e-3
+        _packing     = float(infill_cfg.get("packing_density", 0.55))
+        _arrangement = str(infill_cfg.get("arrangement", "hexagonal"))
+        _orient_deg  = float(infill_cfg.get("orientation_deg", 0.0))
+
+        primitives = fill_region_with_primitives(
+            region_polygon  = poly,
+            primitive_type  = _prim_type,
+            primitive_size_m= _prim_size_m,
+            packing_density = _packing,
+            arrangement     = _arrangement,
+            orientation_deg = _orient_deg,
+            clip_to_region  = True,
+        )
+
+        if primitives:
+            # Union of all primitive masks replaces the solid fill
+            p_mask = np.zeros((len(y), len(x)), dtype=bool)
+            for prim_poly in primitives:
+                p_mask |= polygon_mask(prim_poly, x, y)
+
+            # fill_frac: union of per-primitive subpixel fractions
+            fill_frac_arr = np.zeros((len(y), len(x)), dtype=np.float32)
+            for prim_poly in primitives:
+                fill_frac_arr = np.maximum(
+                    fill_frac_arr,
+                    _subpixel_fill_fraction(prim_poly, x, y, n_sub=8)
+                )
+
+            # Return the first primitive polygon as the representative poly
+            # (used only for reporting purposes downstream)
+            return primitives[0], p_mask, fill_frac_arr
+
+        # Fallback: no primitives fit — warn and use solid fill
+        import warnings as _w
+        _w.warn(
+            f"[infill_geometry] No primitives fit inside '{shape}' region "
+            f"(primitive_size={_prim_size_m*1e3:.2f} mm, region may be too small). "
+            "Falling back to solid fill.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    # ── Standard solid fill (default path) ───────────────────────────────────
     _s = shape.strip().lower()
     if _s in {"circle", "disk", "cylinder", "sphere"}:
         _xx, _yy = np.meshgrid(x, y, indexing="xy")
@@ -856,17 +1171,21 @@ def _apply_antennae_to_mask(
             cx = float(inst.get("center_x", 0.0))
             cy = float(inst.get("center_y", 0.0))
             size_mm = float(inst.get("size_mm", 0.0))
+            # Prefer explicit X/Y dimensions; fall back to legacy circular size_mm
+            size_x_mm = float(inst.get("size_x_mm", size_mm))
+            size_y_mm = float(inst.get("size_y_mm", size_mm))
         except Exception:
             continue
-        r = max(size_mm * 1e-3, 0.0)
-        if r <= 0.0:
+        rx = max(size_x_mm * 1e-3 / 2, 0.0)
+        ry = max(size_y_mm * 1e-3 / 2, 0.0)
+        if rx <= 0.0 or ry <= 0.0:
             continue
         xx, yy = np.meshgrid(x, y, indexing="xy")
-        m = ((xx - cx) ** 2 + (yy - cy) ** 2) <= r ** 2
+        m = (np.abs(xx - cx) <= rx) & (np.abs(yy - cy) <= ry)
         if not np.any(m):
             continue
         f = _subpixel_fill_fraction(
-            lambda xq, yq, _cx=cx, _cy=cy, _r=r: (xq - _cx) ** 2 + (yq - _cy) ** 2 <= _r ** 2,
+            lambda xq, yq, _cx=cx, _cy=cy, _rx=rx, _ry=ry: (np.abs(xq - _cx) <= _rx) & (np.abs(yq - _cy) <= _ry),
             x,
             y,
             n_sub=8,
@@ -1562,6 +1881,7 @@ def thermal_step(
     diag = {
         "p_qrf_gen_w_per_m": float(np.sum(np.maximum(Qrf, 0.0)) * dA),
         "p_conv_loss_w_per_m": float(np.sum(np.maximum(q_conv, 0.0)) * dA),
+        "p_z_loss_w_per_m": float(np.sum(np.maximum(q_z_loss, 0.0)) * dA),
         "mean_dens_rate_part_per_s": float(np.mean(rate[part_mask])),
         "mean_kdens_ss_part_per_s": float(np.mean(kdens_ss[part_mask])),
         "mean_kdens_liq_part_per_s": float(np.mean(kdens_liq[part_mask])),
@@ -1577,25 +1897,43 @@ def thermal_step(
     return T_return, rho_rel_new, phi_out, x_cryst_new, diag
 
 
-def part_energy_per_depth(T: np.ndarray, rho_rel: np.ndarray, part_mask: np.ndarray, params: dict) -> float:
-    # Stored thermal energy per meter depth in the part:
+def _stored_energy_per_depth(
+    T: np.ndarray,
+    rho_rel: np.ndarray,
+    part_mask: np.ndarray,
+    params: dict,
+    *,
+    domain_wide: bool,
+    fixed_mass: bool = False,
+) -> float:
+    # Stored thermal energy per meter depth:
     # sensible + latent, referenced to ambient temperature.
+    # When domain_wide=True this mirrors the full thermal state definition used by
+    # the PDE solve across powder + part so the energy residual closes on the same
+    # control volume as the boundary-loss terms.
     T_eval = np.array(T, dtype=float, copy=True)
     rho_eval = np.array(rho_rel, dtype=float, copy=True)
     mask = np.array(part_mask, dtype=bool, copy=False)
     rho_powder = float(params.rho_powder)
     rho_solid = float(params.rho_solid)
     rho_liquid = float(params.rho_liquid)
+    cp_powder = float(params.cp_powder)
     cp_solid = float(params.cp_solid)
     cp_liquid = float(params.cp_liquid)
+    rho_rel_initial = float(params.rho_rel_initial)
     ambient_c = float(params.ambient_c)
     latent_heat = float(params.latent_heat)
     dA = float(params.dA)
 
-    # Robust scalar accumulation in-part only.
+    # Robust scalar accumulation.
     # This avoids intermittent vectorized-sum corruption observed on some Python 3.14
     # builds for this workflow.
-    ii, jj = np.where(mask)
+    if domain_wide:
+        ii, jj = np.indices(T_eval.shape)
+        ii = ii.ravel()
+        jj = jj.ravel()
+    else:
+        ii, jj = np.where(mask)
     phase_model = str(params.phase_cfg.model).strip().lower()
     t_pc = float(params.phase_cfg.t_pc_c)
     dt_pc = max(float(params.phase_cfg.dt_pc_c), 1e-9)
@@ -1617,13 +1955,34 @@ def part_energy_per_depth(T: np.ndarray, rho_rel: np.ndarray, part_mask: np.ndar
         else:
             ph = min(max((t_ij - t_solidus) / dT_lin, 0.0), 1.0)
         rr = float(rho_eval[i, j])
-        rs = rho_powder + rr * (rho_solid - rho_powder)
-        rloc = (1.0 - ph) * rs + ph * rho_liquid
-        cploc = (1.0 - ph) * cp_solid + ph * cp_liquid
+        in_part = bool(mask[i, j])
+        if in_part:
+            if fixed_mass:
+                rr = rho_rel_initial
+            rs = rho_powder + rr * (rho_solid - rho_powder)
+            rloc = (1.0 - ph) * rs + ph * rho_liquid
+            cploc = (1.0 - ph) * cp_solid + ph * cp_liquid
+        else:
+            # Outside the part the thermal model uses powder sensible properties.
+            # The latent term remains tied to the same phase fraction used in cp_eff.
+            rloc = rho_powder
+            cploc = cp_powder
         dT_ij = max(t_ij - ambient_c, 0.0)
         total += rloc * cploc * dT_ij + rloc * latent_heat * ph
     energy = total * dA
     return float(max(energy, 0.0))
+
+
+def part_energy_per_depth(T: np.ndarray, rho_rel: np.ndarray, part_mask: np.ndarray, params: dict) -> float:
+    return _stored_energy_per_depth(T, rho_rel, part_mask, params, domain_wide=False)
+
+
+def domain_energy_per_depth(T: np.ndarray, rho_rel: np.ndarray, part_mask: np.ndarray, params: dict) -> float:
+    return _stored_energy_per_depth(T, rho_rel, part_mask, params, domain_wide=True)
+
+
+def domain_energy_per_depth_fixed_mass(T: np.ndarray, rho_rel: np.ndarray, part_mask: np.ndarray, params: dict) -> float:
+    return _stored_energy_per_depth(T, rho_rel, part_mask, params, domain_wide=True, fixed_mass=True)
 
 
 def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
@@ -1703,6 +2062,15 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     sigma_density_coeff = float(mat["doped"].get("sigma_density_coeff", 0.0))
     sigma_ref_temp = float(mat["doped"].get("sigma_ref_temp_c", 20.0))
     rho_rel_init = float(dens.get("rho_rel_initial", 0.55))
+
+    # ── FGM feedback: spatially-varying binder saturation map ─────────────────
+    # Loads a pre-generated FGM NPZ (from fgm_generator.py) and uses the
+    # per-pixel saturation values to scale local conductivity:
+    #   sigma(x,y) = sigma_v + sat(x,y) * fill_frac(x,y) * (sigma_d0 - sigma_v)
+    # This simulates printing the graded map and then running the RF sinter.
+    # Fixed-start mode: sat_map is constant for the full run.
+    # Iterative mode: sat_map regenerated mid-run (see _FgmFeedback.maybe_update).
+    _fgm_fb = _FgmFeedback.from_config(cfg, x, y, part_mask)
 
     phase_cfg = therm["phase_change"]
     exp_phase_cfg = cfg.get("phase_model", {}) if isinstance(cfg.get("phase_model", {}), dict) else {}
@@ -1901,8 +2269,13 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     # Interior cells (fill=1) → doped values; exterior (fill=0) → virgin values;
     # boundary cells → smooth linear blend.  Binary part_mask is preserved for
     # thermal and densification physics (phase transitions need sharp boundaries).
-    sigma = sigma_v + fill_frac * (sigma_d0 - sigma_v)
-    eps_r = eps_v  + fill_frac * (eps_d  - eps_v)
+    #
+    # When FGM feedback is active, _fgm_fb.effective_fill() multiplies fill_frac
+    # by the per-pixel binder saturation, scaling local conductivity and
+    # permittivity proportionally to the printed CB concentration.
+    _eff_fill = _fgm_fb.effective_fill(fill_frac)
+    sigma = sigma_v + _eff_fill * (sigma_d0 - sigma_v)
+    eps_r = eps_v  + _eff_fill * (eps_d  - eps_v)
 
     # --- Optional surface sigma model ---
     # When sigma_profile == "surface", the EQS concentrates conductivity in a
@@ -2000,6 +2373,15 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     rho_rel[part_mask] = rho_rel_init
     phi = np.zeros_like(T)
     x_cryst = np.zeros_like(T) if crystallization_enabled else None
+    # Incremental energy balance trackers — consistent with Forward Euler PDE.
+    # Accumulate ΔE = ρ_bos·cp_bos·ΔT + ρ_bos·L·Δφ at each outer step using
+    # beginning-of-step (bos) material properties.  This avoids the density-
+    # mismatch error of snapshot formulas (which use post-melting density for
+    # energy that was absorbed at the lower pre-melting density).
+    _ebal_T_prev   = T.copy()
+    _ebal_phi_prev = phi.copy()
+    _ebal_rho_prev = rho_rel.copy()
+    _ebal_stored   = 0.0        # J/m cumulative stored energy (incremental)
 
     hist: dict[str, list[float]] = {
         "time_s": [],
@@ -2013,8 +2395,12 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         "energy_doped_J_per_m": [],
         "power_conv_loss_W_per_m": [],
         "energy_conv_loss_J_per_m": [],
+        "power_z_loss_W_per_m": [],
+        "energy_z_loss_J_per_m": [],
         "energy_stored_part_J_per_m": [],
+        "energy_stored_domain_J_per_m": [],
         "energy_balance_residual_J_per_m": [],
+        "energy_densification_injection_J_per_m": [],
         "mean_dens_rate_part_per_s": [],
         "mean_kdens_ss_part_per_s": [],
         "mean_kdens_liq_part_per_s": [],
@@ -2067,6 +2453,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         k_liquid=k_liquid,
         cp_solid=cp_solid,
         cp_liquid=cp_liquid,
+        rho_rel_initial=rho_rel_init,
         dens_k0=dens_k0,
         dens_ea=dens_ea,
         dens_model=dens_model,
@@ -2168,6 +2555,12 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     opt_prev_snap: tuple | None = None
     opt_maxdens_saved = False
 
+    # ── T_phi90: track temperature field at the moment phi_mean first crosses 0.90 ──
+    # Saved regardless of optimizer mode — used as a better FGM proxy than final T.
+    _T_phi90: np.ndarray | None = None          # T field snapshot
+    _T_phi90_reached: bool = False
+    _phi90_target: float = 0.90
+
     # ── Animation snapshot setup (all runs + turntable events) ──────────────────
     rep_cfg = cfg.get("reporting", {}) if isinstance(cfg.get("reporting", {}), dict) else {}
     gif_max_frames = int(rep_cfg.get("gif_max_frames", 36))
@@ -2200,6 +2593,12 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
                 part_mask=part_mask,
             )
         )
+
+    # ── Progress bar initialisation ──────────────────────────────────────────
+    _pb_t0       = time.perf_counter()
+    _pb_total_s  = n_steps * dt
+    _pb_bar_w    = 24          # width of the ▓/░ bar in characters
+    _pb_is_tty   = sys.stdout.isatty()   # only use \r when writing to a terminal
 
     for it in range(n_steps):
         # ── Turntable rotation event check (time-based) ──────────────────────────
@@ -2262,15 +2661,24 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             rho_new = np.clip(rho_new, 0.0, 1.0)
             phi_new = np.clip(phi_new, 0.0, 1.0)
             T, rho_rel, phi = T_new, rho_new, phi_new
+            # Reset incremental energy baseline to post-rotation state so the
+            # next outer-step increment is measured from the remapped fields.
+            _ebal_T_prev   = T.copy()
+            _ebal_phi_prev = phi.copy()
+            _ebal_rho_prev = rho_rel.copy()
             if x_cryst is not None:
                 x_cryst = np.clip(_remap_field(x_cryst, 0.0), 0.0, 1.0)
             part_mask, doped_mask = new_part_mask, new_doped_mask
             part_id_mask = new_part_id_mask
             # Recompute sigma from rotated thermal/density fields for consistency.
+            # _fgm_fb.sigma_at_mask() includes FGM saturation scaling when enabled.
             sigma[:, :] = sigma_v
             sigma[new_part_mask] = np.clip(
-                sigma_d0 * (1.0 + sigma_temp_coeff * (T[new_part_mask] - sigma_ref_temp))
-                * (1.0 + sigma_density_coeff * (rho_rel[new_part_mask] - rho_rel_init)),
+                _fgm_fb.sigma_at_mask(
+                    new_part_mask, sigma_d0, T, rho_rel,
+                    sigma_temp_coeff, sigma_density_coeff,
+                    sigma_ref_temp, rho_rel_init,
+                ),
                 1e-4 * sigma_d0, 25.0 * sigma_d0,
             )
             tt_phase_durations.append((tt_current_rot, t_now_tt))
@@ -2299,17 +2707,43 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
                 )
             )
 
-        if not fixed_qrf_mode and update_interval > 0 and it > 0 and (it % update_interval == 0):
-            sigma_part = sigma_d0 * (1.0 + sigma_temp_coeff * (T - sigma_ref_temp)) * (1.0 + sigma_density_coeff * (rho_rel - rho_rel_init))
-            sigma_part = np.nan_to_num(sigma_part, nan=sigma_d0, posinf=25.0 * sigma_d0, neginf=1e-4 * sigma_d0)
+        # ── Iterative FGM feedback hook ───────────────────────────────────────
+        # In fixed-start mode this is always a no-op (returns False).
+        # When iterative mode is enabled, it regenerates sat_map from the live
+        # Qrf field and forces an EQS re-solve on the next update_interval tick.
+        _fgm_updated = _fgm_fb.maybe_update(it, Qrf, T, part_mask)
+
+        if not fixed_qrf_mode and (
+            (update_interval > 0 and it > 0 and (it % update_interval == 0))
+            or _fgm_updated
+        ):
+            # Recompute sigma from current T/rho fields.
+            # _fgm_fb.sigma_at_mask() folds in both the T/density corrections
+            # AND the per-pixel FGM saturation scaling (no-op when disabled).
             sigma[:, :] = sigma_v
-            sigma[part_mask] = np.clip(sigma_part[part_mask], 1e-4 * sigma_d0, 25.0 * sigma_d0)
+            sigma[part_mask] = np.clip(
+                _fgm_fb.sigma_at_mask(
+                    part_mask, sigma_d0, T, rho_rel,
+                    sigma_temp_coeff, sigma_density_coeff,
+                    sigma_ref_temp, rho_rel_init,
+                ),
+                1e-4 * sigma_d0, 25.0 * sigma_d0,
+            )
             # Re-apply surface sigma model if active (surface cells keep sigma_d0
             # but interior cells are reduced, preserving shell-heating pattern).
             if _sigma_profile == "surface" and part_mask.any():
                 sigma[_part_interior] = np.clip(
-                    sigma_part[_part_interior], 1e-4 * _sig_int, 25.0 * _sig_int
+                    _fgm_fb.sigma_at_mask(
+                        _part_interior, sigma_d0, T, rho_rel,
+                        sigma_temp_coeff, sigma_density_coeff,
+                        sigma_ref_temp, rho_rel_init,
+                    ),
+                    1e-4 * _sig_int, 25.0 * _sig_int,
                 )
+            # Also update eps_r to stay consistent with the (possibly new) sat_map.
+            if _fgm_updated and _fgm_fb.enabled:
+                _eff_fill = _fgm_fb.effective_fill(fill_frac)
+                eps_r[:] = eps_v + _eff_fill * (eps_d - eps_v)
             T_keep = T.copy()
             rho_keep = rho_rel.copy()
             phi_keep = phi.copy()
@@ -2331,6 +2765,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
 
         p_conv_acc = 0.0
         p_qrf_acc = 0.0
+        p_z_acc = 0.0
         dens_rate_acc = 0.0
         kss_acc = 0.0
         kliq_acc = 0.0
@@ -2352,6 +2787,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             rho_rel = np.where(rho_rel < 0.0, 0.0, np.where(rho_rel > 1.0, 1.0, rho_rel))
             p_conv_acc += diag_step["p_conv_loss_w_per_m"]
             p_qrf_acc += diag_step["p_qrf_gen_w_per_m"]
+            p_z_acc += float(diag_step.get("p_z_loss_w_per_m", 0.0))
             dens_rate_acc += diag_step["mean_dens_rate_part_per_s"]
             kss_acc += diag_step["mean_kdens_ss_part_per_s"]
             kliq_acc += diag_step["mean_kdens_liq_part_per_s"]
@@ -2359,6 +2795,28 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             max_dt_used_acc = max(max_dt_used_acc, float(diag_step.get("max_dT_used_c", 0.0)))
             frac_dt_clip_acc += float(diag_step.get("frac_cells_dT_clipped", 0.0))
             x_cr_acc += float(diag_step.get("mean_x_cryst_part", 0.0))
+
+        # Accumulate stored energy using beginning-of-outer-step material properties.
+        # This is consistent with the Forward Euler PDE, which also evaluates ρ·cp
+        # at the start of each substep — avoiding the ~2× over-count that occurs
+        # when post-melting density (φ→1, ρ_eff→ρ_liquid) is used for energy that
+        # was physically absorbed at the pre-melting solid density.
+        _dT_step   = T - _ebal_T_prev
+        _dphi_step = phi - _ebal_phi_prev
+        _rs_bos    = rho_powder + _ebal_rho_prev * (rho_solid - rho_powder)
+        _rloc_bos  = np.where(part_mask,
+                               (1.0 - _ebal_phi_prev) * _rs_bos + _ebal_phi_prev * rho_liquid,
+                               rho_powder)
+        _cploc_bos = np.where(part_mask,
+                               (1.0 - _ebal_phi_prev) * cp_solid + _ebal_phi_prev * cp_liquid,
+                               cp_powder)
+        _ebal_stored += (np.sum(_rloc_bos * _cploc_bos * _dT_step)
+                         + np.sum(np.where(part_mask,
+                                           _rloc_bos * latent_heat * _dphi_step,
+                                           0.0))) * dA
+        _ebal_T_prev   = T.copy()
+        _ebal_phi_prev = phi.copy()
+        _ebal_rho_prev = rho_rel.copy()
 
         hist["time_s"].append((it + 1) * dt)
         hist["mean_T_part_c"].append(float(np.mean(T[part_mask])))
@@ -2370,7 +2828,13 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         hist["ui_rms_part"].append(float(np.sqrt(np.mean((t_part_now - t_avg) ** 2)) / denom))
         hist["mean_phi_part"].append(float(np.mean(phi[part_mask])))
         hist["mean_rho_rel_part"].append(float(np.mean(rho_rel[part_mask])))
-        p_doped = float(np.sum(Qrf[doped_mask]) * dA)
+        # ── T_phi90 snapshot: capture T when phi_mean first crosses 0.90 ───────
+        if not _T_phi90_reached and hist["mean_phi_part"][-1] >= _phi90_target:
+            _T_phi90 = T.copy().astype(np.float32)
+            _T_phi90_reached = True
+            print(f"  [T_phi90] snapshot at step {it}: φ̄={hist['mean_phi_part'][-1]:.3f}  "
+                  f"t={float((it+1)*dt):.1f}s  T̄={float(np.mean(T[part_mask])):.1f}°C", flush=True)
+        p_doped = p_qrf_acc / float(n_substeps)
         hist["power_doped_W_per_m"].append(p_doped)
         hist["qrf_scale_applied"].append(float(qrf_scale_applied))
         hist["target_power_doped_W_per_m"].append(
@@ -2382,13 +2846,30 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         hist["power_conv_loss_W_per_m"].append(p_conv_mean)
         prev_conv_energy = hist["energy_conv_loss_J_per_m"][-1] if hist["energy_conv_loss_J_per_m"] else 0.0
         hist["energy_conv_loss_J_per_m"].append(prev_conv_energy + p_conv_mean * dt)
-        # Energy bookkeeping (stored sensible + latent energy in the part).
-        # Keep this in a helper to reduce in-loop local expression complexity.
-        e_stored = part_energy_per_depth(T, rho_rel, part_mask, therm_params)
-        hist["energy_stored_part_J_per_m"].append(e_stored)
+        p_z_mean = p_z_acc / float(n_substeps)
+        hist["power_z_loss_W_per_m"].append(p_z_mean)
+        prev_z_energy = hist["energy_z_loss_J_per_m"][-1] if hist["energy_z_loss_J_per_m"] else 0.0
+        hist["energy_z_loss_J_per_m"].append(prev_z_energy + p_z_mean * dt)
+        # Energy bookkeeping:
+        # - part energy is retained as a local diagnostic
+        # - domain energy is used for the actual closure check because convection
+        #   and depth losses are applied on the full thermal domain
+        e_stored_part = part_energy_per_depth(T, rho_rel, part_mask, therm_params)
+        e_stored_domain = domain_energy_per_depth(T, rho_rel, part_mask, therm_params)
+        e_stored_domain_fixed = domain_energy_per_depth_fixed_mass(T, rho_rel, part_mask, therm_params)
+        hist["energy_stored_part_J_per_m"].append(e_stored_part)
+        hist["energy_stored_domain_J_per_m"].append(e_stored_domain)
         e_in = hist["energy_doped_J_per_m"][-1]
-        e_out = hist["energy_conv_loss_J_per_m"][-1]
-        hist["energy_balance_residual_J_per_m"].append(e_in - e_out - e_stored)
+        e_out = hist["energy_conv_loss_J_per_m"][-1] + hist["energy_z_loss_J_per_m"][-1]
+        # Use incrementally-tracked stored energy (consistent with Forward Euler PDE).
+        # The snapshot formulas (domain / fixed_mass) both produce large errors because
+        # they evaluate density at the current post-melting state for energy that was
+        # absorbed at the earlier pre-melting density.  The incremental tracker avoids
+        # this by attributing each step's ΔE to beginning-of-step material properties.
+        hist["energy_balance_residual_J_per_m"].append(e_in - e_out - _ebal_stored)
+        # Diagnostic: gap between snapshot formula and incremental tracker.
+        # Non-zero when melting/densification caused density to change during the run.
+        hist["energy_densification_injection_J_per_m"].append(e_stored_domain - _ebal_stored)
         hist["mean_dens_rate_part_per_s"].append(dens_rate_acc / float(n_substeps))
         hist["mean_kdens_ss_part_per_s"].append(kss_acc / float(n_substeps))
         hist["mean_kdens_liq_part_per_s"].append(kliq_acc / float(n_substeps))
@@ -2396,6 +2877,55 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         hist["max_dT_raw_c"].append(max_dt_raw_acc)
         hist["max_dT_used_c"].append(max_dt_used_acc)
         hist["frac_cells_dT_clipped"].append(frac_dt_clip_acc / float(n_substeps))
+
+        # ── Inline progress bar ───────────────────────────────────────────────
+        _pb_frac    = (it + 1) / n_steps
+        _pb_elapsed = time.perf_counter() - _pb_t0
+        _pb_eta     = _pb_elapsed / max(_pb_frac, 1e-9) * (1.0 - _pb_frac)
+        _pb_filled  = int(_pb_bar_w * _pb_frac)
+        _pb_bar     = "▓" * _pb_filled + "░" * (_pb_bar_w - _pb_filled)
+        _pb_T_now   = hist["mean_T_part_c"][-1]
+        _pb_Tmax_now = hist["max_T_part_c"][-1]
+        _pb_phi_now = hist["mean_phi_part"][-1]
+        _pb_rho_now = hist["mean_rho_rel_part"][-1]
+        _pb_res_now = hist["energy_balance_residual_J_per_m"][-1]
+        _pb_ein_now = hist["energy_doped_J_per_m"][-1]
+        _pb_err_pct = abs(_pb_res_now) / max(abs(_pb_ein_now), 1.0) * 100.0
+        _pb_t_sim   = (it + 1) * dt
+        _pb_line = (
+            f"\r  [{_pb_bar}] {_pb_frac*100:5.1f}%"
+            f"  step {it+1:4d}/{n_steps}"
+            f"  t={_pb_t_sim:5.0f}/{_pb_total_s:.0f}s"
+            f"  T\u0305={_pb_T_now:6.1f}\u00b0C"
+            f"  \u03c6\u0305={_pb_phi_now:.3f}"
+            f"  \u03c1\u0305={_pb_rho_now:.3f}"
+            f"  err={_pb_err_pct:.3f}%"
+            f"  ETA {_pb_eta:5.1f}s"
+        )
+        if _pb_is_tty:
+            sys.stdout.write(_pb_line)
+            sys.stdout.flush()
+        elif (it + 1) % max(1, n_steps // 20) == 0 or it == n_steps - 1:
+            # Non-TTY (log file / redirect): print at ~5% intervals
+            sys.stdout.write(_pb_line.lstrip("\r") + "\n")
+            sys.stdout.flush()
+        # Machine-readable progress line for webui server — written to stderr
+        # every step so the GUI progress bar updates continuously.
+        # Format: HEATR_PROGRESS pct=XX.XX step=N total=N T=XX Tmax=XX dT=XX phi=X rho=X err=X eta=X
+        sys.stderr.write(
+            f"HEATR_PROGRESS"
+            f" pct={_pb_frac * 100:.2f}"
+            f" step={it + 1}"
+            f" total={n_steps}"
+            f" T={_pb_T_now:.1f}"
+            f" Tmax={_pb_Tmax_now:.1f}"
+            f" dT={max(0.0, _pb_Tmax_now - _pb_T_now):.2f}"
+            f" phi={_pb_phi_now:.4f}"
+            f" rho={_pb_rho_now:.4f}"
+            f" err={_pb_err_pct:.4f}"
+            f" eta={_pb_eta:.1f}\n"
+        )
+        sys.stderr.flush()
 
         if it in gif_step_targets:
             _snap = _capture_animation_snapshot(
@@ -2458,6 +2988,28 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
                         {k: list(v) for k, v in hist.items()},
                         t_now_s,
                     )
+
+    # ── Progress bar final line ───────────────────────────────────────────────
+    _pb_total_elapsed = time.perf_counter() - _pb_t0
+    _pb_fin_T   = hist["mean_T_part_c"][-1]   if hist["mean_T_part_c"]   else 0.0
+    _pb_fin_phi = hist["mean_phi_part"][-1]    if hist["mean_phi_part"]   else 0.0
+    _pb_fin_rho = hist["mean_rho_rel_part"][-1] if hist["mean_rho_rel_part"] else 0.0
+    _pb_fin_res = hist["energy_balance_residual_J_per_m"][-1] if hist["energy_balance_residual_J_per_m"] else 0.0
+    _pb_fin_ein = hist["energy_doped_J_per_m"][-1] if hist["energy_doped_J_per_m"] else 1.0
+    _pb_fin_err = abs(_pb_fin_res) / max(abs(_pb_fin_ein), 1.0) * 100.0
+    _pb_done_bar = "▓" * _pb_bar_w
+    _pb_done_line = (
+        f"\r  [{_pb_done_bar}] 100.0%"
+        f"  step {n_steps}/{n_steps}"
+        f"  t={n_steps*dt:.0f}/{_pb_total_s:.0f}s"
+        f"  T\u0305={_pb_fin_T:6.1f}\u00b0C"
+        f"  \u03c6\u0305={_pb_fin_phi:.3f}"
+        f"  \u03c1\u0305={_pb_fin_rho:.3f}"
+        f"  err={_pb_fin_err:.3f}%"
+        f"  done in {_pb_total_elapsed:.1f}s"
+    )
+    sys.stdout.write(_pb_done_line + "\n")
+    sys.stdout.flush()
 
     if not fixed_qrf_mode:
         gamma, V, Ex, Ey, E_mag, Qrf = solve_electric_state(
@@ -2539,6 +3091,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         "generator_transfer_efficiency": float(gen_eff) if enforce_gen_power else None,
         "effective_depth_m": float(effective_depth_m) if enforce_gen_power else None,
         "energy_doped_total_J_per_m": float(hist["energy_doped_J_per_m"][-1] if hist["energy_doped_J_per_m"] else 0.0),
+        "energy_z_loss_total_J_per_m": float(hist["energy_z_loss_J_per_m"][-1] if hist["energy_z_loss_J_per_m"] else 0.0),
         "mean_T_part_final_c": float(np.mean(t_part)),
         "max_T_part_final_c": float(np.max(t_part)),
         "p95_T_part_final_c": float(np.percentile(t_part, 95.0)),
@@ -2567,6 +3120,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         "mean_rho_rel_part_final": float(np.mean(rho_rel[part_mask])),
         "energy_conv_loss_total_J_per_m": float(hist["energy_conv_loss_J_per_m"][-1] if hist["energy_conv_loss_J_per_m"] else 0.0),
         "energy_stored_part_final_J_per_m": float(hist["energy_stored_part_J_per_m"][-1] if hist["energy_stored_part_J_per_m"] else 0.0),
+        "energy_stored_domain_final_J_per_m": float(hist["energy_stored_domain_J_per_m"][-1] if hist["energy_stored_domain_J_per_m"] else 0.0),
         "energy_balance_residual_final_J_per_m": float(
             hist["energy_balance_residual_J_per_m"][-1] if hist["energy_balance_residual_J_per_m"] else 0.0
         ),
@@ -2639,6 +3193,9 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         "gif_snapshots_all": gif_snapshots_all,
         "gif_snapshots_turntable": gif_snapshots_turntable,
         "time_final_s": float(hist["time_s"][-1] if hist["time_s"] else 0.0),
+        # T_phi90: temperature field at the first phi=0.90 crossing (better FGM proxy than final T)
+        "T_phi90": _T_phi90 if _T_phi90 is not None else state.T.astype(np.float32),
+        "T_phi90_reached": _T_phi90_reached,
     }
 
     return state, summary, hist, tt_rotation_steps, opt_data
@@ -3174,6 +3731,11 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
             )
         )
 
+    # T_phi90: temperature at first phi=0.90 crossing; fallback to final T if never reached.
+    _T_phi90_save = (
+        opt_data.get("T_phi90") if (opt_data and opt_data.get("T_phi90") is not None)
+        else state.T.astype(np.float32)
+    )
     np.savez_compressed(
         output_dir / "fields.npz",
         x=state.x,
@@ -3184,6 +3746,7 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         E_mag=state.E_mag,
         Qrf=state.Qrf,
         T=state.T,
+        T_phi90=_T_phi90_save,
         phi=state.phi,
         rho_rel=state.rho_rel,
         part_mask=state.part_mask,
@@ -3374,14 +3937,13 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
     cbp = plt.colorbar(imp, ax=ax2[1], shrink=0.84)
     _style_cbar(cbp, decimals=2)
 
+    # vmin scales to the lowest density present; vmax is always 1.0 (fully dense
+    # is a fixed physical maximum — auto-scaling it to 0.6x is misleading).
     if rho_plot_mode == "part_contrast":
-        rho_lo = float(np.min(rho_part))
-        rho_hi = float(np.max(rho_part))
-        if rho_hi - rho_lo < 0.02:
-            rho_hi = min(1.0, rho_lo + 0.02)
-        rho_vmin, rho_vmax = max(0.0, rho_lo), min(1.0, rho_hi)
+        rho_vmin = max(0.0, float(np.min(rho_part)))
     else:
-        rho_vmin, rho_vmax = 0.0, 1.0
+        rho_vmin = 0.0
+    rho_vmax = 1.0
     imr = ax2[2].imshow(
         rho_disp,
         extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]],
@@ -3391,13 +3953,36 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         vmax=rho_vmax,
         interpolation="bilinear",
     )
-    ax2[2].set_title("Relative density")
+    _rho_mean_final = float(np.mean(rho_part))
+    ax2[2].set_title(f"Relative density  (ρ̄={_rho_mean_final:.3f})")
     cbr = plt.colorbar(imr, ax=ax2[2], shrink=0.84)
     _style_cbar(cbr, decimals=2)
 
     for a in ax2:
         a.contour(state.x, state.y, pm_disp, levels=[0.5], colors=["w"], linewidths=1.0)
         a.set_aspect("equal")
+
+    # Melt-fraction contours on density panel only — use unblurred phi so
+    # melt-front positions are physically accurate (MEMORY.md convention).
+    from matplotlib.lines import Line2D as _L2D
+    for _thr, _col, _ls, _lw in [
+        (0.10, "cyan",   "--", 1.1),
+        (0.50, "yellow", "-",  1.4),
+        (0.90, "red",    "--", 1.1),
+    ]:
+        try:
+            ax2[2].contour(state.x, state.y, state.phi,
+                           levels=[_thr], colors=[_col],
+                           linewidths=[_lw], linestyles=[_ls], zorder=5)
+        except Exception:
+            pass
+    _melt_legend_handles = [
+        _L2D([0], [0], color="cyan",   lw=1.1, ls="--", label="φ=0.10 (melt onset)"),
+        _L2D([0], [0], color="yellow", lw=1.4, ls="-",  label="φ=0.50 (half melt)"),
+        _L2D([0], [0], color="red",    lw=1.1, ls="--", label="φ=0.90 (near full)"),
+    ]
+    ax2[2].legend(handles=_melt_legend_handles, fontsize=6.5, loc="lower right",
+                  framealpha=0.80, facecolor="#111111", labelcolor="white", edgecolor="none")
     fig2.suptitle(_exp_label, fontsize=8, color="#555555", y=1.01)
     fig2.tight_layout()
     fig2.savefig(output_dir / "thermal_fields_final.png", dpi=180, bbox_inches="tight")
@@ -3421,8 +4006,12 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
     _ax_en = ax3[0, 1].twinx()
     _ax_pw.plot(t, hist["power_doped_W_per_m"],     "-",  lw=1.8, color="tab:blue",   label="Q_rf power")
     _ax_pw.plot(t, hist["power_conv_loss_W_per_m"], "--", lw=1.2, color="tab:cyan",   label="conv loss")
+    if any(abs(v) > 0.0 for v in hist.get("power_z_loss_W_per_m", [])):
+        _ax_pw.plot(t, hist["power_z_loss_W_per_m"], ":", lw=1.2, color="tab:purple", label="z loss")
     _ax_en.plot(t, hist["energy_doped_J_per_m"],    "-",  lw=1.2, color="tab:orange", label="cum. Q_rf")
-    _ax_en.plot(t, hist["energy_stored_part_J_per_m"], "-", lw=1.2, color="tab:red",  label="stored")
+    _ax_en.plot(t, hist["energy_stored_part_J_per_m"], "-", lw=1.0, color="tab:red",  label="stored (part)")
+    if hist.get("energy_stored_domain_J_per_m"):
+        _ax_en.plot(t, hist["energy_stored_domain_J_per_m"], "-", lw=1.2, color="tab:brown", label="stored (domain)")
     _ax_pw.set_title("Power and cumulative energy")
     _ax_pw.set_xlabel("time [s]")
     _ax_pw.set_ylabel("Power [W/m depth]", color="tab:blue")
@@ -3532,25 +4121,47 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
     cbq = plt.colorbar(imq, ax=ax4[0, 1], shrink=0.84)
     _style_cbar(cbq, decimals=2)
 
-    ax4[1, 0].plot(t, hist["mean_T_part_c"], "-", lw=1.8, label="mean T")
-    ax4[1, 0].plot(t, hist["max_T_part_c"], "-", lw=1.2, label="max T")
-    ax4[1, 0].plot(t, hist["ui_abs_part"], "-", lw=1.2, label="UI_abs")
+    # ── Bottom-left: Thermal trajectory ──────────────────────────────────────
+    ax4[1, 0].plot(t, hist["mean_T_part_c"], "-", lw=1.8, color="tab:red",    label="mean T [°C]")
+    ax4[1, 0].plot(t, hist["max_T_part_c"],  "-", lw=1.2, color="tab:orange", label="max T [°C]")
     ax4[1, 0].set_title("Thermal trajectory")
     ax4[1, 0].set_xlabel("time [s]")
+    ax4[1, 0].set_ylabel("T [°C]")
     ax4[1, 0].grid(alpha=0.25)
-    ax4[1, 0].legend(loc="best")
+    _ax4_ui = ax4[1, 0].twinx()
+    _ax4_ui.plot(t, hist["ui_abs_part"], "-", lw=1.2, color="tab:purple", alpha=0.8, label="UI_abs [–]")
+    _ax4_ui.set_ylabel("UI [–]", color="tab:purple")
+    _ax4_ui.tick_params(axis="y", colors="tab:purple")
+    _ax4_ui.set_ylim(bottom=0.0)
+    _l1, _b1 = ax4[1, 0].get_legend_handles_labels()
+    _l2, _b2 = _ax4_ui.get_legend_handles_labels()
+    ax4[1, 0].legend(_l1 + _l2, _b1 + _b2, loc="lower right", fontsize=8)
 
-    ax4[1, 1].plot(t, hist["mean_phi_part"], "-", lw=1.8, label="mean phi")
-    ax4[1, 1].plot(t, hist["mean_rho_rel_part"], "-", lw=1.2, label="mean rho_rel")
-    ax4[1, 1].set_title("Melt, density, energy balance")
+    # ── Bottom-right: Melt state & energy audit ───────────────────────────────
+    # Pre-compute energy arrays (kJ/m) from existing hist — no new keys needed.
+    _e_in_kj    = np.array(hist["energy_doped_J_per_m"]) / 1000.0
+    _e_conv_kj  = np.array(hist["energy_conv_loss_J_per_m"]) / 1000.0
+    _e_z_raw    = hist.get("energy_z_loss_J_per_m") or [0.0] * len(t)
+    _e_out_kj   = _e_conv_kj + np.array(_e_z_raw) / 1000.0
+    _e_resid_kj = np.array(hist["energy_balance_residual_J_per_m"]) / 1000.0
+    _e_stored_kj = _e_in_kj - _e_out_kj - _e_resid_kj   # correct incremental
+    _rel_resid  = abs(float(_e_resid_kj[-1])) / max(abs(float(_e_in_kj[-1])), 1e-9) * 100.0
+
+    ax4[1, 1].plot(t, hist["mean_phi_part"],    "-", lw=1.8, color="tab:blue",  label="φ (melt frac.)")
+    ax4[1, 1].plot(t, hist["mean_rho_rel_part"], "-", lw=1.2, color="tab:green", label="ρ_rel (density)")
+    ax4[1, 1].set_title(f"Melt state & energy audit  (resid {_rel_resid:.2f}%)")
     ax4[1, 1].set_xlabel("time [s]")
+    ax4[1, 1].set_ylabel("fraction [–]")
     ax4[1, 1].set_ylim(0.0, 1.0)
     ax4[1, 1].grid(alpha=0.25)
-    ax4[1, 1].legend(loc="upper left")
+    ax4[1, 1].legend(loc="upper left", fontsize=8)
     ax4r = ax4[1, 1].twinx()
-    ax4r.plot(t, hist["energy_balance_residual_J_per_m"], "-", lw=1.0, color="tab:red", alpha=0.9, label="Ebal residual")
-    ax4r.set_ylabel("residual [J/m]", color="tab:red")
-    ax4r.tick_params(axis="y", colors="tab:red")
+    ax4r.plot(t, _e_in_kj,     "-",  lw=2.0, color="tab:orange", label="E_in (RF input)")
+    ax4r.plot(t, _e_out_kj,    "-",  lw=1.2, color="tab:gray",   label="E_out (losses)")
+    ax4r.plot(t, _e_stored_kj, "--", lw=1.5, color="tab:blue",   label="E_stored (tracked)")
+    ax4r.plot(t, _e_resid_kj,  "-",  lw=1.0, color="tab:red",    label="Residual")
+    ax4r.set_ylabel("Energy [kJ/m]")
+    ax4r.legend(loc="lower right", fontsize=7)
 
     for a in [ax4[0, 0], ax4[0, 1]]:
         a.contour(state.x, state.y, pm_disp, levels=[0.5], colors=["w"], linewidths=1.0)
@@ -3562,6 +4173,127 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
     fig4.tight_layout()
     fig4.savefig(output_dir / "paper_style_report.png", dpi=180, bbox_inches="tight")
     plt.close(fig4)
+
+    # ── Validation report: exhaustive 6-panel error metrics ──────────────────
+    _t_arr = np.array(hist["time_s"])
+    _e_closure_kj = _e_stored_kj + _e_out_kj   # should ≈ E_in if balance closes
+    _e_resid_pct  = (_e_resid_kj * 1000.0) / np.where(np.abs(_e_in_kj) > 1e-9,
+                                                       _e_in_kj * 1000.0, 1.0) * 100.0
+
+    figv, axv = plt.subplots(3, 2, figsize=(13, 10))
+    figv.suptitle(f"HEATR Simulation Validation Report  —  {_exp_label}",
+                  fontsize=9, color="#333333")
+
+    # [0,0] Cumulative energy audit
+    axv[0, 0].plot(_t_arr, _e_in_kj,     "-",  lw=2.0, color="tab:orange", label="E_in (RF input)")
+    axv[0, 0].plot(_t_arr, _e_out_kj,    "-",  lw=1.2, color="tab:gray",   label="E_out (losses)")
+    axv[0, 0].plot(_t_arr, _e_stored_kj, "--", lw=1.5, color="tab:blue",   label="E_stored (tracked)")
+    axv[0, 0].plot(_t_arr, _e_closure_kj, ":", lw=1.2, color="tab:green",  label="E_stored+E_out  ← ≈ E_in?")
+    axv[0, 0].plot(_t_arr, _e_resid_kj,  "-",  lw=0.8, color="tab:red", alpha=0.6, label="Residual")
+    axv[0, 0].set_title("Cumulative energy balance [kJ/m]")
+    axv[0, 0].set_xlabel("Time [s]")
+    axv[0, 0].set_ylabel("Energy [kJ/m]")
+    axv[0, 0].legend(loc="upper left", fontsize=7)
+    axv[0, 0].grid(alpha=0.25)
+
+    # [0,1] Energy residual — absolute (J/m) + relative (%)
+    _ax01r = axv[0, 1].twinx()
+    axv[0, 1].plot(_t_arr, _e_resid_kj * 1000.0, "-", lw=1.5, color="tab:red",  label="Residual [J/m]")
+    _ax01r.plot(_t_arr, _e_resid_pct, "--", lw=1.2, color="tab:blue", label="Relative [%]")
+    _ax01r.axhline( 1.0, color="gray", lw=0.8, ls=":", alpha=0.5)
+    _ax01r.axhline(-1.0, color="gray", lw=0.8, ls=":", alpha=0.5)
+    _ax01r.axhline( 5.0, color="gray", lw=0.6, ls=":", alpha=0.35)
+    _ax01r.axhline(-5.0, color="gray", lw=0.6, ls=":", alpha=0.35)
+    axv[0, 1].set_title("Energy balance residual")
+    axv[0, 1].set_xlabel("Time [s]")
+    axv[0, 1].set_ylabel("Residual [J/m]", color="tab:red")
+    axv[0, 1].tick_params(axis="y", colors="tab:red")
+    _ax01r.set_ylabel("Relative residual [%]", color="tab:blue")
+    _ax01r.tick_params(axis="y", colors="tab:blue")
+    _l01a, _b01a = axv[0, 1].get_legend_handles_labels()
+    _l01b, _b01b = _ax01r.get_legend_handles_labels()
+    axv[0, 1].legend(_l01a + _l01b, _b01a + _b01b, loc="upper left", fontsize=7)
+    axv[0, 1].grid(alpha=0.25)
+
+    # [1,0] RF power control
+    _t_pwr = np.array(hist.get("target_power_doped_W_per_m") or [float("nan")] * len(_t_arr))
+    _ax10r = axv[1, 0].twinx()
+    axv[1, 0].plot(_t_arr, hist["power_doped_W_per_m"], "-",  lw=1.5, color="tab:blue",   label="P_RF deposited [W/m]")
+    axv[1, 0].plot(_t_arr, _t_pwr,                     "--", lw=1.0, color="tab:orange",  label="P_target [W/m]")
+    _ax10r.plot(_t_arr, hist.get("qrf_scale_applied") or [1.0] * len(_t_arr),
+                "-", lw=1.0, color="tab:green", label="QRF scale factor")
+    axv[1, 0].set_title("RF power & generator control")
+    axv[1, 0].set_xlabel("Time [s]")
+    axv[1, 0].set_ylabel("Power [W/m]", color="tab:blue")
+    axv[1, 0].tick_params(axis="y", colors="tab:blue")
+    _ax10r.set_ylabel("Scale factor [–]", color="tab:green")
+    _ax10r.tick_params(axis="y", colors="tab:green")
+    _l10a, _b10a = axv[1, 0].get_legend_handles_labels()
+    _l10b, _b10b = _ax10r.get_legend_handles_labels()
+    axv[1, 0].legend(_l10a + _l10b, _b10a + _b10b, loc="upper right", fontsize=7)
+    axv[1, 0].grid(alpha=0.25)
+
+    # [1,1] Numerical stability
+    _dT_raw  = np.array(hist.get("max_dT_raw_c")  or [0.0] * len(_t_arr))
+    _dT_used = np.array(hist.get("max_dT_used_c") or [0.0] * len(_t_arr))
+    _clip_fr = np.array(hist.get("frac_cells_dT_clipped") or [0.0] * len(_t_arr))
+    _ax11r = axv[1, 1].twinx()
+    axv[1, 1].plot(_t_arr, _dT_raw,  "-",  lw=1.5, color="tab:red",    label="max ΔT raw [°C/step]")
+    axv[1, 1].plot(_t_arr, _dT_used, "--", lw=1.2, color="tab:orange", label="max ΔT used [°C/step]")
+    _ax11r.plot(_t_arr, _clip_fr, "-", lw=0.9, color="tab:purple", label="Frac. cells clipped")
+    axv[1, 1].set_title("Numerical stability (ΔT per outer step)")
+    axv[1, 1].set_xlabel("Time [s]")
+    axv[1, 1].set_ylabel("ΔT [°C/step]", color="tab:red")
+    axv[1, 1].tick_params(axis="y", colors="tab:red")
+    _ax11r.set_ylabel("Clipped fraction [–]", color="tab:purple")
+    _ax11r.tick_params(axis="y", colors="tab:purple")
+    _l11a, _b11a = axv[1, 1].get_legend_handles_labels()
+    _l11b, _b11b = _ax11r.get_legend_handles_labels()
+    axv[1, 1].legend(_l11a + _l11b, _b11a + _b11b, loc="upper right", fontsize=7)
+    axv[1, 1].grid(alpha=0.25)
+
+    # [2,0] Temperature statistics & uniformity
+    _ax20r = axv[2, 0].twinx()
+    axv[2, 0].plot(_t_arr, hist["mean_T_part_c"], "-",  lw=1.8, color="tab:red",    label="T̄ mean [°C]")
+    axv[2, 0].plot(_t_arr, hist["max_T_part_c"],  "--", lw=1.2, color="tab:orange", label="T max [°C]")
+    _ui_abs = np.array(hist.get("ui_abs_part") or [0.0] * len(_t_arr))
+    _ui_rms = np.array(hist.get("ui_rms_part") or [0.0] * len(_t_arr))
+    _ax20r.plot(_t_arr, _ui_abs, "-",  lw=1.0, color="tab:blue",   label="UI_abs [–]")
+    _ax20r.plot(_t_arr, _ui_rms, "--", lw=0.8, color="tab:purple", label="UI_rms [–]")
+    axv[2, 0].set_title("Temperature statistics & uniformity")
+    axv[2, 0].set_xlabel("Time [s]")
+    axv[2, 0].set_ylabel("T [°C]", color="tab:red")
+    axv[2, 0].tick_params(axis="y", colors="tab:red")
+    _ax20r.set_ylabel("Uniformity index [–]", color="tab:blue")
+    _ax20r.tick_params(axis="y", colors="tab:blue")
+    _ax20r.set_ylim(bottom=0.0)
+    _l20a, _b20a = axv[2, 0].get_legend_handles_labels()
+    _l20b, _b20b = _ax20r.get_legend_handles_labels()
+    axv[2, 0].legend(_l20a + _l20b, _b20a + _b20b, loc="upper left", fontsize=7)
+    axv[2, 0].grid(alpha=0.25)
+
+    # [2,1] Densification kinetics
+    _ax21r = axv[2, 1].twinx()
+    axv[2, 1].plot(_t_arr, hist["mean_phi_part"],     "-", lw=1.8, color="tab:blue",  label="φ̄ (melt frac.)")
+    axv[2, 1].plot(_t_arr, hist["mean_rho_rel_part"], "-", lw=1.2, color="tab:green", label="ρ̄_rel (density)")
+    axv[2, 1].set_ylim(0.0, 1.0)
+    _dens_rate = np.array(hist.get("mean_dens_rate_part_per_s") or [0.0] * len(_t_arr))
+    _kliq      = np.array(hist.get("mean_kdens_liq_part_per_s") or [0.0] * len(_t_arr))
+    _ax21r.plot(_t_arr, _dens_rate, "-",  lw=0.9, color="tab:brown", label="ρ rate [1/s]")
+    _ax21r.plot(_t_arr, _kliq,      "--", lw=0.8, color="tab:olive", label="k_dens liq [1/s]")
+    axv[2, 1].set_title("Densification kinetics")
+    axv[2, 1].set_xlabel("Time [s]")
+    axv[2, 1].set_ylabel("fraction [–]")
+    _ax21r.set_ylabel("Densification rate [1/s]", color="tab:brown")
+    _ax21r.tick_params(axis="y", colors="tab:brown")
+    _l21a, _b21a = axv[2, 1].get_legend_handles_labels()
+    _l21b, _b21b = _ax21r.get_legend_handles_labels()
+    axv[2, 1].legend(_l21a + _l21b, _b21a + _b21b, loc="upper left", fontsize=7)
+    axv[2, 1].grid(alpha=0.25)
+
+    figv.tight_layout()
+    figv.savefig(output_dir / "validation_report.png", dpi=150, bbox_inches="tight")
+    plt.close(figv)
 
     # Animated evolution outputs (all runs + turntable rotation events).
     _generate_animation_gifs(cfg=cfg, state=state, output_dir=output_dir, opt_data=opt_data)
@@ -4715,9 +5447,23 @@ def main() -> None:
     p = argparse.ArgumentParser(description="RFAM EQS -> transient thermal/phase/densification simulator")
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--output-dir", type=Path, default=Path("./outputs_eqs/run"))
+    p.add_argument(
+        "--gif-fps",
+        type=float,
+        default=None,
+        metavar="FPS",
+        help="Override GIF frame rate (frames/sec) for turntable and optimizer GIFs. "
+             "Equivalent to reporting.gif_frame_duration_s = 1/FPS. "
+             "Default reads from config (gif_frame_duration_s: 0.6, angle_gif_frame_duration_s: 2.0).",
+    )
     args = p.parse_args()
 
     cfg = load_config(args.config)
+    if args.gif_fps is not None:
+        _gif_duration_s = 1.0 / float(args.gif_fps)
+        cfg.setdefault("reporting", {})["gif_frame_duration_s"] = _gif_duration_s
+        cfg.setdefault("output", {})["angle_gif_frame_duration_s"] = _gif_duration_s
+        print(f"  [gif] frame rate override: {args.gif_fps:.1f} fps → {_gif_duration_s:.3f} s/frame")
     if bool(cfg.get("orientation_optimizer", {}).get("enabled", False)):
         best = run_orientation_optimizer(cfg, args.output_dir)
         print(f"Wrote outputs to: {args.output_dir.resolve()}")
