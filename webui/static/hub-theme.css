@@ -1,0 +1,721 @@
+/* =========================================================
+   HEATR — Hub Design System Override
+   Loaded after styles.css + design-b.css.
+   Replaces colour tokens and nav to match the Research Toolkit
+   hub: Space Grotesk · #0A0A0A base · orange accent #F5A962.
+   All structural layout (grid, panels, gauges) is untouched.
+   ========================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
+
+/* ── Token overrides ───────────────────────────────────────── */
+.ids-inspired {
+  /* Base surfaces — lifted palette */
+  --bg-body:      #1A1A1A;
+  --bg-surface:   #222222;
+  --bg-card:      #2A2A2A;
+  --bg-input:     #303030;
+
+  /* Borders — same as hub */
+  --border-color: rgba(255, 255, 255, 0.13);
+
+  /* Text — readable contrast */
+  --text-primary:   #FAFAFA;
+  --text-secondary: #C0C0C0;  /* ~8:1 on #0A0A0A — legible for engineering data */
+
+  /* Accent: orange default (matches hub tool card colour for HEATR).
+     --accent-main is overridden by [data-accent] selectors in design-b.css. */
+  --accent-main:   #F5A962;
+  --accent-blue:   #F5A962;   /* replaces blue accent everywhere */
+  --accent-green:  #34d399;
+  --accent-amber:  #fbbf24;
+  --accent-purple: #c084fc;
+  --accent-cyan:   #22d3ee;
+
+  /* YAML inspector */
+  --yaml-bg:    #141414;
+  --yaml-fg:    #FAFAFA;
+  --yaml-border: rgba(255, 255, 255, 0.14);
+
+  /* Font */
+  font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+
+  background: #1A1A1A;
+  color: #FAFAFA;
+}
+
+/* ── Grid background (matches hub) ─────────────────────────── */
+.ids-inspired::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--accent-main) 2.5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-main) 2.5%, transparent) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Topbar ─────────────────────────────────────────────────── */
+.topbar-ids {
+  background: rgba(10, 10, 10, 0.92) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14) !important;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  padding: 0 1.5rem !important;
+  height: 64px;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky !important;
+  top: 0;
+  z-index: 200;
+}
+
+.topbar-ids > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.topbar-ids h1 {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--accent-main) !important;
+  margin: 0 !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-ids h1::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent-main);
+  box-shadow: 0 0 8px var(--accent-main);
+  flex-shrink: 0;
+}
+
+.topbar-ids p {
+  font-size: 0.78rem !important;
+  color: #C0C0C0 !important;
+  margin: 0 !important;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Hub back-link (injected into all pages) */
+.heatr-hub-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #C0C0C0;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 100px;
+  text-decoration: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+}
+.heatr-hub-link:hover {
+  color: var(--accent-main);
+  border-color: var(--accent-main);
+  background: color-mix(in srgb, var(--accent-main) 10%, transparent);
+}
+
+/* Settings menu */
+.ids-inspired .settings-menu summary {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #C0C0C0;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 100px;
+  cursor: pointer;
+  list-style: none;
+  transition: all 0.2s;
+}
+.ids-inspired .settings-menu summary:hover {
+  color: var(--accent-main);
+  border-color: var(--accent-main);
+  background: color-mix(in srgb, var(--accent-main) 8%, transparent);
+}
+.ids-inspired .settings-menu summary::-webkit-details-marker { display: none; }
+
+/* Status pill */
+.ids-inspired .status-pill {
+  background: color-mix(in srgb, var(--accent-main) 10%, transparent) !important;
+  color: var(--accent-main) !important;
+  border: 1px solid color-mix(in srgb, var(--accent-main) 35%, transparent) !important;
+  border-radius: 100px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.28rem 0.65rem;
+}
+
+/* ── Tab nav ─────────────────────────────────────────────────── */
+.tabs-nav {
+  background: rgba(10, 10, 10, 0.92) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14) !important;
+  padding: 0 1.5rem !important;
+  backdrop-filter: blur(20px);
+  gap: 0.1rem !important;
+}
+
+.tab-link {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  color: #C0C0C0 !important;
+  padding: 0.55rem 0.75rem !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  transition: color 0.2s, border-color 0.2s !important;
+}
+.tab-link:hover { color: #FAFAFA !important; }
+.tab-link.active {
+  color: var(--accent-main) !important;
+  border-bottom-color: var(--accent-main) !important;
+}
+
+/* ── Cards ────────────────────────────────────────────────────── */
+.ids-inspired .card {
+  background: #2A2A2A !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  transition: border-color 0.2s;
+}
+.ids-inspired .card:hover {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Card headings */
+.ids-inspired .card h2,
+.ids-inspired .card h3 {
+  font-family: 'Instrument Serif', Georgia, serif !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.01em !important;
+  color: #FAFAFA !important;
+}
+.ids-inspired .card h2 { font-size: 1.4rem !important; }
+
+/* ── Primary button ─────────────────────────────────────────── */
+.ids-inspired .primary,
+.ids-inspired button.primary {
+  background: var(--accent-main) !important;
+  border: none !important;
+  color: #0A0A0A !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  border-radius: 100px !important;
+  padding: 0.65rem 1.25rem !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.ids-inspired .primary:hover,
+.ids-inspired button.primary:hover {
+  background: color-mix(in srgb, var(--accent-main) 80%, black) !important;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent-main) 35%, transparent) !important;
+  transform: translateY(-1px);
+}
+.ids-inspired .primary.compact {
+  padding: 0.38rem 0.9rem !important;
+  font-size: 0.7rem !important;
+}
+
+/* ── All other buttons ──────────────────────────────────────── */
+.ids-inspired button:not(.primary):not(.job-ctl-btn):not(.queue-btn) {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+}
+
+/* ── Inputs, selects ─────────────────────────────────────────── */
+.ids-inspired input,
+.ids-inspired select {
+  background: #303030 !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;  /* more visible than card borders */
+  color: #FAFAFA !important;
+  border-radius: 8px !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.88rem !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+}
+.ids-inspired input:focus,
+.ids-inspired select:focus {
+  border-color: var(--accent-main) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-main) 15%, transparent) !important;
+  outline: none !important;
+}
+.ids-inspired select option {
+  background: #2A2A2A !important;
+  color: #FAFAFA !important;
+}
+
+/* ── Labels ─────────────────────────────────────────────────── */
+.ids-inspired label {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.82rem !important;       /* was 0.72 — readable for dense forms */
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;   /* drop tight tracking for normal labels */
+  text-transform: none !important;     /* drop all-caps — params need mixed case */
+  color: #B0B0B0 !important;
+  gap: 0.3rem !important;
+  line-height: 1.5 !important;
+}
+
+/* ── Advanced panel (details/summary) ──────────────────────── */
+.ids-inspired .advanced-panel > summary {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent-main);
+  padding: 0.5rem 0;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.ids-inspired .advanced-panel > summary::before {
+  content: '▶';
+  font-size: 0.55rem;
+  opacity: 0.6;
+  transition: transform 0.15s;
+}
+.ids-inspired .advanced-panel[open] > summary::before {
+  transform: rotate(90deg);
+}
+.ids-inspired .advanced-panel > summary::-webkit-details-marker { display: none; }
+
+/* ── Match/config box ───────────────────────────────────────── */
+.ids-inspired .match-box {
+  background: #222222 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  color: #FAFAFA !important;
+  font-family: 'SF Mono', 'Fira Code', monospace !important;
+  font-size: 0.78rem !important;
+  padding: 0.6rem !important;
+}
+
+/* ── YAML / code blocks ─────────────────────────────────────── */
+.ids-inspired .summary,
+.ids-inspired pre,
+.ids-inspired .yaml-preview {
+  background: #141414 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #FAFAFA !important;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace !important;
+  font-size: 0.78rem !important;
+  border-radius: 8px !important;
+}
+
+/* YAML important section */
+.ids-inspired .yaml-important {
+  background: color-mix(in srgb, var(--accent-main) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-main) 20%, transparent);
+  border-radius: 8px;
+  padding: 0.5rem;
+  font-size: 0.78rem;
+  color: #FAFAFA;
+  margin-bottom: 0.5rem;
+}
+
+/* ── Job cards ──────────────────────────────────────────────── */
+.ids-inspired .job {
+  background: #222222 !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 10px !important;
+  transition: border-color 0.15s;
+}
+.ids-inspired .job:hover {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Job name */
+.ids-inspired .job-head { align-items: center; }
+.ids-inspired .job strong {
+  font-size: 0.85rem;
+  color: #FAFAFA;
+}
+
+/* Progress bar tint: accent color */
+.ids-inspired .job-progress-fill.running {
+  background: linear-gradient(90deg, var(--accent-main), color-mix(in srgb, var(--accent-main) 70%, white)) !important;
+}
+
+/* Status badges — improved readability */
+.ids-inspired .running  { background: color-mix(in srgb, var(--accent-main) 15%, transparent) !important; color: color-mix(in srgb, var(--accent-main) 70%, white) !important; }
+.ids-inspired .queued   { background: color-mix(in srgb, var(--accent-main) 8%, transparent) !important; color: var(--accent-main) !important; }
+.ids-inspired .completed { background: rgba(52,211,153,0.12) !important; color: #6ee7b7 !important; }
+.ids-inspired .failed   { background: rgba(248,113,113,0.12) !important; color: #fca5a5 !important; }
+.ids-inspired .paused   { background: rgba(192,132,252,0.12) !important; color: #d8b4fe !important; }
+.ids-inspired .cancelled { background: rgba(156,163,175,0.10) !important; color: #9ca3af !important; }
+.ids-inspired .cancelling { background: rgba(251,191,36,0.12) !important; color: #fcd34d !important; }
+
+/* Job control buttons */
+.ids-inspired .job-ctl-btn,
+.ids-inspired .queue-btn {
+  background: transparent !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  color: #C0C0C0 !important;
+  border-radius: 6px !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  transition: all 0.15s !important;
+}
+.ids-inspired .job-ctl-btn:hover,
+.ids-inspired .queue-btn:hover {
+  border-color: var(--accent-main) !important;
+  color: var(--accent-main) !important;
+  background: color-mix(in srgb, var(--accent-main) 8%, transparent) !important;
+}
+.ids-inspired .job-ctl-btn.danger {
+  border-color: rgba(248,113,113,0.3) !important;
+  color: #fca5a5 !important;
+}
+.ids-inspired .job-ctl-btn.danger:hover {
+  background: rgba(248,113,113,0.10) !important;
+  border-color: #f87171 !important;
+  color: #f87171 !important;
+}
+
+/* ── Artifact cards ─────────────────────────────────────────── */
+.ids-inspired .artifact-card {
+  background: #222222 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px !important;
+}
+.ids-inspired .artifact-card h4 {
+  color: #FAFAFA;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* ── Gallery ────────────────────────────────────────────────── */
+.ids-inspired .gallery figure {
+  background: #222222 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.2s;
+}
+.ids-inspired .gallery figure:hover {
+  border-color: color-mix(in srgb, var(--accent-main) 40%, transparent) !important;
+  transform: translateY(-2px);
+}
+.ids-inspired .gallery figcaption {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.72rem !important;
+  color: #C0C0C0 !important;
+  padding: 0.35rem 0.45rem;
+}
+
+/* ── File manager ────────────────────────────────────────────── */
+.ids-inspired .file-table-wrap {
+  background: #222222 !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  border-radius: 10px !important;
+}
+.ids-inspired .file-table th {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.65rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: #C0C0C0 !important;
+  background: #1A1A1A !important;
+}
+.ids-inspired .file-table td {
+  color: #FAFAFA !important;
+  font-size: 0.83rem !important;
+}
+.ids-inspired .file-table th,
+.ids-inspired .file-table td {
+  border-bottom-color: rgba(255,255,255,0.06) !important;
+}
+.ids-inspired .file-row:hover {
+  background: color-mix(in srgb, var(--accent-main) 6%, transparent) !important;
+}
+.ids-inspired .file-row.active {
+  background: color-mix(in srgb, var(--accent-main) 12%, transparent) !important;
+}
+.ids-inspired .file-name { color: #FAFAFA !important; }
+
+.ids-inspired .danger-btn {
+  border-color: rgba(248,113,113,0.3) !important;
+  color: #fca5a5 !important;
+}
+.ids-inspired .danger-btn:hover {
+  background: rgba(248,113,113,0.10) !important;
+  border-color: #f87171 !important;
+}
+
+/* ── Shape preview chip ─────────────────────────────────────── */
+.ids-inspired .shape-preview-chip {
+  border-color: rgba(255,255,255,0.08) !important;
+  background: color-mix(in srgb, var(--accent-main) 5%, transparent) !important;
+}
+.ids-inspired .shape-preview-chip span {
+  color: #C0C0C0 !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.72rem !important;
+}
+
+/* ── Config match / field help ──────────────────────────────── */
+.ids-inspired .field-help {
+  color: #A0A0A0 !important;
+  font-size: 0.75rem !important;
+  line-height: 1.5 !important;
+}
+.ids-inspired .adv-section strong {
+  color: var(--accent-main) !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+}
+
+/* ── Image modal ────────────────────────────────────────────── */
+.ids-inspired .image-modal {
+  background: #0A0A0A !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 14px !important;
+  color: #FAFAFA !important;
+}
+.ids-inspired .image-modal::backdrop {
+  background: rgba(0,0,0,0.85) !important;
+}
+.ids-inspired .image-modal-head {
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+}
+.ids-inspired .image-modal-head button,
+.ids-inspired .nav-btn {
+  background: transparent !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  color: #C0C0C0 !important;
+  border-radius: 8px !important;
+  transition: all 0.15s !important;
+}
+.ids-inspired .image-modal-head button:hover,
+.ids-inspired .nav-btn:hover {
+  border-color: var(--accent-main) !important;
+  color: var(--accent-main) !important;
+}
+
+/* ── Theory page ────────────────────────────────────────────── */
+.ids-inspired .theory-doc h3 {
+  font-family: 'Instrument Serif', Georgia, serif !important;
+  font-size: 1.1rem !important;
+  font-weight: 400 !important;
+  color: #FAFAFA !important;
+  margin-top: 1.5rem !important;
+}
+.ids-inspired .theory-table th {
+  background: #111111 !important;
+  color: var(--accent-main) !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+}
+.ids-inspired .theory-table td {
+  color: #FAFAFA !important;
+  font-size: 0.83rem !important;
+}
+.ids-inspired .theory-table th,
+.ids-inspired .theory-table td {
+  border-color: rgba(255,255,255,0.07) !important;
+}
+.ids-inspired .theory-table tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.02) !important;
+}
+.ids-inspired .theory-table tbody tr:hover {
+  background: color-mix(in srgb, var(--accent-main) 6%, transparent) !important;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+.ids-inspired ::-webkit-scrollbar { width: 6px; height: 6px; }
+.ids-inspired ::-webkit-scrollbar-track { background: transparent; }
+.ids-inspired ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+.ids-inspired ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+/* ── Muted text — stronger for readability ─────────────────── */
+.ids-inspired .muted,
+.ids-inspired .card p {
+  color: #C0C0C0 !important;
+  font-size: 0.9rem !important;
+  line-height: 1.6 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LIGHT MODE OVERRIDES
+   hub-theme.css uses !important throughout, so light mode must
+   also use !important to win. Covers everything that hub-theme
+   hardcodes as dark that design-b.css's variable-based light
+   block cannot reach.
+   ═══════════════════════════════════════════════════════════════ */
+
+body.ids-inspired[data-mode="light"] {
+  background: #f3f6fb;
+  color: #111827;
+}
+
+/* Grid overlay — lighter tint for light mode */
+body.ids-inspired[data-mode="light"]::before {
+  background-image:
+    linear-gradient(rgba(17,24,39,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17,24,39,0.04) 1px, transparent 1px);
+}
+
+/* Topbar + tab nav */
+body.ids-inspired[data-mode="light"] .topbar-ids {
+  background: rgba(243,246,251,0.95) !important;
+  border-bottom-color: #d8dfec !important;
+}
+body.ids-inspired[data-mode="light"] .tabs-nav {
+  background: rgba(243,246,251,0.95) !important;
+  border-bottom-color: #d8dfec !important;
+}
+body.ids-inspired[data-mode="light"] .topbar-ids p { color: #4b5563 !important; }
+body.ids-inspired[data-mode="light"] .heatr-hub-link { color: #374151 !important; border-color: rgba(0,0,0,0.15) !important; }
+body.ids-inspired[data-mode="light"] .settings-menu summary { color: #374151 !important; border-color: rgba(0,0,0,0.12) !important; }
+
+/* Tab links */
+body.ids-inspired[data-mode="light"] .tab-link { color: #4b5563 !important; }
+body.ids-inspired[data-mode="light"] .tab-link:hover { color: #111827 !important; }
+
+/* Cards */
+body.ids-inspired[data-mode="light"] .card {
+  background: #ffffff !important;
+  border-color: #d8dfec !important;
+}
+body.ids-inspired[data-mode="light"] .card h2,
+body.ids-inspired[data-mode="light"] .card h3 { color: #111827 !important; }
+body.ids-inspired[data-mode="light"] .muted,
+body.ids-inspired[data-mode="light"] .card p { color: #4b5563 !important; }
+
+/* Inputs and selects */
+body.ids-inspired[data-mode="light"] input,
+body.ids-inspired[data-mode="light"] select {
+  background: #f7f9fc !important;
+  border-color: #c8d4e8 !important;
+  color: #111827 !important;
+}
+body.ids-inspired[data-mode="light"] select option {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* Labels */
+body.ids-inspired[data-mode="light"] label { color: #374151 !important; }
+
+/* Job cards, artifact cards, match-box */
+body.ids-inspired[data-mode="light"] .job {
+  background: #f0f4fb !important;
+  border-color: #d0daea !important;
+}
+body.ids-inspired[data-mode="light"] .job strong { color: #111827 !important; }
+body.ids-inspired[data-mode="light"] .artifact-card {
+  background: #f0f4fb !important;
+  border-color: #d0daea !important;
+}
+body.ids-inspired[data-mode="light"] .artifact-card h4 { color: #111827 !important; }
+body.ids-inspired[data-mode="light"] .match-box {
+  background: #f0f4fb !important;
+  border-color: #d0daea !important;
+  color: #111827 !important;
+}
+
+/* YAML / code blocks */
+body.ids-inspired[data-mode="light"] .summary,
+body.ids-inspired[data-mode="light"] pre,
+body.ids-inspired[data-mode="light"] .yaml-preview {
+  background: #ffffff !important;
+  border-color: #d0daea !important;
+  color: #0f172a !important;
+}
+
+/* Gallery */
+body.ids-inspired[data-mode="light"] .gallery figure {
+  background: #f0f4fb !important;
+  border-color: #d0daea !important;
+}
+body.ids-inspired[data-mode="light"] .gallery figcaption { color: #4b5563 !important; }
+
+/* File manager */
+body.ids-inspired[data-mode="light"] .file-table-wrap {
+  background: #f0f4fb !important;
+  border-color: #d0daea !important;
+}
+body.ids-inspired[data-mode="light"] .file-table th {
+  background: #e2eaf6 !important;
+  color: #374151 !important;
+}
+body.ids-inspired[data-mode="light"] .file-table td { color: #111827 !important; }
+body.ids-inspired[data-mode="light"] .file-table th,
+body.ids-inspired[data-mode="light"] .file-table td { border-bottom-color: #d0daea !important; }
+body.ids-inspired[data-mode="light"] .file-name { color: #111827 !important; }
+
+/* Theory page */
+body.ids-inspired[data-mode="light"] .theory-doc h3 { color: #111827 !important; }
+body.ids-inspired[data-mode="light"] .theory-table th {
+  background: #e2eaf6 !important;
+}
+body.ids-inspired[data-mode="light"] .theory-table td { color: #111827 !important; }
+body.ids-inspired[data-mode="light"] .theory-table th,
+body.ids-inspired[data-mode="light"] .theory-table td { border-color: #d0daea !important; }
+body.ids-inspired[data-mode="light"] .theory-table tbody tr:nth-child(even) {
+  background: rgba(0,0,0,0.02) !important;
+}
+
+/* Job control buttons */
+body.ids-inspired[data-mode="light"] .job-ctl-btn,
+body.ids-inspired[data-mode="light"] .queue-btn {
+  border-color: rgba(0,0,0,0.12) !important;
+  color: #374151 !important;
+}
+
+/* Image modal */
+body.ids-inspired[data-mode="light"] .image-modal {
+  background: #ffffff !important;
+  border-color: #d0daea !important;
+  color: #111827 !important;
+}
+body.ids-inspired[data-mode="light"] .image-modal-head { border-bottom-color: #d0daea !important; }
+body.ids-inspired[data-mode="light"] .image-modal-head button,
+body.ids-inspired[data-mode="light"] .nav-btn {
+  border-color: rgba(0,0,0,0.12) !important;
+  color: #374151 !important;
+}
+
+/* Scrollbar */
+body.ids-inspired[data-mode="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }
+body.ids-inspired[data-mode="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.22); }
