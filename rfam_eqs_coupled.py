@@ -1354,6 +1354,58 @@ def _resolve_antennae_instances(cfg: dict) -> dict:
     return {"enabled": True, "instances": selected_rows}
 
 
+def _build_passive_conductors(
+    cfg: dict, x: np.ndarray, y: np.ndarray
+) -> tuple[np.ndarray, float, float, bool, list[dict]]:
+    """Build a boolean mask of PASSIVE-conductor cells from cfg['passive_conductors'].
+
+    A passive conductor is a high-sigma (metal-like) parasitic element placed
+    near a part face to RESHAPE the EQS field. Unlike the doped antenna tab it
+    is NOT added to part_mask/doped_mask, so it does not self-heat as part
+    material and is excluded from melt / temperature statistics (Qrf is zeroed
+    outside doped_mask). When ``grounded`` is true its cells are added to the
+    low (V=0) Dirichlet set, modelling a grounded parasitic plate; otherwise it
+    floats as a finite-conductivity dielectric/conductor block.
+
+    Each element rect is specified in metres:
+        {center_x, center_y, size_x_mm, size_y_mm}
+    Returns (mask, sigma_metal, eps_metal, grounded, resolved_instances).
+    """
+    pc = cfg.get("passive_conductors", {})
+    if not isinstance(pc, dict) or not bool(pc.get("enabled", False)):
+        return np.zeros((len(y), len(x)), dtype=bool), 0.0, 0.0, False, []
+    sigma_metal = float(pc.get("sigma_s_per_m", 1.0e4))
+    eps_metal = float(pc.get("eps_r", 1.0))
+    grounded = bool(pc.get("grounded", False))
+    elements = pc.get("elements", [])
+    if not isinstance(elements, list):
+        elements = []
+    xx, yy = np.meshgrid(x, y, indexing="xy")
+    mask = np.zeros((len(y), len(x)), dtype=bool)
+    resolved: list[dict] = []
+    for el in elements:
+        if not isinstance(el, dict):
+            continue
+        cx = float(el.get("center_x", 0.0))
+        cy = float(el.get("center_y", 0.0))
+        sx = float(el.get("size_x_mm", el.get("size_mm", 1.0)))
+        sy = float(el.get("size_y_mm", el.get("size_mm", 1.0)))
+        rx = max(sx * 1e-3 / 2.0, 0.0)
+        ry = max(sy * 1e-3 / 2.0, 0.0)
+        if rx <= 0.0 or ry <= 0.0:
+            continue
+        m = (np.abs(xx - cx) <= rx) & (np.abs(yy - cy) <= ry)
+        if not np.any(m):
+            continue
+        mask |= m
+        resolved.append({
+            "center_x": cx, "center_y": cy,
+            "size_x_mm": sx, "size_y_mm": sy,
+            "n_cells": int(m.sum()),
+        })
+    return mask, sigma_metal, eps_metal, grounded, resolved
+
+
 def _parts_from_geometry(geom: dict) -> list[dict]:
     parts_raw = geom.get("parts", None)
     if isinstance(parts_raw, list) and parts_raw:
@@ -2302,6 +2354,28 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             f"interior={_n_int} cells"
         )
 
+    # --- Passive conductor (parasitic field-shaping) overlay ---------------
+    # Metal-like high-sigma cells that reshape the EQS field WITHOUT being
+    # counted as part/doped material (so they never self-heat as part and are
+    # excluded from melt/T statistics). Re-stamped before every EQS re-solve.
+    _pc_mask, _pc_sigma, _pc_eps, _pc_grounded, _pc_resolved = _build_passive_conductors(cfg, x, y)
+    _pc_active = bool(_pc_mask.any())
+    if _pc_active:
+        # Keep conductors out of the part interior to avoid corrupting part physics.
+        _pc_mask = _pc_mask & (~part_mask)
+        _pc_active = bool(_pc_mask.any())
+    def _stamp_passive(_sig: np.ndarray, _eps: np.ndarray) -> None:
+        if _pc_active:
+            _sig[_pc_mask] = _pc_sigma
+            _eps[_pc_mask] = _pc_eps
+    if _pc_active:
+        _stamp_passive(sigma, eps_r)
+        if _pc_grounded:
+            elec_lo = np.asarray(elec_lo, dtype=bool) | _pc_mask
+        print(f"  [passive_conductor] {int(_pc_mask.sum())} cells, "
+              f"sigma={_pc_sigma:.3g} S/m, eps_r={_pc_eps:.3g}, "
+              f"grounded={_pc_grounded}")
+
     if fixed_qrf_mode:
         # Load Q_rf directly from a COMSOL export (e.g. qrf_2d_map.npy).
         # The EQS solve is bypassed; V/E fields are set to zero placeholders.
@@ -2744,6 +2818,8 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             if _fgm_updated and _fgm_fb.enabled:
                 _eff_fill = _fgm_fb.effective_fill(fill_frac)
                 eps_r[:] = eps_v + _eff_fill * (eps_d - eps_v)
+            # Re-stamp passive conductor cells (the sigma reset above wiped them).
+            _stamp_passive(sigma, eps_r)
             T_keep = T.copy()
             rho_keep = rho_rel.copy()
             phi_keep = phi.copy()
