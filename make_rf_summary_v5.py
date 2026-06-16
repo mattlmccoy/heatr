@@ -72,6 +72,12 @@ _density_cmap = mcolors.LinearSegmentedColormap.from_list(
     N=256,
 )
 
+# Design-guide RF-potential LUT (figkit LUT_POTENTIAL / render_fields.py stops),
+# for cross-chapter consistency with the design-guide RF-potential panel.
+DG_POTENTIAL = mcolors.LinearSegmentedColormap.from_list("dg_potential", [
+    (0.00, "#0a1230"), (0.30, "#163a8f"), (0.58, "#2774d6"),
+    (0.80, "#4fc6e8"), (1.00, "#eaffff")])
+
 
 def _heatmap_limits(arr: np.ndarray) -> tuple[float, float]:
     """Return robust (vmin, vmax) matching the plotted heatmap data."""
@@ -195,7 +201,7 @@ def make_rf_summary_v5(out_dir: str,
     # ══════════════════════════════════════════════════════════════════════
     T_vmin, T_vmax = _heatmap_limits(T_plot)
     im_T = ax_th.pcolormesh(
-        X, Y, T_plot, cmap="jet",
+        X, Y, T_plot, cmap="inferno",
         vmin=T_vmin, vmax=T_vmax,
         shading="gouraud", rasterized=True,
     )
@@ -271,7 +277,7 @@ def make_rf_summary_v5(out_dir: str,
     # ══════════════════════════════════════════════════════════════════════
     V_vmin, V_vmax = _heatmap_limits(V_plot)
     im_V = ax_pot.pcolormesh(
-        X, Y, V_plot, cmap="Blues",
+        X, Y, V_plot, cmap=DG_POTENTIAL,
         vmin=V_vmin, vmax=V_vmax,
         shading="gouraud", rasterized=True,
     )
@@ -321,7 +327,7 @@ def make_rf_summary_v5(out_dir: str,
 
     im_rho = ax_rho.pcolormesh(
         X, Y, rho_plot,
-        cmap=_density_cmap,
+        cmap="viridis",
         vmin=rho_vmin, vmax=rho_vmax,
         shading="gouraud", rasterized=True,
     )

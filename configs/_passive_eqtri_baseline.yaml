@@ -1,0 +1,100 @@
+# shape_equilateral_triangle_6min.yaml — Equilateral triangle, 20mm side
+#
+# All physics identical to canonical rfam_eqs_xz_uniform_500w.yaml:
+#   500 W generator · 2% coupling · 120×120 grid · 60mm chamber · 6 min
+# ──────────────────────────────────────────────────────────────────────
+densification:
+  activation_energy_j_per_mol: 42000.0
+  activation_energy_liq_j_per_mol: 0.0
+  activation_energy_ss_j_per_mol: 48000.0
+  eta_activation_j_per_mol: 6.0e4
+  eta_ref_pa_s: 8.0e3
+  eta_ref_temp_k: 458.15
+  geom_factor: 0.05
+  k0_liq_per_s: 0.08
+  k0_per_s: 0.08
+  k0_ss_per_s: 0.005
+  liquid_rate_mode: viscous_capillary
+  max_delta_per_step: 0.02
+  model: physics_dual
+  particle_radius_m: 3.5e-05
+  phi_liq_exponent: 1.0
+  phi_solid_exponent: 0.8
+  phi_threshold: 0.01
+  rho_exponent: 1.0
+  rho_rel_initial: 0.55
+  surface_tension_n_per_m: 0.03
+electric:
+  effective_depth_m: 0.02
+  enforce_generator_power: true
+  frequency_hz: 27120000.0
+  generator_power_w: 500.0
+  generator_transfer_efficiency: 0.02
+  max_qrf_w_per_m3: 1.0e11
+  power_factor: 1.0
+  solver_steps: 3000
+  solver_tol: 1.0e-09
+  update_interval: 20
+  voltage_mode: grounded
+  voltage_v: 860.0
+  zero_qrf_outside_doped: true
+electrodes:
+  boundary_cells: 1
+  hi_boundary: top
+  lo_boundary: bottom
+  mode: boundary
+geometry:
+  chamber_x: 0.06
+  chamber_y: 0.06
+  grid_nx: 120
+  grid_ny: 120
+  part:
+    center_x: 0.0
+    center_y: 0.0
+    height: 0.02
+    rotation_deg: 0.0
+    shape: equilateral_triangle
+    width: 0.02
+materials:
+  doped:
+    cp_liquid_j_per_kgk: 3279.0
+    cp_solid_j_per_kgk: 2500.0
+    eps_r: 20.0
+    k_liquid_w_per_mk: 0.26
+    k_solid_w_per_mk: 0.1
+    rho_liquid_kg_per_m3: 1010.0
+    rho_solid_kg_per_m3: 460.0
+    sigma_density_coeff: 0.0
+    sigma_profile: uniform
+    sigma_ref_temp_c: 23.0
+    sigma_s_per_m: 0.04
+    sigma_temp_coeff_per_K: 0.0
+  powder:
+    cp_solid_j_per_kgk: 1072.0
+    k_solid_w_per_mk: 0.197
+    rho_solid_kg_per_m3: 490.0
+  virgin:
+    eps_r: 2.0
+    sigma_s_per_m: 0.0
+reporting:
+  potential_contours: 18
+  temp_cbar_max_c: 400.0
+  temp_cbar_min_c: 20.0
+thermal:
+  ambient_c: 23.0
+  convection_h_w_per_m2k: 5.0
+  convective_boundaries:
+  - top
+  depth_correction:
+    enabled: false
+  dt_s: 0.5
+  max_deltaT_per_step_c: 10.0
+  max_temp_c: 600.0
+  min_temp_c: -50.0
+  n_steps: 720
+  phase_change:
+    dt_pc_c: 10.0
+    latent_heat_j_per_kg: 96700.0
+    model: comsol_heaviside
+    smooth_shape: linear
+    t_pc_c: 180.0

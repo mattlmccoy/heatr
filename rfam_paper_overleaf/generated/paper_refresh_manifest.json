@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "single_source_dataset": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json",
+  "rows": [
+    {
+      "label": "single-H",
+      "mode": "single",
+      "geometry": "H",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-L",
+      "mode": "single",
+      "geometry": "L",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-T",
+      "mode": "single",
+      "geometry": "T",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-circle",
+      "mode": "single",
+      "geometry": "circle",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-cross",
+      "mode": "single",
+      "geometry": "cross",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-diamond",
+      "mode": "single",
+      "geometry": "diamond",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-ellipse",
+      "mode": "single",
+      "geometry": "ellipse",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-equilateral_triangle",
+      "mode": "single",
+      "geometry": "equilateral_triangle",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-hexagon",
+      "mode": "single",
+      "geometry": "hexagon",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-octagon",
+      "mode": "single",
+      "geometry": "octagon",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-pentagon",
+      "mode": "single",
+      "geometry": "pentagon",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-rectangle",
+      "mode": "single",
+      "geometry": "rectangle",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-rounded_rect",
+      "mode": "single",
+      "geometry": "rounded_rect",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-star",
+      "mode": "single",
+      "geometry": "star",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-star6",
+      "mode": "single",
+      "geometry": "star6",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-trapezoid",
+      "mode": "single",
+      "geometry": "trapezoid",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "single-triangle",
+      "mode": "single",
+      "geometry": "triangle",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "dataset-level",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental_ab/screen-20260302-allstatic/geometry_performance_summary.json"
+    },
+    {
+      "label": "turntable-Square",
+      "mode": "turntable",
+      "geometry": "Square",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "0.44",
+      "include_in_paper": "yes",
+      "source_path": "generated from saved run directories"
+    },
+    {
+      "label": "turntable-Circle",
+      "mode": "turntable",
+      "geometry": "Circle",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "63.09",
+      "include_in_paper": "yes",
+      "source_path": "generated from saved run directories"
+    },
+    {
+      "label": "turntable-Equilateral triangle",
+      "mode": "turntable",
+      "geometry": "Equilateral triangle",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "36.59",
+      "include_in_paper": "yes",
+      "source_path": "generated from saved run directories"
+    },
+    {
+      "label": "turntable-L-shape",
+      "mode": "turntable",
+      "geometry": "L-shape",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 720,
+      "energy_residual_pct": "27.32",
+      "include_in_paper": "yes",
+      "source_path": "generated from saved run directories"
+    },
+    {
+      "label": "orientation-lshape",
+      "mode": "orientation_optimizer",
+      "geometry": "L-shape",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 720,
+      "energy_residual_pct": "26.00",
+      "include_in_paper": "yes",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/L_shape/orientation_optimizer/experimental/lshape_orient_20260304_6min"
+    },
+    {
+      "label": "prewarp-legacy-square",
+      "mode": "prewarp",
+      "geometry": "Square",
+      "physics_family": "baseline-legacy",
+      "exposure_s": 360,
+      "energy_residual_pct": "legacy",
+      "include_in_paper": "limited",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/square/single/baseline/prewarp_eval_square_L7mm"
+    },
+    {
+      "label": "antennae-square",
+      "mode": "antennae",
+      "geometry": "Square",
+      "physics_family": "experimental_pa12_hybrid",
+      "exposure_s": 360,
+      "energy_residual_pct": "see calibration run",
+      "include_in_paper": "limited",
+      "source_path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/runs/unknown/single/experimental/experimental/square_single_20260303_antcal"
+    }
+  ]
+}

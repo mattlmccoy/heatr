@@ -21,3 +21,12 @@ archive/
 .env.*
 .venv-heatr3d/
 outputs_eqs/_heatr3d/
+
+# --- audit snapshot additions (scratch/venv/logs not source) ---
+.venv312/
+*.log
+_tt_*/
+_lowpower_*/
+scratch/
+findings/
+_work/

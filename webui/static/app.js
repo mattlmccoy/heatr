@@ -777,6 +777,14 @@ function buildPayload(includeOutput = true) {
   payload.shell_wall_thickness_mm = Number(byId("shellWallThicknessMm")?.value);
   payload.shell_method = String(byId("shellMethod")?.value || "offset_inward");
 
+  if (mode === "prewarp") {
+    // Geometry Pre-Warp (level-set ILT). Geometry comes from the shared "shape" field.
+    payload.prewarp_grid      = parseInt(byId("prewarpGrid")?.value)   || 56;
+    payload.prewarp_iters     = parseInt(byId("prewarpIters")?.value)  || 400;
+    payload.prewarp_melt_frac = parseFloat(byId("prewarpMeltFrac")?.value) || 0.95;
+    payload.prewarp_gate      = String(byId("prewarpGate")?.value || "true").toLowerCase() === "true";
+  }
+
   return payload;
 }
 
@@ -1888,6 +1896,25 @@ async function launchRun(ev) {
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
       alert("FGM Iterate error: " + err.message);
+    }
+    return;
+  }
+
+  // prewarp (Geometry Pre-Warp / level-set ILT) uses a dedicated endpoint
+  if (mode === "prewarp") {
+    const btn = ev.target?.querySelector('[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = "Queuing…"; }
+    try {
+      await fetchJson("/api/tools/prewarp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
+      await loadJobs();
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
+      alert("Geometry Pre-Warp error: " + err.message);
     }
     return;
   }

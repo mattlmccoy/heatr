@@ -1,0 +1,16 @@
+\begin{table*}[tb]
+\centering
+\caption{Turntable benchmark set for the refreshed manuscript. Boundary metrics were recomputed from the saved fields. The schedules reported here match the reusable run artifacts currently available in the repository, so the exposure durations and discrete rotation sequences are geometry specific.}
+\label{tab:turntable_core_refresh}
+\small
+\begin{tabular}{lcrrrrrr}
+\toprule
+Geometry & Exp. [s] & Schedule & Single std & Turntable std & Single min/max & Turntable min/max & Turntable residual [\%] \\
+\midrule
+Square & 360 & 16x45deg over 360 s & 0.0697 & 0.0640 & 0.702 & 0.693 & 0.44 \\
+Circle & 360 & 24x30deg over 360 s & 0.1639 & 0.0076 & 0.559 & 0.957 & 63.09 \\
+Equilateral triangle & 360 & 16x45deg over 360 s & 0.1582 & 0.0581 & 0.555 & 0.824 & 36.59 \\
+L-shape & 720 & 16x45deg over 720 s & 0.1664 & 0.0450 & 0.550 & 0.790 & 27.32 \\
+\bottomrule
+\end{tabular}
+\end{table*}

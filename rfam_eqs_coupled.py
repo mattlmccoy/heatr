@@ -25,8 +25,29 @@ os.environ.setdefault("MPLCONFIGDIR", str(Path("./.mplconfig").resolve()))
 import matplotlib
 matplotlib.use("Agg")  # must be before pyplot import; overrides env/system backend
 import matplotlib.pyplot as plt
+try:
+    # Importing seaborn auto-registers the "mako" colormap with matplotlib so
+    # that cmap="mako" string lookups resolve. Used for EQS |E| field panels.
+    import seaborn as _sns  # noqa: F401
+except Exception:  # pragma: no cover - fallback if seaborn is unavailable
+    from matplotlib.colors import LinearSegmentedColormap as _LSC
+    _mako_stops = [
+        "#0B0405", "#2C1E3F", "#403891", "#3C5DA8", "#357BA2",
+        "#3497A9", "#38AAAC", "#5BC8AC", "#A0DFB9", "#DEF5E5",
+    ]
+    if "mako" not in matplotlib.colormaps:
+        matplotlib.colormaps.register(
+            _LSC.from_list("mako", _mako_stops), name="mako"
+        )
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.path import Path as MplPath
 from matplotlib.ticker import FuncFormatter
+
+# Design-guide RF-potential LUT (figkit LUT_POTENTIAL / render_fields.py stops),
+# for cross-chapter consistency with the design-guide RF-potential panel.
+DG_POTENTIAL = LinearSegmentedColormap.from_list("dg_potential", [
+    (0.00, "#0a1230"), (0.30, "#163a8f"), (0.58, "#2774d6"),
+    (0.80, "#4fc6e8"), (1.00, "#eaffff")])
 try:
     from PIL import Image, ImageDraw
 except Exception:  # pragma: no cover - optional dependency guard
@@ -194,6 +215,19 @@ class ThermalParams:
     crystallization_exponent: float = 2.0
     crystallization_liquid_suppression: float = 0.25
     debug: bool = False
+    # --- IDEA 4: patterned heat-sink lattice (sub-diffusion thermal structuring) ---
+    # heatsink_field: per-voxel pattern g(x) in [0,1] (1 = full sink presence).
+    #   When None, ALL heat-sink physics is skipped -> exactly baseline (inert).
+    # heatsink_h: volumetric cold-loss coefficient [W/m^3/K]. Adds an
+    #   energy-REMOVING term q_sink = heatsink_h * g * (T - ambient_c) on part
+    #   voxels (a Newton sink to ambient; the outflow path that sets a steady
+    #   gradient by sink SPACING). This is the energy-removing knob.
+    # heatsink_kgain: multiplies local conductivity by (1 + heatsink_kgain*g)
+    #   inside the sink (a high-k channel that conducts heat away faster). This
+    #   knob alone does NOT remove energy; it redistributes it.
+    heatsink_field: np.ndarray | None = None
+    heatsink_h: float = 0.0
+    heatsink_kgain: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -865,6 +899,65 @@ def phase_fraction(T: np.ndarray, phase_cfg: PhaseConfig) -> tuple[np.ndarray, n
     phi = np.clip(raw, 0.0, 1.0)
     dphi_dT = np.where((T_eval >= T_solidus) & (T_eval <= T_liquidus), 1.0 / dT, 0.0)
     return phi, dphi_dT
+
+
+def build_heatsink_field(
+    spec: dict | None,
+    x: np.ndarray,
+    y: np.ndarray,
+    part_mask: np.ndarray,
+) -> np.ndarray | None:
+    """Build a patterned heat-sink presence field g(x,y) in [0,1] (IDEA 4).
+
+    Returns None when spec is falsy or disabled -> caller leaves heatsink_field
+    None -> thermal_step is exactly baseline (inert when off).
+
+    spec keys:
+      enabled: bool (default True if spec given)
+      kind: 'stripes' (default) | 'array'
+      For 'stripes':
+        pitch_m: stripe period along the grating axis x
+        duty: fraction of period that is SINK (default 0.5)
+        offset_m: phase shift (default 0.5*pitch to land sinks in GAPS of a
+                  bar grating whose bars are centered at multiples of pitch)
+        profile: 'square' (binary 0/1) or 'cosine' (smooth) (default 'square')
+        axis: 'x' (default) stripes vary along x
+        confine_to_part: bool (default True) zero outside part_mask
+      For 'array': provide 'field' as a 2D list/array matching (len(y),len(x)).
+    """
+    if not spec:
+        return None
+    if not bool(spec.get("enabled", True)):
+        return None
+    kind = str(spec.get("kind", "stripes")).strip().lower()
+    ny, nx = len(y), len(x)
+    if kind == "array":
+        g = np.asarray(spec["field"], dtype=float)
+        if g.shape != (ny, nx):
+            raise ValueError(f"heatsink array shape {g.shape} != grid {(ny, nx)}")
+    elif kind == "stripes":
+        pitch = float(spec["pitch_m"])
+        duty = float(spec.get("duty", 0.5))
+        offset = float(spec.get("offset_m", 0.5 * pitch))
+        profile = str(spec.get("profile", "square")).strip().lower()
+        axis = str(spec.get("axis", "x")).strip().lower()
+        coord = x if axis == "x" else y
+        # phase in [0,1) within each period
+        ph = np.mod((coord - offset) / pitch + 0.5, 1.0)  # centered cell
+        if profile == "cosine":
+            line = 0.5 * (1.0 + np.cos(2.0 * np.pi * (ph - 0.5)))  # peak at cell center
+        else:
+            line = (np.abs(ph - 0.5) < 0.5 * duty).astype(float)
+        if axis == "x":
+            g = np.tile(line.reshape(1, nx), (ny, 1))
+        else:
+            g = np.tile(line.reshape(ny, 1), (1, nx))
+    else:
+        raise ValueError(f"unknown heatsink kind: {kind}")
+    g = np.clip(g, 0.0, 1.0)
+    if bool(spec.get("confine_to_part", True)):
+        g = np.where(part_mask, g, 0.0)
+    return g
 
 
 def diffusion_divergence(T: np.ndarray, k: np.ndarray, dx: float, dy: float) -> np.ndarray:
@@ -1716,6 +1809,18 @@ def thermal_step(
     cp_base[part_mask] = cp_local[part_mask]
     cp_eff = cp_base + latent_heat * dphi_dT
 
+    # --- IDEA 4: patterned heat-sink k-gain (inert when heatsink_field is None) ---
+    # Multiply local conductivity by (1 + kgain*g) inside the sink stripes so the
+    # lattice conducts heat away faster (high-k channels). Energy is NOT removed
+    # by this term; it only redistributes. Applied wherever the sink field is
+    # present (the lattice occupies the powder bed; NOT re-masked to part voxels,
+    # since a sink in the gaps acts on gap powder). The field's support is set by
+    # the caller (build_heatsink_field, confine_to_part toggle).
+    g_sink = getattr(params, "heatsink_field", None)
+    if g_sink is not None and float(params.heatsink_kgain) != 0.0:
+        gain = 1.0 + float(params.heatsink_kgain) * np.asarray(g_sink, dtype=float)
+        k = k * gain
+
     div_term = diffusion_divergence(T, k, dx, dy)
     if convection_model == "natural_chimney_parallel_plates":
         h_field = chimney_natural_convection_h(
@@ -1744,7 +1849,16 @@ def thermal_step(
         q_z_loss_field = k * (T - ambient_c) * (np.pi**2 / (4.0 * L_eff**2))
         q_z_loss[part_mask] = q_z_loss_field[part_mask]
 
-    dTdt = (div_term + Qrf - q_conv - q_z_loss) / np.maximum(rho * cp_eff, 1e-9)
+    # --- IDEA 4: patterned heat-sink cold-loss (inert when heatsink_field is None) ---
+    # Volumetric Newton sink to ambient: q_sink = h_sink * g * (T - ambient).
+    # This is the energy-REMOVING outflow path. Applied wherever the sink field is
+    # present (the lattice occupies the powder bed, including the gaps; NOT
+    # re-masked to part voxels). Field support is set by build_heatsink_field.
+    q_sink = np.zeros_like(T)
+    if g_sink is not None and float(params.heatsink_h) != 0.0:
+        q_sink = float(params.heatsink_h) * np.asarray(g_sink, dtype=float) * (T - ambient_c)
+
+    dTdt = (div_term + Qrf - q_conv - q_z_loss - q_sink) / np.maximum(rho * cp_eff, 1e-9)
     dTdt = np.nan_to_num(dTdt, nan=0.0, posinf=0.0, neginf=0.0)
 
     dT_step_raw = np.asarray(dt * dTdt, dtype=float)
@@ -2048,6 +2162,12 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     x, y, _, part_mask, doped_mask, elec_hi, elec_lo, fill_frac, part_id_mask, _part_polys = make_domain(cfg)
     dx = float(x[1] - x[0])
     dy = float(y[1] - y[0])
+
+    # IDEA 4: build patterned heat-sink field (None when cfg has no 'heatsink' block).
+    _heatsink_spec = cfg.get("heatsink", None)
+    heatsink_field = build_heatsink_field(_heatsink_spec, x, y, part_mask)
+    heatsink_h = float(_heatsink_spec.get("h_w_per_m3_k", 0.0)) if _heatsink_spec else 0.0
+    heatsink_kgain = float(_heatsink_spec.get("kgain", 0.0)) if _heatsink_spec else 0.0
 
     elec = cfg["electric"]
     therm = cfg["thermal"]
@@ -2568,6 +2688,9 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         crystallization_ea_j_per_mol=crystallization_ea,
         crystallization_exponent=crystallization_exp,
         crystallization_liquid_suppression=crystallization_liq_supp,
+        heatsink_field=heatsink_field,
+        heatsink_h=heatsink_h,
+        heatsink_kgain=heatsink_kgain,
     )
 
     # ── Turntable mode setup ─────────────────────────────────────────────────────
@@ -3528,12 +3651,12 @@ def generate_optimizer_report(
         ext = [st.x[0], st.x[-1], st.y[0], st.y[-1]]
         kw  = dict(extent=ext, origin="lower", interpolation="bilinear", aspect="equal")
 
-        im_T = axes[row, 0].imshow(snap["T_d"],   cmap="jet",    vmin=T_vmin, vmax=T_vmax, **kw)
+        im_T = axes[row, 0].imshow(snap["T_d"],   cmap="inferno",    vmin=T_vmin, vmax=T_vmax, **kw)
         axes[row, 0].contour(st.x, st.y, snap["pm_d"], levels=[0.5], colors=["w"], linewidths=0.9)
         axes[row, 0].set_title(f"T [°C]  |  {snap['label']}", fontsize=7)
         plt.colorbar(im_T, ax=axes[row, 0], shrink=0.82)
 
-        im_phi = axes[row, 1].imshow(snap["phi_d"], cmap="plasma", vmin=0.0, vmax=1.0, **kw)
+        im_phi = axes[row, 1].imshow(snap["phi_d"], cmap="Blues", vmin=0.0, vmax=1.0, **kw)
         axes[row, 1].contour(st.x, st.y, snap["pm_d"], levels=[0.5], colors=["w"], linewidths=0.9)
         axes[row, 1].set_title(f"Melt fraction φ  |  {snap['label']}", fontsize=7)
         plt.colorbar(im_phi, ax=axes[row, 1], shrink=0.82)
@@ -3743,19 +3866,19 @@ def _generate_animation_gifs(
         rho_limits_tt = _density_gif_limits(snaps_tt, rho_rel_initial)
         _write_animation_gif(
             snaps=snaps_tt, x=state.x, y=state.y, key="E_mag",
-            title="Turntable Rotation: Electric Field", cmap="turbo",
+            title="Turntable Rotation: Electric Field", cmap="mako",
             out_path=output_dir / "turntable_electric.gif",
             frame_duration_s=frame_duration_s,
         )
         _write_animation_gif(
             snaps=snaps_tt, x=state.x, y=state.y, key="T",
-            title="Turntable Rotation: Temperature", cmap="turbo",
+            title="Turntable Rotation: Temperature", cmap="inferno",
             out_path=output_dir / "turntable_thermal.gif",
             frame_duration_s=frame_duration_s,
         )
         _write_animation_gif(
             snaps=snaps_tt, x=state.x, y=state.y, key="rho_rel",
-            title="Turntable Rotation: Relative Density", cmap="magma",
+            title="Turntable Rotation: Relative Density", cmap="viridis",
             out_path=output_dir / "turntable_density.gif",
             frame_duration_s=frame_duration_s,
             outside_fill=rho_rel_initial,
@@ -3768,19 +3891,19 @@ def _generate_animation_gifs(
     rho_limits_all = _density_gif_limits(snaps_all, rho_rel_initial)
     _write_animation_gif(
         snaps=snaps_all, x=state.x, y=state.y, key="E_mag",
-        title="Electric Field Magnitude Evolution", cmap="turbo",
+        title="Electric Field Magnitude Evolution", cmap="mako",
         out_path=output_dir / "electric_field_evolution.gif",
         frame_duration_s=frame_duration_s,
     )
     _write_animation_gif(
         snaps=snaps_all, x=state.x, y=state.y, key="T",
-        title="Temperature Evolution", cmap="turbo",
+        title="Temperature Evolution", cmap="inferno",
         out_path=output_dir / "thermal_evolution.gif",
         frame_duration_s=frame_duration_s,
     )
     _write_animation_gif(
         snaps=snaps_all, x=state.x, y=state.y, key="rho_rel",
-        title="Relative Density Evolution", cmap="magma",
+        title="Relative Density Evolution", cmap="viridis",
         out_path=output_dir / "density_evolution.gif",
         frame_duration_s=frame_duration_s,
         outside_fill=rho_rel_initial,
@@ -3935,12 +4058,12 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         np.clip(q_plot_mwpm3, 0.0, qrf_display_vmax).astype(float), sigma=_sig
     )
 
-    im0 = ax[0].imshow(V_abs_disp, extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]], origin="lower", cmap="viridis", interpolation="bilinear")
+    im0 = ax[0].imshow(V_abs_disp, extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]], origin="lower", cmap=DG_POTENTIAL, interpolation="bilinear")
     ax[0].set_title("|V| [V]")
     cb0 = plt.colorbar(im0, ax=ax[0], shrink=0.84)
     _style_cbar(cb0, decimals=0)
 
-    im1 = ax[1].imshow(E_disp / 1e3, extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]], origin="lower", cmap="turbo", interpolation="bilinear")
+    im1 = ax[1].imshow(E_disp / 1e3, extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]], origin="lower", cmap="mako", interpolation="bilinear")
     ax[1].set_title("|E| [kV/m]")
     cb1 = plt.colorbar(im1, ax=ax[1], shrink=0.84)
     _style_cbar(cb1, decimals=1)
@@ -3949,7 +4072,7 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         q_plot_disp,
         extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]],
         origin="lower",
-        cmap="inferno",
+        cmap="plasma",
         vmin=0.0,
         vmax=qrf_display_vmax,
         interpolation="bilinear",
@@ -3984,7 +4107,7 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
 
     # Thermal + state figure.
     fig2, ax2 = plt.subplots(1, 3, figsize=(14, 4.3))
-    imt = ax2[0].imshow(T_disp, extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]], origin="lower", cmap="turbo", interpolation="bilinear")
+    imt = ax2[0].imshow(T_disp, extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]], origin="lower", cmap="inferno", interpolation="bilinear")
     ax2[0].set_title("T final [C]")
     cbt = plt.colorbar(imt, ax=ax2[0], shrink=0.84)
     _style_cbar(cbt, decimals=1)
@@ -4004,7 +4127,7 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         phi_display,
         extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]],
         origin="lower",
-        cmap="viridis",
+        cmap="Blues",
         vmin=phi_vmin,
         vmax=phi_vmax,
         interpolation="bilinear",
@@ -4024,7 +4147,7 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         rho_disp,
         extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]],
         origin="lower",
-        cmap="magma",
+        cmap="viridis",
         vmin=rho_vmin,
         vmax=rho_vmax,
         interpolation="bilinear",
@@ -4171,7 +4294,7 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         T_disp,
         extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]],
         origin="lower",
-        cmap="jet",
+        cmap="inferno",
         vmin=_t_vmin,
         vmax=_t_vmax,
         interpolation="bilinear",
@@ -4187,7 +4310,7 @@ def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list
         q_plot_disp,
         extent=[state.x[0], state.x[-1], state.y[0], state.y[-1]],
         origin="lower",
-        cmap="jet",
+        cmap="plasma",
         vmin=_q_vmin,
         vmax=_q_vmax,
         interpolation="bilinear",
@@ -5008,7 +5131,7 @@ def generate_antennae_preview(cfg: dict, output_png: Path) -> dict:
         qmw,
         extent=[float(x[0]), float(x[-1]), float(y[0]), float(y[-1])],
         origin="lower",
-        cmap="magma",
+        cmap="plasma",
         vmin=qmin,
         vmax=qmax,
         interpolation="bilinear",
@@ -5072,7 +5195,7 @@ def generate_antennae_quick_search(cfg: dict) -> dict:
         qmw,
         extent=[float(x[0]) * 1000, float(x[-1]) * 1000, float(y[0]) * 1000, float(y[-1]) * 1000],
         origin="lower",
-        cmap="magma",
+        cmap="plasma",
         vmin=qmin,
         vmax=qmax,
         interpolation="bilinear",

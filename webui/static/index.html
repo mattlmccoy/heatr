@@ -87,6 +87,7 @@
             <option value="orientation_optimizer">⤾ │ Orientation Optimizer</option>
             <option value="placement_optimizer">◫ │ Placement Optimizer</option>
             <option value="shell_sweep">◌ │ Shell Thickness Sweep</option>
+            <option value="prewarp">⬡ │ Geometry Pre-Warp (ILT)</option>
           </select>
         </label>
 
@@ -311,6 +312,37 @@
           <label>Temp ceiling for ranking (C)
             <input id="shellTempCeilingC" type="number" step="1" value="250" />
           </label>
+        </div>
+
+        <div class="mode-section hidden" data-mode="prewarp">
+          <p class="field-help">
+            Geometry Pre-Warp moves only the part <strong>boundary</strong> (level-set ILT)
+            so the as-sintered melt lands on the fixed nominal CAD. Dopant stays
+            <strong>uniform</strong> and the part center is fixed — this is a different
+            correction approach from FGM (which grades dopant on a fixed geometry).
+            Supported shapes: square, circle, hexagon, cross, diamond, triangle,
+            equilateral_triangle, star, L_shape, T_shape.
+          </p>
+          <label>Grid resolution (nx = ny)
+            <input id="prewarpGrid" type="number" min="20" max="96" step="4" value="56" />
+          </label>
+          <label>Level-set iterations
+            <input id="prewarpIters" type="number" min="20" max="1000" step="20" value="400" />
+          </label>
+          <label>Melt fraction threshold
+            <input id="prewarpMeltFrac" type="number" min="0.05" max="0.99" step="0.05" value="0.95" />
+          </label>
+          <label>Re-run FD gate (proves gradient correctness)
+            <select id="prewarpGate">
+              <option value="true" selected>true</option>
+              <option value="false">false</option>
+            </select>
+          </label>
+          <p class="field-help">
+            Result: naive vs pre-warped IoU(melt, nominal), boundary error, and the
+            pre-warp figure (nominal | printed melt | pre-warped geometry | corrected
+            melt | IoU). Runs under the py3.12 venv required by the prewarp physics.
+          </p>
         </div>
 
         <div class="antennae-toggle-row">

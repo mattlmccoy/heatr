@@ -1,0 +1,52 @@
+{
+  "shape": "diamond",
+  "angles_deg": [
+    0.0,
+    90.0,
+    180.0,
+    270.0
+  ],
+  "n_orientations": 4,
+  "magnitude": 1.0,
+  "metric": "sigma of rotation-averaged Qrf over part interior (CoV %)",
+  "A_baseline_no_tt_no_fgm": {
+    "sigma_Q_w_per_m3": 3568687.333146889,
+    "mean_Q_w_per_m3": 1211087.164750963,
+    "CoV_pct": 294.66808310867714,
+    "sigma_Tproxy": 1178947.8628604047,
+    "mean_Tproxy": 1079403.6451812587,
+    "CoV_Tproxy_pct": 109.22214948259047
+  },
+  "B_turntable_no_fgm": {
+    "sigma_Q_w_per_m3": 2535706.386827842,
+    "mean_Q_w_per_m3": 1211087.164750963,
+    "CoV_pct": 209.3743919207716,
+    "sigma_Tproxy": 734173.036363809,
+    "mean_Tproxy": 1079403.6451812587,
+    "CoV_Tproxy_pct": 68.01654224917158
+  },
+  "C_single_mask_tt_fgm": {
+    "sigma_Q_w_per_m3": 3664465.888216784,
+    "mean_Q_w_per_m3": 1211087.1647509632,
+    "CoV_pct": 302.57656053768113,
+    "sigma_Tproxy": 979179.7844330871,
+    "mean_Tproxy": 1030224.3139984662,
+    "CoV_Tproxy_pct": 95.0452994681064
+  },
+  "D_perlayer_mask_tt_fgm": {
+    "sigma_Q_w_per_m3": 2894650.933287109,
+    "mean_Q_w_per_m3": 1211087.164750963,
+    "CoV_pct": 239.01260103622172,
+    "sigma_Tproxy": 842996.6180825033,
+    "mean_Tproxy": 1048031.9623260915,
+    "CoV_Tproxy_pct": 80.43615542139429
+  },
+  "E_avgfield_mask_tt_fgm": {
+    "sigma_Q_w_per_m3": 2949816.042550916,
+    "mean_Q_w_per_m3": 1211087.164750963,
+    "CoV_pct": 243.5676083775101,
+    "sigma_Tproxy": 784001.1922083335,
+    "mean_Tproxy": 1053310.0822827055,
+    "CoV_Tproxy_pct": 74.43213592993119
+  }
+}

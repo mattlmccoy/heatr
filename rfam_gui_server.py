@@ -67,6 +67,21 @@ SUPPORTED_SHAPES = [
 
 DEFAULT_OPT_PHI = [0.50, 0.75, 0.90, 0.95]
 
+# ── Geometry Pre-Warp (level-set ILT) constants ─────────────────────────────────
+# The prewarp engine (ilt_levelset) lives in the analysis-3dfgm workstream and MUST
+# run under its py3.12 venv (.venv312) — system numpy 2.2.x has a buffer-elision bug
+# that silently corrupts arrays. Figure rendering uses a separate python that has
+# matplotlib (.venv312 does not). Both are vendored worker scripts in this directory.
+PREWARP_ANALYSIS_DIR = (ROOT / "../../../dissertation_materials/analysis-3dfgm").resolve()
+PREWARP_VENV_PY = PREWARP_ANALYSIS_DIR / ".venv312" / "bin" / "python"
+# python with matplotlib for the figure stage (system py3); fall back to server py.
+PREWARP_FIGURE_PY = Path("/usr/bin/python3")
+# GUI shape names that the prewarp level-set supports (centred analytic nominals).
+PREWARP_SUPPORTED_SHAPES = {
+    "square", "circle", "hexagon", "cross", "diamond", "triangle",
+    "equilateral_triangle", "star", "L_shape", "T_shape",
+}
+
 JOBS_LOCK = threading.Lock()
 JOBS: dict[str, dict[str, Any]] = {}
 QUEUE_LOCK = threading.Lock()
@@ -1414,7 +1429,10 @@ def _should_skip_result_path(path: Path) -> bool:
     rel = path.relative_to(OUTPUTS_DIR).as_posix().lower()
     if rel.startswith("_archive"):
         return True
-    if "prewarp" in rel:
+    # Hide the legacy offline rfam_prewarp.py outputs, but NOT the new GUI Geometry
+    # Pre-Warp (level-set ILT) runs which live under the "geowarp" family — those are
+    # first-class results even when the user's output_name contains "prewarp".
+    if "prewarp" in rel and "/geowarp/" not in ("/" + rel):
         return True
     # Skip individual fgm_iterate child dirs (iterN and opt_probe) — exposed via parent dashboard
     # e.g. runs/square/fgm_iterate/square_run_20260430/square_run_20260430_iter2  → skip
@@ -1474,7 +1492,10 @@ def _register_job_output(job: dict[str, Any], out_dir: Path) -> None:
 
 def _output_dir_for_request(output_name: str, payload: dict[str, Any]) -> Path:
     shape = str(payload.get("shape", "unknown")).strip().lower() or "unknown"
-    mode = str(payload.get("mode", "single")).strip().lower() or "single"
+    # _dir_mode lets a mode place outputs under a different directory family than its
+    # dispatch key (prewarp dispatches as "prewarp" but writes under "geowarp" so the
+    # run is not hidden by the legacy "prewarp"-substring skip in _should_skip_result_path).
+    mode = str(payload.get("_dir_mode") or payload.get("mode", "single")).strip().lower() or "single"
     family = "experimental" if _is_experimental_request(payload) else "baseline"
     safe_shape = "".join(ch if (ch.isalnum() or ch in {"_", "-"}) else "_" for ch in shape).strip("_") or "unknown"
     safe_mode = "".join(ch if (ch.isalnum() or ch in {"_", "-"}) else "_" for ch in mode).strip("_") or "single"
@@ -1738,6 +1759,86 @@ def _write_shell_sweep_report_png(rows: list[dict[str, Any]], report_dir: Path) 
     fig.tight_layout()
     fig.savefig(report_dir / "shell_sweep_report.png", bbox_inches="tight")
     plt.close(fig)
+
+
+def _launch_prewarp_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
+    """Geometry Pre-Warp mode — corrected nominal-target level-set ILT.
+
+    Holds the dopant UNIFORM and moves only the part BOUNDARY (level-set phi) so the
+    as-sintered melt lands on the fixed crisp centred nominal CAD. This is a DIFFERENT
+    correction approach from FGM (grade dopant, fixed geometry) — not a special case.
+
+    Two stages, each a subprocess so the prewarp physics runs under its required
+    py3.12 venv and the figure renders under a python that has matplotlib:
+      1. prewarp_worker.py  (PREWARP_VENV_PY)   -> capture .npz + summary.json + FD gate
+      2. prewarp_figure.py  (PREWARP_FIGURE_PY) -> prewarp.png
+
+    Payload keys: shape, output_name, prewarp_grid, prewarp_iters, prewarp_melt_frac,
+                  prewarp_gate (bool, re-run the FD gate on the wired path).
+    """
+    job_id = str(job["id"])
+    output_name = str(payload.get("output_name", "")).strip()
+    shape = str(payload.get("shape", "")).strip()
+
+    if not _is_valid_output_name(output_name):
+        raise ValueError("output_name must use only letters, numbers, '_' or '-'")
+    if shape not in PREWARP_SUPPORTED_SHAPES:
+        raise ValueError(
+            f"shape {shape!r} is not supported by Geometry Pre-Warp. "
+            f"Supported: {sorted(PREWARP_SUPPORTED_SHAPES)}"
+        )
+    if not PREWARP_VENV_PY.is_file():
+        raise RuntimeError(
+            f"prewarp venv python not found at {PREWARP_VENV_PY} — the level-set ILT "
+            f"requires the analysis-3dfgm .venv312 (py3.12 + numpy 2.1.3)."
+        )
+
+    grid = int(payload.get("prewarp_grid", 56))
+    iters = int(payload.get("prewarp_iters", 400))
+    melt_frac = float(payload.get("prewarp_melt_frac", 0.95))
+    do_gate = bool(payload.get("prewarp_gate", True))
+    grid = max(20, min(96, grid))
+    iters = max(20, min(1000, iters))
+
+    out_dir = _output_dir_for_request(output_name, payload)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _register_job_output(job, out_dir)
+    log_path = Path(job["log_path"])
+
+    _set_job_progress(job_id, total_runs=2, completed_runs=0, progress_pct=8.0,
+                      progress_label="Pre-warp: level-set ILT (FD-gated) running")
+
+    # ── Stage 1: compute under .venv312 ────────────────────────────────────────
+    cmd = [
+        str(PREWARP_VENV_PY), "prewarp_worker.py",
+        "--analysis-dir", str(PREWARP_ANALYSIS_DIR),
+        "--out-dir", str(out_dir),
+        "--geometry", shape,
+        "--grid", str(grid),
+        "--iters", str(iters),
+        "--melt-frac", str(melt_frac),
+    ]
+    if do_gate:
+        cmd.append("--gate")
+    rc = _run_command(cmd, log_path, job_id=job_id)
+    if rc != 0:
+        _set_job_progress(job_id, progress_label="Pre-warp compute failed")
+        raise RuntimeError(f"prewarp_worker.py exited with code {rc}")
+
+    _set_job_progress(job_id, completed_runs=1, progress_pct=70.0,
+                      progress_label="Pre-warp: rendering figure")
+
+    # ── Stage 2: figure under a python that has matplotlib ─────────────────────
+    fig_py = PREWARP_FIGURE_PY if PREWARP_FIGURE_PY.is_file() else Path(sys.executable)
+    fig_cmd = [str(fig_py), "prewarp_figure.py", "--out-dir", str(out_dir)]
+    rc2 = _run_command(fig_cmd, log_path, job_id=job_id)
+    if rc2 != 0:
+        # figure is non-fatal: the summary.json + IoU numbers are the primary result
+        _write_job_log(log_path, f"[warn] prewarp_figure.py exited with code {rc2} "
+                                 f"(numbers still available in summary.json)")
+
+    _set_job_progress(job_id, completed_runs=2, progress_pct=100.0,
+                      progress_label="Pre-warp complete")
 
 
 def _launch_single_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
@@ -4064,6 +4165,8 @@ def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
             _launch_fgm_iterate_mode(payload, job)
         elif mode == "fgm_gradient_descent":
             _launch_fgm_gradient_descent(payload, job)
+        elif mode == "prewarp":
+            _launch_prewarp_mode(payload, job)
         else:
             _launch_single_mode(payload, job)
         _refresh_job_artifacts(job)
@@ -5697,6 +5800,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/tools/fgm-iterate",
             "/api/tools/fgm-continue",
             "/api/tools/fgm-gradient-descent",
+            "/api/tools/prewarp",
             "/api/heatr3d/preview",
             "/api/heatr3d/run",
         }:
@@ -6169,6 +6273,39 @@ class Handler(BaseHTTPRequestHandler):
             job_payload["mode"]        = "fgm_iterate"
             job_payload["output_name"] = output_name
             job = _make_job(mode="fgm_iterate", output_name=output_name)
+            with JOBS_LOCK:
+                JOBS[job["id"]]["_payload"] = job_payload
+            _enqueue_job(job["id"])
+            _maybe_start_next_job()
+            with JOBS_LOCK:
+                status = str(JOBS[job["id"]]["status"])
+                qpos   = JOBS[job["id"]].get("queue_position", None)
+            return self._json({
+                "ok": True, "job_id": job["id"], "status": status,
+                "queue_position": qpos, "output_name": output_name,
+            }, status=202)
+
+        if path == "/api/tools/prewarp":
+            # Geometry Pre-Warp — corrected nominal-target level-set ILT. Holds dopant
+            # uniform and moves the boundary so the as-sintered melt lands on the fixed
+            # nominal CAD. A DIFFERENT correction approach from FGM. Payload keys:
+            #   shape, output_name, prewarp_grid, prewarp_iters, prewarp_melt_frac, prewarp_gate
+            shape       = str(payload.get("shape", "")).strip()
+            output_name = str(payload.get("output_name", "")).strip()
+            if not shape or shape not in PREWARP_SUPPORTED_SHAPES:
+                return self._json(
+                    {"error": f"shape {shape!r} not supported by prewarp; "
+                              f"supported: {sorted(PREWARP_SUPPORTED_SHAPES)}"},
+                    status=400)
+            if not output_name:
+                output_name = f"{shape.lower()}_prewarp"
+            if not _is_valid_output_name(output_name):
+                return self._json({"error": "output_name contains invalid characters"}, status=400)
+            job_payload = dict(payload)
+            job_payload["mode"]        = "prewarp"
+            job_payload["_dir_mode"]   = "geowarp"   # keep out of the "prewarp"-skip path
+            job_payload["output_name"] = output_name
+            job = _make_job(mode="prewarp", output_name=output_name)
             with JOBS_LOCK:
                 JOBS[job["id"]]["_payload"] = job_payload
             _enqueue_job(job["id"])

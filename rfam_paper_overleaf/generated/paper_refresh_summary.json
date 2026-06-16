@@ -1,0 +1,25 @@
+{
+  "single_geometries": 17,
+  "turntable_geometries": 4,
+  "orientation": {
+    "best_angle_deg": 140.0,
+    "exposure_s": 720.0,
+    "mean_rho": 0.986106023589411,
+    "temp_violation_c": 102.32262187906423,
+    "energy_residual_pct": 25.995005588615193
+  },
+  "prewarp": {
+    "square_rmse_mm": 0.1526,
+    "circle_rmse_mm": 0.1026,
+    "square_boundary_std": 0.0403353356682327,
+    "circle_boundary_std": 0.11054136347516824
+  },
+  "antennae": {
+    "candidate_id": 2,
+    "global_size_mm": 1.5,
+    "base_boundary_std": 0.06971579743250032,
+    "antennae_boundary_std": 0.07119478945392707,
+    "improvement_pct": -2.1214589460283024,
+    "mean_rho": 0.6054194171917961
+  }
+}
