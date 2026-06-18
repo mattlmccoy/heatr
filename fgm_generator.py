@@ -95,6 +95,14 @@ def generate_fgm(
     #                         and eligible for overprint extension (default 0.6)
     overprint_cold_mm: float = 0.0,
     overprint_cold_thresh: float = 0.6,
+    # ── REPRO-03: deterministic seed for the stochastic perturbation RNG ─────────
+    # The stagnation-escape noise (used only when perturbation_amplitude > 0) was
+    # previously drawn from the UNSEEDED global np.random, making any perturbed FGM
+    # map non-reproducible. It now uses np.random.default_rng(perturbation_seed)
+    # with a documented default seed so the same (run, amplitude, seed) reproduces
+    # the same map. CHANGES FUTURE generation of PERTURBED maps only; committed FGM
+    # artifacts and all non-perturbed (production, amplitude=0) maps are unaffected.
+    perturbation_seed: int = 0,
 ) -> dict:
     """Generate a functionally graded binder-saturation map from a HEATR run.
 
@@ -490,7 +498,11 @@ def generate_fgm(
     # Mean-subtraction preserves Σ sat_map[part] approximately.
     if float(perturbation_amplitude) > 0.0 and part_mask.any():
         _pamp  = float(perturbation_amplitude)
-        _noise = np.random.uniform(-_pamp, _pamp, sat_scaled.shape).astype(np.float32)
+        # REPRO-03: seeded local RNG (was unseeded global np.random). Deterministic
+        # for a fixed (perturbation_seed, amplitude, map shape). Map values are now
+        # SEED-PINNED: a perturbed map is reproducible only for the same seed.
+        _rng   = np.random.default_rng(perturbation_seed)
+        _noise = _rng.uniform(-_pamp, _pamp, sat_scaled.shape).astype(np.float32)
         _noise[~part_mask] = 0.0
         _noise[part_mask] -= float(_noise[part_mask].mean())  # zero-mean → volume neutral
         sat_scaled = np.clip(sat_scaled + _noise, 0.0, 1.0).astype(np.float32)
@@ -652,6 +664,9 @@ def generate_fgm(
         "oc_alpha":                   _oc_alpha,          # None if not in OC mode
         "volume_error":               _vol_error,         # None if not in OC mode
         "perturbation_amplitude":     float(perturbation_amplitude),
+        # REPRO-03: provenance of the (now-seeded) perturbation RNG. Only affects
+        # the map when perturbation_amplitude > 0.
+        "perturbation_seed":          int(perturbation_seed),
     }
 
     # ── 9. Write outputs ──────────────────────────────────────────────────────

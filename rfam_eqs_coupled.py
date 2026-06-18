@@ -6,6 +6,7 @@ import copy
 import csv
 import io
 import json
+import logging
 import math
 import sys
 import time
@@ -58,6 +59,11 @@ from shapes import make_shape, rotate, fill_region_with_primitives
 
 EPS0 = 8.8541878128e-12
 R_GAS = 8.31446261815324
+
+# Module logger for clamp / stability diagnostics (THM-01/02). Emits WARNINGs only
+# when a numerical limiter actually BINDS; in the dissertation production config the
+# clamps are dormant, so this logger stays silent and output is bit-identical.
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -1871,7 +1877,21 @@ def thermal_step(
         dT_step = np.clip(dT_step, -dT_cap_abs, dT_cap_abs)
     else:
         dT_cap_abs = float("inf")
-    T_new = np.clip(np.asarray(T, dtype=float) + dT_step, temp_min_c, temp_max_c)
+    # THM-02 instrumentation: measure how many cells the temp_max/temp_min clamp
+    # would BIND on (pre-clamp candidate vs the clamp bounds). This is diagnostic
+    # ONLY -- the clamp arithmetic below is unchanged, so production output is
+    # bit-identical (the clamp is dormant in the dissertation config: candidates
+    # never reach temp_max/temp_min). Computed here so it can ride along in `diag`.
+    T_candidate = np.asarray(T, dtype=float) + dT_step
+    _temp_max_finite = np.isfinite(temp_max_c)
+    _temp_min_finite = np.isfinite(temp_min_c)
+    frac_cells_temp_cap = float(
+        np.mean(
+            ((T_candidate > temp_max_c) if _temp_max_finite else np.zeros_like(T_candidate, dtype=bool))
+            | ((T_candidate < temp_min_c) if _temp_min_finite else np.zeros_like(T_candidate, dtype=bool))
+        )
+    )
+    T_new = np.clip(T_candidate, temp_min_c, temp_max_c)
     # Keep an immutable copy for return; use a separate working copy for phase/density.
     T_return = np.array(T_new, copy=True)
     T_work = np.array(T_new, copy=True)
@@ -2057,7 +2077,27 @@ def thermal_step(
         "frac_cells_dT_clipped": float(
             np.mean(np.abs(dT_step_raw) > dT_cap_abs) if np.isfinite(dT_cap_abs) else 0.0
         ),
+        "frac_cells_temp_cap": frac_cells_temp_cap,
     }
+    # THM-01/02 clamp-binding WARNING. Inert in production (both clamps dormant ->
+    # both fracs 0.0 -> nothing logged, no output change). When a clamp BINDS it
+    # means the explicit march hit a numerical limiter that silently altered the
+    # physics, so surface it loudly. The summary-level manifest flag is set by the
+    # caller (run_sim) from the per-substep history.
+    if diag["frac_cells_dT_clipped"] > 0.0:
+        logger.warning(
+            "THM-01 per-substep dT cap BOUND: %.4f%% of cells clipped to +-%.3f C "
+            "(max raw |dT|=%.3f C). The explicit limiter is altering the physics; "
+            "results at these cells are non-physical -- reduce dt / add substeps.",
+            100.0 * diag["frac_cells_dT_clipped"], dT_cap_abs, max_dT_raw,
+        )
+    if frac_cells_temp_cap > 0.0:
+        logger.warning(
+            "THM-02 temperature clamp BOUND: %.4f%% of cells hit [temp_min=%.1f, "
+            "temp_max=%.1f] C. The clamp is masking a runaway/instability; "
+            "results at these cells are non-physical.",
+            100.0 * frac_cells_temp_cap, temp_min_c, temp_max_c,
+        )
     if x_cryst_new is not None:
         diag["mean_x_cryst_part"] = float(np.mean(x_cryst_new[part_mask]))
     return T_return, rho_rel_new, phi_out, x_cryst_new, diag
@@ -2616,9 +2656,21 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         ),
         1e-9,
     )
+    # THM-03/CB-01: the explicit-diffusion stability limit must use the LARGEST
+    # conductivity that actually appears in the march, including the IDEA-4
+    # heat-sink k-gain (k -> k*(1 + heatsink_kgain*g), applied in thermal_step).
+    # If we left it out, a positive kgain would under-substep and the FTCS scheme
+    # could go unstable. Production uses heatsink_kgain=0 -> the factor is exactly
+    # 1.0 -> k_max (and thus dt_stable / n_substeps) is bit-identical.
+    _kgain_max = 1.0
+    if heatsink_field is not None and float(heatsink_kgain) != 0.0:
+        _kgain_max = 1.0 + float(heatsink_kgain) * float(np.max(np.asarray(heatsink_field, dtype=float)))
+    k_max = k_max * max(_kgain_max, 1.0)
     dt_stable = 0.24 * (min(dx, dy) ** 2) * rho_cp_min / k_max
     n_substeps = max(1, int(math.ceil(dt / max(dt_stable, 1e-12))))
     dt_sub = dt / float(n_substeps)
+    # THM-01/02 clamp-binding manifest flag (latched in the substep loop below).
+    _clamp_bound_any = False
 
     therm_params = ThermalParams(
         dx=dx,
@@ -2994,6 +3046,11 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             max_dt_used_acc = max(max_dt_used_acc, float(diag_step.get("max_dT_used_c", 0.0)))
             frac_dt_clip_acc += float(diag_step.get("frac_cells_dT_clipped", 0.0))
             x_cr_acc += float(diag_step.get("mean_x_cryst_part", 0.0))
+            # THM-01/02 manifest flag: latch True if EITHER limiter bound this
+            # substep. Inert in production (both fracs are 0.0 -> stays False).
+            if (float(diag_step.get("frac_cells_dT_clipped", 0.0)) > 0.0
+                    or float(diag_step.get("frac_cells_temp_cap", 0.0)) > 0.0):
+                _clamp_bound_any = True
 
         # Accumulate stored energy using beginning-of-outer-step material properties.
         # This is consistent with the Forward Euler PDE, which also evaluates ρ·cp
@@ -3339,6 +3396,11 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             hist["frac_cells_dT_clipped"][-1] if hist["frac_cells_dT_clipped"] else 0.0
         ),
         "frac_cells_dT_clipped_mean": float(np.mean(hist["frac_cells_dT_clipped"])) if hist["frac_cells_dT_clipped"] else 0.0,
+        # THM-01/02 provenance flag: True iff a per-substep dT cap OR the
+        # temp_min/temp_max clamp BOUND on at least one cell at any step. False in
+        # the dissertation production config (both limiters dormant). When True,
+        # numbers were silently altered by a numerical limiter -- treat as suspect.
+        "clamp_bound": bool(_clamp_bound_any),
         "time_final_s": float(hist["time_s"][-1] if hist["time_s"] else 0.0),
         "model_family": physics_model_family,
         "parameter_source": parameter_source,
