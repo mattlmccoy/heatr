@@ -9,6 +9,18 @@
   <link rel="stylesheet" href="/static/hub-theme.css" />
 </head>
 <body class="layout-b ids-inspired">
+  <div id="heatr-splash-overlay"
+       style="position:fixed;inset:0;z-index:9999;background:#0d0c0e;transition:opacity .6s ease">
+    <iframe src="/static/heatr-splash.html" title="HEATR"
+            style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe>
+  </div>
+  <script>
+    addEventListener('load', () => setTimeout(() => {
+      const o = document.getElementById('heatr-splash-overlay');
+      o.style.opacity = '0';
+      setTimeout(() => o.remove(), 700);
+    }, 3500));
+  </script>
   <header class="topbar topbar-ids">
     <div>
       <h1>HEATR: High-frequency Electrothermal Additive Thermal Resolver</h1>
@@ -63,6 +75,7 @@
     <a class="tab-link" href="/files">Files</a>
     <a class="tab-link" href="/heatr3d">HEATR-3D</a>
     <a class="tab-link" href="/theory">Theory</a>
+    <a class="tab-link" href="/getting-started">Getting Started</a>
   </nav>
 
   <main class="grid design-grid-b run-layout">
