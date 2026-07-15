@@ -5407,6 +5407,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_static("examples.html")
         if path == "/heatr3d" or path == "/heatr3d.html":
             return self._serve_static("heatr3d.html")
+        if path == "/getting-started" or path == "/getting-started.html":
+            return self._serve_static("getting-started.html")
         if path.startswith("/static/"):
             return self._serve_static(path[len("/static/"):])
         if path == "/api/ping":
