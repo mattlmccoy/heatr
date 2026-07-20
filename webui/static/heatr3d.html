@@ -17,12 +17,6 @@
        padding, drop its column template. */
     main.grid { display:block; }
 
-    /* `.layout-b .form-card { grid-area: form }` (design-b.css) is meant for the
-       Operation page's named areas, which .h3d-grid never defines. Left applied
-       it creates phantom implicit tracks and pushes this card onto a second row
-       below the fold, so the two panels are never side by side. */
-    .h3d-grid > .form-card { grid-area: auto; }
-
     /* Global `label { display:grid }` (styles.css) turns this label into a grid
        container, stretching the checkbox to full width above its own text. */
     .h3d-check { display:flex; align-items:center; gap:8px; font-size:.78rem; opacity:.85; }
