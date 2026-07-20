@@ -1,56 +1,78 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HEATR — Getting Started</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg:#0b0e13; --panel:#141922; --panel2:#1b2230; --line:#232c3a;
-    --ink:#e6edf5; --mut:#8c9bb0; --accent:#4a90e2; --accent2:#76D6D5;
-    --sans:'Space Grotesk',system-ui,sans-serif; --serif:'Instrument Serif',Georgia,serif;
-  }
-  *{box-sizing:border-box;}
-  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
-  a{color:var(--accent);text-decoration:none;}
-  .topbar{display:flex;justify-content:space-between;align-items:flex-start;padding:26px 40px 0;}
-  .topbar h1{font-size:22px;font-weight:600;margin:0;}
-  .topbar p{font-size:13px;color:var(--mut);margin:4px 0 0;}
-  .status-pill{font-size:12px;color:var(--accent2);border:1px solid #1f4f4f;border-radius:999px;padding:6px 14px;}
-  .tabs-nav{display:flex;gap:26px;padding:20px 40px 0;border-bottom:1px solid var(--line);margin-top:18px;}
-  .tab-link{position:relative;padding-bottom:12px;font-size:15px;color:var(--mut);}
-  .tab-link.active{color:var(--accent);}
-  .tab-link.active::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--accent);}
-  main{max-width:1100px;margin:0 auto;padding:36px 40px 80px;}
-  .lede{font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent2);}
-  .h2{font-size:34px;font-weight:600;letter-spacing:-0.02em;margin:14px 0 0;}
-  .h2 em{font-family:var(--serif);font-style:italic;font-weight:400;color:var(--accent2);}
-  .sub{font-size:16px;color:var(--mut);margin:16px 0 0;max-width:680px;line-height:1.6;}
-  .embed{margin:34px 0 0;border-radius:14px;overflow:hidden;background:#000;box-shadow:0 24px 48px -12px rgba(0,0,0,0.5);border:1px solid var(--line);}
-  .embed .ratio{position:relative;width:100%;padding-top:56.25%;}
-  .embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;}
-  .cap{font-size:12.5px;color:var(--mut);margin:10px 2px 0;}
-  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:44px 0 0;}
-  .step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;}
-  .step .n{font-family:var(--serif);font-style:italic;font-size:26px;color:var(--accent2);}
-  .step h3{font-size:17px;font-weight:600;margin:8px 0 0;}
-  .step p{font-size:14px;color:var(--mut);margin:8px 0 0;line-height:1.5;}
-  .step code{font-family:ui-monospace,monospace;font-size:12.5px;color:var(--accent2);background:var(--panel2);padding:2px 6px;border-radius:4px;}
-  .foot{margin:44px 0 0;font-family:var(--serif);font-style:italic;font-size:17px;color:var(--mut);}
-  .foot a{font-family:var(--sans);font-style:normal;}
-  @media(max-width:760px){.steps{grid-template-columns:1fr;}}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HEATR — Getting Started</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/design-b.css" />
+  <link rel="stylesheet" href="/static/hub-theme.css" />
+  <style>
+    /* Page-specific walkthrough styling. Chrome (topbar, tabs, background,
+       typography, theming) comes from the shared stylesheets above, so this page
+       inherits the accent/mode/background settings like every other page. */
+    /* Same centred single-column pattern as .theory-page / .files-page so this
+       page sits at the tool's standard content width. */
+    .gs-page { grid-template-columns: minmax(680px, 1100px); justify-content: center;
+               padding-bottom: 4rem; }
+    .gs-lede { font-size:.78rem; letter-spacing:.18em; text-transform:uppercase;
+               color: var(--accent-main); }
+    .gs-title { font-size:2.1rem; font-weight:600; letter-spacing:-.02em; margin:.6rem 0 0; }
+    .gs-title em { font-family:'Instrument Serif',Georgia,serif; font-style:italic;
+                   font-weight:400; color: var(--accent-main); }
+    .gs-sub { font-size:1rem; color: var(--text-secondary); margin:.9rem 0 0;
+              max-width:680px; line-height:1.6; }
+    .gs-embed { margin:2rem 0 0; border-radius:14px; overflow:hidden; background:#000;
+                border:1px solid var(--border-color);
+                box-shadow:0 24px 48px -12px rgba(0,0,0,.5); }
+    .gs-embed .gs-ratio { position:relative; width:100%; padding-top:56.25%; }
+    .gs-embed iframe { position:absolute; inset:0; width:100%; height:100%; border:0; display:block; }
+    .gs-cap { font-size:.78rem; color: var(--text-secondary); margin:.6rem .15rem 0; }
+    .gs-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:1.1rem; margin:2.75rem 0 0; }
+    .gs-step { background: var(--bg-card); border:1px solid var(--border-color);
+               border-radius:12px; padding:1.35rem; }
+    .gs-step .gs-n { font-family:'Instrument Serif',Georgia,serif; font-style:italic;
+                     font-size:1.6rem; color: var(--accent-main); }
+    .gs-step h3 { font-size:1.05rem; font-weight:600; margin:.5rem 0 0; }
+    .gs-step p { font-size:.87rem; color: var(--text-secondary); margin:.5rem 0 0; line-height:1.5; }
+    .gs-step code { font-family:ui-monospace,monospace; font-size:.78rem;
+                    color: var(--accent-main); background: var(--bg-input);
+                    padding:2px 6px; border-radius:4px; }
+    .gs-foot { margin:2.75rem 0 0; font-family:'Instrument Serif',Georgia,serif;
+               font-style:italic; font-size:1.05rem; color: var(--text-secondary); }
+    @media (max-width:760px) { .gs-steps { grid-template-columns:1fr; } }
+  </style>
 </head>
-<body>
-  <header class="topbar">
+<body class="ids-inspired">
+  <header class="topbar topbar-ids">
     <div>
-      <h1>HEATR <span style="font-weight:400;color:var(--mut);font-size:15px">Getting Started</span></h1>
+      <h1>HEATR Getting Started</h1>
       <p>A guided introduction to running electrothermal simulations</p>
     </div>
-    <div class="status-pill">HEATR service connected</div>
+    <div class="header-tools">
+      <a class="heatr-hub-link" href="http://localhost:5050" title="Back to Research Toolkit Hub">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Hub
+      </a>
+      <div class="status-pill" id="serverStatus">HEATR service connected</div>
+      <details class="settings-menu">
+        <summary>Settings</summary>
+        <div class="settings-grid">
+          <label>Mode
+            <select id="prefMode"><option value="dark">Dark</option><option value="light">Light</option></select>
+          </label>
+          <label>Accent
+            <select id="prefAccent"><option value="hub">HEATR orange</option><option value="blue">Blue</option><option value="green">Green</option><option value="amber">Amber</option><option value="violet">Violet</option></select>
+          </label>
+          <label>Background
+            <select id="prefBackground"><option value="grid">Grid</option><option value="plain">Plain</option><option value="aurora">Aurora</option></select>
+          </label>
+          <label>Layout
+            <select id="prefLayout"><option value="layout-1">Split</option><option value="layout-2">Stacked</option><option value="layout-3">Dual</option></select>
+          </label>
+        </div>
+      </details>
+    </div>
   </header>
 
   <nav class="tabs-nav">
@@ -62,25 +84,30 @@
     <a class="tab-link active" href="/getting-started">Getting Started</a>
   </nav>
 
-  <main>
-    <div class="lede">Start here</div>
-    <h2 class="h2">How HEATR heats a part, <em>and how to drive it</em></h2>
-    <p class="sub">HEATR couples an electro-quasi-static field solve, RF power deposition, and transient
+  <main class="results-page gs-page">
+    <div class="gs-lede">Start here</div>
+    <h2 class="gs-title">How HEATR heats a part, <em>and how to drive it</em></h2>
+    <p class="gs-sub">HEATR couples an electro-quasi-static field solve, RF power deposition, and transient
       thermal + melt + densification physics. The walkthrough below shows the full pipeline, then how to
       launch a run and read your results.</p>
 
-    <div class="embed">
-      <div class="ratio"><iframe src="/static/heatr-tutorial.html" title="HEATR field guide" loading="lazy" allow="autoplay"></iframe></div>
+    <div class="gs-embed">
+      <div class="gs-ratio"><iframe src="/static/heatr-tutorial.html" title="HEATR field guide" loading="lazy" allow="autoplay"></iframe></div>
     </div>
-    <div class="cap">The field guide — physics pipeline, Operation page, and Results browser. Loops automatically; drag the scrubber to review any moment.</div>
+    <div class="gs-cap">The field guide — physics pipeline, Operation page, and Results browser. Loops automatically; drag the scrubber to review any moment.</div>
 
-    <div class="steps">
-      <div class="step"><div class="n">01</div><h3>Configure a run</h3><p>On the <a href="/index.html">Operation</a> page pick a <b>mode</b> and <b>shape</b>, set the <b>exposure</b>, then <code>Launch Run</code>.</p></div>
-      <div class="step"><div class="n">02</div><h3>Watch it solve</h3><p>The active-job panel tracks progress; live figures show the field, deposition, and thermal evolution as the run marches.</p></div>
-      <div class="step"><div class="n">03</div><h3>Read the result</h3><p>In <a href="/results">Results</a>, star what matters and read <code>ρ</code>, <code>φ</code> and peak <code>T</code> — the metrics panel explains each.</p></div>
+    <div class="gs-steps">
+      <div class="gs-step"><div class="gs-n">01</div><h3>Configure a run</h3><p>On the <a href="/index.html">Operation</a> page pick a <b>mode</b> and <b>shape</b>, set the <b>exposure</b>, then <code>Launch Run</code>.</p></div>
+      <div class="gs-step"><div class="gs-n">02</div><h3>Watch it solve</h3><p>The active-job panel tracks progress; live figures show the field, deposition, and thermal evolution as the run marches.</p></div>
+      <div class="gs-step"><div class="gs-n">03</div><h3>Read the result</h3><p>In <a href="/results">Results</a>, star what matters and read <code>ρ</code>, <code>φ</code> and peak <code>T</code> — the metrics panel explains each.</p></div>
     </div>
 
-    <p class="foot">Want the equations behind it? See the <a href="/theory">Theory</a> page for the full model reference.</p>
+    <p class="gs-foot">Want the equations behind it? See the <a href="/theory">Theory</a> page for the full model reference.</p>
   </main>
+
+  <script src="/static/settings.js"></script>
+  <script>/* Keep Research Toolkit Hub alive while this tool is open */
+  (function(){function p(){fetch('http://localhost:5050/api/heartbeat',{method:'POST'}).catch(function(){});}p();setInterval(p,5000);})();
+  </script>
 </body>
 </html>

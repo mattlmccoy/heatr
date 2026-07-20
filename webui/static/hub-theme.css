@@ -719,3 +719,9 @@ body.ids-inspired[data-mode="light"] .nav-btn {
 /* Scrollbar */
 body.ids-inspired[data-mode="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }
 body.ids-inspired[data-mode="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.22); }
+
+/* Accent option matching the hub's own identity colour. Selected by default in
+   settings.js so applying preferences never overrides the hub theme. */
+body.ids-inspired[data-accent="hub"] {
+  --accent-main: #F5A962;
+}
