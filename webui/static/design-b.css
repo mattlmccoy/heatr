@@ -79,8 +79,12 @@
   grid-template-areas: "form jobs";
 }
 
-.layout-b .form-card { grid-area: form; }
-.layout-b .jobs-card { grid-area: jobs; }
+/* The `form`/`jobs` grid areas only exist in `.run-layout` (above), so scope
+   these placements to it. Previously unscoped, they leaked onto any `.form-card`
+   under `.layout-b` (e.g. HEATR-3D), referencing an undefined area and spawning
+   phantom implicit grid tracks. */
+.layout-b .run-layout .form-card { grid-area: form; }
+.layout-b .run-layout .jobs-card { grid-area: jobs; }
 
 .ids-inspired .card {
   background: var(--bg-card);
