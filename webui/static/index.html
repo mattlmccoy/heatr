@@ -11,15 +11,28 @@
 <body class="layout-b ids-inspired">
   <div id="heatr-splash-overlay"
        style="position:fixed;inset:0;z-index:9999;background:#0d0c0e;transition:opacity .6s ease">
-    <iframe src="/static/heatr-splash.html" title="HEATR"
+    <iframe id="heatr-splash-frame" data-src="/static/heatr-splash.html" title="HEATR"
             style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe>
   </div>
   <script>
-    addEventListener('load', () => setTimeout(() => {
-      const o = document.getElementById('heatr-splash-overlay');
-      o.style.opacity = '0';
-      setTimeout(() => o.remove(), 700);
-    }, 3500));
+    // Show the splash once per browser session, not on every visit to Operation.
+    // Runs inline (before paint) so a repeat visit never flashes the overlay.
+    (function () {
+      var overlay = document.getElementById('heatr-splash-overlay');
+      var seen = null;
+      try { seen = sessionStorage.getItem('heatrSplashSeen'); } catch (e) {}
+      if (seen) { overlay.remove(); return; }
+      try { sessionStorage.setItem('heatrSplashSeen', '1'); } catch (e) {}
+      // Only fetch the animation when it is actually going to be shown.
+      var frame = document.getElementById('heatr-splash-frame');
+      frame.src = frame.getAttribute('data-src');
+      addEventListener('load', function () {
+        setTimeout(function () {
+          overlay.style.opacity = '0';
+          setTimeout(function () { overlay.remove(); }, 700);
+        }, 3500);
+      });
+    })();
   </script>
   <header class="topbar topbar-ids">
     <div>
@@ -44,6 +57,7 @@
           </label>
           <label>Accent
             <select id="prefAccent">
+              <option value="hub">HEATR orange</option>
               <option value="blue">Blue</option>
               <option value="green">Green</option>
               <option value="amber">Amber</option>

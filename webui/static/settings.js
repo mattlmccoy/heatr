@@ -1,6 +1,8 @@
 const HEATR_DEFAULTS = {
   mode: "dark",
-  accent: "blue",
+  // "hub" is the tool's own orange (#F5A962, defined in hub-theme.css). It was
+  // previously "blue", which overrode the hub theme wherever settings were applied.
+  accent: "hub",
   bgstyle: "grid",
   layout: "layout-1",
 };
@@ -57,4 +59,13 @@ function heatrInitSettings() {
   [modeSel, accentSel, bgSel, layoutSel].forEach((el) => {
     if (el) el.addEventListener("change", onChange);
   });
+}
+
+// Apply saved preferences on every page that loads this script. Previously only
+// heatr3d.html called heatrInitSettings(), so the rest of the tool ignored the
+// user's settings entirely (and HEATR-3D was the only page whose accent changed).
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", heatrInitSettings);
+} else {
+  heatrInitSettings();
 }
