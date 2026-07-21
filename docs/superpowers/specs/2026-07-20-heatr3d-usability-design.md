@@ -91,12 +91,20 @@ deformation math, results collection); UI/rendering uses a concrete browser-veri
 
 ### Phase 1 — foundation (kill "results don't populate")
 
-**F0 — Prove a run completes end-to-end (verification gate, blocks all).**
+**F0 — Prove a run completes end-to-end (verification gate, blocks all). — PASSED 2026-07-20.**
 Purpose: confirm the solver venv spawns and a real run writes `results.json` + `fields.npz` in
 this environment. If runs silently error, that is itself part of complaint #1.
-Work: run a small case (e.g. `n=32`, sphere, `densify=false`) via the API; inspect the run dir;
-read `job.log`. Verification: a completed run dir with non-empty `results.json` and `fields.npz`;
-the in-page grid populates. No code unless this exposes a break.
+Result: a real run (sphere, `diam=0.028 m`, `n=32`, `fgm=melt`, `densify=true`) completed in
+~19 s (run id `1e10228aff1d`). `fields.npz` written with all six 3D arrays at correct shape/dtype
+(`part, T_phi90, phi_final, Qrf, rho_final, sat, h`, each `(32,32,32)`). `sat` grades in space
+(0.33–0.67) and layer-by-layer along z (0.667→0.554→0.667 — hotter middle, less dopant), so the
+slice/warp views will have meaningful data. Metrics real: σ_T=22.7, dice=0.94, z_shrink=30.7%.
+The finished run was confirmed **absent** from `/api/results` (0 of 352 listed) because its dir
+has no `summary.json`/media — validating F1's premise. Solver is healthy; "no results" is a
+visibility gap, not a solver break.
+Incidental (folded into F7): `diam`/`zspan` are meters (the frontend divides mm by 1000); the
+API silently accepts absurd magnitudes — passing `28` yields a grid-filling "part" with no
+warning.
 
 **F1 — HEATR-3D runs appear in the Results browser.**
 Purpose: every finished run shows up where all other runs live.
@@ -159,8 +167,10 @@ Effort: M.
 Purpose: the sharp edges. Includes: surface run errors in the UI (not swallowed), remove the
 silent `sat→blue` fallback (`heatr3d.js:54-55`) in favor of an explicit state, verify the STL
 import path and the `cone`/`cylinder`/`dumbbell` shapes actually solve (frontend claims them;
-backend support unverified), and give the results grid real labels, units, and grouping.
-Effort: M.
+backend support unverified), give the results grid real labels, units, and grouping, and add a
+**units/range guard on `diam`/`zspan`** — the API accepts meters but silently accepts absurd
+magnitudes (e.g. `28` → a grid-filling part), so validate against the chamber size and reject or
+warn. Effort: M.
 
 ---
 
