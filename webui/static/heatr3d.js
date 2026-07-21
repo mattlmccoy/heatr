@@ -161,6 +161,11 @@ function showResults(res) {
 }
 
 // ── per-run views: layer slices + summary plots ─────────────────────────────
+const FIELD_UNITS = {
+  sat: "dopant\nfraction", T_phi90: "°C", phi_final: "melt\nfraction",
+  rho_final: "rel.\ndensity", Qrf: "W/m³",
+};
+let slicePlayTimer = null;
 async function loadRunViews(id) {
   const views = $("h3dViews");
   try {
@@ -174,12 +179,27 @@ async function loadRunViews(id) {
       }
       const nz = meta.dims[2], zr = $("sliceZ");
       zr.min = 0; zr.max = nz - 1; zr.value = Math.floor(nz / 2);
+      const fmtNum = (v) => (Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 1e-2)) ? v.toExponential(2) : v.toPrecision(4);
       const showSlice = () => {
         const f = sel.value, k = parseInt(zr.value, 10), fi = meta.fields[f];
         $("sliceImg").src = `/api/heatr3d/slice?id=${encodeURIComponent(id)}&field=${f}&k=${k}`;
-        $("sliceLabel").textContent = `${f} · layer ${k}/${nz - 1} · [${fi.min.toPrecision(3)}, ${fi.max.toPrecision(3)}]`;
+        $("sliceLabel").textContent = `${f} · layer ${k} / ${nz - 1}`;
+        $("cbMax").textContent = fmtNum(fi.max);
+        $("cbMin").textContent = fmtNum(fi.min);
+        $("cbUnits").textContent = FIELD_UNITS[f] || "";
       };
-      sel.onchange = showSlice; zr.oninput = showSlice; showSlice();
+      const step = (d) => { zr.value = Math.max(0, Math.min(nz - 1, parseInt(zr.value, 10) + d)); showSlice(); };
+      sel.onchange = showSlice; zr.oninput = showSlice;
+      $("slicePrev").onclick = () => step(-1);
+      $("sliceNext").onclick = () => step(1);
+      $("slicePlay").onclick = () => {
+        if (slicePlayTimer) { clearInterval(slicePlayTimer); slicePlayTimer = null; $("slicePlay").textContent = "▶"; }
+        else { $("slicePlay").textContent = "‖"; slicePlayTimer = setInterval(() => {
+          zr.value = (parseInt(zr.value, 10) + 1) % nz; showSlice(); }, 180); }
+      };
+      zr.onkeydown = (e) => { if (e.key === "ArrowLeft") { step(-1); e.preventDefault(); }
+                              else if (e.key === "ArrowRight") { step(1); e.preventDefault(); } };
+      showSlice();
       views.style.display = "";
     }
   } catch (e) { /* no slices for this run */ }
