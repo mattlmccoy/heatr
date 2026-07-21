@@ -5301,6 +5301,30 @@ def _h3d_run_dir(jid: str) -> "Path | None":
     return d if d.is_dir() else None
 
 
+def _h3d_list_runs(limit: int = 60) -> list:
+    """List completed HEATR-3D runs (newest first) for the past-run picker, with
+    lightweight metadata read from each run's summary.json. Numpy-free file I/O."""
+    runs: list = []
+    if not _H3D_OUT.is_dir():
+        return runs
+    for d in _H3D_OUT.iterdir():
+        sp = d / "summary.json"
+        if not d.is_dir() or not sp.exists():
+            continue
+        try:
+            s = json.loads(sp.read_text())
+        except Exception:
+            continue
+        runs.append({
+            "id": d.name,
+            "shape": s.get("shape"), "fgm": s.get("fgm"),
+            "densify": bool(s.get("densify")), "grid_n": s.get("grid_n"),
+            "sigma_T": s.get("sigma_T"), "mtime": d.stat().st_mtime,
+        })
+    runs.sort(key=lambda r: r["mtime"], reverse=True)
+    return runs[:limit]
+
+
 def _h3d_write_config(payload: dict) -> Path:
     out = _H3D_OUT / uuid.uuid4().hex[:12]
     out.mkdir(parents=True, exist_ok=True)
@@ -5460,6 +5484,8 @@ class Handler(BaseHTTPRequestHandler):
             if wj and wj.exists():
                 return self._serve_file(wj)
             return self._text("not found", status=404)
+        if path == "/api/heatr3d/runs":
+            return self._json(_h3d_list_runs())
 
         if path == "/api/meta":
             model_info = _experimental_model_info()

@@ -42,6 +42,21 @@
       background:linear-gradient(90deg,#440154,#21918c,#fde725); }
     .h3d-status { font-size:.78rem; opacity:.85; min-height:1.1em; }
     .h3d-actions { display:flex; gap:8px; margin-top:6px; }
+    .h3d-pastrun { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .h3d-pastrun label { font-size:.78rem; opacity:.85; white-space:nowrap; }
+    .h3d-pastrun select { flex:1; min-width:0; }
+    .h3d-warp-toggle { display:flex; align-items:center; gap:6px; font-size:.78rem; opacity:.9; cursor:pointer; }
+    .h3d-warp-toggle input { width:auto; }
+    .h3d-warp-max { opacity:.6; font-size:.72rem; font-variant-numeric:tabular-nums; }
+    .h3d-metrics { display:block; }
+    .h3d-metric-group { margin:0 0 12px; }
+    .h3d-metric-title { font-size:.66rem; text-transform:uppercase; letter-spacing:.05em; opacity:.55; margin:8px 0 5px; }
+    .h3d-metrics .gauge-row { grid-template-columns:5.4rem 1fr 4.8rem; margin:4px 0; }
+    .h3d-metrics .gauge-label { text-align:left; font-size:.74rem; }
+    .h3d-metrics .gauge-val { font-size:.74rem; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .h3d-metrics .metric-txt { display:flex; justify-content:space-between; font-size:.74rem; margin:4px 0; }
+    .h3d-metrics .metric-txt .lbl { opacity:.7; }
+    .h3d-metrics .metric-txt .val { font-variant-numeric:tabular-nums; white-space:nowrap; }
     .h3d-slice-ctrls { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
     .h3d-slice-ctrls select { flex:0 0 auto; }
     .h3d-slice-ctrls input[type=range] { flex:1; min-width:120px; }
@@ -172,6 +187,10 @@
 
       <!-- ── viewport + results ── -->
       <section class="card">
+        <div class="h3d-pastrun">
+          <label for="pastRun">View a past run</label>
+          <select id="pastRun"><option value="">— recent HEATR-3D runs —</option></select>
+        </div>
         <div id="h3dViewport"><div class="h3d-vp-hint">drag to orbit · scroll to zoom</div></div>
         <div class="h3d-row" style="align-items:flex-end; margin-top:8px;">
           <div class="h3d-field" style="max-width:200px;">
@@ -182,6 +201,10 @@
             </select>
           </div>
           <div class="h3d-legend"><span>low</span><span class="bar"></span><span>high</span></div>
+          <label class="h3d-warp-toggle" id="warpRow" style="display:none;" title="Show the post-sinter deformed geometry, colored by displacement">
+            <input type="checkbox" id="warpToggle" disabled /> Post-sinter warp
+            <span id="warpMax" class="h3d-warp-max"></span>
+          </label>
         </div>
         <h3 style="margin:14px 0 6px;">Results</h3>
         <div class="h3d-results" id="resultsGrid">
