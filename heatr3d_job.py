@@ -162,13 +162,13 @@ def _render_slices(out: Path, fields: dict, meta: dict) -> None:
             fig.savefig(sl / f"{name}_z_{k:03d}.png", transparent=True)
             plt.close(fig)
         if not preview_written:
-            _save_preview(out / "preview.png", a, mask3d, vmin, vmax, name)
+            _save_preview(out / "preview.png", a, mask3d, vmin, vmax)
             preview_written = True
     if not preview_written:  # no real fields (e.g. no-FGM, no-densify run): preview the geometry mask
         _save_preview(out / "preview.png", (mask3d.astype(float) if mask3d is not None
-                      else np.zeros((1, 1, 1))), mask3d, 0.0, 1.0, "part")
+                      else np.zeros((1, 1, 1))), mask3d, 0.0, 1.0)
 
-def _save_preview(path: Path, a, mask3d, vmin, vmax, name):
+def _save_preview(path: Path, a, mask3d, vmin, vmax):
     kmid = a.shape[2] // 2
     img = a[:, :, kmid].astype(float)
     if mask3d is not None and mask3d.shape == a.shape:
@@ -177,7 +177,7 @@ def _save_preview(path: Path, a, mask3d, vmin, vmax, name):
     ax = fig.add_axes([0, 0, 1, 1]); ax.axis("off")
     ax.imshow(img.T, origin="lower", cmap="viridis", vmin=vmin, vmax=(vmax if vmax > vmin else vmin + 1e-9),
               interpolation="nearest")
-    fig.savefig(path)
+    fig.savefig(path, transparent=True)
     plt.close(fig)
 
 

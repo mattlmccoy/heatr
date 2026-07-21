@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse, json, sys, tempfile, traceback
 from pathlib import Path
 import numpy as np
+import matplotlib.image as mpimg
 import heatr3d_job as J   # module under test (repo root)
 
 def test_field_meta_only_reports_real_volumes():
@@ -57,6 +58,17 @@ def test_render_slices_writes_pngs_and_meta(run_dir: Path):
             got = sorted((out / "slices").glob(f"{name}_z_*.png"))
             assert len(got) == info["slices"], f"{name}: {len(got)} != {info['slices']}"
             assert all(p.stat().st_size > 0 for p in got), f"{name}: empty PNG"
+        # outside-part must be transparent (alpha 0), never opaque — check preview.png and one
+        # masked field's mid-slice PNG. The real sphere run has outside-part voxels at mid-z.
+        preview_rgba = mpimg.imread(out / "preview.png")
+        assert preview_rgba.shape[-1] == 4, f"preview.png must be RGBA: {preview_rgba.shape}"
+        assert preview_rgba[..., 3].min() == 0.0, "preview.png outside-part must be transparent"
+        first_field = next(iter(meta["fields"]))
+        first_info = meta["fields"][first_field]
+        kmid = first_info["slices"] // 2
+        slice_rgba = mpimg.imread(out / "slices" / f"{first_field}_z_{kmid:03d}.png")
+        assert slice_rgba.shape[-1] == 4, f"slice PNG must be RGBA: {slice_rgba.shape}"
+        assert slice_rgba[..., 3].min() == 0.0, f"{first_field} slice outside-part must be transparent"
 
 def _run(run_dir, verbose):
     plain = [
