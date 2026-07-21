@@ -226,7 +226,7 @@ def _render_summary_plots(out: Path, phi_hist, dt_s: float, fields: dict, meta: 
 
     if phi_hist is not None and len(phi_hist) > 1:
         t = np.arange(len(phi_hist)) * float(dt_s)
-        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=110)
+        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=150)
         ax.plot(t, phi_hist, color="#d1495b", lw=1.6)
         ax.axhline(0.90, ls="--", lw=0.8, color="#666")
         ax.set_xlabel("exposure time (s)"); ax.set_ylabel("mean melt fraction phi")
@@ -235,21 +235,21 @@ def _render_summary_plots(out: Path, phi_hist, dt_s: float, fields: dict, meta: 
 
     if "sat" in real and mask is not None:
         prof = _fgm_z_profile(fields["sat"], mask)
-        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=110)
+        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=150)
         ax.plot(np.arange(len(prof)), prof, color="#2e8b57", lw=1.6, marker="o", ms=2)
         ax.set_xlabel("build layer (z index)"); ax.set_ylabel("mean dopant fraction")
         ax.set_title("FGM grading profile"); fig.tight_layout()
         fig.savefig(pdir / "fgm_z_profile.png"); plt.close(fig)
 
     if "T_phi90" in real and mask is not None:
-        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=110)
+        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=150)
         ax.hist(fields["T_phi90"][mask], bins=40, color="#e07a3f")
         ax.set_xlabel("temperature at phi=0.90 (C)"); ax.set_ylabel("voxels")
         ax.set_title("Temperature distribution"); fig.tight_layout()
         fig.savefig(pdir / "temperature_hist.png"); plt.close(fig)
 
     if "rho_final" in real and mask is not None:
-        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=110)
+        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=150)
         ax.hist(fields["rho_final"][mask], bins=40, color="#4c8dff")
         ax.set_xlabel("relative density"); ax.set_ylabel("voxels")
         ax.set_title("Density distribution"); fig.tight_layout()
@@ -266,7 +266,7 @@ def _render_summary_plots(out: Path, phi_hist, dt_s: float, fields: dict, meta: 
             ("XZ (y mid)", np.where(mask[:, ny // 2, :], a[:, ny // 2, :].astype(float), np.nan).T),
             ("YZ (x mid)", np.where(mask[nx // 2, :, :], a[nx // 2, :, :].astype(float), np.nan).T),
         ]
-        fig, axs = plt.subplots(1, 3, figsize=(7.5, 2.7), dpi=110)
+        fig, axs = plt.subplots(1, 3, figsize=(7.5, 2.7), dpi=150)
         for ax, (ttl, img) in zip(axs, planes):
             ax.imshow(img, origin="lower", cmap="viridis", vmin=vmin, vmax=vmax, interpolation="nearest")
             ax.set_title(ttl, fontsize=9); ax.axis("off")
@@ -293,7 +293,7 @@ def _render_slices(out: Path, fields: dict, meta: dict) -> None:
             img = a[:, :, k].astype(float)
             if mask3d is not None:
                 img = np.where(mask3d[:, :, k], img, np.nan)  # outside-part = transparent, not 0
-            fig = plt.figure(figsize=(2.2, 2.2), dpi=100)
+            fig = plt.figure(figsize=(2.6, 2.6), dpi=150)
             ax = fig.add_axes([0, 0, 1, 1]); ax.axis("off")
             ax.imshow(img.T, origin="lower", cmap="viridis", vmin=vmin, vmax=vmax, interpolation="nearest")
             fig.savefig(sl / f"{name}_z_{k:03d}.png", transparent=True)
@@ -310,7 +310,7 @@ def _save_preview(path: Path, a, mask3d, vmin, vmax):
     img = a[:, :, kmid].astype(float)
     if mask3d is not None and mask3d.shape == a.shape:
         img = np.where(mask3d[:, :, kmid], img, np.nan)
-    fig = plt.figure(figsize=(3, 3), dpi=100)
+    fig = plt.figure(figsize=(3.2, 3.2), dpi=150)
     ax = fig.add_axes([0, 0, 1, 1]); ax.axis("off")
     ax.imshow(img.T, origin="lower", cmap="viridis", vmin=vmin, vmax=(vmax if vmax > vmin else vmin + 1e-9),
               interpolation="nearest")
