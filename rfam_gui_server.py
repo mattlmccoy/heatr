@@ -5289,6 +5289,18 @@ def _h3d_python() -> str:
     return sys.executable
 
 
+def _h3d_run_dir(jid: str) -> "Path | None":
+    """Resolve a HEATR-3D run dir from a job id, rejecting path traversal."""
+    if not jid or "/" in jid or ".." in jid:
+        return None
+    d = (_H3D_OUT / jid).resolve()
+    try:
+        d.relative_to(_H3D_OUT.resolve())
+    except ValueError:
+        return None
+    return d if d.is_dir() else None
+
+
 def _h3d_write_config(payload: dict) -> Path:
     out = _H3D_OUT / uuid.uuid4().hex[:12]
     out.mkdir(parents=True, exist_ok=True)
@@ -5424,6 +5436,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_h3d_status(jid))
             except Exception as e:
                 return self._json({"done": True, "error": str(e)}, status=500)
+
+        if path == "/api/heatr3d/fields":
+            jid = parse_qs(urlparse(self.path).query).get("id", [""])[0]
+            d = _h3d_run_dir(jid)
+            fm = (d / "fieldmeta.json") if d else None
+            if fm and fm.exists():
+                return self._serve_file(fm)
+            return self._text("not found", status=404)
+        if path == "/api/heatr3d/slice":
+            q = parse_qs(urlparse(self.path).query)
+            jid = q.get("id", [""])[0]; field = q.get("field", [""])[0]; k = q.get("k", [""])[0]
+            d = _h3d_run_dir(jid)
+            if d and field.isidentifier() and k.isdigit():
+                png = d / "slices" / f"{field}_z_{int(k):03d}.png"
+                if png.exists():
+                    return self._serve_file(png)
+            return self._text("not found", status=404)
 
         if path == "/api/meta":
             model_info = _experimental_model_info()
@@ -5686,7 +5715,6 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/fields/"):
             # Return field data from fields.npz for the interactive field viewer.
             # GET /api/fields/<rel_run_path>?field=T_phi90&maxpx=256
-            from urllib.parse import parse_qs
             rel = unquote(path[len("/api/fields/"):])
             qs  = parse_qs(urlparse(self.path).query)
             field_name  = qs.get("field",  ["T_phi90"])[0]
