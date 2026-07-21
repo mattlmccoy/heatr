@@ -5,7 +5,7 @@ Self-contained (no pytest). Run with the job venv against a REAL run dir:
 Exit 0 = all pass, 1 = any failure.
 """
 from __future__ import annotations
-import argparse, sys, traceback
+import argparse, json, sys, tempfile, traceback
 from pathlib import Path
 import numpy as np
 import heatr3d_job as J   # module under test (repo root)
@@ -27,8 +27,23 @@ def test_field_meta_only_reports_real_volumes():
     assert fm["slices"] == n, "one slice per z index"
     assert abs(meta["h_mm"] - 1.875) < 1e-6, meta["h_mm"]
 
+def test_write_summary_makes_run_collectible():
+    results = {"sigma_T": 22.66, "T_max_C": 184.2, "dice": 0.94, "densify": True,
+               "z_shrink_pct": 30.7, "fgm": "melt", "grid_n": 32}
+    cfg = {"shape": "sphere", "n": 32, "fgm": "melt", "densify": True}
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d)
+        J._write_summary(out, results, cfg)
+        sp = out / "summary.json"
+        assert sp.exists(), "summary.json must be written (the Results-browser gate)"
+        s = json.loads(sp.read_text())
+        assert s.get("run_type") == "heatr3d", s.get("run_type")
+        assert s.get("sigma_T") == 22.66 and s.get("dice") == 0.94, s
+        assert s.get("shape") == "sphere", "config echoed for the run card"
+
 def _run(verbose):
-    tests = [("field_meta_only_reports_real_volumes", test_field_meta_only_reports_real_volumes)]
+    tests = [("field_meta_only_reports_real_volumes", test_field_meta_only_reports_real_volumes),
+             ("write_summary_makes_run_collectible", test_write_summary_makes_run_collectible)]
     failures = 0
     for name, fn in tests:
         try:

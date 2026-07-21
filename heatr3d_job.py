@@ -94,6 +94,7 @@ _SLICE_FIELDS = {
     "Qrf": "Absorbed RF power (W/m^3)",
 }
 
+
 def _field_meta(fields: dict, h: float) -> dict:
     """Metadata for the per-layer slice viewer. Only real (n,n,n) volumes are reported;
     shape-(1,) sentinels (absent fields) and the boolean `part` mask are skipped."""
@@ -106,6 +107,7 @@ def _field_meta(fields: dict, h: float) -> dict:
             continue
         if dims is None:
             dims = list(a.shape)
+        # shape disagrees with the grid: drop rather than mis-slice (should not happen for a valid run)
         if list(a.shape) != dims:
             continue
         out_fields[name] = {
@@ -115,6 +117,21 @@ def _field_meta(fields: dict, h: float) -> dict:
             "slices": int(a.shape[2]),  # z-axis
         }
     return {"dims": dims or [0, 0, 0], "h_mm": float(h) * 1000.0, "axis": "z", "fields": out_fields}
+
+
+def _write_summary(out: Path, results: dict, cfg: dict) -> None:
+    """Write summary.json so the run is picked up by the Results browser
+    (rfam_gui_server _collect_results accepts any dir with summary.json). Carries a
+    `run_type: heatr3d` tag plus the scalar metrics and the input config for the run card."""
+    summary = {"run_type": "heatr3d"}
+    summary.update(results)
+    summary["config"] = {k: cfg.get(k) for k in ("shape", "n", "fgm", "magnitude", "densify",
+                                                  "exposure_s", "stop_mean_rho", "diam", "zspan")
+                         if cfg.get(k) is not None}
+    # Also promote shape to top level so it shows on the run card without digging into config.
+    if "shape" in cfg:
+        summary["shape"] = cfg["shape"]
+    (out / "summary.json").write_text(json.dumps(summary, indent=2))
 
 
 def main(argv: list[str]) -> None:
