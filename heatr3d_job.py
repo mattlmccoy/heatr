@@ -138,6 +138,77 @@ def _write_summary(out: Path, results: dict, cfg: dict) -> None:
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
 
 
+def _fgm_z_profile(sat, part):
+    """Mean dopant fraction over part voxels in each build layer (z index), NaN where
+    a layer has no part voxels. The 1-D 'how it was functionally graded' curve."""
+    nz = sat.shape[2]
+    prof = np.full(nz, np.nan, dtype=float)
+    for k in range(nz):
+        col = sat[:, :, k][part[:, :, k].astype(bool)]
+        if col.size:
+            prof[k] = float(col.mean())
+    return prof
+
+
+def _render_summary_plots(out: Path, phi_hist, dt_s: float, fields: dict, meta: dict) -> None:
+    """Per-run summary figures (matplotlib, in-job) under plots/: melt progression,
+    FGM grading profile, temperature & density histograms, and an orthogonal
+    center-slice montage. Each plot is written only when its data exists."""
+    pdir = out / "plots"; pdir.mkdir(parents=True, exist_ok=True)
+    part = fields.get("part")
+    mask = part.astype(bool) if getattr(part, "ndim", 0) == 3 else None
+    real = meta.get("fields", {})
+
+    if phi_hist is not None and len(phi_hist) > 1:
+        t = np.arange(len(phi_hist)) * float(dt_s)
+        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=110)
+        ax.plot(t, phi_hist, color="#d1495b", lw=1.6)
+        ax.axhline(0.90, ls="--", lw=0.8, color="#666")
+        ax.set_xlabel("exposure time (s)"); ax.set_ylabel("mean melt fraction phi")
+        ax.set_title("Melt progression"); ax.set_ylim(0, 1); fig.tight_layout()
+        fig.savefig(pdir / "melt_progression.png"); plt.close(fig)
+
+    if "sat" in real and mask is not None:
+        prof = _fgm_z_profile(fields["sat"], mask)
+        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=110)
+        ax.plot(np.arange(len(prof)), prof, color="#2e8b57", lw=1.6, marker="o", ms=2)
+        ax.set_xlabel("build layer (z index)"); ax.set_ylabel("mean dopant fraction")
+        ax.set_title("FGM grading profile"); fig.tight_layout()
+        fig.savefig(pdir / "fgm_z_profile.png"); plt.close(fig)
+
+    if "T_phi90" in real and mask is not None:
+        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=110)
+        ax.hist(fields["T_phi90"][mask], bins=40, color="#e07a3f")
+        ax.set_xlabel("temperature at phi=0.90 (C)"); ax.set_ylabel("voxels")
+        ax.set_title("Temperature distribution"); fig.tight_layout()
+        fig.savefig(pdir / "temperature_hist.png"); plt.close(fig)
+
+    if "rho_final" in real and mask is not None:
+        fig, ax = plt.subplots(figsize=(4, 2.6), dpi=110)
+        ax.hist(fields["rho_final"][mask], bins=40, color="#4c8dff")
+        ax.set_xlabel("relative density"); ax.set_ylabel("voxels")
+        ax.set_title("Density distribution"); fig.tight_layout()
+        fig.savefig(pdir / "density_hist.png"); plt.close(fig)
+
+    prim = "sat" if "sat" in real else ("T_phi90" if "T_phi90" in real else None)
+    if prim is not None and mask is not None:
+        a = fields[prim]; nx, ny, nz = a.shape
+        info = real[prim]; vmin, vmax = info["min"], info["max"]
+        if vmax <= vmin:
+            vmax = vmin + 1e-9
+        planes = [
+            ("XY (z mid)", np.where(mask[:, :, nz // 2], a[:, :, nz // 2].astype(float), np.nan).T),
+            ("XZ (y mid)", np.where(mask[:, ny // 2, :], a[:, ny // 2, :].astype(float), np.nan).T),
+            ("YZ (x mid)", np.where(mask[nx // 2, :, :], a[nx // 2, :, :].astype(float), np.nan).T),
+        ]
+        fig, axs = plt.subplots(1, 3, figsize=(7.5, 2.7), dpi=110)
+        for ax, (ttl, img) in zip(axs, planes):
+            ax.imshow(img, origin="lower", cmap="viridis", vmin=vmin, vmax=vmax, interpolation="nearest")
+            ax.set_title(ttl, fontsize=9); ax.axis("off")
+        fig.suptitle(f"{prim} - center slices", fontsize=10); fig.tight_layout()
+        fig.savefig(pdir / "ortho_slices.png"); plt.close(fig)
+
+
 def _render_slices(out: Path, fields: dict, meta: dict) -> None:
     """Pre-render one PNG per z-slice for each real field (viridis, per-field global min/max so
     the colormap is stable across layers), plus a preview.png, plus fieldmeta.json. Done in-job
@@ -252,6 +323,7 @@ def main(argv: list[str]) -> None:
     meta = _field_meta(fields_for_view, grid.h)
     _write_summary(out, results, cfg)
     _render_slices(out, fields_for_view, meta)
+    _render_summary_plots(out, r.phi_hist, getattr(p, "dt_s", 0.05), fields_for_view, meta)
 
     print("PROGRESS 100")
     print("RESULTS " + json.dumps(results))
