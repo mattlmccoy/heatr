@@ -136,6 +136,7 @@ async function poll(id) {
       setProg(100); statusLine.textContent = "done.";
       if (s.results) showResults(s.results);
       if (s.geometry) { $("colorBy").value = (cfg().fgm !== "none") ? "sat" : "geom"; renderSurface(s.geometry, $("colorBy").value); }
+      loadRunViews(id);
     }
   } catch (e) { /* keep polling */ }
 }
@@ -156,6 +157,40 @@ function showResults(res) {
     const vv = document.createElement("span"); vv.className = "v";
     vv.textContent = (typeof res[k] === "number") ? (Number.isInteger(res[k]) ? res[k] : res[k].toFixed(3)) : res[k];
     g.appendChild(kk); g.appendChild(vv);
+  }
+}
+
+// ── per-run views: layer slices + summary plots ─────────────────────────────
+async function loadRunViews(id) {
+  const views = $("h3dViews");
+  try {
+    const meta = await (await fetch(`/api/heatr3d/fields?id=${encodeURIComponent(id)}`)).json();
+    const fields = Object.keys(meta.fields || {});
+    if (fields.length) {
+      const sel = $("sliceField"); sel.innerHTML = "";
+      for (const f of fields) {
+        const o = document.createElement("option");
+        o.value = f; o.textContent = meta.fields[f].label || f; sel.appendChild(o);
+      }
+      const nz = meta.dims[2], zr = $("sliceZ");
+      zr.min = 0; zr.max = nz - 1; zr.value = Math.floor(nz / 2);
+      const showSlice = () => {
+        const f = sel.value, k = parseInt(zr.value, 10), fi = meta.fields[f];
+        $("sliceImg").src = `/api/heatr3d/slice?id=${encodeURIComponent(id)}&field=${f}&k=${k}`;
+        $("sliceLabel").textContent = `${f} · layer ${k}/${nz - 1} · [${fi.min.toPrecision(3)}, ${fi.max.toPrecision(3)}]`;
+      };
+      sel.onchange = showSlice; zr.oninput = showSlice; showSlice();
+      views.style.display = "";
+    }
+  } catch (e) { /* no slices for this run */ }
+  const plots = ["melt_progression", "fgm_z_profile", "temperature_hist", "density_hist", "ortho_slices"];
+  const gal = $("plotsGallery"); gal.innerHTML = "";
+  for (const name of plots) {
+    const img = document.createElement("img");
+    img.src = `/files/outputs_eqs/_heatr3d/${encodeURIComponent(id)}/plots/${name}.png`;
+    img.alt = name; img.loading = "lazy";
+    img.onerror = () => img.remove();   // plot not generated for this run
+    gal.appendChild(img);
   }
 }
 
