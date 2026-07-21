@@ -80,14 +80,53 @@ def test_non_finite_scalars_sanitized_for_strict_json():
     assert clean["sigma_T"] == 1.5 and clean["reached_phi90"] is False and clean["grid_n"] == 32
     json.dumps(clean, allow_nan=False)  # must NOT raise (strict JSON)
 
+def test_fgm_z_profile_per_layer_means():
+    n = 4
+    part = np.ones((n, n, n), bool)
+    sat = np.zeros((n, n, n), np.float32)
+    for k in range(n):
+        sat[:, :, k] = 0.1 * k
+    prof = J._fgm_z_profile(sat, part)
+    assert prof.shape == (n,), prof.shape
+    assert np.allclose(prof, [0.0, 0.1, 0.2, 0.3]), prof
+    # a layer with no part voxels must be NaN (not silently 0)
+    part2 = np.zeros((n, n, n), bool); part2[:, :, 1] = True
+    prof2 = J._fgm_z_profile(sat, part2)
+    assert np.isnan(prof2[0]) and abs(prof2[1] - 0.1) < 1e-6, prof2
+
+def test_summary_plots_written(run_dir: Path):
+    z = np.load(run_dir / "fields.npz")
+    fields = {k: z[k] for k in z.files}
+    h = float(z["h"]) if z["h"].ndim == 0 else float(z["h"][0])
+    meta = J._field_meta(fields, h)
+    phi_hist = list(np.linspace(0.0, 0.9, 200))
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d)
+        J._render_summary_plots(out, phi_hist, 0.05, fields, meta)
+        pdir = out / "plots"
+        # melt progression + temperature hist + ortho montage always; fgm/density need their fields
+        expected = ["melt_progression.png", "temperature_hist.png", "ortho_slices.png"]
+        if "sat" in meta["fields"]:
+            expected.append("fgm_z_profile.png")
+        if "rho_final" in meta["fields"]:
+            expected.append("density_hist.png")
+        for name in expected:
+            p = pdir / name
+            assert p.exists(), f"missing plot {name}"
+            assert p.stat().st_size > 0, f"empty plot {name}"
+            img = mpimg.imread(p)
+            assert img.ndim == 3 and img.shape[0] > 10 and img.shape[1] > 10, f"{name} not a real image {img.shape}"
+
 def _run(run_dir, verbose):
     plain = [
         ("field_meta_only_reports_real_volumes", test_field_meta_only_reports_real_volumes),
         ("write_summary_makes_run_collectible", test_write_summary_makes_run_collectible),
         ("non_finite_scalars_sanitized_for_strict_json", test_non_finite_scalars_sanitized_for_strict_json),
+        ("fgm_z_profile_per_layer_means", test_fgm_z_profile_per_layer_means),
     ]
     needs_dir = [
         ("render_slices_writes_pngs_and_meta", test_render_slices_writes_pngs_and_meta),
+        ("summary_plots_written", test_summary_plots_written),
     ]
     failures = 0
     for name, fn in plain:
