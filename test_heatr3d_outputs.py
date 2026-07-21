@@ -70,10 +70,21 @@ def test_render_slices_writes_pngs_and_meta(run_dir: Path):
         assert slice_rgba.shape[-1] == 4, f"slice PNG must be RGBA: {slice_rgba.shape}"
         assert slice_rgba[..., 3].min() == 0.0, f"{first_field} slice outside-part must be transparent"
 
+def test_non_finite_scalars_sanitized_for_strict_json():
+    import math
+    raw = {"sigma_T": 1.5, "t_phi90_s": float("nan"), "x": float("inf"),
+           "reached_phi90": False, "grid_n": 32}
+    clean = J._finite_results(raw)
+    assert clean["t_phi90_s"] is None, clean["t_phi90_s"]
+    assert clean["x"] is None, clean["x"]
+    assert clean["sigma_T"] == 1.5 and clean["reached_phi90"] is False and clean["grid_n"] == 32
+    json.dumps(clean, allow_nan=False)  # must NOT raise (strict JSON)
+
 def _run(run_dir, verbose):
     plain = [
         ("field_meta_only_reports_real_volumes", test_field_meta_only_reports_real_volumes),
         ("write_summary_makes_run_collectible", test_write_summary_makes_run_collectible),
+        ("non_finite_scalars_sanitized_for_strict_json", test_non_finite_scalars_sanitized_for_strict_json),
     ]
     needs_dir = [
         ("render_slices_writes_pngs_and_meta", test_render_slices_writes_pngs_and_meta),

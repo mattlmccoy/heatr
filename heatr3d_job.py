@@ -25,6 +25,7 @@ Outputs in out_dir:
 from __future__ import annotations
 
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -181,6 +182,14 @@ def _save_preview(path: Path, a, mask3d, vmin, vmax):
     plt.close(fig)
 
 
+def _finite_results(results: dict) -> dict:
+    """Replace non-finite floats (NaN/Inf) with None so the JSON is strict-valid.
+    Python's json.dumps emits bare NaN/Infinity, which browsers' JSON.parse reject —
+    that silently breaks the results grid and the Results-detail view."""
+    return {k: (None if isinstance(v, float) and not math.isfinite(v) else v)
+            for k, v in results.items()}
+
+
 def main(argv: list[str]) -> None:
     cfg_path = Path(argv[1])
     preview = "--preview" in argv
@@ -223,6 +232,8 @@ def main(argv: list[str]) -> None:
     if densify and r.rho_final is not None:
         sh = {k: v for k, v in H.shrinkage_analysis(r, p, grid.h).items() if not k.startswith("_")}
         results.update(sh)
+
+    results = _finite_results(results)
 
     np.savez_compressed(out / "fields.npz", part=part,
                         T_phi90=r.T_phi90.astype(np.float32),
