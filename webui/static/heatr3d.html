@@ -42,6 +42,9 @@
       background:linear-gradient(90deg,#440154,#21918c,#fde725); }
     .h3d-status { font-size:.78rem; opacity:.85; min-height:1.1em; }
     .h3d-actions { display:flex; gap:8px; margin-top:6px; }
+    .h3d-pastrun { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .h3d-pastrun label { font-size:.78rem; opacity:.85; white-space:nowrap; }
+    .h3d-pastrun select { flex:1; min-width:0; }
     .h3d-warp-toggle { display:flex; align-items:center; gap:6px; font-size:.78rem; opacity:.9; cursor:pointer; }
     .h3d-warp-toggle input { width:auto; }
     .h3d-warp-max { opacity:.6; font-size:.72rem; font-variant-numeric:tabular-nums; }
@@ -184,6 +187,10 @@
 
       <!-- ── viewport + results ── -->
       <section class="card">
+        <div class="h3d-pastrun">
+          <label for="pastRun">View a past run</label>
+          <select id="pastRun"><option value="">— recent HEATR-3D runs —</option></select>
+        </div>
         <div id="h3dViewport"><div class="h3d-vp-hint">drag to orbit · scroll to zoom</div></div>
         <div class="h3d-row" style="align-items:flex-end; margin-top:8px;">
           <div class="h3d-field" style="max-width:200px;">

@@ -280,6 +280,41 @@ async function loadRunViews(id) {
   }
 }
 
+// Reopen a PAST run in the full 3D viewer (geometry + metrics + slices + plots + warp).
+// Uses the status endpoint's on-disk fallback, which returns geometry+results for finished runs.
+async function loadPastRun(id) {
+  if (!id) return;
+  try {
+    statusLine.textContent = `loading run ${id}…`;
+    const s = await (await fetch(`/api/heatr3d/status?id=${encodeURIComponent(id)}`)).json();
+    if (!s.geometry) { statusLine.textContent = `run ${id} has no geometry on disk`; return; }
+    nominalGeom = s.geometry;
+    $("colorBy").value = s.geometry.surface_sat ? "sat" : "geom";
+    if ($("warpToggle")) $("warpToggle").checked = false;
+    applyGeomView();
+    if (s.results) showResults(s.results);
+    setProg(100);
+    statusLine.textContent = `loaded run ${id}`;
+    const sel = $("pastRun"); if (sel && sel.value !== id) sel.value = id;
+    loadRunViews(id);
+  } catch (e) { statusLine.textContent = "failed to load run: " + e.message; }
+}
+
+async function loadRunList() {
+  try {
+    const runs = await (await fetch("/api/heatr3d/runs")).json();
+    const sel = $("pastRun");
+    while (sel.options.length > 1) sel.remove(1);
+    for (const r of runs) {
+      const o = document.createElement("option");
+      o.value = r.id;
+      const sig = (r.sigma_T != null) ? ` · σT ${Number(r.sigma_T).toFixed(1)}` : "";
+      o.textContent = `${r.shape || "?"} · ${r.fgm || "none"}${r.densify ? "+dens" : ""} · n${r.grid_n || "?"}${sig}`;
+      sel.appendChild(o);
+    }
+  } catch (e) { /* no run list */ }
+}
+
 // ── wire up ───────────────────────────────────────────────────────────────
 $("srcSel").addEventListener("change", () => {
   const stl = $("srcSel").value === "stl";
@@ -290,5 +325,8 @@ $("colorBy").addEventListener("change", applyGeomView);
 if ($("warpToggle")) $("warpToggle").addEventListener("change", applyGeomView);
 $("previewBtn").addEventListener("click", preview);
 $("runBtn").addEventListener("click", run);
+$("pastRun").addEventListener("change", () => loadPastRun($("pastRun").value));
 initScene();
-preview();
+loadRunList();
+const _qid = new URLSearchParams(location.search).get("id");
+if (_qid) loadPastRun(_qid); else preview();
