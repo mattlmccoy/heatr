@@ -42,6 +42,15 @@
       background:linear-gradient(90deg,#440154,#21918c,#fde725); }
     .h3d-status { font-size:.78rem; opacity:.85; min-height:1.1em; }
     .h3d-actions { display:flex; gap:8px; margin-top:6px; }
+    .h3d-slice-ctrls { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+    .h3d-slice-ctrls select { flex:0 0 auto; }
+    .h3d-slice-ctrls input[type=range] { flex:1; }
+    .h3d-slice-label { font-size:.73rem; opacity:.8; white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .h3d-slice-view { display:flex; justify-content:center; background:#0b0e14;
+      border:1px solid rgba(128,140,160,.22); border-radius:10px; padding:8px; }
+    .h3d-slice-view img { width:220px; height:220px; image-rendering:pixelated; }
+    .h3d-plots { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+    .h3d-plots img { width:100%; border:1px solid rgba(128,140,160,.22); border-radius:8px; background:#fff; }
   </style>
 </head>
 <body class="layout-b ids-inspired">
@@ -167,6 +176,18 @@
         <h3 style="margin:14px 0 6px;">Results</h3>
         <div class="h3d-results" id="resultsGrid">
           <span class="k">—</span><span class="v">run a simulation</span>
+        </div>
+
+        <div id="h3dViews" style="display:none; margin-top:16px;">
+          <h3 style="margin:14px 0 6px;">Layer slices</h3>
+          <div class="h3d-slice-ctrls">
+            <select id="sliceField"></select>
+            <input type="range" id="sliceZ" min="0" max="0" value="0" />
+            <span id="sliceLabel" class="h3d-slice-label">—</span>
+          </div>
+          <div class="h3d-slice-view"><img id="sliceImg" alt="layer slice" /></div>
+          <h3 style="margin:16px 0 6px;">Summary plots</h3>
+          <div id="plotsGallery" class="h3d-plots"></div>
         </div>
       </section>
     </div>
