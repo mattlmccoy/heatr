@@ -138,6 +138,57 @@ def _write_summary(out: Path, results: dict, cfg: dict) -> None:
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
 
 
+def _shrink_factor_fields(rho_final, part, p, xy_frac: float = 0.04):
+    """Per-voxel anisotropic linear-shrink factors (lam_xy, lam_z) from the final
+    density field, using the solver's own single-source-of-truth shrink law
+    (H.shrinkage_factors). Both are zeroed outside the part."""
+    rho_f = np.clip(np.asarray(rho_final, float), 1e-6, 1.0)
+    S_V = np.clip(p.rho_rel / rho_f, 1e-6, 1.0)   # local volume shrink ratio (<=1)
+    lam_xy, lam_z = H.shrinkage_factors(S_V, xy_frac=xy_frac)
+    m = part.astype(bool)
+    return np.where(m, lam_xy, 0.0), np.where(m, lam_z, 0.0)
+
+
+def _warped_centers(part, lam_xy, lam_z, h, L):
+    """Displaced voxel-center coordinates (m, domain-centered) after sintering shrink.
+    Z compacts from the build plate: each column integrates h*lam_z, anchored at the
+    part's nominal bottom face. X/Y shrink toward the part centroid by lam_xy. No new
+    physics — a closed-form integration of the shrink fields the solver produces."""
+    m = part.astype(bool)
+    idx = np.indices(part.shape)
+    xc = (idx[0] + 0.5) * h - L / 2.0
+    yc = (idx[1] + 0.5) * h - L / 2.0
+    cx = float(xc[m].mean()); cy = float(yc[m].mean())
+    wx = cx + (xc - cx) * lam_xy
+    wy = cy + (yc - cy) * lam_xy
+    hz = h * lam_z                                  # compacted voxel heights (0 outside part)
+    cfb = np.cumsum(hz, axis=2) - 0.5 * hz          # compacted center height above part-bottom face
+    first = np.argmax(m, axis=2)                    # first part layer per column (0 if none)
+    anchor = first * h - L / 2.0                    # nominal z of that bottom face
+    wz = anchor[:, :, None] + cfb
+    return wx, wy, wz
+
+
+def _write_warped_geometry(out: Path, part, rho_final, p, grid) -> None:
+    """Post-sinter warped geometry (F4): emit the deformed SURFACE shell + per-voxel
+    displacement (mm) for the viewer. In the job wrapper — heatr3d.py is a synced
+    copy — and adds no physics; it integrates the existing shrink fields."""
+    lam_xy, lam_z = _shrink_factor_fields(rho_final, part, p)
+    wx, wy, wz = _warped_centers(part, lam_xy, lam_z, grid.h, grid.L)
+    surf = _surface_voxels(part)
+    ix, iy, iz = surf[:, 0], surf[:, 1], surf[:, 2]
+    warped = np.stack([wx[ix, iy, iz], wy[ix, iy, iz], wz[ix, iy, iz]], axis=1)   # (S,3) m
+    nominal = (surf + 0.5) * grid.h - grid.L / 2.0
+    disp = np.linalg.norm(warped - nominal, axis=1)
+    payload = {
+        "dims": list(part.shape), "h_mm": grid.h * 1e3, "n_surface": int(len(surf)),
+        "warped_xyz_mm": (warped * 1e3).round(3).tolist(),
+        "disp_mm": (disp * 1e3).round(4).tolist(),
+        "disp_max_mm": (round(float(disp.max()) * 1e3, 4) if len(disp) else 0.0),
+    }
+    (out / "warped_geometry.json").write_text(json.dumps(payload))
+
+
 def _fgm_z_profile(sat, part):
     """Mean dopant fraction over part voxels in each build layer (z index), NaN where
     a layer has no part voxels. The 1-D 'how it was functionally graded' curve."""
@@ -324,6 +375,8 @@ def main(argv: list[str]) -> None:
     _write_summary(out, results, cfg)
     _render_slices(out, fields_for_view, meta)
     _render_summary_plots(out, r.phi_hist, getattr(p, "dt_s", 0.05), fields_for_view, meta)
+    if densify and r.rho_final is not None:
+        _write_warped_geometry(out, part, r.rho_final, p, grid)
 
     print("PROGRESS 100")
     print("RESULTS " + json.dumps(results))
