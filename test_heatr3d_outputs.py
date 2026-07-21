@@ -159,6 +159,18 @@ def test_warped_geometry_written(run_dir: Path):
         nom_z = ((surf[:, 2] + 0.5) * grid.h - grid.L / 2) * 1e3
         assert (max(wz) - min(wz)) < (nom_z.max() - nom_z.min()) + 1e-6, "warped part should not be taller"
 
+def test_validate_dims_rejects_raw_mm():
+    # valid meters pass silently
+    J._validate_dims(0.028, 0.030, 0.06)
+    J._validate_dims(None, 0.030, 0.06)  # unspecified is fine
+    # raw-mm and out-of-range values are rejected with a units-aware message
+    for diam, zspan in [(28, 0.03), (0.03, 30), (-0.01, 0.03), (0.06, 0.03), (0.03, 0.0)]:
+        try:
+            J._validate_dims(diam, zspan, 0.06)
+            assert False, f"should reject diam={diam} zspan={zspan}"
+        except SystemExit as e:
+            assert "METERS" in str(e), str(e)
+
 def _run(run_dir, verbose):
     plain = [
         ("field_meta_only_reports_real_volumes", test_field_meta_only_reports_real_volumes),
@@ -167,6 +179,7 @@ def _run(run_dir, verbose):
         ("fgm_z_profile_per_layer_means", test_fgm_z_profile_per_layer_means),
         ("warped_centers_zero_shrink_is_identity", test_warped_centers_zero_shrink_is_identity),
         ("warped_centers_uniform_z_compacts_from_plate", test_warped_centers_uniform_z_compacts_from_plate),
+        ("validate_dims_rejects_raw_mm", test_validate_dims_rejects_raw_mm),
     ]
     needs_dir = [
         ("render_slices_writes_pngs_and_meta", test_render_slices_writes_pngs_and_meta),

@@ -65,6 +65,19 @@ def _write_geometry(out: Path, grid: H.Grid, part: np.ndarray, sat=None) -> None
     (out / "geometry.json").write_text(json.dumps(payload))
 
 
+def _validate_dims(diam, zspan, L):
+    """Reject parametric sizes that don't fit the chamber. diam/zspan are METERS
+    (the UI divides mm by 1000); passing raw mm (e.g. 28) silently fills the whole
+    grid. Fail loudly with a units-aware message instead of producing a bad part."""
+    for name, v in (("diam", diam), ("zspan", zspan)):
+        if v is None:
+            continue
+        if not (0 < v < L):
+            raise SystemExit(
+                f"{name}={v} is out of range for a {L * 1e3:.0f} mm chamber. "
+                f"diam/zspan are in METERS (e.g. 0.028 for 28 mm), not mm.")
+
+
 def build_part(grid: H.Grid, cfg: dict) -> np.ndarray:
     stl = cfg.get("stl")
     if stl:
@@ -85,8 +98,9 @@ def build_part(grid: H.Grid, cfg: dict) -> np.ndarray:
         idx = idx[ok]
         part[idx[:, 0], idx[:, 1], idx[:, 2]] = True
         return part
-    return H.make_geometry(grid, cfg.get("shape", "sphere"),
-                           diam=cfg.get("diam", 0.024), zspan=cfg.get("zspan", 0.024))
+    diam = cfg.get("diam", 0.024); zspan = cfg.get("zspan", 0.024)
+    _validate_dims(diam, zspan, grid.L)
+    return H.make_geometry(grid, cfg.get("shape", "sphere"), diam=diam, zspan=zspan)
 
 
 # Fields worth coloring as slices (name -> human label). `part` is the mask, not a field.
