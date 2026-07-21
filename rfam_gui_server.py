@@ -5453,6 +5453,13 @@ class Handler(BaseHTTPRequestHandler):
                 if png.exists():
                     return self._serve_file(png)
             return self._text("not found", status=404)
+        if path == "/api/heatr3d/warp":
+            jid = parse_qs(urlparse(self.path).query).get("id", [""])[0]
+            d = _h3d_run_dir(jid)
+            wj = (d / "warped_geometry.json") if d else None
+            if wj and wj.exists():
+                return self._serve_file(wj)
+            return self._text("not found", status=404)
 
         if path == "/api/meta":
             model_info = _experimental_model_info()
