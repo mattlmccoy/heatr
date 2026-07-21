@@ -41,13 +41,39 @@ def test_write_summary_makes_run_collectible():
         assert s.get("sigma_T") == 22.66 and s.get("dice") == 0.94, s
         assert s.get("shape") == "sphere", "config echoed for the run card"
 
-def _run(verbose):
-    tests = [("field_meta_only_reports_real_volumes", test_field_meta_only_reports_real_volumes),
-             ("write_summary_makes_run_collectible", test_write_summary_makes_run_collectible)]
+def test_render_slices_writes_pngs_and_meta(run_dir: Path):
+    z = np.load(run_dir / "fields.npz")
+    fields = {k: z[k] for k in z.files}
+    h = float(z["h"]) if z["h"].ndim == 0 else float(z["h"][0])
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d)
+        meta = J._field_meta(fields, h)
+        J._render_slices(out, fields, meta)
+        fm = json.loads((out / "fieldmeta.json").read_text())
+        assert fm["fields"].keys() == meta["fields"].keys(), fm["fields"].keys()
+        assert (out / "preview.png").exists(), "preview.png must exist"
+        assert (out / "preview.png").stat().st_size > 0
+        for name, info in meta["fields"].items():
+            got = sorted((out / "slices").glob(f"{name}_z_*.png"))
+            assert len(got) == info["slices"], f"{name}: {len(got)} != {info['slices']}"
+            assert all(p.stat().st_size > 0 for p in got), f"{name}: empty PNG"
+
+def _run(run_dir, verbose):
+    plain = [
+        ("field_meta_only_reports_real_volumes", test_field_meta_only_reports_real_volumes),
+        ("write_summary_makes_run_collectible", test_write_summary_makes_run_collectible),
+    ]
+    needs_dir = [
+        ("render_slices_writes_pngs_and_meta", test_render_slices_writes_pngs_and_meta),
+    ]
     failures = 0
-    for name, fn in tests:
-        try:
-            fn(); print(f"PASS {name}")
+    for name, fn in plain:
+        try: fn(); print(f"PASS {name}")
+        except Exception:
+            failures += 1; print(f"FAIL {name}")
+            if verbose: traceback.print_exc()
+    for name, fn in needs_dir:
+        try: fn(run_dir); print(f"PASS {name}")
         except Exception:
             failures += 1; print(f"FAIL {name}")
             if verbose: traceback.print_exc()
@@ -58,4 +84,4 @@ if __name__ == "__main__":
     ap.add_argument("--run-dir", default="outputs_eqs/_heatr3d")
     ap.add_argument("-v", dest="v", action="store_true")
     a = ap.parse_args()
-    sys.exit(1 if _run(a.v) else 0)
+    sys.exit(1 if _run(Path(a.run_dir), a.v) else 0)

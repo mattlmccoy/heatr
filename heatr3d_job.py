@@ -30,6 +30,9 @@ import time
 from pathlib import Path
 
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import heatr3d as H
 
 
@@ -132,6 +135,50 @@ def _write_summary(out: Path, results: dict, cfg: dict) -> None:
     if "shape" in cfg:
         summary["shape"] = cfg["shape"]
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
+
+
+def _render_slices(out: Path, fields: dict, meta: dict) -> None:
+    """Pre-render one PNG per z-slice for each real field (viridis, per-field global min/max so
+    the colormap is stable across layers), plus a preview.png, plus fieldmeta.json. Done in-job
+    because the GUI server's numpy is unreliable; the server only serves these static files."""
+    (out / "fieldmeta.json").write_text(json.dumps(meta, indent=2))
+    sl = out / "slices"; sl.mkdir(parents=True, exist_ok=True)
+    part = fields.get("part")
+    mask3d = part if getattr(part, "ndim", 0) == 3 else None
+    preview_written = False
+    for name, info in meta["fields"].items():
+        a = fields[name]
+        vmin, vmax = info["min"], info["max"]
+        if vmax <= vmin:
+            vmax = vmin + 1e-9
+        nz = a.shape[2]
+        for k in range(nz):
+            img = a[:, :, k].astype(float)
+            if mask3d is not None:
+                img = np.where(mask3d[:, :, k], img, np.nan)  # outside-part = transparent, not 0
+            fig = plt.figure(figsize=(2.2, 2.2), dpi=100)
+            ax = fig.add_axes([0, 0, 1, 1]); ax.axis("off")
+            ax.imshow(img.T, origin="lower", cmap="viridis", vmin=vmin, vmax=vmax, interpolation="nearest")
+            fig.savefig(sl / f"{name}_z_{k:03d}.png", transparent=True)
+            plt.close(fig)
+        if not preview_written:
+            _save_preview(out / "preview.png", a, mask3d, vmin, vmax, name)
+            preview_written = True
+    if not preview_written:  # no real fields (e.g. no-FGM, no-densify run): preview the geometry mask
+        _save_preview(out / "preview.png", (mask3d.astype(float) if mask3d is not None
+                      else np.zeros((1, 1, 1))), mask3d, 0.0, 1.0, "part")
+
+def _save_preview(path: Path, a, mask3d, vmin, vmax, name):
+    kmid = a.shape[2] // 2
+    img = a[:, :, kmid].astype(float)
+    if mask3d is not None and mask3d.shape == a.shape:
+        img = np.where(mask3d[:, :, kmid], img, np.nan)
+    fig = plt.figure(figsize=(3, 3), dpi=100)
+    ax = fig.add_axes([0, 0, 1, 1]); ax.axis("off")
+    ax.imshow(img.T, origin="lower", cmap="viridis", vmin=vmin, vmax=(vmax if vmax > vmin else vmin + 1e-9),
+              interpolation="nearest")
+    fig.savefig(path)
+    plt.close(fig)
 
 
 def main(argv: list[str]) -> None:
