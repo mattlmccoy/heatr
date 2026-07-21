@@ -9,7 +9,7 @@ const progBar = $("progBar");
 // ── three.js scene ──────────────────────────────────────────────────────────
 const vp = $("h3dViewport");
 let renderer, scene, camera, controls, partMesh = null, electrodes = null;
-let lastGeom = null;
+let lastGeom = null, nominalGeom = null, lastRunId = null, lastWarp = null;
 
 function initScene() {
   const w = vp.clientWidth, h = vp.clientHeight;
@@ -49,16 +49,18 @@ function renderSurface(geom, colorBy) {
   if (partMesh) { scene.remove(partMesh); partMesh.geometry.dispose(); partMesh.material.dispose(); partMesh = null; }
   if (electrodes) { scene.remove(electrodes); electrodes = null; }
   lastGeom = geom;
-  const pts = geom.surface_xyz_mm, hmm = geom.h_mm, sat = geom.surface_sat || null;
+  const pts = geom.surface_xyz_mm, hmm = geom.h_mm;
+  const vals = colorBy === "sat" ? (geom.surface_sat || null)
+            : colorBy === "disp" ? (geom.surface_disp || null) : null;
   const box = new THREE.BoxGeometry(hmm, hmm, hmm);
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: (colorBy === "sat" && sat) });
-  if (!(colorBy === "sat" && sat)) mat.color = new THREE.Color(0x4f9dff);
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: !!vals });
+  if (!vals) mat.color = new THREE.Color(0x4f9dff);
   const mesh = new THREE.InstancedMesh(box, mat, pts.length);
   const m = new THREE.Matrix4();
   for (let i = 0; i < pts.length; i++) {
     m.setPosition(pts[i][0], pts[i][1], pts[i][2]);   // x, y(field), z(build)
     mesh.setMatrixAt(i, m);
-    if (colorBy === "sat" && sat) mesh.setColorAt(i, viridis(sat[i]));
+    if (vals) mesh.setColorAt(i, viridis(vals[i]));
   }
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -71,6 +73,24 @@ function renderSurface(geom, colorBy) {
     pm.rotation.x = Math.PI / 2; pm.position.y = sgn * L / 2; grp.add(pm);
   }
   scene.add(grp); electrodes = grp;
+}
+
+// F5: render the post-sinter WARPED surface, colored by displacement magnitude.
+function renderWarped() {
+  if (!lastWarp) return;
+  const dmax = lastWarp.disp_max_mm || 1;
+  renderSurface({
+    surface_xyz_mm: lastWarp.warped_xyz_mm,
+    surface_disp: lastWarp.disp_mm.map((d) => d / (dmax || 1)),
+    h_mm: lastWarp.h_mm,
+    L_mm: (nominalGeom && nominalGeom.L_mm) || 60,
+  }, "disp");
+}
+// Show nominal geometry (respecting the Color-by dropdown) or the warped view.
+function applyGeomView() {
+  const wt = $("warpToggle");
+  if (wt && wt.checked && lastWarp) renderWarped();
+  else if (nominalGeom) renderSurface(nominalGeom, $("colorBy").value);
 }
 
 // ── form → config ───────────────────────────────────────────────────────────
@@ -105,7 +125,9 @@ async function preview() {
     const r = await fetch("/api/heatr3d/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(c) });
     if (!r.ok) throw new Error(await r.text());
     const geom = await r.json();
-    renderSurface(geom, $("colorBy").value);
+    nominalGeom = geom;
+    if ($("warpToggle")) $("warpToggle").checked = false;   // preview is nominal geometry
+    applyGeomView();
     setProg(100); statusLine.textContent = `geometry: ${geom.n_voxels} voxels (${geom.dims.join("×")}), h=${geom.h_mm} mm`;
   } catch (e) { statusLine.textContent = "preview failed: " + e.message; setProg(0); }
 }
@@ -129,35 +151,67 @@ async function poll(id) {
     const r = await fetch(`/api/heatr3d/status?id=${encodeURIComponent(id)}`);
     const s = await r.json();
     if (typeof s.progress === "number") setProg(s.progress);
-    if (s.geometry) renderSurface(s.geometry, $("colorBy").value);
+    if (s.geometry) { nominalGeom = s.geometry; applyGeomView(); }
     if (s.done) {
       clearInterval(pollTimer); pollTimer = null;
       if (s.error) { statusLine.textContent = "run error: " + s.error; return; }
       setProg(100); statusLine.textContent = "done.";
       if (s.results) showResults(s.results);
-      if (s.geometry) { $("colorBy").value = (cfg().fgm !== "none") ? "sat" : "geom"; renderSurface(s.geometry, $("colorBy").value); }
+      if (s.geometry) { nominalGeom = s.geometry; $("colorBy").value = (cfg().fgm !== "none") ? "sat" : "geom"; applyGeomView(); }
       loadRunViews(id);
     }
   } catch (e) { /* keep polling */ }
 }
 
-const RESULT_KEYS = [
-  ["sigma_T", "σ_T (°C)"], ["t_phi90_s", "t_φ90 (s)"], ["T_max_C", "T_max (°C)"],
-  ["sintered_frac", "sintered frac"], ["dice", "Dice vs CAD"],
-  ["rho_final_mean", "ρ̄ final"], ["rho_final_std", "ρ std"],
-  ["z_shrink_pct", "Z shrink (%)"], ["xy_shrink_pct", "XY shrink (%)"],
-  ["warp_std_pct", "warpage (%)"], ["green_layers", "green layers"],
-  ["layer_multiplier", "layer ×"], ["extra_layers", "extra layers"], ["solve_s", "solve (s)"],
-];
+// Grouped, threshold-colored metrics panel (mirrors the 2D run gauges).
+function _clampPct(v, lo, hi) { return Math.min(100, Math.max(0, (v - lo) / (hi - lo) * 100)); }
+function _gauge(label, valStr, pct, color, tip, fillClass) {
+  const cls = fillClass ? `gauge-fill ${fillClass}` : "gauge-fill";
+  const bg = color ? `background:${color};` : "";
+  const cs = color ? `style="color:${color};"` : "";
+  return `<div class="gauge-row" title="${tip}"><span class="gauge-label" ${cs}>${label}</span>` +
+    `<div class="gauge-track"><div class="${cls}" style="width:${pct.toFixed(1)}%;${bg}"></div></div>` +
+    `<span class="gauge-val" ${cs}>${valStr}</span></div>`;
+}
+function _txt(label, valStr, tip) {
+  return `<div class="metric-txt" title="${tip || ""}"><span class="lbl">${label}</span><span class="val">${valStr}</span></div>`;
+}
+function _group(title, rows) {
+  const r = rows.filter(Boolean).join("");
+  return r ? `<div class="h3d-metric-group"><div class="h3d-metric-title">${title}</div>${r}</div>` : "";
+}
 function showResults(res) {
-  const g = $("resultsGrid"); g.innerHTML = "";
-  for (const [k, label] of RESULT_KEYS) {
-    if (res[k] === undefined) continue;
-    const kk = document.createElement("span"); kk.className = "k"; kk.textContent = label;
-    const vv = document.createElement("span"); vv.className = "v";
-    vv.textContent = (typeof res[k] === "number") ? (Number.isInteger(res[k]) ? res[k] : res[k].toFixed(3)) : res[k];
-    g.appendChild(kk); g.appendChild(vv);
-  }
+  const has = (k) => res[k] !== undefined && res[k] !== null;
+  const num = (k, d) => has(k) ? (Number.isInteger(res[k]) ? res[k] : Number(res[k]).toFixed(d)) : "—";
+  const sigT = res.sigma_T, dice = res.dice, warp = res.warp_std_pct;
+  const sigColor = sigT == null ? null : (sigT < 3 ? "#40c080" : sigT < 5 ? "#e0c060" : "#e05050");
+  const diceColor = dice == null ? null : (dice >= 0.97 ? "#40c080" : dice >= 0.9 ? "#e0c060" : "#e05050");
+  const warpColor = warp == null ? null : (warp < 1 ? "#40c080" : warp < 3 ? "#e0c060" : "#e05050");
+  const A = _group("Thermal uniformity", [
+    has("sigma_T") && _gauge("σ_T", `${num("sigma_T", 2)} °C`, _clampPct(sigT, 0, 20), sigColor, "Spatial temperature std across the part. Target under 3 °C.", null),
+    has("T_max_C") && _gauge("T_max", `${num("T_max_C", 1)} °C`, _clampPct(res.T_max_C, 25, 260), null, "Peak part temperature.", "gauge-tmax-fill"),
+    _txt("φ=0.90", (has("reached_phi90") && !res.reached_phi90) ? "not reached" : (has("t_phi90_s") ? `${num("t_phi90_s", 1)} s` : "—"), "Time to reach 90% melt fraction (melt onset)."),
+  ]);
+  const B = _group("Sintering fidelity vs CAD", [
+    has("dice") && _gauge("Dice", num("dice", 3), _clampPct(dice, 0, 1), diceColor, "Overlap of the sintered body with the CAD part (1 = perfect).", null),
+    has("sintered_frac") && _gauge("sintered", `${(res.sintered_frac * 100).toFixed(0)}%`, res.sintered_frac * 100, null, "Fraction of CAD voxels that sintered.", "gauge-melt-fill"),
+    (has("unsintered_vox") && has("nominal_vox")) && _txt("unsintered", `${res.unsintered_vox} / ${res.nominal_vox} vox`, "CAD voxels that stayed unsintered."),
+  ]);
+  const C = has("rho_final_mean") ? _group("Densification", [
+    _gauge("ρ̄", num("rho_final_mean", 3), _clampPct(res.rho_final_mean, 0.45, 1.0), null, "Mean relative density. Target ≥ 0.95.", "gauge-dens-fill"),
+    has("rho_final_std") && _gauge("ρ std", num("rho_final_std", 3), _clampPct(res.rho_final_std, 0, 0.15), null, "Density spread (lower = more uniform).", "gauge-dens-fill"),
+  ]) : "";
+  const D = has("z_shrink_pct") ? _group("Shrinkage & warp", [
+    _txt("Z / XY shrink", `${num("z_shrink_pct", 1)}% / ${num("xy_shrink_pct", 1)}%`, "Linear sinter shrinkage (Z-dominant)."),
+    has("warp_std_pct") && _gauge("warp", `${num("warp_std_pct", 2)}%`, _clampPct(warp, 0, 10), warpColor, "Column-to-column shrink scatter (0 = flat).", null),
+    has("layer_multiplier") && _txt("green layers", `${num("green_layers", 0)} · ×${num("layer_multiplier", 2)}`, "Green layers needed to compact to the final height."),
+  ]) : "";
+  const E = _group("Run", [
+    _txt("mode", `${res.fgm || "?"}${res.densify ? " · densify" : ""} · n=${res.grid_n || "?"}`, "FGM mode / densification / grid size."),
+    has("solve_s") && _txt("solve time", `${num("solve_s", 1)} s`, "Wall-clock solve time."),
+  ]);
+  const g = $("resultsGrid"); g.className = "h3d-metrics";
+  g.innerHTML = (A + B + C + D + E) || `<span class="k">—</span><span class="v">run a simulation</span>`;
 }
 
 // ── per-run views: layer slices + summary plots ─────────────────────────────
@@ -203,6 +257,18 @@ async function loadRunViews(id) {
       views.style.display = "";
     }
   } catch (e) { /* no slices for this run */ }
+  // F5: post-sinter warped geometry (densify runs only). Enable the viewport toggle if present.
+  lastRunId = id; lastWarp = null;
+  const wt = $("warpToggle"), wr = $("warpRow");
+  if (wt) { wt.checked = false; wt.disabled = true; }
+  try {
+    const w = await (await fetch(`/api/heatr3d/warp?id=${encodeURIComponent(id)}`)).json();
+    if (w && Array.isArray(w.warped_xyz_mm) && w.warped_xyz_mm.length) {
+      lastWarp = w;
+      if (wt) wt.disabled = false;
+      if (wr) { wr.style.display = ""; const dm = $("warpMax"); if (dm) dm.textContent = `max ${(w.disp_max_mm).toFixed(2)} mm`; }
+    } else if (wr) { wr.style.display = "none"; }
+  } catch (e) { if (wr) wr.style.display = "none"; }
   const plots = ["melt_progression", "fgm_z_profile", "temperature_hist", "density_hist", "ortho_slices"];
   const gal = $("plotsGallery"); gal.innerHTML = "";
   for (const name of plots) {
@@ -220,7 +286,8 @@ $("srcSel").addEventListener("change", () => {
   $("stlBlock").style.display = stl ? "" : "none";
   $("paramBlock").style.display = stl ? "none" : "";
 });
-$("colorBy").addEventListener("change", () => { if (lastGeom) renderSurface(lastGeom, $("colorBy").value); });
+$("colorBy").addEventListener("change", applyGeomView);
+if ($("warpToggle")) $("warpToggle").addEventListener("change", applyGeomView);
 $("previewBtn").addEventListener("click", preview);
 $("runBtn").addEventListener("click", run);
 initScene();
