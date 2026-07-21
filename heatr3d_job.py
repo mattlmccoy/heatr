@@ -25,11 +25,15 @@ Outputs in out_dir:
 from __future__ import annotations
 
 import json
+import math
 import sys
 import time
 from pathlib import Path
 
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import heatr3d as H
 
 
@@ -85,6 +89,107 @@ def build_part(grid: H.Grid, cfg: dict) -> np.ndarray:
                            diam=cfg.get("diam", 0.024), zspan=cfg.get("zspan", 0.024))
 
 
+# Fields worth coloring as slices (name -> human label). `part` is the mask, not a field.
+_SLICE_FIELDS = {
+    "sat": "FGM dopant fraction",
+    "T_phi90": "Temperature at phi=0.90 (C)",
+    "phi_final": "Melt fraction",
+    "rho_final": "Relative density",
+    "Qrf": "Absorbed RF power (W/m^3)",
+}
+
+
+def _field_meta(fields: dict, h: float) -> dict:
+    """Metadata for the per-layer slice viewer. Only real (n,n,n) volumes are reported;
+    shape-(1,) sentinels (absent fields) and the boolean `part` mask are skipped."""
+    part = fields.get("part")
+    dims = list(part.shape) if getattr(part, "ndim", 0) == 3 else None
+    out_fields = {}
+    for name in _SLICE_FIELDS:
+        a = fields.get(name)
+        if a is None or getattr(a, "ndim", 0) != 3:
+            continue
+        if dims is None:
+            dims = list(a.shape)
+        # shape disagrees with the grid: drop rather than mis-slice (should not happen for a valid run)
+        if list(a.shape) != dims:
+            continue
+        out_fields[name] = {
+            "label": _SLICE_FIELDS[name],
+            "min": float(a.min()),
+            "max": float(a.max()),
+            "slices": int(a.shape[2]),  # z-axis
+        }
+    return {"dims": dims or [0, 0, 0], "h_mm": float(h) * 1000.0, "axis": "z", "fields": out_fields}
+
+
+def _write_summary(out: Path, results: dict, cfg: dict) -> None:
+    """Write summary.json so the run is picked up by the Results browser
+    (rfam_gui_server _collect_results accepts any dir with summary.json). Carries a
+    `run_type: heatr3d` tag plus the scalar metrics and the input config for the run card."""
+    summary = {"run_type": "heatr3d"}
+    summary.update(results)
+    summary["config"] = {k: cfg.get(k) for k in ("shape", "n", "fgm", "magnitude", "densify",
+                                                  "exposure_s", "stop_mean_rho", "diam", "zspan")
+                         if cfg.get(k) is not None}
+    # Also promote shape to top level so it shows on the run card without digging into config.
+    if "shape" in cfg:
+        summary["shape"] = cfg["shape"]
+    (out / "summary.json").write_text(json.dumps(summary, indent=2))
+
+
+def _render_slices(out: Path, fields: dict, meta: dict) -> None:
+    """Pre-render one PNG per z-slice for each real field (viridis, per-field global min/max so
+    the colormap is stable across layers), plus a preview.png, plus fieldmeta.json. Done in-job
+    because the GUI server's numpy is unreliable; the server only serves these static files."""
+    (out / "fieldmeta.json").write_text(json.dumps(meta, indent=2))
+    sl = out / "slices"; sl.mkdir(parents=True, exist_ok=True)
+    part = fields.get("part")
+    mask3d = part if getattr(part, "ndim", 0) == 3 else None
+    preview_written = False
+    for name, info in meta["fields"].items():
+        a = fields[name]
+        vmin, vmax = info["min"], info["max"]
+        if vmax <= vmin:
+            vmax = vmin + 1e-9
+        nz = a.shape[2]
+        for k in range(nz):
+            img = a[:, :, k].astype(float)
+            if mask3d is not None:
+                img = np.where(mask3d[:, :, k], img, np.nan)  # outside-part = transparent, not 0
+            fig = plt.figure(figsize=(2.2, 2.2), dpi=100)
+            ax = fig.add_axes([0, 0, 1, 1]); ax.axis("off")
+            ax.imshow(img.T, origin="lower", cmap="viridis", vmin=vmin, vmax=vmax, interpolation="nearest")
+            fig.savefig(sl / f"{name}_z_{k:03d}.png", transparent=True)
+            plt.close(fig)
+        if not preview_written:
+            _save_preview(out / "preview.png", a, mask3d, vmin, vmax)
+            preview_written = True
+    if not preview_written:  # no real fields (e.g. no-FGM, no-densify run): preview the geometry mask
+        _save_preview(out / "preview.png", (mask3d.astype(float) if mask3d is not None
+                      else np.zeros((1, 1, 1))), mask3d, 0.0, 1.0)
+
+def _save_preview(path: Path, a, mask3d, vmin, vmax):
+    kmid = a.shape[2] // 2
+    img = a[:, :, kmid].astype(float)
+    if mask3d is not None and mask3d.shape == a.shape:
+        img = np.where(mask3d[:, :, kmid], img, np.nan)
+    fig = plt.figure(figsize=(3, 3), dpi=100)
+    ax = fig.add_axes([0, 0, 1, 1]); ax.axis("off")
+    ax.imshow(img.T, origin="lower", cmap="viridis", vmin=vmin, vmax=(vmax if vmax > vmin else vmin + 1e-9),
+              interpolation="nearest")
+    fig.savefig(path, transparent=True)
+    plt.close(fig)
+
+
+def _finite_results(results: dict) -> dict:
+    """Replace non-finite floats (NaN/Inf) with None so the JSON is strict-valid.
+    Python's json.dumps emits bare NaN/Infinity, which browsers' JSON.parse reject —
+    that silently breaks the results grid and the Results-detail view."""
+    return {k: (None if isinstance(v, float) and not math.isfinite(v) else v)
+            for k, v in results.items()}
+
+
 def main(argv: list[str]) -> None:
     cfg_path = Path(argv[1])
     preview = "--preview" in argv
@@ -128,6 +233,8 @@ def main(argv: list[str]) -> None:
         sh = {k: v for k, v in H.shrinkage_analysis(r, p, grid.h).items() if not k.startswith("_")}
         results.update(sh)
 
+    results = _finite_results(results)
+
     np.savez_compressed(out / "fields.npz", part=part,
                         T_phi90=r.T_phi90.astype(np.float32),
                         phi_final=r.phi_final.astype(np.float32),
@@ -138,6 +245,14 @@ def main(argv: list[str]) -> None:
                         h=grid.h)
     _write_geometry(out, grid, part, sat=sat)
     (out / "results.json").write_text(json.dumps(results, indent=2))
+
+    fields_for_view = {"part": part, "T_phi90": r.T_phi90, "phi_final": r.phi_final, "Qrf": r.Qrf,
+                       "rho_final": (r.rho_final if r.rho_final is not None else np.zeros((1,), np.float32)),
+                       "sat": (sat if sat is not None else np.zeros((1,), np.float32))}
+    meta = _field_meta(fields_for_view, grid.h)
+    _write_summary(out, results, cfg)
+    _render_slices(out, fields_for_view, meta)
+
     print("PROGRESS 100")
     print("RESULTS " + json.dumps(results))
 
