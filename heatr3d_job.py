@@ -85,6 +85,38 @@ def build_part(grid: H.Grid, cfg: dict) -> np.ndarray:
                            diam=cfg.get("diam", 0.024), zspan=cfg.get("zspan", 0.024))
 
 
+# Fields worth coloring as slices (name -> human label). `part` is the mask, not a field.
+_SLICE_FIELDS = {
+    "sat": "FGM dopant fraction",
+    "T_phi90": "Temperature at phi=0.90 (C)",
+    "phi_final": "Melt fraction",
+    "rho_final": "Relative density",
+    "Qrf": "Absorbed RF power (W/m^3)",
+}
+
+def _field_meta(fields: dict, h: float) -> dict:
+    """Metadata for the per-layer slice viewer. Only real (n,n,n) volumes are reported;
+    shape-(1,) sentinels (absent fields) and the boolean `part` mask are skipped."""
+    part = fields.get("part")
+    dims = list(part.shape) if getattr(part, "ndim", 0) == 3 else None
+    out_fields = {}
+    for name in _SLICE_FIELDS:
+        a = fields.get(name)
+        if a is None or getattr(a, "ndim", 0) != 3:
+            continue
+        if dims is None:
+            dims = list(a.shape)
+        if list(a.shape) != dims:
+            continue
+        out_fields[name] = {
+            "label": _SLICE_FIELDS[name],
+            "min": float(a.min()),
+            "max": float(a.max()),
+            "slices": int(a.shape[2]),  # z-axis
+        }
+    return {"dims": dims or [0, 0, 0], "h_mm": float(h) * 1000.0, "axis": "z", "fields": out_fields}
+
+
 def main(argv: list[str]) -> None:
     cfg_path = Path(argv[1])
     preview = "--preview" in argv
