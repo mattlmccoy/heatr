@@ -234,6 +234,14 @@ def main(argv: list[str]) -> None:
                         h=grid.h)
     _write_geometry(out, grid, part, sat=sat)
     (out / "results.json").write_text(json.dumps(results, indent=2))
+
+    fields_for_view = {"part": part, "T_phi90": r.T_phi90, "phi_final": r.phi_final, "Qrf": r.Qrf,
+                       "rho_final": (r.rho_final if r.rho_final is not None else np.zeros((1,), np.float32)),
+                       "sat": (sat if sat is not None else np.zeros((1,), np.float32))}
+    meta = _field_meta(fields_for_view, grid.h)
+    _write_summary(out, results, cfg)
+    _render_slices(out, fields_for_view, meta)
+
     print("PROGRESS 100")
     print("RESULTS " + json.dumps(results))
 
