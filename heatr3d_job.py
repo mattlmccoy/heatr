@@ -226,6 +226,19 @@ def _melt_classes(phi, part, thresh: float = 0.5):
     return cls
 
 
+def _cad_outline(ax, mask2d):
+    """Overlay the CAD (part) boundary as a thin outline, aligned with an
+    imshow(X.T, origin='lower'). Pass the mask slice already transposed like X.T.
+    Drawn as a dark halo + white core so it reads on any background (dark viewport,
+    white plot, or the field itself)."""
+    if mask2d is None:
+        return
+    m = np.asarray(mask2d, dtype=float)
+    if m.any() and not m.all():
+        ax.contour(m, levels=[0.5], colors="#101010", linewidths=1.4, alpha=0.6)
+        ax.contour(m, levels=[0.5], colors="#ffffff", linewidths=0.6, alpha=0.95)
+
+
 def _render_summary_plots(out: Path, phi_hist, dt_s: float, fields: dict, meta: dict) -> None:
     """Per-run summary figures (matplotlib, in-job) under plots/: melt progression,
     FGM grading profile, temperature & density histograms, and an orthogonal
@@ -273,15 +286,16 @@ def _render_summary_plots(out: Path, phi_hist, dt_s: float, fields: dict, meta: 
         if vmax <= vmin:
             vmax = vmin + 1e-9
         planes = [
-            ("XY (z mid)", np.where(mask[:, :, nz // 2], a[:, :, nz // 2].astype(float), np.nan).T),
-            ("XZ (y mid)", np.where(mask[:, ny // 2, :], a[:, ny // 2, :].astype(float), np.nan).T),
-            ("YZ (x mid)", np.where(mask[nx // 2, :, :], a[nx // 2, :, :].astype(float), np.nan).T),
+            ("XY (z mid)", np.where(mask[:, :, nz // 2], a[:, :, nz // 2].astype(float), np.nan).T, mask[:, :, nz // 2].T),
+            ("XZ (y mid)", np.where(mask[:, ny // 2, :], a[:, ny // 2, :].astype(float), np.nan).T, mask[:, ny // 2, :].T),
+            ("YZ (x mid)", np.where(mask[nx // 2, :, :], a[nx // 2, :, :].astype(float), np.nan).T, mask[nx // 2, :, :].T),
         ]
         fig, axs = plt.subplots(1, 3, figsize=(7.5, 2.7), dpi=150)
-        for ax, (ttl, img) in zip(axs, planes):
+        for ax, (ttl, img, mk) in zip(axs, planes):
             ax.imshow(img, origin="lower", cmap="viridis", vmin=vmin, vmax=vmax, interpolation="nearest")
+            _cad_outline(ax, mk)
             ax.set_title(ttl, fontsize=9); ax.axis("off")
-        fig.suptitle(f"{prim} - center slices", fontsize=10); fig.tight_layout()
+        fig.suptitle(f"{prim} - center slices  (white = CAD outline)", fontsize=10); fig.tight_layout()
         fig.savefig(pdir / "ortho_slices.png"); plt.close(fig)
 
     # Melt-vs-CAD overlay: green = correctly sintered, red = CAD wanted it but it stayed
@@ -329,6 +343,8 @@ def _render_slices(out: Path, fields: dict, meta: dict) -> None:
             fig = plt.figure(figsize=(2.6, 2.6), dpi=150)
             ax = fig.add_axes([0, 0, 1, 1]); ax.axis("off")
             ax.imshow(img.T, origin="lower", cmap="viridis", vmin=vmin, vmax=vmax, interpolation="nearest")
+            if mask3d is not None:
+                _cad_outline(ax, mask3d[:, :, k].T)
             fig.savefig(sl / f"{name}_z_{k:03d}.png", transparent=True)
             plt.close(fig)
         if not preview_written:
@@ -347,6 +363,8 @@ def _save_preview(path: Path, a, mask3d, vmin, vmax):
     ax = fig.add_axes([0, 0, 1, 1]); ax.axis("off")
     ax.imshow(img.T, origin="lower", cmap="viridis", vmin=vmin, vmax=(vmax if vmax > vmin else vmin + 1e-9),
               interpolation="nearest")
+    if mask3d is not None and mask3d.shape == a.shape:
+        _cad_outline(ax, mask3d[:, :, kmid].T)
     fig.savefig(path, transparent=True)
     plt.close(fig)
 
