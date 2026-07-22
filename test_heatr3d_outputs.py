@@ -184,6 +184,18 @@ def test_melt_classes_labels_sintered_and_cold():
     assert cls[1, 1, 1] == 1, "phi<thresh in part is cold (1)"
     assert cls[1, 1, 2] == 2, "phi==thresh counts as sintered"
 
+def test_radial_density_profile_core_vs_rim():
+    n = 9
+    part = np.ones((n, n, n), bool)
+    idx = np.indices((n, n, n)); c = (n - 1) / 2.0
+    rr = np.sqrt((idx[0] - c) ** 2 + (idx[1] - c) ** 2 + (idx[2] - c) ** 2)
+    rho = (1.0 - 0.4 * (rr / rr.max())).astype(np.float32)   # dense core, porous rim
+    centers, means = J._radial_density_profile(rho, part, 0.001, nbins=6)
+    assert len(centers) == 6 and len(means) == 6, (len(centers), len(means))
+    m = means[~np.isnan(means)]
+    assert m[0] > m[-1] + 0.1, f"core should be denser than rim: {m}"
+    assert centers[0] < centers[-1], "radius increases outward"
+
 def _run(run_dir, verbose):
     plain = [
         ("field_meta_only_reports_real_volumes", test_field_meta_only_reports_real_volumes),
@@ -194,6 +206,7 @@ def _run(run_dir, verbose):
         ("warped_centers_uniform_z_compacts_from_plate", test_warped_centers_uniform_z_compacts_from_plate),
         ("validate_dims_rejects_raw_mm", test_validate_dims_rejects_raw_mm),
         ("melt_classes_labels_sintered_and_cold", test_melt_classes_labels_sintered_and_cold),
+        ("radial_density_profile_core_vs_rim", test_radial_density_profile_core_vs_rim),
     ]
     needs_dir = [
         ("render_slices_writes_pngs_and_meta", test_render_slices_writes_pngs_and_meta),

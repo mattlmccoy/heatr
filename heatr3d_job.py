@@ -226,6 +226,27 @@ def _melt_classes(phi, part, thresh: float = 0.5):
     return cls
 
 
+def _radial_density_profile(rho, part, h, nbins: int = 12):
+    """Mean relative density vs radial distance from the part centroid (mm). Reveals
+    core-dense / rim-porous structure. Empty radial bins are NaN."""
+    m = part.astype(bool)
+    idx = np.argwhere(m)
+    if len(idx) == 0:
+        return np.array([]), np.array([])
+    r = np.linalg.norm(idx - idx.mean(axis=0), axis=1) * float(h)   # meters
+    vals = np.asarray(rho, float)[m]
+    rmax = r.max() if r.max() > 0 else 1e-9
+    edges = np.linspace(0.0, rmax, nbins + 1)
+    which = np.clip(np.digitize(r, edges) - 1, 0, nbins - 1)
+    centers = 0.5 * (edges[:-1] + edges[1:]) * 1e3   # mm
+    means = np.full(nbins, np.nan)
+    for b in range(nbins):
+        sel = which == b
+        if sel.any():
+            means[b] = float(vals[sel].mean())
+    return centers, means
+
+
 def _cad_outline(ax, mask2d):
     """Overlay the CAD (part) boundary as a thin outline, aligned with an
     imshow(X.T, origin='lower'). Pass the mask slice already transposed like X.T.
@@ -278,6 +299,17 @@ def _render_summary_plots(out: Path, phi_hist, dt_s: float, fields: dict, meta: 
         ax.set_xlabel("relative density"); ax.set_ylabel("voxels")
         ax.set_title("Density distribution"); fig.tight_layout()
         fig.savefig(pdir / "density_hist.png"); plt.close(fig)
+
+        # radial density profile — core-dense vs rim-porous
+        h_m = float(meta.get("h_mm", 1.0)) / 1000.0
+        centers, means = _radial_density_profile(fields["rho_final"], mask, h_m, nbins=12)
+        good = ~np.isnan(means)
+        if good.sum() >= 2:
+            fig, ax = plt.subplots(figsize=(4, 2.6), dpi=150)
+            ax.plot(centers[good], means[good], color="#d97706", lw=1.6, marker="o", ms=3)
+            ax.set_xlabel("radius from centroid (mm)"); ax.set_ylabel("mean relative density")
+            ax.set_title("Radial density profile"); fig.tight_layout()
+            fig.savefig(pdir / "radial_density.png"); plt.close(fig)
 
     prim = "sat" if "sat" in real else ("T_phi90" if "T_phi90" in real else None)
     if prim is not None and mask is not None:
