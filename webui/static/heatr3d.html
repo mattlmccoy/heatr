@@ -76,6 +76,17 @@
     .h3d-colorbar .cb-units { opacity:.7; text-align:center; line-height:1.15; }
     .h3d-plots { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
     .h3d-plots img { width:100%; border:1px solid rgba(128,140,160,.22); border-radius:8px; background:#fff; }
+    .h3d-cmp-hint { font-size:.74rem; opacity:.65; margin-bottom:8px; }
+    .h3d-cmp-list { display:flex; flex-wrap:wrap; gap:6px 14px; margin-bottom:10px; max-height:120px; overflow:auto; }
+    .h3d-cmp-list label { display:flex; align-items:center; gap:5px; font-size:.74rem; opacity:.9; cursor:pointer; }
+    .h3d-cmp-list input { width:auto; }
+    .h3d-cmp-headline { font-size:.82rem; font-weight:600; margin:2px 0 8px; min-height:1.1em; }
+    .h3d-cmp-bars { display:flex; flex-direction:column; gap:7px; }
+    .h3d-cmp-bar { display:grid; grid-template-columns:8.5rem 1fr 4rem; align-items:center; gap:8px; }
+    .h3d-cmp-bar .lbl { font-size:.72rem; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .h3d-cmp-bar .track { height:14px; border-radius:4px; background:rgba(128,140,160,.14); overflow:hidden; }
+    .h3d-cmp-bar .fill { height:100%; border-radius:4px; }
+    .h3d-cmp-bar .val { font-size:.72rem; text-align:right; font-variant-numeric:tabular-nums; }
   </style>
 </head>
 <body class="layout-b ids-inspired">
@@ -232,6 +243,14 @@
           </div>
           <h3 style="margin:16px 0 6px;">Summary plots</h3>
           <div id="plotsGallery" class="h3d-plots"></div>
+        </div>
+
+        <div id="h3dCompare" class="h3d-compare" style="display:none;">
+          <h3 style="margin:16px 0 4px;">Compare σ_T across runs</h3>
+          <div class="h3d-cmp-hint">Tick runs (e.g. a baseline vs an FGM run) to compare temperature uniformity — lower σ_T is better.</div>
+          <div id="cmpList" class="h3d-cmp-list"></div>
+          <div id="cmpHeadline" class="h3d-cmp-headline"></div>
+          <div id="cmpBars" class="h3d-cmp-bars"></div>
         </div>
       </section>
     </div>
