@@ -300,19 +300,67 @@ async function loadPastRun(id) {
   } catch (e) { statusLine.textContent = "failed to load run: " + e.message; }
 }
 
+let allRuns = [];
+function runLabel(r) {
+  return `${r.shape || "?"} · ${r.fgm || "none"}${r.densify ? "+dens" : ""} · n${r.grid_n || "?"}`;
+}
 async function loadRunList() {
   try {
-    const runs = await (await fetch("/api/heatr3d/runs")).json();
+    allRuns = await (await fetch("/api/heatr3d/runs")).json();
     const sel = $("pastRun");
     while (sel.options.length > 1) sel.remove(1);
-    for (const r of runs) {
+    for (const r of allRuns) {
       const o = document.createElement("option");
       o.value = r.id;
       const sig = (r.sigma_T != null) ? ` · σT ${Number(r.sigma_T).toFixed(1)}` : "";
-      o.textContent = `${r.shape || "?"} · ${r.fgm || "none"}${r.densify ? "+dens" : ""} · n${r.grid_n || "?"}${sig}`;
+      o.textContent = `${runLabel(r)}${sig}`;
       sel.appendChild(o);
     }
+    buildCompareList();
   } catch (e) { /* no run list */ }
+}
+
+// σ_T comparison: tick runs (e.g. baseline vs FGM) and draw horizontal bars.
+function buildCompareList() {
+  const withSig = allRuns.filter((r) => r.sigma_T != null);
+  const panel = $("h3dCompare"), list = $("cmpList");
+  if (!panel || !list) return;
+  if (withSig.length < 2) { panel.style.display = "none"; return; }
+  panel.style.display = "";
+  list.innerHTML = "";
+  withSig.forEach((r, i) => {
+    const lab = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = r.id; cb.checked = i < 2;   // preselect two most recent
+    cb.addEventListener("change", renderCompare);
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(`${runLabel(r)} (${Number(r.sigma_T).toFixed(1)})`));
+    list.appendChild(lab);
+  });
+  renderCompare();
+}
+function renderCompare() {
+  const chosen = [...document.querySelectorAll("#cmpList input:checked")].map((cb) => cb.value);
+  const rows = allRuns.filter((r) => chosen.includes(r.id) && r.sigma_T != null)
+                      .map((r) => ({ r, s: Number(r.sigma_T) }));
+  const bars = $("cmpBars"), head = $("cmpHeadline");
+  bars.innerHTML = ""; head.textContent = "";
+  if (rows.length < 1) return;
+  const maxS = Math.max(...rows.map((x) => x.s)), minS = Math.min(...rows.map((x) => x.s));
+  for (const { r, s } of rows) {
+    const best = s === minS;
+    const row = document.createElement("div"); row.className = "h3d-cmp-bar";
+    row.innerHTML =
+      `<span class="lbl" title="${runLabel(r)}">${runLabel(r)}</span>` +
+      `<div class="track"><div class="fill" style="width:${(s / maxS * 100).toFixed(1)}%;` +
+      `background:${best ? "#40c080" : "#e0922a"};"></div></div>` +
+      `<span class="val"${best ? ' style="color:#40c080;"' : ""}>${s.toFixed(1)} °C</span>`;
+    bars.appendChild(row);
+  }
+  if (rows.length >= 2 && maxS > 0) {
+    const drop = (1 - minS / maxS) * 100;
+    head.textContent = `best σ_T ${minS.toFixed(1)} °C — ${drop.toFixed(0)}% lower than the worst (${maxS.toFixed(1)} °C)`;
+  }
 }
 
 // ── wire up ───────────────────────────────────────────────────────────────
