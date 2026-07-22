@@ -215,6 +215,17 @@ def _fgm_z_profile(sat, part):
     return prof
 
 
+def _melt_classes(phi, part, thresh: float = 0.5):
+    """Per-voxel melt-vs-CAD class: 0 = outside the CAD part, 1 = the CAD wants it but it
+    stayed cold (under-melt), 2 = correctly sintered (phi >= thresh). The 'did it build
+    the intended shape' map."""
+    m = part.astype(bool)
+    cls = np.zeros(phi.shape, dtype=np.int8)
+    cls[m & (phi >= thresh)] = 2
+    cls[m & (phi < thresh)] = 1
+    return cls
+
+
 def _render_summary_plots(out: Path, phi_hist, dt_s: float, fields: dict, meta: dict) -> None:
     """Per-run summary figures (matplotlib, in-job) under plots/: melt progression,
     FGM grading profile, temperature & density histograms, and an orthogonal
@@ -272,6 +283,28 @@ def _render_summary_plots(out: Path, phi_hist, dt_s: float, fields: dict, meta: 
             ax.set_title(ttl, fontsize=9); ax.axis("off")
         fig.suptitle(f"{prim} - center slices", fontsize=10); fig.tight_layout()
         fig.savefig(pdir / "ortho_slices.png"); plt.close(fig)
+
+    # Melt-vs-CAD overlay: green = correctly sintered, red = CAD wanted it but it stayed
+    # cold (under-melt). The "did it build the intended shape" money-shot.
+    if "phi_final" in real and mask is not None and getattr(fields.get("phi_final"), "ndim", 0) == 3:
+        from matplotlib.colors import ListedColormap
+        cls = _melt_classes(fields["phi_final"], mask, 0.5)
+        cmap = ListedColormap([[0.86, 0.24, 0.24], [0.29, 0.74, 0.36]])   # 0->red (cold), 1->green (sintered)
+        nx, ny, nz = cls.shape
+        def _cp(a2):
+            return np.where(a2 > 0, a2.astype(float) - 1.0, np.nan)       # 0 outside -> NaN; 1->0 red; 2->1 green
+        planes = [
+            ("XY (z mid)", _cp(cls[:, :, nz // 2]).T),
+            ("XZ (y mid)", _cp(cls[:, ny // 2, :]).T),
+            ("YZ (x mid)", _cp(cls[nx // 2, :, :]).T),
+        ]
+        fig, axs = plt.subplots(1, 3, figsize=(7.5, 2.7), dpi=150)
+        for ax, (ttl, img) in zip(axs, planes):
+            ax.imshow(img, origin="lower", cmap=cmap, vmin=0, vmax=1, interpolation="nearest")
+            ax.set_title(ttl, fontsize=9); ax.axis("off")
+        fig.suptitle("Melt vs CAD  —  green: sintered   red: cold (under-melt)", fontsize=10)
+        fig.tight_layout()
+        fig.savefig(pdir / "melt_vs_cad.png"); plt.close(fig)
 
 
 def _render_slices(out: Path, fields: dict, meta: dict) -> None:
