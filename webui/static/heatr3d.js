@@ -269,7 +269,7 @@ async function loadRunViews(id) {
       if (wr) { wr.style.display = ""; const dm = $("warpMax"); if (dm) dm.textContent = `max ${(w.disp_max_mm).toFixed(2)} mm`; }
     } else if (wr) { wr.style.display = "none"; }
   } catch (e) { if (wr) wr.style.display = "none"; }
-  const plots = ["melt_progression", "fgm_z_profile", "temperature_hist", "density_hist", "ortho_slices"];
+  const plots = ["melt_vs_cad", "ortho_slices", "melt_progression", "fgm_z_profile", "temperature_hist", "density_hist"];
   const gal = $("plotsGallery"); gal.innerHTML = "";
   for (const name of plots) {
     const img = document.createElement("img");

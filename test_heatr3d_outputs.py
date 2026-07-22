@@ -171,6 +171,19 @@ def test_validate_dims_rejects_raw_mm():
         except SystemExit as e:
             assert "METERS" in str(e), str(e)
 
+def test_melt_classes_labels_sintered_and_cold():
+    n = 3
+    part = np.zeros((n, n, n), bool); part[1, 1, :] = True   # one part column
+    phi = np.zeros((n, n, n), np.float32)
+    phi[1, 1, 0] = 0.9   # sintered
+    phi[1, 1, 1] = 0.2   # cold (under-melt)
+    phi[1, 1, 2] = 0.5   # exactly threshold -> sintered (>=)
+    cls = J._melt_classes(phi, part, 0.5)
+    assert cls[0, 0, 0] == 0, "outside the part is class 0"
+    assert cls[1, 1, 0] == 2, "phi>=thresh in part is sintered (2)"
+    assert cls[1, 1, 1] == 1, "phi<thresh in part is cold (1)"
+    assert cls[1, 1, 2] == 2, "phi==thresh counts as sintered"
+
 def _run(run_dir, verbose):
     plain = [
         ("field_meta_only_reports_real_volumes", test_field_meta_only_reports_real_volumes),
@@ -180,6 +193,7 @@ def _run(run_dir, verbose):
         ("warped_centers_zero_shrink_is_identity", test_warped_centers_zero_shrink_is_identity),
         ("warped_centers_uniform_z_compacts_from_plate", test_warped_centers_uniform_z_compacts_from_plate),
         ("validate_dims_rejects_raw_mm", test_validate_dims_rejects_raw_mm),
+        ("melt_classes_labels_sintered_and_cold", test_melt_classes_labels_sintered_and_cold),
     ]
     needs_dir = [
         ("render_slices_writes_pngs_and_meta", test_render_slices_writes_pngs_and_meta),
