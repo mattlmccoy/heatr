@@ -309,12 +309,21 @@ async function loadRunList() {
     allRuns = await (await fetch("/api/heatr3d/runs")).json();
     const sel = $("pastRun");
     while (sel.options.length > 1) sel.remove(1);
-    for (const r of allRuns) {
-      const o = document.createElement("option");
-      o.value = r.id;
-      const sig = (r.sigma_T != null) ? ` · σT ${Number(r.sigma_T).toFixed(1)}` : "";
-      o.textContent = `${runLabel(r)}${sig}`;
-      sel.appendChild(o);
+    // Group the picker by shape, sorted by FGM within each shape (recent first as a tiebreak).
+    const byShape = {};
+    for (const r of allRuns) (byShape[r.shape || "?"] = byShape[r.shape || "?"] || []).push(r);
+    for (const shape of Object.keys(byShape).sort()) {
+      const og = document.createElement("optgroup"); og.label = shape;
+      const rs = byShape[shape].slice().sort((a, b) =>
+        (a.fgm || "none").localeCompare(b.fgm || "none") || (b.mtime || 0) - (a.mtime || 0));
+      for (const r of rs) {
+        const o = document.createElement("option");
+        o.value = r.id;
+        const sig = (r.sigma_T != null) ? ` · σT ${Number(r.sigma_T).toFixed(1)}` : "";
+        o.textContent = `${r.fgm || "none"}${r.densify ? "+dens" : ""} · n${r.grid_n || "?"}${sig}`;
+        og.appendChild(o);
+      }
+      sel.appendChild(og);
     }
     buildCompareList();
   } catch (e) { /* no run list */ }
