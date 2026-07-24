@@ -281,9 +281,15 @@ class _FgmFeedback:
 
     def __init__(self, sat_map: np.ndarray | None, cfg_block: dict) -> None:
         # sat_map: (ny, nx) float32 in [0, 1], or None when FGM is disabled.
+        # In the two-sided per-node direct mode sat_map may exceed 1 (up to
+        # sat_max = sigma_max/sigma_d0) so sigma can rise ABOVE the baseline.
         self.sat_map  = sat_map
         self.enabled  = sat_map is not None
         self._cfg     = cfg_block
+        # When True (per-node direct mode), permittivity blends by geometry
+        # fill only — sat>1 raises sigma but must NOT inflate eps_r past the
+        # doped value (Allison's part eps_r=20 is fixed; only sigma varies).
+        self.eps_geometry_only = bool(cfg_block.get("eps_geometry_only", False))
         # Iterative-mode parameters (parsed now; active when iterate=True).
         self.iterate           = bool(cfg_block.get("iterate", False))
         self.iterate_interval  = int(cfg_block.get("iterate_interval_steps", 50))
@@ -309,6 +315,39 @@ class _FgmFeedback:
         fgm_cfg = cfg.get("fgm_feedback", {})
         if not (isinstance(fgm_cfg, dict) and bool(fgm_cfg.get("enabled", False))):
             return cls(None, {})
+
+        # ── Two-sided per-node direct mode ────────────────────────────────────
+        # A CONTINUOUS per-cell sat map (sat = sigma/sigma_d0) supplied at sim
+        # resolution, bypassing bpp quantization and the [0,1] printable clamp.
+        # sat may exceed 1 up to sat_max, so sigma can rise above the baseline.
+        direct_raw = str(fgm_cfg.get("sat_map_npz_direct", "")).strip()
+        if direct_raw:
+            p = Path(direct_raw)
+            if not p.is_absolute():
+                p = Path(__file__).resolve().parent / p
+            if not p.exists():
+                raise FileNotFoundError(
+                    f"fgm_feedback: sat_map_npz_direct not found: {p}"
+                )
+            data = np.load(p, allow_pickle=True)
+            sat = np.asarray(data["sat_map"], dtype=np.float32)
+            ny_sim, nx_sim = len(y), len(x)
+            if sat.shape != (ny_sim, nx_sim):
+                from scipy.ndimage import zoom as _zoom
+                sat = _zoom(sat, (ny_sim / sat.shape[0], nx_sim / sat.shape[1]),
+                            order=1).astype(np.float32)
+            sat_max = float(fgm_cfg.get("sat_max", 1.0))
+            sat = np.clip(sat, 0.0, sat_max).astype(np.float32)
+            block = dict(fgm_cfg)
+            block["eps_geometry_only"] = True
+            v_in = sat[part_mask]
+            print(
+                f"  [fgm_feedback:direct] loaded {p.name}\n"
+                f"    sat_inside=[{v_in.min():.3f}, {v_in.max():.3f}]"
+                f"  mean={v_in.mean():.3f}  sat_max={sat_max:.4f}"
+                f"  (two-sided; eps geometry-only)"
+            )
+            return cls(sat, block)
 
         npz_raw = str(fgm_cfg.get("saturation_map_npz", "")).strip()
         if not npz_raw:
@@ -2487,7 +2526,10 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     # permittivity proportionally to the printed CB concentration.
     _eff_fill = _fgm_fb.effective_fill(fill_frac)
     sigma = sigma_v + _eff_fill * (sigma_d0 - sigma_v)
-    eps_r = eps_v  + _eff_fill * (eps_d  - eps_v)
+    # In two-sided per-node direct mode, permittivity blends by geometry fill
+    # only so sat>1 raises sigma without inflating eps_r past the doped value.
+    _eff_fill_eps = fill_frac if getattr(_fgm_fb, "eps_geometry_only", False) else _eff_fill
+    eps_r = eps_v  + _eff_fill_eps * (eps_d  - eps_v)
 
     # --- Optional surface sigma model ---
     # When sigma_profile == "surface", the EQS concentrates conductivity in a
