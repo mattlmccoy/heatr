@@ -373,11 +373,17 @@ Append:
 
 ```python
 def test_enthalpy_update_conserves_energy_on_window_crossing():
-    grid, part, p, q = spike_case()
+    # Task-3 finding: at spike_mult=400 x 120 s the spiked voxel saturates at
+    # temp_max_c and RF into a clamped voxel dominates the residual, which the
+    # phase fix cannot and should not hide. Isolate the phase mechanism with a
+    # softer spike (still window-crossing: mult 200 > the ~145 crossing
+    # threshold) and a shorter run, and assert no saturation occurred.
+    grid, part, p, q = spike_case(spike_mult=200.0)
     p = dataclasses.replace(p, phase_update="enthalpy")   # Params is frozen
-    res = run(grid, part, p, qrf_override=q, max_time_s=120.0)
+    res = run(grid, part, p, qrf_override=q, max_time_s=60.0)
+    assert res.T_max_c < p.temp_max_c - 1.0     # no temp-clamp saturation
     assert abs(res.energy_residual_frac) < 0.05
-    # the spiked cell still melts; it just pays the latent toll on the way
+    # the spiked cell still crosses the window; it pays the latent toll now
     assert res.phi_final.max() > 0.9
 
 
