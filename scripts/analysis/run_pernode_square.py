@@ -40,9 +40,11 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from pernode_tuning import pernode_sigma_update
+REPO = Path(__file__).resolve().parents[2]  # repo root (moved to scripts/analysis/)
+sys.path.insert(0, str(REPO))  # pernode_tuning lives at the repo root
 
-REPO = Path(__file__).resolve().parent
+from pernode_tuning import pernode_sigma_update  # noqa: E402
+
 BASE_CFG = REPO / "outputs_eqs/fgm_dosecheck/configs/square_baseline_voltage.yaml"
 OUT_ROOT = REPO / "outputs_eqs/pernode_square"
 PY = str(REPO / ".venv312/bin/python")

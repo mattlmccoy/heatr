@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]  # repo root (moved to scripts/analysis/)
 BASE_CFG = ROOT / "configs" / "_tmp_L_orient_singlebase.yaml"
 OUT_ROOT = ROOT / "outputs_eqs" / "runs" / "L_shape" / "orientation_sigmaT" / "baseline"
 

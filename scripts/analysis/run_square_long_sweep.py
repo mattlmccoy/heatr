@@ -17,7 +17,7 @@ import numpy as np
 import yaml
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]  # repo root (moved to scripts/analysis/)
 CONFIG_DIR = ROOT / "configs"
 OUT_ROOT = ROOT / "outputs_eqs" / "_experimental_ab"
 

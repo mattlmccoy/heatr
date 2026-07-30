@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]  # repo root (moved to scripts/analysis/)
 BASE_CFG = ROOT / "configs" / "shape_circle_6min.yaml"
 CFG_DIR = ROOT / "configs" / "_multipart_study"
 RUN_ROOT = ROOT / "outputs_eqs" / "runs" / "circle" / "multipart_interaction"

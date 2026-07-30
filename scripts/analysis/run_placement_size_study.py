@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]  # repo root (moved to scripts/analysis/)
 CFG_BASE = ROOT / "configs" / "shape_circle_placement_optimizer.yaml"
 OUT_ROOT = ROOT / "outputs_eqs" / "placement_size_study"
 TMP_CFG_DIR = ROOT / "configs" / "_tmp_placement_size_study"

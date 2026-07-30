@@ -23,7 +23,7 @@ from scipy.ndimage import zoom
 
 from analysis_fgm_vs_jared_square import load_jared_grid, norm01, structure_stats, N
 
-REPO = Path(__file__).resolve().parent
+REPO = Path(__file__).resolve().parents[2]  # repo root (moved to scripts/analysis/)
 OUT = REPO / "outputs_eqs/pernode_square"
 HEATR_HALF_MM = 10.0
 BASELINE_SIGMA_T = 4.92   # untouched-baseline matched-melt sigma_T (DOSECHECK)

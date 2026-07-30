@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 import matplotlib.pyplot as plt
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]  # repo root (moved to scripts/analysis/)
 CONFIGS = ROOT / "configs"
 OUT = ROOT / "outputs_eqs" / "shell_sweep"
 MPLCONFIG = ROOT / ".mplconfig"

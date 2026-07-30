@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parents[2]  # repo root (moved to scripts/analysis/)
 METRICS_JSON = ROOT / "paperbanana_figures" / "data" / "figure1_square_metrics_real.json"
 OUT_MAIN = ROOT / "rfam_paper_overleaf" / "figures" / "fig_square_workflow_data_dense.png"
 OUT_ALT = ROOT / "paperbanana_figures" / "generated" / "fig_square_workflow_data_dense.png"
