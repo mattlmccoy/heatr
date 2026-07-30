@@ -441,6 +441,15 @@ class Result:
     # dissertation production config (both limiters dormant). When True, numbers
     # were silently altered by a numerical limiter -- treat as suspect.
     clamp_bound: bool = False
+    # S1 energy audit (Joules over the whole domain, cumulative over the run):
+    # in = RF deposited; stored = sensible + latent actually banked in the
+    # temperature/phase state; loss = convection + powder-loss + heatsink sinks.
+    # residual_frac = (in - stored - loss) / max(in, 1e-30). The standing S1
+    # gate: |residual_frac| must be small; a blow-up shows up here first.
+    energy_in_j: float = 0.0
+    energy_stored_j: float = 0.0
+    energy_loss_j: float = 0.0
+    energy_residual_frac: float = 0.0
 
 
 # --------------------------------------------------------------------------- #
@@ -567,6 +576,12 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
 
     T_phi90 = None; reached = False; t90 = float("nan"); phi_hist = []
     clamp_bound = False   # THM-01/02 manifest flag (latched if a clamp binds)
+    # ---- S1 energy audit state (read-only w.r.t. the solve) ----
+    dV = grid.dV
+    e_in = 0.0
+    e_loss = 0.0
+    T0 = T.copy()
+    phi0, _ = phase_fraction(T0, p)
     for it in range(nsteps):
         phi, dphi = phase_fraction(T, p)
         pmult = _sched_mult(float(phi[part].mean()), power_schedule)
@@ -633,6 +648,14 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         # IDEA 4: patterned heat-sink cold-loss to ambient (energy-removing).
         if heatsink_field is not None and heatsink_h != 0.0:
             num -= heatsink_h * np.asarray(heatsink_field, dtype=float) * (T - p.ambient_c)
+        # ---- S1 energy audit (per step, before the dT clamp) ----
+        e_in += float((Qrf * (pmult if pmult != 1.0 else 1.0)).sum()) * dV * p.dt_s
+        e_loss += float(q_conv.sum()) * dV * p.dt_s
+        if h_eff_loss != 0.0:
+            e_loss += float(q_loss.sum()) * dV * p.dt_s
+        if heatsink_field is not None and heatsink_h != 0.0:
+            e_loss += float((heatsink_h * np.asarray(heatsink_field, dtype=float)
+                             * (T - p.ambient_c)).sum()) * dV * p.dt_s
         dTdt = num / np.maximum(rho * cp_eff, 1e-9)
         dT_raw = p.dt_s * np.nan_to_num(dTdt)
         dT = np.clip(dT_raw, -p.max_dt_step_c, p.max_dt_step_c)
@@ -683,6 +706,23 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
             print(f"  t={it*p.dt_s:6.1f}s  Tmax={T[part].max():6.1f}  phi={mean_phi:.3f}  "
                   f"rho={rho_rel[part].mean():.3f}")
 
+    # ---- S1 energy audit: stored energy from the STATE CHANGE ----
+    # Deliberately a first-order sensible-heat model on initial-state properties.
+    # It is an AUDIT, not a solver term: its job is to be O(few %) on healthy
+    # runs and O(>>1) on latent-skip blow-ups. Property-drift refinements are
+    # out of scope.
+    phiN, _ = phase_fraction(T, p)
+    rho_s_eff0 = p.rho_powder + rho_rel * (p.rho_solid - p.rho_powder)
+    rho_map = np.full(part.shape, p.rho_powder)
+    cp_map = np.full(part.shape, p.cp_powder)
+    rho_map[part] = rho_s_eff0[part]
+    cp_map[part] = p.cp_solid
+    e_sensible = float((rho_map * cp_map * (T - T0)).sum()) * dV
+    e_latent = float((rho_map[part] * p.latent_j_per_kg
+                      * (phiN[part] - phi0[part])).sum()) * dV
+    e_stored = e_sensible + e_latent
+    e_resid_frac = (e_in - e_stored - e_loss) / max(e_in, 1e-30)
+
     if T_phi90 is None:
         T_phi90 = T.copy()
     sigma_T = float(T_phi90[part].std())
@@ -691,7 +731,11 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
                   reached=reached, phi_hist=phi_hist, T_max_c=float(T_phi90[part].max()),
                   rho_final=(rho_rel if densify else None),
                   exposure_s=(nsteps * p.dt_s if densify else t90),
-                  clamp_bound=clamp_bound)
+                  clamp_bound=clamp_bound,
+                  energy_in_j=e_in,
+                  energy_stored_j=e_stored,
+                  energy_loss_j=e_loss,
+                  energy_residual_frac=e_resid_frac)
 
 
 def make_fgm(res: Result, magnitude: float = 1.0, baseline: float = 0.5,
