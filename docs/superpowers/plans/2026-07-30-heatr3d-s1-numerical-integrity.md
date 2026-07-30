@@ -27,6 +27,8 @@ Create `test_heatr3d_s1.py`:
 ```python
 """S1 numerical-integrity tests for heatr3d (spec: docs/superpowers/specs/
 2026-07-30-heatr3d-graduation-design.md, Gate S1)."""
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -372,7 +374,7 @@ Append:
 ```python
 def test_enthalpy_update_conserves_energy_on_window_crossing():
     grid, part, p, q = spike_case()
-    p.phase_update = "enthalpy"
+    p = dataclasses.replace(p, phase_update="enthalpy")   # Params is frozen
     res = run(grid, part, p, qrf_override=q, max_time_s=120.0)
     assert abs(res.energy_residual_frac) < 0.05
     # the spiked cell still melts; it just pays the latent toll on the way
@@ -454,9 +456,7 @@ def test_adiabatic_uniform_heating_matches_analytic_plateau():
     n = 16
     grid = Grid(n=n, L=0.060)
     part = np.ones((n, n, n), dtype=bool)
-    p = Params()
-    p.phase_update = "enthalpy"
-    p.conv_h = 0.0
+    p = dataclasses.replace(Params(), phase_update="enthalpy", conv_h=0.0)
     q = np.full((n, n, n), 2.0e5)               # W/m^3, uniform
     t_end = 200.0
     res = run(grid, part, p, qrf_override=q, max_time_s=t_end,
@@ -491,8 +491,7 @@ the test, not the solver: choose q and t_end so the exact solution stays
 BELOW the window top (mid-plateau), where H(T) inversion in-window is
 governed by the same rho_cp used at window entry within 0.5 C tolerance; if
 the 0.5 C tolerance still trips due to property blending, tighten the test by
-setting `p.cp_liquid = p.cp_solid` and `p.k_liquid = p.k_solid` and
-`p.rho_liquid = rho_s` inside this test (a legitimate benchmark
+building the Params with `dataclasses.replace(p, cp_liquid=p.cp_solid, k_liquid=p.k_solid, rho_liquid=rho_s)` inside this test (Params is a frozen dataclass; in-place mutation raises FrozenInstanceError) (a legitimate benchmark
 configuration: constant properties are exactly what the analytic solution
 assumes), and assert `< 0.05` instead.
 
@@ -523,8 +522,7 @@ def test_conduction_decay_matches_fourier_mode():
     n = 24
     grid = Grid(n=n, L=0.060)
     part = np.zeros((n, n, n), dtype=bool)     # all powder, no part
-    p = Params()
-    p.conv_h = 0.0
+    p = dataclasses.replace(Params(), conv_h=0.0)
     q = np.zeros((n, n, n))
     # run() initializes T uniformly; to inject the mode this test uses the
     # T0_override hook added in step 3.
@@ -632,8 +630,7 @@ def test_full_scale_n200_melt_onset_clean_with_enthalpy():
     S1 campaign, not per-commit CI."""
     grid = Grid(n=200, L=0.060)
     part = make_geometry(grid, "sphere", diam=0.020)
-    p = Params()
-    p.phase_update = "enthalpy"
+    p = dataclasses.replace(Params(), phase_update="enthalpy")
     res = run(grid, part, p, max_time_s=900.0)
     assert res.reached is True
     assert abs(res.energy_residual_frac) < 0.05
