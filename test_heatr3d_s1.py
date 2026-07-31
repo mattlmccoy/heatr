@@ -419,3 +419,81 @@ def test_full_scale_n200_melt_onset_clean_with_enthalpy():
     assert res.reached is True
     assert abs(res.energy_residual_frac) < 0.05
     assert res.clamp_bound is False
+
+
+# --------------------------------------------------------------------------- #
+# S1b / EQS-01: the direct-solve fallback must not be armed at large N
+# (docs/superpowers/plans/s1-findings.md section 13.2)
+# --------------------------------------------------------------------------- #
+def test_eqs_large_system_raises_memoryerror_instead_of_segfaulting(monkeypatch):
+    """EQS-01 RED: at N = 8.0e6 complex unknowns spilu cannot allocate
+    ("malloc fails for local dworkptr[]", SuperLU zgstrf) and solve_eqs_3d
+    swallowed it with a bare `except Exception: V = None`, falling through to
+    spla.spsolve -- a direct complex LU of an 8-million-unknown 3-D Laplacian,
+    which SIGSEGVs (reproduced 3/3, findings 13.2). A caller cannot handle a
+    segfault; a batch campaign loses the whole process.
+
+    The guard is tested CHEAPLY: a 16^3 system (N=4096) with spilu monkeypatched
+    to raise the real SuperLU allocation failure and the direct-solve size limit
+    monkeypatched down to 1000, so N > limit exactly as it is at n=200. spsolve
+    is monkeypatched to a tripwire: reaching it at all is the defect."""
+    import heatr3d
+
+    n = 16
+    grid = Grid(n=n, L=0.060)
+    part = np.zeros((n, n, n), dtype=bool)
+    p = Params()
+    gamma = heatr3d.build_gamma(part, p, None, h=grid.h)
+    N = n ** 3
+
+    def _spilu_out_of_memory(*a, **k):
+        raise MemoryError("malloc fails for local dworkptr[]. zgstrf info 2082443264")
+
+    def _spsolve_tripwire(*a, **k):
+        raise AssertionError(
+            "direct spsolve was entered above the direct-solve size limit: "
+            "this is the armed-but-unusable fallback that segfaults at n=200")
+
+    # raising=False so the PRE-FIX run reaches the tripwire (the actual defect)
+    # instead of dying on a missing attribute; the attribute is asserted below.
+    monkeypatch.setattr(heatr3d, "EQS_DIRECT_MAX_UNKNOWNS", 1000, raising=False)
+    monkeypatch.setattr(heatr3d.spla, "spilu", _spilu_out_of_memory)
+    monkeypatch.setattr(heatr3d.spla, "spsolve", _spsolve_tripwire)
+
+    with pytest.raises(MemoryError) as exc:
+        heatr3d.solve_eqs_3d(gamma, grid, p, iterative=True)
+    msg = str(exc.value)
+    assert str(N) in msg, msg                 # the system size
+    assert "GB" in msg, msg                   # the memory estimate
+    assert "96" in msg and "128" in msg, msg  # max supported grids
+    assert hasattr(heatr3d, "EQS_DIRECT_MAX_UNKNOWNS")
+    assert heatr3d.EQS_DIRECT_MAX_UNKNOWNS == 1000   # the monkeypatched value
+
+
+def test_eqs_small_system_still_uses_direct_fallback_when_ilu_fails(monkeypatch):
+    """The guard must NOT disarm the direct fallback for small systems: with the
+    REAL limit (2e6 unknowns) an 8^3 system (N=512) whose ILU fails must still be
+    solved directly and reproduce the parallel-plate field.
+
+    n=8 deliberately: this test pins the BRANCH (small N still reaches spsolve),
+    not the accuracy -- test_eqs_uniform_medium_is_parallel_plate already pins
+    the accuracy at n=24/40. Direct complex LU on this matrix is superlinear in
+    N here (measured on this machine: N=512 0.0 s, N=1728 18 s, N=4096 231 s,
+    under heavy background load), so the fast suite must not pay for a larger
+    direct solve than it needs."""
+    import heatr3d
+
+    n = 8
+    grid = Grid(n=n, L=0.060)
+    part = np.zeros((n, n, n), dtype=bool)
+    p = Params()
+    gamma = heatr3d.build_gamma(part, p, None, h=grid.h)
+
+    def _spilu_fails(*a, **k):
+        raise RuntimeError("Factor is exactly singular")
+
+    monkeypatch.setattr(heatr3d.spla, "spilu", _spilu_fails)
+    V = heatr3d.solve_eqs_3d(gamma, grid, p, iterative=True)
+    y_prof = np.real(V).mean(axis=(0, 2))
+    y_lin = np.linspace(p.v_lo, p.v_hi, n)
+    assert np.max(np.abs(y_prof - y_lin)) < 1e-6 * abs(p.v_lo)

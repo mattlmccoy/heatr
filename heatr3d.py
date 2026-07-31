@@ -194,6 +194,35 @@ def _harmonic(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return out
 
 
+# S1b / EQS-01 (docs/superpowers/plans/s1-findings.md 13.2): largest system size
+# for which the DIRECT complex LU fallback (spla.spsolve -> SuperLU zgstrf) is
+# considered usable. Above this, the direct solve is not merely slow: at
+# N = 8.0e6 (n=200) it SIGSEGVs the interpreter (reproduced 3/3 on a 34 GB
+# machine) after spilu itself fails to allocate. A segfault cannot be handled by
+# a caller and kills a whole batch campaign, so solve_eqs_3d now raises a
+# MemoryError instead of entering it. 2e6 unknowns ~ n=126 on a cubic grid.
+EQS_DIRECT_MAX_UNKNOWNS = 2_000_000
+
+# Practical grid ceilings MEASURED for this solver (findings 13.1/13.2, same
+# machine): full pipeline (EQS + thermal) completes at n=96 (N=8.85e5, EQS 322 s,
+# 2.21 GB); n=128 (N=2.10e6) did not finish an EQS solve in 30 min. Quoted in the
+# EQS-01 error message so a caller learns the supported envelope, not just that
+# it failed.
+EQS_MAX_GRID_FULL_PHYSICS = 96
+EQS_MAX_GRID_EQS_ONLY = 128
+
+
+def _direct_lu_memory_estimate_gb(N: int) -> float:
+    """Order-of-magnitude memory needed by a DIRECT complex LU of the 7-point
+    3-D Laplacian on an N-unknown grid.
+
+    Nested-dissection fill-in for a 3-D box grid is O(N^(4/3)) nonzeros; each
+    complex128 nonzero costs 16 B of value plus ~4 B of index. This is an
+    ESTIMATE for the error message (it is not calibrated against SuperLU's
+    actual COLAMD ordering), stated as such wherever it is printed."""
+    return 20.0 * float(N) ** (4.0 / 3.0) / 1024.0 ** 3
+
+
 def solve_eqs_3d(gamma: np.ndarray, grid: Grid, p: Params,
                  iterative: bool | None = None) -> np.ndarray:
     """Solve div(gamma grad V)=0. Electrodes: y_min plane = v_lo, y_max = v_hi.
@@ -252,6 +281,7 @@ def solve_eqs_3d(gamma: np.ndarray, grid: Grid, p: Params,
     # 3-D LU fill-in explodes, so use ILU-preconditioned BiCGSTAB. Direct fallback.
     use_iter = (N > 50_000) if iterative is None else bool(iterative)   # n>=~37 -> iterative
     V = None
+    iter_failure: BaseException | str | None = None
     if use_iter:
         try:
             ilu = spla.spilu(A.tocsc(), drop_tol=1e-4, fill_factor=12)
@@ -259,9 +289,27 @@ def solve_eqs_3d(gamma: np.ndarray, grid: Grid, p: Params,
             V, info = spla.bicgstab(A, b, rtol=1e-8, atol=0.0, maxiter=2000, M=M)
             if info != 0 or not np.all(np.isfinite(V)):
                 V = None       # fall back to direct
-        except Exception:
+                iter_failure = f"BiCGSTAB did not converge (info={info})"
+        except Exception as exc:                       # ILU build/solve failed
             V = None
+            iter_failure = exc
     if V is None:
+        # S1b / EQS-01: the direct fallback is only armed for systems where a
+        # direct complex LU is actually feasible. Above EQS_DIRECT_MAX_UNKNOWNS
+        # it SIGSEGVs inside SuperLU (findings 13.2) -- an unhandleable failure
+        # mode -- so raise a MemoryError the caller can catch instead.
+        if N > EQS_DIRECT_MAX_UNKNOWNS:
+            raise MemoryError(
+                f"EQS solve failed and the direct fallback is not usable at this "
+                f"size: N={N} complex unknowns ({nx}x{ny}x{nz} grid) exceeds the "
+                f"direct-solve limit EQS_DIRECT_MAX_UNKNOWNS={EQS_DIRECT_MAX_UNKNOWNS}. "
+                f"A direct complex LU here needs ~{_direct_lu_memory_estimate_gb(N):.3g} GB "
+                f"(order-of-magnitude estimate: 20 B x N^(4/3) fill-in) and is known to "
+                f"SIGSEGV inside SuperLU rather than raise. Iterative-path failure: "
+                f"{iter_failure!r}. Largest grids this solver is measured to support "
+                f"today: n={EQS_MAX_GRID_FULL_PHYSICS} for the full EQS+thermal pipeline, "
+                f"n={EQS_MAX_GRID_EQS_ONLY} for an EQS-only solve. Reduce the grid, or "
+                f"wait for the scalable large-N EQS work (decision point D1).")
         V = spla.spsolve(A, b)
     if not np.all(np.isfinite(V)):
         raise RuntimeError("EQS solve produced non-finite values")
