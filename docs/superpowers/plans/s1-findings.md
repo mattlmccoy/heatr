@@ -527,3 +527,82 @@ cd geo-prewarp
 ./.venv312/bin/python -m pytest test_heatr3d_s1.py -m slow -v # SIGSEGV in 17 s (13.2)
 ./.venv312/bin/python scripts/analysis/s1_cfl_powder_mode.py  # the 13.3 table
 ```
+
+### 13.8 THM-03 full-scale evidence (2026-07-31): the n=200 THERMAL march runs clean
+
+Test: `test_n200_thermal_march_clean_with_qrf_override`, `@pytest.mark.slow`.
+Grid(n=200, L=0.060) = 8.0e6 voxels, h = 0.300 mm; sphere d = 0.020 m;
+`phase_update="enthalpy"`; `enforce_cfl` at its default True; RF drive =
+`qrf_override` uniform at `p.power_density_w_per_m3 = 1591549.43 W/m^3` over the
+part; `run()` defaults for the stop (`max_time_s=1500`, `phi_target=0.90`).
+
+**SCOPE (stated up front, also in the test docstring): this is THERMAL / PHASE
+evidence only.** The uniform `qrf_override` deliberately BYPASSES the EQS solve,
+which at n=200 remains INFEASIBLE (EQS-01, 13.2 -- N = 8.0e6 complex unknowns,
+~29.8 GB direct LU; `solve_eqs_3d` now raises MemoryError instead of
+segfaulting, commit 22122da). The scalable large-N EQS path is deferred to the
+**D1 dolfinx spike**. **This run does NOT constitute a full-physics n=200 pass**,
+and `test_full_scale_n200_melt_onset_clean_with_enthalpy` stays blocked on
+exactly that.
+
+**Runtime estimate made BEFORE launching** (20-step probe at n=200, n_sub=2,
+this machine): 5 steps 4.25 s, 20 steps 15.16 s -> **0.758 s/step**, RSS
+2.27 GB. Under the uniform `qrf_override` the melt-onset time is nearly
+grid-independent -- t90 = 645.55 s at n=32, 651.15 s at n=64, 639.85 s at n=96
+(same config, wall 23.1 / 167.0 / 574.5 s) -- so ~640 s / 0.05 s = ~12 800 steps
+-> **~2.70 h estimated**, under the 3 h stop line, so the run was launched.
+
+**Actual: PASSED in 10 303.51 s = 2:51:43** (2.86 h; the realised rate was
+0.806 s/step). Verbatim tail:
+
+```
+  t= 630.0s  Tmax= 259.9  phi=0.891  rho=0.550
+  [s1-energy] in=4257.3 J stored=4219.8 J loss=37.5 J residual_frac=-0.0000
+
+N200-THERMAL: reached=True nsub=2 t90=638.975 sigma_T=22.843 Tmax=260.6
+              clamp=False cfl_violated=False resid=-3.2933e-13 phi_mean=0.9000
+PASSED
+================ 1 passed, 16 deselected in 10303.51s (2:51:43) ================
+```
+
+Assertion values:
+
+| assertion | value | verdict |
+|---|---|---|
+| `res.reached is True` | True (t90 = **638.975 s**, sub-step resolved) | PASS |
+| `res.n_substeps_used == 2` | 2 (dt_sub = 0.025 s; CFL ratio 1.250 -> 0.625) | PASS |
+| `res.clamp_bound is False` | False | PASS |
+| `res.cfl_violated is False` | False | PASS |
+| `abs(res.energy_residual_frac) < 0.05` | **-3.2933e-13** | PASS (11 orders of margin) |
+
+Other measured values: sigma_T = **22.843 C**, T_max = **260.6 C**,
+final mean phi = 0.9000, energy in = 4257.3 J, stored = 4219.8 J, loss = 37.5 J.
+Wall-clock start-to-finish 2:51:43; peak RSS ~2.3 GB.
+
+What this closes and what it does not:
+- **Closes** the THM-03 half of the S1 "the previously blowing-up case runs
+  clean" criterion. This is exactly the grid where the legacy explicit
+  conduction update is CFL-unstable (ratio 1.250, checkerboard amplification
+  1.5003/step, 13.3) and where the old code could only stay bounded by letting
+  the +-10 C THM-01 clamp truncate a divergence. With the guard on: n_sub = 2,
+  **no clamp bound anywhere in 12 780 steps**, melt onset reached, and the
+  standing energy gate exact to 3.3e-13. The fix is not a grid cap -- the run is
+  AT the previously failing grid.
+- **Does not close** the EQS half. No EQS solve was performed. Nothing here says
+  anything about the accuracy or feasibility of the n=200 field solve; that is
+  EQS-01 -> D1.
+- Consistency cross-check: sigma_T = 22.843 at n=200 vs 22.950 / 22.963 / 23.010
+  at n=96 / 64 / 32 on the identical uniform-drive configuration (a 0.7 % spread
+  over a 6x grid refinement), and t90 638.975 vs 639.85 / 651.15 / 645.55 s. The
+  substepped n=200 march sits on the same trend as the unsubstepped coarse runs,
+  i.e. the guard did not distort the solution. (These are uniform-Qrf numbers
+  and are NOT comparable to the full-physics n=96 numbers of 13.5, where the EQS
+  field concentrates the drive: there sigma_T = 19.278 and t90 = 802.6 s.)
+
+Reproduce (2.9 h):
+
+```bash
+cd geo-prewarp
+./.venv312/bin/python -m pytest test_heatr3d_s1.py -m slow \
+    -k n200_thermal_march -v -s
+```

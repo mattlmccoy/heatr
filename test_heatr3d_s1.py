@@ -627,3 +627,58 @@ def test_cfl_guard_is_inert_at_the_default_working_grid():
     assert np.allclose(r_on.T_phi90, r_off.T_phi90, rtol=1e-12, atol=0.0)
     assert abs(r_on.energy_in_j - r_off.energy_in_j) <= 1e-12 * abs(r_off.energy_in_j)
     assert abs(r_on.sigma_T - r_off.sigma_T) <= 1e-12 * abs(r_off.sigma_T)
+
+
+@pytest.mark.slow
+def test_n200_thermal_march_clean_with_qrf_override():
+    """S1b THM-03 full-scale EVIDENCE: the n=200 THERMAL/PHASE march, run to melt
+    onset with the CFL guard engaged, is clean.
+
+    SCOPE - READ THIS BEFORE QUOTING THE RESULT. This is thermal/phase evidence
+    ONLY. The RF drive is a uniform `qrf_override` over the part
+    (p.power_density_w_per_m3), which deliberately BYPASSES the EQS solve. The
+    n=200 EQS solve remains INFEASIBLE (EQS-01, findings 13.2): at N = 8.0e6
+    complex unknowns spilu cannot allocate and the direct LU needs ~29.8 GB, so
+    solve_eqs_3d now raises MemoryError (commit 22122da) instead of segfaulting.
+    A scalable large-N EQS path is deferred to the D1 dolfinx spike. THEREFORE
+    THIS RUN DOES NOT CONSTITUTE A FULL-PHYSICS n=200 PASS -- see
+    test_full_scale_n200_melt_onset_clean_with_enthalpy, which is still blocked
+    on exactly that.
+
+    What it DOES prove: at n=200 (8.0e6 voxels, h = 0.300 mm), where the legacy
+    explicit conduction update is CFL-unstable (dt_s/dt_stable = 1.250,
+    checkerboard amplification 1.5003 per step, findings 13.3), the THM-03 guard
+    auto-substeps (n_sub = 2, dt_sub = 0.025 s), the march reaches the phi = 0.90
+    melt onset, no limiter binds, and the standing energy gate stays exact.
+
+    Runtime estimated BEFORE launching (as the plan requires): 20-step probe at
+    n=200 with n_sub=2 measured 0.758 s/step; t90 under the uniform qrf_override
+    is nearly grid-independent (645.6 s at n=32, 651.2 s at n=64, 639.9 s at
+    n=96), so ~640 s / 0.05 s = ~12800 steps -> ~2.7 h, under the 3 h stop line.
+
+    MEASURED 2026-07-31 (recorded with the full log in
+    docs/superpowers/plans/s1-findings.md 13.8): PASSED in 10303.51 s = 2:51:43.
+      [s1-energy] in=4257.3 J stored=4219.8 J loss=37.5 J residual_frac=-0.0000
+      reached=True nsub=2 t90=638.975 sigma_T=22.843 Tmax=260.6 clamp=False
+      cfl_violated=False resid=-3.2933e-13 phi_mean=0.9000
+    No clamp bound in 12780 steps at the grid where the unguarded scheme is
+    CFL-unstable (ratio 1.250, checkerboard amplification 1.5003/step).
+    """
+    grid = Grid(n=200, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = dataclasses.replace(Params(), phase_update="enthalpy")
+    assert p.enforce_cfl is True                 # the layer under test
+    q = np.zeros(part.shape)
+    q[part] = p.power_density_w_per_m3
+    # default max_time_s / phi_target; verbose so a ~2.7 h run shows progress
+    res = run(grid, part, p, qrf_override=q, verbose=True)
+    print(f"\nN200-THERMAL: reached={res.reached} nsub={res.n_substeps_used} "
+          f"t90={res.t_phi90_s} sigma_T={res.sigma_T:.3f} Tmax={res.T_max_c:.1f} "
+          f"clamp={res.clamp_bound} cfl_violated={res.cfl_violated} "
+          f"resid={res.energy_residual_frac:.4e} "
+          f"phi_mean={float(res.phi_final[part].mean()):.4f}")
+    assert res.reached is True
+    assert res.n_substeps_used == 2
+    assert res.clamp_bound is False
+    assert res.cfl_violated is False
+    assert abs(res.energy_residual_frac) < 0.05
