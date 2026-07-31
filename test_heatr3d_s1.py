@@ -180,6 +180,63 @@ def test_audit_stays_tight_through_melt_both_schemes():
         assert abs(res.energy_residual_frac) < 0.02, scheme
 
 
+def test_adiabatic_uniform_heating_matches_analytic_plateau():
+    """Whole domain = part, uniform q, conv off: T(t) is analytic including
+    the latent plateau. Exact for the enthalpy scheme by construction; this
+    pins the wiring (property maps, dt, source bookkeeping).
+
+    Sizing (deviation from the plan's q=2.0e5 / t_end=200 s, which deposits
+    only 4.0e7 J/m^3 and lands at 56.8 C -- entirely BELOW the melt window, so
+    it would never touch the latent plateau it is named for): q=2.0e6 W/m^3 for
+    100.0 s deposits 2.0e8 J/m^3 and lands MID-PLATEAU at T_exact = 178.48 C
+    (phi ~ 0.35), which is what the plan's step-3 note asks for.
+
+    Two arms, both measured 2026-07-30 (./.venv312, n=16, dt=0.05, 2000 steps,
+    clamp_bound False, energy residual ~1e-14 in both):
+      * default property blending: T_num = 178.312174 vs T_exact = 178.482866,
+        err = 1.71e-01 C  (< the plan's 0.5 C bound). The gap is NOT a wiring
+        error: once phi > 0 the solver blends rho -> rho_liquid and
+        cp -> cp_liquid, while the closed-form H(T) above assumes the fixed
+        solid slope rho_s*cp_solid. That is a property-model difference and it
+        is what this arm measures.
+      * constant properties (cp_liquid=cp_solid, k_liquid=k_solid,
+        rho_liquid=rho_s -- the plan's step-3 escape hatch, and exactly the
+        assumption the analytic solution makes): T_num = T_exact to
+        err = 3.13e-13 C, i.e. machine precision. This is the real wiring gate.
+    """
+    from heatr3d import T_from_enthalpy, enthalpy_from_T
+    n = 16
+    grid = Grid(n=n, L=0.060)
+    part = np.ones((n, n, n), dtype=bool)
+    p = dataclasses.replace(Params(), phase_update="enthalpy", conv_h=0.0)
+    q_val = 2.0e6                                # W/m^3, uniform
+    q = np.full((n, n, n), q_val)
+    t_end = 100.0                                # lands mid-plateau (see above)
+    # analytic: uniform state, no gradients -> pure source integration
+    rho_s = p.rho_powder + p.rho_rel * (p.rho_solid - p.rho_powder)
+    rho_cp = rho_s * p.cp_solid
+    rho_L = rho_s * p.latent_j_per_kg
+    H_end = enthalpy_from_T(np.array([p.preheat_c]), rho_cp, rho_L, p) \
+        + q_val * t_end
+    T_exact = float(T_from_enthalpy(H_end, rho_cp, rho_L, p)[0])
+    assert p.t_pc_c - p.dt_pc_c / 2 < T_exact < p.t_pc_c + p.dt_pc_c / 2
+
+    res = run(grid, part, p, qrf_override=q, max_time_s=t_end,
+              phi_target=2.0)                    # never stop early
+    assert abs(float(res.T_final.mean()) - T_exact) < 0.5
+    assert float(res.T_final.std()) < 1e-6
+
+    # constant-property arm: the analytic solution's own assumptions
+    p_const = dataclasses.replace(p, cp_liquid=p.cp_solid, k_liquid=p.k_solid,
+                                  rho_liquid=rho_s)
+    res_c = run(grid, part, p_const, qrf_override=q, max_time_s=t_end,
+                phi_target=2.0)
+    assert abs(float(res_c.T_final.mean()) - T_exact) < 0.05
+    assert float(res_c.T_final.std()) < 1e-6
+    assert res_c.clamp_bound is False
+    assert abs(res_c.energy_residual_frac) < 1e-9
+
+
 def test_legacy_default_is_unchanged():
     """Default Params must still take the legacy apparent_cp path.
 

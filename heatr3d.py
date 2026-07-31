@@ -479,6 +479,11 @@ class Result:
     energy_stored_j: float = 0.0
     energy_loss_j: float = 0.0
     energy_residual_frac: float = 0.0
+    # Final-timestep temperature field [C], i.e. T at loop exit. Distinct from
+    # T_phi90 (the melt-onset read, or the final field when phi_target was never
+    # reached). Needed by the S1 analytic benchmarks, which compare the whole
+    # final field against a closed-form solution.
+    T_final: np.ndarray | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -782,7 +787,8 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
                   energy_in_j=e_in,
                   energy_stored_j=e_stored,
                   energy_loss_j=e_loss,
-                  energy_residual_frac=e_resid_frac)
+                  energy_residual_frac=e_resid_frac,
+                  T_final=T.copy())
 
 
 def make_fgm(res: Result, magnitude: float = 1.0, baseline: float = 0.5,
