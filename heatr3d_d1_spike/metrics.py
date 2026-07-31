@@ -87,14 +87,38 @@ def masked_grad_2d(V: np.ndarray, mask: np.ndarray, h: float):
     a linear field and therefore isolates that artifact from real physics.
 
     Works for real or complex V (V is complex in the EQS solve)."""
+    return masked_grad_nd(V, mask, h, ndim=2)
+
+
+def masked_grad_3d(V: np.ndarray, mask: np.ndarray, h: float):
+    """3-D form of masked_grad_2d: E = -grad V with a stencil confined to the
+    part, returning (Ex, Ey, Ez).
+
+    Used by the EQS-02 impact study, where the corrected Q_rf must be formed on
+    the WHOLE volume (not just the mid-plane) so it can drive run(qrf_override).
+    For the exactly z-invariant extruded shapes this is identical to applying
+    masked_grad_2d per z-slice with Ez == 0 (pinned by
+    test_masked_grad_3d_matches_2d_per_slice_for_a_z_invariant_field), but the
+    volumetric form does not ASSUME the invariance -- it is measured."""
+    return masked_grad_nd(V, mask, h, ndim=3)
+
+
+def masked_grad_nd(V: np.ndarray, mask: np.ndarray, h: float, ndim: int):
+    """Shared implementation of the mask-confined gradient in `ndim` axes.
+
+    Second-order central difference wherever BOTH neighbours along an axis are
+    inside the mask; one-sided (exact for a linear field) where only one is;
+    zero where neither is. Never differences across the mask edge."""
     V = np.asarray(V)
     mask = np.asarray(mask, dtype=bool)
+    if V.ndim != ndim or mask.shape != V.shape:
+        raise ValueError(f"masked_grad_nd: expected {ndim}-D V and matching mask")
     out = []
-    for ax in (0, 1):
+    for ax in range(ndim):
         g = np.zeros(V.shape, dtype=V.dtype if np.iscomplexobj(V) else float)
         fwd_ok = np.zeros(V.shape, bool)
         bwd_ok = np.zeros(V.shape, bool)
-        sl_all = [slice(None)] * 2
+        sl_all = [slice(None)] * ndim
         s_lo, s_hi = list(sl_all), list(sl_all)
         s_lo[ax] = slice(0, -1)
         s_hi[ax] = slice(1, None)
@@ -110,7 +134,7 @@ def masked_grad_2d(V: np.ndarray, mask: np.ndarray, h: float):
                      np.where(fwd_ok, dfwd, np.where(bwd_ok, dbwd, 0.0)))
         g = np.where(mask, g, 0.0)
         out.append(-g)
-    return out[0], out[1]
+    return tuple(out)
 
 
 # --------------------------------------------------------------------------- #

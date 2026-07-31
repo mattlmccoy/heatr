@@ -128,6 +128,66 @@ def test_masked_grad_isolated_cell_has_zero_gradient():
     assert Ex[2, 2] == 0.0 and Ey[2, 2] == 0.0
 
 
+# --------------------------------------------------------------------------- #
+# 3-D mask-aware gradient (EQS-02 impact study: the same diagnostic applied to
+# the FULL volume, so a corrected Q_rf can drive the thermal march)
+# --------------------------------------------------------------------------- #
+def _grid3(nx, ny, nz, h):
+    x = (np.arange(nx) + 0.5) * h
+    y = (np.arange(ny) + 0.5) * h
+    z = (np.arange(nz) + 0.5) * h
+    return np.meshgrid(x, y, z, indexing="ij")
+
+
+def test_masked_grad_3d_is_exact_for_a_linear_field_including_boundary_cells():
+    h = 0.5
+    X, Y, Z = _grid3(9, 7, 8, h)
+    mask = np.zeros(X.shape, bool)
+    mask[2:7, 1:6, 3:7] = True
+    V = np.where(mask, 3.0 * X - 2.0 * Y + 5.0 * Z, 1e9)   # poisoned outside
+    Ex, Ey, Ez = m.masked_grad_3d(V, mask, h)
+    assert np.allclose(Ex[mask], -3.0)
+    assert np.allclose(Ey[mask], +2.0)
+    assert np.allclose(Ez[mask], -5.0)
+
+
+def test_masked_grad_3d_matches_2d_per_slice_for_a_z_invariant_field():
+    """The extruded shapes are exactly z-invariant, so the 3-D routine must
+    reduce to the 2-D one applied per z-slice, with Ez identically zero."""
+    h = 0.75
+    X, Y, _ = _grid3(11, 9, 5, h)
+    mask2 = np.zeros(X.shape[:2], bool)
+    mask2[3:8, 2:7] = True
+    mask = np.repeat(mask2[:, :, None], 5, axis=2)
+    V2 = np.where(mask2, np.sin(X[:, :, 0]) * np.cos(2.0 * Y[:, :, 0]), 1e9)
+    V = np.repeat(V2[:, :, None], 5, axis=2)
+    Ex3, Ey3, Ez3 = m.masked_grad_3d(V, mask, h)
+    for k in range(5):
+        Ex2, Ey2 = m.masked_grad_2d(V2, mask2, h)
+        assert np.allclose(Ex3[:, :, k], Ex2)
+        assert np.allclose(Ey3[:, :, k], Ey2)
+    assert np.allclose(Ez3, 0.0)
+
+
+def test_masked_grad_3d_isolated_cell_has_zero_gradient():
+    mask = np.zeros((5, 5, 5), bool)
+    mask[2, 2, 2] = True
+    V = np.zeros((5, 5, 5))
+    V[2, 2, 2] = 7.0
+    Ex, Ey, Ez = m.masked_grad_3d(V, mask, 1.0)
+    assert Ex[2, 2, 2] == 0.0 and Ey[2, 2, 2] == 0.0 and Ez[2, 2, 2] == 0.0
+
+
+def test_masked_grad_3d_handles_complex_fields():
+    h = 1.0
+    X, _, _ = _grid3(6, 6, 6, h)
+    mask = np.ones(X.shape, bool)
+    V = (1.0 + 2.0j) * X
+    Ex, Ey, Ez = m.masked_grad_3d(V, mask, h)
+    assert np.allclose(Ex, -(1.0 + 2.0j))
+    assert np.allclose(Ey, 0.0) and np.allclose(Ez, 0.0)
+
+
 def test_weighted_percentile_equal_weights_is_the_order_statistic():
     v = np.arange(1.0, 101.0)
     w = np.ones_like(v)
