@@ -292,6 +292,52 @@ def test_conduction_decay_matches_fourier_mode():
     assert abs(float(res.T_final.mean()) - p.preheat_c) < 1e-9
 
 
+def test_eqs_uniform_medium_is_parallel_plate():
+    """Characterization: on a uniform medium the EQS solve must reproduce the
+    parallel-plate field exactly (V linear in y, constant in x and z).
+
+    Result: PASS on BOTH solver paths (measured 2026-07-30, ./.venv312):
+      n=24 (N=13824 <= 50000 -> direct spsolve)
+          max|V(y) - linspace(v_lo, v_hi, n)| = 1.25e-11 V (1.4e-14 relative)
+          max transverse std = 9.46e-13 V,  max|Im V| = 8.3e-17 V
+      n=40 (N=64000  > 50000 -> ILU-preconditioned BiCGSTAB)
+          max|V(y) - linear| = 3.14e-06 V (3.7e-09 relative)
+          max transverse std = 4.84e-06 V,  max|Im V| = 2.0e-16 V
+    The n=40 arm matters because every production grid n >= 37 takes the
+    iterative branch; its error floor is set by the solver's own rtol=1e-8, so
+    it is asserted at 1e-6 relative, not at the direct path's 1e-9.
+
+    FINDING (documented, not a failure -- see docs/superpowers/plans/
+    s1-findings.md section 6): the Dirichlet rows sit at the CELL CENTRES of
+    the first/last y layers, so the effective plate gap is (n-1)h, not L. The
+    measured uniform field is |E_y| = v_lo/((n-1)h) = 14956.521739 V/m at n=24
+    (ptp 2.6e-09), matching that to 13 digits and exceeding the nominal
+    v_lo/L = 14333.33 V/m by L/(L-h) = 4.3%. The bias is grid dependent
+    (0.5% at n=200), but it is a UNIFORM scale factor on E, and
+    compute_qrf_3d renormalizes Q to a fixed total absorbed power, so it
+    cancels out of Qrf on a uniform medium. It is not corrected here.
+    """
+    from heatr3d import build_gamma, solve_eqs_3d
+    for n, tol_lin, tol_std in ((24, 1e-6, 1e-9), (40, 1e-6, 1e-7)):
+        grid = Grid(n=n, L=0.060)
+        part = np.zeros((n, n, n), dtype=bool)      # uniform virgin bed
+        p = Params()
+        gamma = build_gamma(part, p, None, h=grid.h)
+        V = solve_eqs_3d(gamma, grid, p)
+        Vr = np.real(V)
+        # linear in y between the plates, uniform in x and z
+        y_prof = Vr.mean(axis=(0, 2))
+        y_lin = np.linspace(p.v_lo, p.v_hi, n)
+        assert np.max(np.abs(y_prof - y_lin)) < tol_lin * abs(p.v_lo), n
+        assert float(Vr.std(axis=(0, 2)).max()) < tol_std * abs(p.v_lo), n
+        # uniform medium -> no phase lag anywhere
+        assert float(np.max(np.abs(np.imag(V)))) < 1e-12 * abs(p.v_lo), n
+        # uniform E_y at the cell-centre plate gap (n-1)h (see FINDING above)
+        Ey = -np.gradient(Vr, grid.h, edge_order=1)[1]
+        assert abs(float(Ey.mean()) - p.v_lo / ((n - 1) * grid.h)) < 1e-6, n
+        assert float(np.ptp(Ey)) < 1e-2, n
+
+
 def test_legacy_default_is_unchanged():
     """Default Params must still take the legacy apparent_cp path.
 
