@@ -1,0 +1,96 @@
+{
+  "gates": [
+    {
+      "run_dir": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/geometry_dual_readstate/runs/square/baseline",
+      "fgm_enabled": false,
+      "map_npz": null,
+      "melt_onset_outer_index": 845,
+      "melt_onset_time_s": 423.0,
+      "T_phi90_max_abs_diff_c": 0.0,
+      "T_phi90_max_abs_diff_part_c": 0.0,
+      "prototype": {
+        "T_bar_part_c": 186.24772794723512,
+        "ui_rms_part": 0.030205563916829884,
+        "sigma_T_c": 4.930989680787467
+      },
+      "stored": {
+        "T_bar_part_c": 186.24772794723512,
+        "ui_rms_part": 0.030205563916829884,
+        "sigma_T_c": 4.930989680787467
+      },
+      "sigma_T_abs_diff_c": 0.0,
+      "PASS_bit_identical": true,
+      "P_abs_state_B_W_per_m": 499.99999999993986,
+      "wall_s": 11.197519042063504
+    },
+    {
+      "run_dir": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/geometry_dual_readstate/runs/square/fgm_m0p85",
+      "fgm_enabled": true,
+      "map_npz": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/geometry_dual_readstate/runs/square/map_m0p85/fgm_baseline_T_phi90_4bpp_mag0p85.npz",
+      "melt_onset_outer_index": 672,
+      "melt_onset_time_s": 336.5,
+      "T_phi90_max_abs_diff_c": 0.0,
+      "T_phi90_max_abs_diff_part_c": 0.0,
+      "prototype": {
+        "T_bar_part_c": 186.63688535690306,
+        "ui_rms_part": 0.023027974452522214,
+        "sigma_T_c": 3.7682260154890703
+      },
+      "stored": {
+        "T_bar_part_c": 186.63688535690306,
+        "ui_rms_part": 0.023027974452522214,
+        "sigma_T_c": 3.7682260154890703
+      },
+      "sigma_T_abs_diff_c": 0.0,
+      "PASS_bit_identical": true,
+      "P_abs_state_B_W_per_m": 564.5725753281424,
+      "wall_s": 11.321662375004962
+    },
+    {
+      "run_dir": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/geometry_dual_readstate/runs/triangle/fgm_m0p85",
+      "fgm_enabled": true,
+      "map_npz": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/geometry_dual_readstate/runs/triangle/map_m0p85/fgm_baseline_T_phi90_4bpp_mag0p85.npz",
+      "melt_onset_outer_index": 572,
+      "melt_onset_time_s": 286.5,
+      "T_phi90_max_abs_diff_c": 0.0,
+      "T_phi90_max_abs_diff_part_c": 0.0,
+      "prototype": {
+        "T_bar_part_c": 225.26094650268556,
+        "ui_rms_part": 0.22425416403823273,
+        "sigma_T_c": 45.35785947554146
+      },
+      "stored": {
+        "T_bar_part_c": 225.26094650268556,
+        "ui_rms_part": 0.22425416403823273,
+        "sigma_T_c": 45.35785947554146
+      },
+      "sigma_T_abs_diff_c": 0.0,
+      "PASS_bit_identical": true,
+      "P_abs_state_B_W_per_m": 556.3118730969336,
+      "wall_s": 10.033962917048484
+    },
+    {
+      "run_dir": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/geometry_dual_readstate/runs/cross/fgm_m0p85",
+      "fgm_enabled": true,
+      "map_npz": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/geometry_dual_readstate/runs/cross/map_m0p85/fgm_baseline_T_phi90_4bpp_mag0p85.npz",
+      "melt_onset_outer_index": 663,
+      "melt_onset_time_s": 332.0,
+      "T_phi90_max_abs_diff_c": 0.0,
+      "T_phi90_max_abs_diff_part_c": 0.0,
+      "prototype": {
+        "T_bar_part_c": 230.2342552568001,
+        "ui_rms_part": 0.15152219399752184,
+        "sigma_T_c": 31.400589027952826
+      },
+      "stored": {
+        "T_bar_part_c": 230.2342552568001,
+        "ui_rms_part": 0.15152219399752184,
+        "sigma_T_c": 31.400589027952826
+      },
+      "sigma_T_abs_diff_c": 0.0,
+      "PASS_bit_identical": true,
+      "P_abs_state_B_W_per_m": 601.4226507268081,
+      "wall_s": 7.51437725010328
+    }
+  ]
+}
