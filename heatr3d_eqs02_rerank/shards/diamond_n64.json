@@ -1,0 +1,92 @@
+{
+ "shape": "diamond",
+ "n": 64,
+ "h_m": 0.0009375,
+ "L_m": 0.06,
+ "geometry": {
+  "diam": 0.02,
+  "zspan": "L",
+  "src": "local mask, 2-D-published cross-section"
+ },
+ "shape_class": "prism_full_height",
+ "n_voxels_in_part": 14080,
+ "n_voxels_interior": 9216,
+ "n_voxels_surface_band": 4864,
+ "surface_band_volume_fraction": 0.34545454545454546,
+ "surface_band_rule": "within 1.5 voxels of the part boundary",
+ "wall_eqs_s": 86.58952537504956,
+ "power_identity": {
+  "p_legacy_w": 18.464460194645664,
+  "p_masked_w": 18.464460194645664,
+  "rel_diff": 0.0
+ },
+ "qrf": {
+  "legacy": {
+   "mean_w_per_m3": 1591549.4309189531,
+   "max_over_mean": 17.054699911241578,
+   "p99_over_mean": 17.054693430619608,
+   "cv": 2.385309004603502,
+   "interior_mean_w_per_m3": 591586.0341512128,
+   "surface_mean_w_per_m3": 3486216.919531514,
+   "power_fraction_in_surface_band": 0.7567025301861537
+  },
+  "masked": {
+   "mean_w_per_m3": 1591549.4309189531,
+   "max_over_mean": 3.2185185903612386,
+   "p99_over_mean": 3.218517265574028,
+   "cv": 0.5376784020027287,
+   "interior_mean_w_per_m3": 1500755.2511114457,
+   "surface_mean_w_per_m3": 1763580.508448967,
+   "power_fraction_in_surface_band": 0.38279483570105866
+  }
+ },
+ "thermal": {
+  "legacy": {
+   "sigma_T_c": 26.213959702140748,
+   "t_phi90_s": 531.4,
+   "T_max_c": 292.4239607323629,
+   "T_mean_c": 212.84184816940788,
+   "T_min_c": 156.15349840329213,
+   "interior_mean_c": 212.68294821903916,
+   "interior_std_c": 17.242239300370453,
+   "surface_mean_c": 213.14292175958016,
+   "surface_std_c": 37.7590685994742,
+   "surface_minus_interior_mean_c": 0.45997354054100015,
+   "gates": {
+    "reached_phi90": true,
+    "energy_residual_frac": 1.6816781435006212e-13,
+    "clamp_bound": false,
+    "cfl_violated": false,
+    "n_substeps_used": 1
+   },
+   "wall_thermal_s": 285.0593514160719
+  },
+  "masked": {
+   "sigma_T_c": 21.141717646084242,
+   "t_phi90_s": 439.65000000000003,
+   "T_max_c": 237.22719513173647,
+   "T_mean_c": 211.90107499747353,
+   "T_min_c": 147.3572684976446,
+   "interior_mean_c": 221.27390403116664,
+   "interior_std_c": 14.498259017019034,
+   "surface_mean_c": 194.14203051258121,
+   "surface_std_c": 20.34104358299536,
+   "surface_minus_interior_mean_c": -27.131873518585422,
+   "gates": {
+    "reached_phi90": true,
+    "energy_residual_frac": -1.8730970677814073e-15,
+    "clamp_bound": false,
+    "cfl_violated": false,
+    "n_substeps_used": 1
+   },
+   "wall_thermal_s": 146.88240537501406
+  }
+ },
+ "phase_update": "enthalpy",
+ "phi_target": 0.9,
+ "max_time_s": 1500.0,
+ "peak_rss_gb": 0.6947021484375,
+ "wall_total_s": 518.6041364159901,
+ "python": "3.12.7",
+ "heatr3d_default_qrf_gradient": "masked"
+}
