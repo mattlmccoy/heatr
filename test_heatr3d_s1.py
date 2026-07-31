@@ -371,36 +371,41 @@ def test_full_scale_n200_melt_onset_clean_with_enthalpy():
     S1 fix: must stay clean. Deselected by default (pytest.ini addopts
     -m "not slow"); run explicitly with `-m slow`.
 
-    STATUS 2026-07-30: this test does NOT pass yet, and it is committed in that
-    state deliberately (the plan forbids weakening the assertions). It is the
-    open S1 target. Two independent blockers were measured; both are recorded
-    with numbers in docs/superpowers/plans/s1-findings.md section 13.
+    STATUS 2026-07-31 (S1b): this test still does NOT pass, and it is committed
+    in that state deliberately (the plan forbids weakening the assertions). It
+    is the open S1 target. It now has exactly ONE remaining blocker.
 
-    (1) HARD BLOCKER - the n=200 EQS solve crashes the interpreter. Run once as
-        `pytest test_heatr3d_s1.py -m slow`: Fatal Python error: Segmentation
-        fault after 17 s, inside scipy spsolve at heatr3d.py:265, i.e. the
-        DIRECT fallback that solve_eqs_3d takes after spilu(fill_factor=12)
-        fails to allocate ("malloc fails for local dworkptr[]", SuperLU zgstrf)
-        on N = 8.0e6 complex unknowns. Reproduced 3/3 (twice standalone, once
-        under pytest) on a 34 GB machine. EQS cost measured at smaller grids:
-        n=64 (N=2.6e5) 97.7 s / 0.81 GB; n=96 (N=8.8e5) 322.1 s / 2.21 GB;
-        n=128 did not finish in 30 min.
+    SOLE REMAINING BLOCKER - EQS-01, deferred to D1. The n=200 EQS solve is
+        infeasible on this machine: at N = 8.0e6 complex unknowns
+        spilu(drop_tol=1e-4, fill_factor=12) cannot allocate and a direct
+        complex LU needs ~29.8 GB. As of commit 22122da this no longer
+        SIGSEGVs (it used to: Fatal Python error after 17 s inside scipy
+        spsolve at heatr3d.py:265, reproduced 3/3 on a 34 GB machine); the
+        direct fallback is armed only below EQS_DIRECT_MAX_UNKNOWNS = 2e6 and
+        solve_eqs_3d raises an informative MemoryError above it. The size
+        ceiling itself is unchanged and measured: n=64 (N=2.6e5) 97.7 s /
+        0.81 GB; n=96 (N=8.8e5) 322.1 s / 2.21 GB; n=128 (N=2.10e6) did not
+        finish in 30 min. The MemoryError quotes the supported grids as n=96
+        full pipeline / n=128 EQS-only. A SCALABLE LARGE-N EQS PATH IS
+        DEFERRED TO THE D1 DOLFINX FEM SPIKE; nothing else blocks this test.
 
-    (2) PHYSICS BLOCKER - even with a working EQS solve, `clamp_bound is False`
-        cannot hold at n=200: the explicit conduction update is CFL-UNSTABLE
-        there. alpha_max over the domain is the POWDER value
-        k_powder/(rho_powder*cp_powder) = 3.7504e-07 m^2/s (4.78x the liquid
-        value the Task-3 note used), so dt < h^2/(6 alpha) fails for
-        n > 178.9 at dt_s = 0.05 s, L = 0.060 m. Measured checkerboard-mode
-        growth per step (all-powder, no source, no convection) vs the predicted
-        |1 - 12 alpha dt/h^2|: n=176 0.9362 vs 0.9362 (decays), n=184 1.1162 vs
-        1.1162 (GROWS), n=200 1.1558 measured vs 1.5003 predicted with
-        clamp_bound True (the +-10 C limiter truncates the true growth).
-        The enthalpy fix cannot address this; it is a separate mechanism.
+    CLEARED 2026-07-31 - THM-03 (was blocker 2): the explicit conduction update
+        is CFL-unstable at n=200 (alpha_max is the POWDER value 3.7504e-07
+        m^2/s, 4.78x the liquid value the Task-3 note used, so
+        dt < h^2/(6 alpha) fails for n > 178.9 at dt_s = 0.05 s, L = 0.060 m;
+        measured checkerboard growth 1.1162 vs predicted 1.1162 at n=184).
+        Params.enforce_cfl (default True) now auto-substeps: n_sub = 2 at
+        n=200. Evidenced at full scale by
+        test_n200_thermal_march_clean_with_qrf_override -- 12780 steps at
+        n=200, clamp_bound False, residual -3.2933e-13, melt onset reached
+        (findings 13.8). So `clamp_bound is False` is no longer expected to
+        fail here; only the EQS solve is.
 
-    Runtime estimate for when the blockers are cleared (measured 2026-07-30 on
-    this machine): thermal loop at n=200 = 0.370 s/step, i.e. 1.85 h for
-    max_time_s=900 (18000 steps) and 3.08 h for 1500 s, plus the EQS solve.
+    Runtime estimate for when EQS-01 is cleared: the thermal march at n=200
+    with the CFL guard engaged is MEASURED at 0.806 s/step (n_sub=2), i.e.
+    2:51:43 to the phi=0.90 crossing at t90 = 638.975 s under a uniform drive;
+    the EQS-driven crossing will differ (the n=96 full-physics t90 is 802.6 s),
+    plus the EQS solve itself.
 
     Margin note on `reached`: 900 s is close to melt onset. At n=32 mean phi
     only gets to 0.8787 by 900 s (run()'s own default is max_time_s=1500), but

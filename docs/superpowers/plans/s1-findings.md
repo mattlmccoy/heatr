@@ -331,6 +331,20 @@ still untouched. Machine: Apple Silicon, 12 cores, 34.36 GB RAM.
 
 ## 13. Task 8 landed the wiring; the n=200 run itself is blocked twice over
 
+> **STATUS RECONCILED 2026-07-31 (post-S1b).** Section 13 was written when both
+> blockers were raw and outstanding. Neither is raw any more; every measurement
+> below still stands, only the STATUS changed. Amendments are inline in 13.2,
+> 13.3 and 13.6, and the new evidence is in 13.8.
+>
+> | blocker | status now | where |
+> |---|---|---|
+> | **THM-03** (explicit conduction CFL, n > 178.9) | **FIXED** -- CFL guard + auto-substepping, commit 06bd87d; closed-form-verified; default-inert for **n <= 169**; evidenced at n=200 | 13.3 amendment, 13.8 |
+> | **EQS-01** (n=200 EQS SIGSEGV) | **CONVERTED, NOT SOLVED** -- informative MemoryError instead of a segfault, commit 22122da; measured ceilings n=96 full physics / n=128 EQS-only; scalable path **deferred to D1** | 13.2 amendment |
+>
+> So the "blocked twice over" of this heading is now "blocked once over", and
+> the remaining block is a solver-capability item owned by D1, not an unfixed
+> defect.
+
 Landed and verified:
 - `test_full_scale_n200_melt_onset_clean_with_enthalpy`, `@pytest.mark.slow`,
   assertions exactly as the plan specifies (`reached is True`,
@@ -396,6 +410,31 @@ any memory size and here dies inside SuperLU. Two defects, not one:
 This is a genuine S1 (numerical integrity) defect of the EQS core and it is NOT
 addressed by anything in Tasks 1-7. It also caps the practical grid: the largest
 grid at which the full pipeline runs today is n<=96 (section 13.5).
+
+> **STATUS AMENDED 2026-07-31: EQS-01 defect (2) is FIXED; defect (1) is closed
+> by design; the underlying CAPABILITY gap is DEFERRED TO D1.** Commit 22122da:
+> the direct fallback is armed only below `EQS_DIRECT_MAX_UNKNOWNS = 2e6`; above
+> it `solve_eqs_3d` raises an informative `MemoryError` naming N, the grid, the
+> order-of-magnitude LU memory estimate (**~29.8 GB at n=200**), the underlying
+> iterative-path failure, and the measured supported grids. Small systems keep
+> the existing direct path unchanged (control test:
+> `test_eqs_small_system_still_uses_direct_fallback_when_ilu_fails`, N=512 still
+> solved to the parallel-plate field).
+>
+> What that does and does not buy:
+> - **Gone:** the process-killing SIGSEGV. A batch campaign now sees a catchable
+>   exception that says what to do, instead of losing the interpreter.
+> - **Not gone:** the size ceiling itself. Measured, and unchanged:
+>   **n = 96 for the full pipeline (EQS + thermal), n = 128 for EQS-only.**
+>   n = 200 EQS is still infeasible on this machine.
+> - **Owner of the remaining work: D1 (dolfinx FEM spike).** A scalable large-N
+>   EQS path (matrix-free / multigrid / FEM with a proper preconditioner) is
+>   explicitly out of S1b scope and deferred there. EQS-01 is therefore the SOLE
+>   remaining S1 blocker, and it is a capability item, not an unfixed defect.
+>
+> This is why the n=200 evidence run of 13.8 uses `qrf_override`: it is the only
+> way to exercise the thermal/phase core at that grid today, and it is
+> explicitly NOT a full-physics n=200 pass.
 
 ### 13.3 BLOCKER 2 (new finding, THM-03): the n>=200 trigger is a conduction
 CFL violation in the POWDER -- section 3 conclusion (1) is CORRECTED
@@ -466,6 +505,43 @@ Consequences:
   energy-clean-ish, so the residual gate alone does NOT catch THM-03 -- the
   clamp_bound flag does.
 
+> **STATUS AMENDED 2026-07-31: THM-03 is FIXED** (commit 06bd87d), by fix
+> options (a)+(b) of the list immediately above. Everything measured in 13.3
+> stands unchanged -- it is the diagnosis the fix is built on. What changed:
+>
+> - `run()` computes `dt_stable = h^2/(6 alpha_max)` over all materials present
+>   (`alpha_max_thermal`, `dt_stable_thermal`, `cfl_substeps`, `CFL_SAFETY=0.9`)
+>   and, with the new `Params.enforce_cfl` (default **True**), SUBSTEPS the
+>   thermal update `n_sub = ceil(dt_s / (0.9 dt_stable))` times per `dt_s`. Qrf
+>   is held fixed across the substeps of a step (exact: Qrf is computed once per
+>   run). `Result` gains `n_substeps_used` and `cfl_violated`.
+>   `enforce_cfl=False` keeps the legacy single step, latches `cfl_violated` and
+>   logs the closed-form growth rate.
+> - Closed-form verification at CFL ratio 1.25 (the n=200 value, reproduced
+>   cheaply at n=32 by raising dt_s): legacy grows the checkerboard at
+>   **1.5000/step vs the predicted 1.5003**, to 3.33 C in 20 steps; enforced
+>   `n_sub = 2` DECAYS it to 2.6e-06 C, domain mean conserved to 0.0.
+> - The standing energy gate stays exact under substepping (the audit banks per
+>   substep with `dt_sub`): RED with the audit reverted to `p.dt_s` gives
+>   residual **+0.5000**; GREEN gives **-1.09e-15**.
+> - **CORRECTION to the no-change ceiling.** The default-inert ceiling is
+>   **n <= 169** at dt_s = 0.05 s, L = 0.060 m -- NOT the n <= 178 that the
+>   marginal-stability threshold (178.9) in the table above would suggest. The
+>   0.9 safety factor pulls the substepping trigger down to n = 170. Recorded
+>   explicitly because earlier write-ups of this finding quoted n <= 178 as the
+>   ceiling. Verified out of band against the pre-change module (22122da), n=32
+>   sphere, fixed Qrf, both phase schemes x densify on/off: **4/4 BIT-IDENTICAL**
+>   (max|dT| = 0.0 on T_final / T_phi90 / phi_final / rho_final; identical
+>   sigma_T, energy_in_j, t90, phi_hist). Every historical heatr3d number is
+>   preserved.
+> - Regression tests: `test_cfl_stability_criterion_and_substep_count`
+>   (n=32/96/160/169 -> 1; n=170/184/200 -> 2),
+>   `test_cfl_substepping_bounds_the_checkerboard_mode_legacy_grows`,
+>   `test_energy_gate_stays_exact_under_substepping`,
+>   `test_cfl_guard_is_inert_at_the_default_working_grid`.
+> - **Full-scale evidence at the trigger grid: section 13.8** (n=200, 12780
+>   steps, no clamp bound, residual -3.29e-13, melt onset reached).
+
 ### 13.4 `max_time_s=900` is marginal for phi_target=0.90, and grid dependent
 
 Measured at n=32, default Params, phi_target never triggered
@@ -510,6 +586,29 @@ as predicted. Wall clock 1049 s (322 s of it the EQS solve).
 
 ### 13.6 Verdict
 
+> **VERDICT AMENDED 2026-07-31 (post-S1b). The 2026-07-30 verdict below is kept
+> verbatim; this supersedes it.**
+>
+> **S1 PARTIALLY PASSED -- the thermal/phase core passes all criteria including
+> full-scale; overall S1 remains open solely on the large-N EQS path (D1).**
+>
+> Of the two blockers listed below:
+> 1. **EQS-01: converted, not solved.** No more segfault -- an informative
+>    MemoryError with the measured ceilings (n=96 full physics, n=128 EQS-only).
+>    The scalable large-N EQS path is **deferred to D1**. This is the sole
+>    remaining S1 blocker.
+> 2. **THM-03: FIXED** (CFL guard + auto-substepping, closed-form-verified,
+>    default-inert for n <= 169) **and evidenced at full scale** by the n=200
+>    thermal march of 13.8: reached=True, n_sub=2, clamp_bound=False,
+>    cfl_violated=False, residual -3.2933e-13, t90=638.975 s, sigma_T=22.843,
+>    wall 2:51:43.
+>
+> On the spec's "avoidance by grid cap is explicitly not a pass": the thermal
+> march is NOT capped -- it runs AT n=200, the documented trigger grid. The EQS
+> solve IS still capped (n<=96 full physics), and that is exactly what keeps S1
+> from a full pass.
+
+**[ORIGINAL 2026-07-30 verdict, superseded]**
 **Gate S1 is NOT passed.** Delivered: the mechanism diagnosis (sections 1-4,
 corrected by 13.3), the enthalpy fix with its RED test, the audit v2 standing
 gate wired into every solve, three analytic benchmarks (sections 7-9), and the
