@@ -81,6 +81,11 @@ class Params:
     max_dt_step_c: float = 10.0
     temp_min_c: float = -50.0
     temp_max_c: float = 600.0
+    # S1: phase-update scheme. "apparent_cp" = legacy pointwise dphi in cp_eff
+    # (bit-for-bit historical behavior; can skip the latent barrier when one
+    # step crosses the melt window). "enthalpy" = exact piecewise-linear
+    # enthalpy inversion (energy-conserving by construction; S1 fix).
+    phase_update: str = "apparent_cp"
     # densification (physics_dual; ported from shape_circle_6min.yaml)
     dens_k0_ss: float = 0.005
     dens_ea_ss: float = 48000.0
@@ -420,6 +425,30 @@ def phase_fraction(T: np.ndarray, p: Params) -> tuple[np.ndarray, np.ndarray]:
     return phi, dphi
 
 
+def enthalpy_from_T(T, rho_cp, rho_L, p: Params):
+    """Volumetric enthalpy H(T) [J/m^3], piecewise linear: sensible slope
+    rho_cp everywhere plus the latent plateau rho_L ramped linearly across
+    the melt window [t_pc - dt_pc/2, t_pc + dt_pc/2]."""
+    T = np.asarray(T, dtype=np.float64)
+    lo = p.t_pc_c - p.dt_pc_c / 2.0
+    frac = np.clip((T - lo) / p.dt_pc_c, 0.0, 1.0)
+    return rho_cp * T + rho_L * frac
+
+
+def T_from_enthalpy(H, rho_cp, rho_L, p: Params):
+    """Exact inverse of enthalpy_from_T for scalar-per-voxel rho_cp/rho_L."""
+    H = np.asarray(H, dtype=np.float64)
+    lo = p.t_pc_c - p.dt_pc_c / 2.0
+    H_lo = rho_cp * lo
+    H_hi = rho_cp * (lo + p.dt_pc_c) + rho_L
+    T_below = H / rho_cp
+    # in-window: H = rho_cp*T + rho_L*(T-lo)/dt_pc
+    T_window = (H + rho_L * lo / p.dt_pc_c) / (rho_cp + rho_L / p.dt_pc_c)
+    T_above = (H - rho_L) / rho_cp
+    return np.where(H <= H_lo, T_below,
+                    np.where(H >= H_hi, T_above, T_window))
+
+
 # --------------------------------------------------------------------------- #
 # Result container
 # --------------------------------------------------------------------------- #
@@ -656,9 +685,22 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         if heatsink_field is not None and heatsink_h != 0.0:
             e_loss += float((heatsink_h * np.asarray(heatsink_field, dtype=float)
                              * (T - p.ambient_c)).sum()) * dV * p.dt_s
-        dTdt = num / np.maximum(rho * cp_eff, 1e-9)
-        dT_raw = p.dt_s * np.nan_to_num(dTdt)
-        dT = np.clip(dT_raw, -p.max_dt_step_c, p.max_dt_step_c)
+        if p.phase_update == "enthalpy":
+            # Energy-conserving update: deposit num*dt into volumetric
+            # enthalpy and invert exactly. Latent uses the SOLID density
+            # basis for a consistent H(T) (audit uses the same basis).
+            rho_cp_map = rho * cp                     # sensible slope, J/(m^3 K)
+            rho_L_map = np.zeros(part.shape)
+            rho_L_map[part] = rho_s_eff[part] * p.latent_j_per_kg
+            H = enthalpy_from_T(T, rho_cp_map, rho_L_map, p)
+            H = H + p.dt_s * np.nan_to_num(num)
+            T_new = T_from_enthalpy(H, rho_cp_map, rho_L_map, p)
+            dT_raw = T_new - T
+            dT = np.clip(dT_raw, -p.max_dt_step_c, p.max_dt_step_c)
+        else:
+            dTdt = num / np.maximum(rho * cp_eff, 1e-9)
+            dT_raw = p.dt_s * np.nan_to_num(dTdt)
+            dT = np.clip(dT_raw, -p.max_dt_step_c, p.max_dt_step_c)
         # THM-01 per-step dT-cap binding diagnostic (clamp arithmetic above is
         # UNCHANGED -> output bit-identical; cap is dormant in production).
         _n_dT_clip = int(np.count_nonzero(np.abs(dT_raw) > p.max_dt_step_c))

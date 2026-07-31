@@ -1,5 +1,7 @@
 """S1 numerical-integrity tests for heatr3d (spec: docs/superpowers/specs/
 2026-07-30-heatr3d-graduation-design.md, Gate S1)."""
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -61,3 +63,92 @@ def test_legacy_phase_update_skips_latent_on_window_crossing():
     res = run(grid, part, p, qrf_override=q, max_time_s=120.0)
     assert res.clamp_bound is True
     assert res.energy_residual_frac > 0.10
+
+
+def test_enthalpy_roundtrip_and_window_crossing():
+    from heatr3d import enthalpy_from_T, T_from_enthalpy
+    p = Params()
+    rho_cp = p.rho_solid * p.cp_solid          # J/(m^3 K), sensible slope
+    rho_L = p.rho_solid * p.latent_j_per_kg    # J/m^3, latent plateau
+    Ts = np.array([25.0, 175.0, 180.0, 185.0, 190.0, 250.0])
+    H = enthalpy_from_T(Ts, rho_cp, rho_L, p)
+    Tb = T_from_enthalpy(H, rho_cp, rho_L, p)
+    assert np.allclose(Tb, Ts, atol=1e-9)
+    # depositing exactly the latent plateau plus 20 C sensible from the window
+    # start lands 20 C above the window end, never skipping the latent barrier
+    H0 = enthalpy_from_T(np.array([p.t_pc_c - p.dt_pc_c / 2]), rho_cp, rho_L, p)
+    H1 = H0 + rho_L + rho_cp * (p.dt_pc_c + 20.0)
+    T1 = T_from_enthalpy(H1, rho_cp, rho_L, p)
+    assert np.allclose(T1, p.t_pc_c + p.dt_pc_c / 2 + 20.0, atol=1e-9)
+
+
+def bulk_crossing_case(n=32, mult=130.0):
+    """Uniform heating of the WHOLE part, sized so every part voxel takes a
+    melt-window-crossing step, with no numerical limiter binding.
+
+    raw source dT/step = mult * 0.06920 C = 9.00 C at mult=130: below
+    max_dt_step_c = 10.0 (so THM-01 never binds) yet large enough that a voxel
+    sitting below the window start (175 C) lands well inside the window in one
+    step with dphi/dT = 0 at the step start -- the exact mechanism traced in
+    docs/superpowers/plans/s1-findings.md section 2 (173.00 -> 183.00 C).
+
+    Applying it to all 624 part voxels (instead of the single spiked voxel of
+    spike_case) makes the skipped latent heat GLOBALLY measurable: the part's
+    full latent budget is rho_s_eff * L * V_part = 188.3 J against ~851 J of
+    RF input over 1.0 s. In spike_case the skipped latent is ~0.3 J and is
+    invisible next to clamp artifacts (Task-3 honesty note).
+    """
+    grid, part, p = small_sphere_case(n)
+    q = np.zeros((n, n, n))
+    q[part] = p.power_density_w_per_m3 * mult
+    return grid, part, p, q
+
+
+def test_enthalpy_update_conserves_energy_on_window_crossing():
+    """The S1 fix heals the latent-skip energy error on a window-crossing run.
+
+    DEVIATION from the plan's spike_case(200)/60 s version, with measurements
+    (2026-07-30, ./.venv312, n=32): that case cannot isolate the phase
+    mechanism at ANY (spike_mult, max_time_s). A single spiked voxel needs
+    mult >= ~145 to cross the window, and its steady state sits
+    mult*q1/(6*k_s_eff/h^2) = 974 C (mult=150) above its neighbours, so it
+    always drives into the temp_max_c = 600 C clamp; and below saturation the
+    skipped latent (~0.3 J) is far smaller than the clamp/audit error.
+    Measured spike sweep (resid apparent_cp -> enthalpy): mult=100 t=3 s
+    +0.0268 -> +0.0240; mult=150 t=10 s +0.0617 -> +0.0620; mult=200 t=60 s
+    +0.1258 -> +0.1239 (T_max=600 C, clamp_bound both). The residual there is
+    dominated by the clamps, not by latent, so it cannot show the fix.
+
+    bulk_crossing_case makes the same mechanism global and limiter-free.
+    Measured at mult=130, t_end=1.0 s: apparent_cp residual = -0.0711 (the
+    latent-skip signature: the audit books 126 J of latent from the phi jump
+    that the solver never paid, so stored > in), enthalpy = +0.0045, both with
+    clamp_bound False and T_max ~180 C. That is the fix, isolated.
+    """
+    grid, part, p0, q = bulk_crossing_case()
+    p = dataclasses.replace(p0, phase_update="enthalpy")   # Params is frozen
+    res = run(grid, part, p, qrf_override=q, max_time_s=1.0, phi_target=2.0)
+    assert res.clamp_bound is False             # no limiter is hiding anything
+    assert res.T_max_c < p.temp_max_c - 1.0     # no temp-clamp saturation
+    assert abs(res.energy_residual_frac) < 0.05
+    # the part really did cross into the melt window; it pays the latent toll
+    # now, so it sits mid-window instead of being snapped past it
+    assert res.phi_final.max() > 0.4
+    assert 175.0 < res.T_max_c < 185.0
+
+    # differential control: the legacy scheme on the IDENTICAL case books the
+    # latent-skip surplus the fix removes (this is what makes the assertion
+    # above discriminating rather than vacuous).
+    res_legacy = run(grid, part, p0, qrf_override=q, max_time_s=1.0,
+                     phi_target=2.0)
+    assert res_legacy.energy_residual_frac < -0.05
+    assert res_legacy.phi_final.max() > res.phi_final.max()
+
+
+def test_legacy_default_is_unchanged():
+    grid, part, p = small_sphere_case()
+    r1 = run(grid, part, p, max_time_s=20.0)
+    r2 = run(grid, part, p, max_time_s=20.0)
+    assert np.array_equal(r1.T_phi90 if r1.T_phi90 is not None else np.zeros(1),
+                          r2.T_phi90 if r2.T_phi90 is not None else np.zeros(1))
+    assert Params().phase_update == "apparent_cp"

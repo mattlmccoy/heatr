@@ -110,6 +110,35 @@ wired into all entry points.
   the per-voxel densification trajectory must match the 2-D law applied to
   the corresponding cross-section history.
 
+### Decision point D1 (after S2): FEM engine spike (dolfinx)
+
+Approved addition (Matt, 2026-07-30). The voxel grid, not the Python
+implementation, is heatr3d's structural weakness: staircase corners produce
+the non-converging field concentration that pollutes the 3-D spread metric,
+and the compaction-to-distortion mechanics (Gate P2's core) is what
+hand-rolled voxel code does worst and structural FEM does best.
+
+When S2's convergence study has quantified the voxel-corner cost, run a
+time-boxed spike (one week):
+
+- Reproduce the S3 extrusion-anchor case in FEniCSx/dolfinx on a
+  geometry-conforming tetrahedral mesh from the same STL: complex-valued EQS
+  solve, enthalpy-based thermal-phase march, same material parameters.
+- Compare against heatr3d and the COMSOL anchor: field agreement, corner
+  behavior under refinement, wall-clock cost, and implementation effort.
+- Decision output, recorded in a short report: adopt dolfinx as (a) the
+  high-fidelity cross-check engine and the P2 mechanics engine (heatr3d
+  remains the fast in-tool planner), (b) mechanics engine only, or (c) not
+  adopted (voxel cost acceptable). CalculiX remains the narrower fallback
+  for role (b) if dolfinx tooling disappoints.
+
+Rationale for dolfinx over alternatives: open source, Python-facing (lab
+succession), complex-number support for EQS, unstructured meshes eliminate
+the staircase-corner artifact class, and its adjoint ecosystem opens the
+path to gradient-based volumetric FGM inverse design later. Rewrites in
+non-Python stacks are rejected at this stage: trust is the scarce resource
+and a rewrite restarts the trust ladder.
+
 ### Gate S4: historical-data anchor (real physics, zero lab time)
 
 - Score heatr3d predicted top-surface temperature fields against Jared
