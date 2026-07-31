@@ -795,6 +795,15 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     if T_phi90 is None:
         T_phi90 = T.copy()
     sigma_T = float(T_phi90[part].std()) if _has_part else float("nan")
+    # ---- S1 standing conservation gate (always on, one line per solve) ----
+    # Spec (Gate S1): "standing energy-conservation gate on every heatr3d solve
+    # (|residual| / integrated dose), printed in every run summary." Healthy
+    # runs read |residual_frac| <~ 1e-2 (machine precision on the enthalpy
+    # scheme); a melt-onset blow-up shows up here first, usually together with
+    # CLAMP-BOUND (THM-01/02 limiter latched).
+    print(f"  [s1-energy] in={e_in:.1f} J stored={e_stored:.1f} J "
+          f"loss={e_loss:.1f} J residual_frac={e_resid_frac:+.4f}"
+          f"{'  CLAMP-BOUND' if clamp_bound else ''}")
     return Result(sigma_T=sigma_T, T_phi90=T_phi90, part=part, Qrf=Qrf,
                   phi_final=phase_fraction(T_phi90, p)[0], t_phi90_s=t90,
                   reached=reached, phi_hist=phi_hist, T_max_c=(float(T_phi90[part].max()) if _has_part

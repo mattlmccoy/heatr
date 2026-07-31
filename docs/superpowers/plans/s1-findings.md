@@ -321,3 +321,209 @@ still pass. Flagged, not fixed here -- it is out of the S1 plan's scope.
 cd geo-prewarp
 ./.venv312/bin/python -m pytest test_heatr3d_s1.py -v   # 9 passed in 115.3 s
 ```
+
+---
+
+# Task 8 findings (2026-07-30): the full-scale regression does NOT pass
+
+Same interpreter, same repo root. `dissertation_materials/analysis-3dfgm/heatr3d.py`
+still untouched. Machine: Apple Silicon, 12 cores, 34.36 GB RAM.
+
+## 13. Task 8 landed the wiring; the n=200 run itself is blocked twice over
+
+Landed and verified:
+- `test_full_scale_n200_melt_onset_clean_with_enthalpy`, `@pytest.mark.slow`,
+  assertions exactly as the plan specifies (`reached is True`,
+  `|residual_frac| < 0.05`, `clamp_bound is False`). NOT weakened.
+- `pytest.ini` (the repo had NO pytest config before: no pytest.ini, setup.cfg,
+  tox.ini or pyproject.toml anywhere). Registers the `slow` marker and
+  `addopts = -m "not slow"`. It sets no testpaths / no --ignore, so the 25
+  pre-existing `fixture 'run_dir' not found` collection errors of section 12
+  stay visible; only the slow marker is filtered.
+  Default suite after the change: `9 passed, 1 deselected in 304.37 s`.
+- The always-on standing gate line in `run()`, printed on every solve:
+  `  [s1-energy] in=... J stored=... J loss=... J residual_frac=+... [CLAMP-BOUND]`.
+
+### 13.1 Runtime estimate (measured before launching, as instructed)
+
+Thermal loop at n=200 with an injected Qrf (EQS bypassed), clean machine:
+10 steps = 4.1 s, 40 steps = 15.2 s -> **0.370 s/step**, peak RSS 2.35 GB.
+
+| max_time_s | steps | loop-only estimate |
+|-----------|-------|--------------------|
+| 900 s (the test) | 18 000 | **1.85 h** |
+| 1500 s (run() default) | 30 000 | 3.08 h |
+
+EQS solve cost, measured standalone (uniform bed, default Params):
+
+| n | N = n^3 | wall | peak RSS | branch |
+|---|---------|------|----------|--------|
+| 64 | 2.62e5 | 97.7 s | 0.81 GB | ILU-BiCGSTAB |
+| 96 | 8.85e5 | 322.1 s | 2.21 GB | ILU-BiCGSTAB |
+| 128 | 2.10e6 | did not finish in 30 min | - | ILU-BiCGSTAB |
+| 200 | 8.00e6 | **crashes (see 13.2)** | - | ILU fails -> direct |
+
+So the loop alone is under the 6 h stop line, but the run cannot start at all.
+
+### 13.2 BLOCKER 1 (new finding, EQS-01): the n=200 EQS solve segfaults
+
+`./.venv312/bin/python -m pytest test_heatr3d_s1.py -m slow -v`
+
+```
+test_heatr3d_s1.py::test_full_scale_n200_melt_onset_clean_with_enthalpy
+Fatal Python error: Segmentation fault
+Current thread 0x00000001efea5d80 (most recent call first):
+  File ".../scipy/sparse/linalg/_dsolve/linsolve.py", line 293 in spsolve
+  File ".../geo-prewarp/heatr3d.py", line 265 in solve_eqs_3d
+  File ".../geo-prewarp/heatr3d.py", line 597 in run
+  File ".../geo-prewarp/test_heatr3d_s1.py", line 382 in
+        test_full_scale_n200_melt_onset_clean_with_enthalpy
+PYTEST_EXIT=139        # SIGSEGV
+```
+Wall clock to the crash: **17 s**. Reproduced 3/3 (twice standalone, once under
+pytest); the two standalone attempts printed
+`malloc fails for local dworkptr[]. ... zgstrf info 2082443264` and were then
+SIGKILLed by the OS.
+
+Mechanism: at N = 8.0e6 complex unknowns `spla.spilu(A, drop_tol=1e-4,
+fill_factor=12)` cannot allocate; `solve_eqs_3d` catches that with a bare
+`except Exception: V = None` and falls through to `spla.spsolve(A, b)` -- a
+DIRECT complex LU of an 8-million-unknown 3-D Laplacian, which is hopeless at
+any memory size and here dies inside SuperLU. Two defects, not one:
+1. the direct fallback is unreachable-by-design at large N but is still armed;
+2. the failure is a segfault, not an exception, so a caller cannot handle it and
+   a batch campaign loses the whole process.
+This is a genuine S1 (numerical integrity) defect of the EQS core and it is NOT
+addressed by anything in Tasks 1-7. It also caps the practical grid: the largest
+grid at which the full pipeline runs today is n<=96 (section 13.5).
+
+### 13.3 BLOCKER 2 (new finding, THM-03): the n>=200 trigger is a conduction
+CFL violation in the POWDER -- section 3 conclusion (1) is CORRECTED
+
+Section 3 concluded "conduction CFL is innocent, including at n=200 (ratio
+0.262)". That used `alpha_max = k_liquid/(rho_liquid*cp_liquid) = 7.85e-8`.
+**The liquid is not the fastest medium in the domain; the powder bed is**, and
+the bed is ~98 % of the voxels:
+
+| medium | k | rho | cp | alpha [m^2/s] |
+|--------|---|-----|----|---------------|
+| powder | 0.197 | 490.0 | 1072.0 | **3.7504e-07** |
+| solid | 0.10 | 460.0 | 2500.0 | 8.6957e-08 |
+| liquid | 0.26 | 1010.0 | 3279.0 | 7.8507e-08 |
+
+With the correct `alpha_max = 3.7504e-07` (4.78x the value used) the explicit
+6-neighbour bound `dt < h^2/(6 alpha)` at L = 0.060 m, dt_s = 0.05 s gives:
+
+| n | h | dt_CFL | ratio dt_s/dt_CFL |
+|---|---|--------|-------------------|
+| 32 | 1.8750 mm | 1.5623 s | 0.032 |
+| 96 | 0.6250 mm | 0.1736 s | 0.288 |
+| 128 | 0.4688 mm | 0.0976 s | 0.512 |
+| 160 | 0.3750 mm | 0.0625 s | 0.800 |
+| **178.9** | 0.3354 mm | 0.0500 s | **1.000 (threshold)** |
+| 200 | 0.3000 mm | 0.0400 s | **1.250 (UNSTABLE)** |
+
+The crossing grid is **n = 178.9**, which is exactly the documented
+"blow-up at grid >= 200" trigger.
+
+Direct experiment (`scripts/analysis/s1_cfl_powder_mode.py`): all-powder domain,
+no part, no source, `conv_h=0`, initial condition = a 1e-3 C 3-D checkerboard
+(the fastest-growing discrete mode), 60 steps, via the Task-6 `T0_override`
+hook. Predicted per-step amplification `|1 - 12 alpha dt/h^2|` vs measured
+`(amp_60/amp_0)^(1/60)`:
+
+| n | CFL ratio | predicted | measured | clamp_bound |
+|---|-----------|-----------|----------|-------------|
+| 128 | 0.512 | 0.0241 | 0.9012 (decays) | False |
+| 160 | 0.800 | 0.6002 | 0.8910 (decays) | False |
+| 176 | 0.968 | 0.9362 | **0.9362** (decays) | False |
+| 184 | 1.058 | 1.1162 | **1.1162** (GROWS) | False |
+| 200 | 1.250 | 1.5003 | 1.1558 (GROWS) | **True** |
+
+At n=176 and n=184 the measured growth matches the closed-form amplification to
+4 decimals and the sign of the instability flips exactly across the predicted
+threshold. (At n=128/160 the measured rate is set by the slowest surviving mode
+after the checkerboard has already decayed away, not by the checkerboard rate --
+the checkerboard is gone within a few steps there; the qualitative reading,
+decay vs growth, is what matters.) At n=200 the measured rate is BELOW the
+prediction only because the +-10 C THM-01 limiter binds and truncates the true
+growth -- the clamp is hiding the divergence, the same pattern the S1 spec
+refuses to accept as a pass.
+
+Consequences:
+- `assert res.clamp_bound is False` at n=200 CANNOT hold with dt_s = 0.05 s no
+  matter what the phase scheme does. The enthalpy fix (Task 4) is necessary and
+  correct but it is not sufficient for the documented trigger.
+- The latent-skip mechanism of sections 2-4 remains real and independently
+  pinned (phi 0.000 -> 0.800 in one step with dphi/dT = 0), but it is NOT the
+  n>=200 trigger. Both mechanisms are melt-onset-adjacent; only THM-03 is
+  grid-threshold-shaped, and its threshold (178.9) matches the observation.
+- Fix options for S2/next-S1-pass, in increasing order of cost: (a) enforce
+  `dt_s <= 0.9 h^2/(6 alpha_max)` as a hard, ASSERTED stability criterion in
+  `run()` (spec-legal: "a fix OR a principled stability criterion"), which at
+  n=200 means dt_s <= 0.036 s and ~1.4x more steps; (b) conduction substepping;
+  (c) implicit / IMEX conduction. Note the audit already reports these runs as
+  energy-clean-ish, so the residual gate alone does NOT catch THM-03 -- the
+  clamp_bound flag does.
+
+### 13.4 `max_time_s=900` is marginal for phi_target=0.90, and grid dependent
+
+Measured at n=32, default Params, phi_target never triggered
+(`phi_target=2.0` sweep), 18 000 steps:
+
+```
+n=32 apparent_cp: reached=False final_phi=0.8385  phi>=0.5 at 529.7 s, phi>=0.8 at 829.8 s
+n=32 enthalpy   : reached=False final_phi=0.8787  phi>=0.5 at 493.4 s, phi>=0.8 at 767.7 s,
+                                                  phi>=0.85 at 854.3 s
+  [s1-energy] in=5891.8 J stored=5635.7 J loss=126.7 J residual_frac=+0.0220   (apparent_cp)
+  [s1-energy] in=5891.8 J stored=5763.9 J loss=127.9 J residual_frac=+0.0000   (enthalpy, 1.86e-14)
+```
+At n=32, then, `assert res.reached is True` would fail for a pure run-length
+reason (`run()`'s own default is `max_time_s=1500.0`, not 900). But the melt
+time is grid dependent and moves the RIGHT way: the n=96 full-physics run
+(13.5) reaches phi_target at **t90 = 802.6 s**, comfortably inside the 900 s
+window. So 900 s is probably adequate at n=200 and this is a marginal-margin
+note, not a fourth blocker. Nothing changed in the test.
+
+Incidental value of the n=32 pair above: identical RF input (5891.8 J in both
+arms), legacy books +2.2e-02 residual, enthalpy +1.9e-14 -- the S1 fix visible
+on a plain benign production case, not only on the engineered spike.
+
+### 13.5 The largest full-physics run that completes today (n=96): CLEAN
+
+Full pipeline (EQS + thermal, no qrf_override), n=96 sphere d=20 mm, default
+Params with `phase_update="enthalpy"`, `max_time_s=1500`, phi_target=0.90,
+`scripts` copy at `/private/tmp/.../full_n96.py`:
+
+```
+  [s1-energy] in=5381.5 J stored=5289.0 J loss=92.5 J residual_frac=+0.0000
+FULL n=96 enthalpy: wall=1049s reached=True t90=802.6 sigma_T=19.278 Tmax=251.2
+                    clamp=False resid=+1.3320e-13 in=5381.5 stored=5289.0
+                    loss=92.5 final_phi=0.9000
+```
+
+This is the best available substitute for the blocked n=200 regression: a real,
+production-configuration, full-physics melt-onset run at 8.85e5 voxels with the
+S1 fix engaged. **Energy residual 1.33e-13, no clamp bound, melt onset reached.**
+CFL ratio at n=96 is 0.288 (well below 1), so THM-03 is dormant there, exactly
+as predicted. Wall clock 1049 s (322 s of it the EQS solve).
+
+### 13.6 Verdict
+
+**Gate S1 is NOT passed.** Delivered: the mechanism diagnosis (sections 1-4,
+corrected by 13.3), the enthalpy fix with its RED test, the audit v2 standing
+gate wired into every solve, three analytic benchmarks (sections 7-9), and the
+full-scale regression test itself. Outstanding, both newly measured here and
+both required by the spec's own wording ("Avoidance by grid cap is explicitly
+not a pass"):
+1. EQS-01: n=200 EQS segfault (13.2).
+2. THM-03: explicit conduction CFL violation for n > 178.9 (13.3).
+
+### 13.7 Reproduction commands (Task 8)
+
+```bash
+cd geo-prewarp
+./.venv312/bin/python -m pytest test_heatr3d_s1.py -v        # 9 passed, 1 deselected
+./.venv312/bin/python -m pytest test_heatr3d_s1.py -m slow -v # SIGSEGV in 17 s (13.2)
+./.venv312/bin/python scripts/analysis/s1_cfl_powder_mode.py  # the 13.3 table
+```

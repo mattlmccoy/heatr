@@ -363,3 +363,59 @@ def test_legacy_default_is_unchanged():
     b = r2.T_phi90 if r2.T_phi90 is not None else np.zeros(1)
     assert np.allclose(a, b, rtol=0.0, atol=1e-12)
     assert Params().phase_update == "apparent_cp"
+
+
+@pytest.mark.slow
+def test_full_scale_n200_melt_onset_clean_with_enthalpy():
+    """The documented trigger (grid >= 200 melt-onset blow-up), run with the
+    S1 fix: must stay clean. Deselected by default (pytest.ini addopts
+    -m "not slow"); run explicitly with `-m slow`.
+
+    STATUS 2026-07-30: this test does NOT pass yet, and it is committed in that
+    state deliberately (the plan forbids weakening the assertions). It is the
+    open S1 target. Two independent blockers were measured; both are recorded
+    with numbers in docs/superpowers/plans/s1-findings.md section 13.
+
+    (1) HARD BLOCKER - the n=200 EQS solve crashes the interpreter. Run once as
+        `pytest test_heatr3d_s1.py -m slow`: Fatal Python error: Segmentation
+        fault after 17 s, inside scipy spsolve at heatr3d.py:265, i.e. the
+        DIRECT fallback that solve_eqs_3d takes after spilu(fill_factor=12)
+        fails to allocate ("malloc fails for local dworkptr[]", SuperLU zgstrf)
+        on N = 8.0e6 complex unknowns. Reproduced 3/3 (twice standalone, once
+        under pytest) on a 34 GB machine. EQS cost measured at smaller grids:
+        n=64 (N=2.6e5) 97.7 s / 0.81 GB; n=96 (N=8.8e5) 322.1 s / 2.21 GB;
+        n=128 did not finish in 30 min.
+
+    (2) PHYSICS BLOCKER - even with a working EQS solve, `clamp_bound is False`
+        cannot hold at n=200: the explicit conduction update is CFL-UNSTABLE
+        there. alpha_max over the domain is the POWDER value
+        k_powder/(rho_powder*cp_powder) = 3.7504e-07 m^2/s (4.78x the liquid
+        value the Task-3 note used), so dt < h^2/(6 alpha) fails for
+        n > 178.9 at dt_s = 0.05 s, L = 0.060 m. Measured checkerboard-mode
+        growth per step (all-powder, no source, no convection) vs the predicted
+        |1 - 12 alpha dt/h^2|: n=176 0.9362 vs 0.9362 (decays), n=184 1.1162 vs
+        1.1162 (GROWS), n=200 1.1558 measured vs 1.5003 predicted with
+        clamp_bound True (the +-10 C limiter truncates the true growth).
+        The enthalpy fix cannot address this; it is a separate mechanism.
+
+    Runtime estimate for when the blockers are cleared (measured 2026-07-30 on
+    this machine): thermal loop at n=200 = 0.370 s/step, i.e. 1.85 h for
+    max_time_s=900 (18000 steps) and 3.08 h for 1500 s, plus the EQS solve.
+
+    Margin note on `reached`: 900 s is close to melt onset. At n=32 mean phi
+    only gets to 0.8787 by 900 s (run()'s own default is max_time_s=1500), but
+    the melt time shrinks with grid: the n=96 full-physics run reaches
+    phi_target at t90 = 802.6 s. Left at 900 s as the plan specifies.
+
+    Best available substitute while this is blocked (findings 13.5): the same
+    physics at n=96 (8.85e5 voxels, full EQS + thermal, enthalpy scheme,
+    max_time_s=1500) is CLEAN -- reached=True, t90=802.6 s, clamp_bound=False,
+    energy residual +1.33e-13, sigma_T=19.278, in=5381.5 J, wall 1049 s.
+    """
+    grid = Grid(n=200, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = dataclasses.replace(Params(), phase_update="enthalpy")
+    res = run(grid, part, p, max_time_s=900.0)
+    assert res.reached is True
+    assert abs(res.energy_residual_frac) < 0.05
+    assert res.clamp_bound is False
