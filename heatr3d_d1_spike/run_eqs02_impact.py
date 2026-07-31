@@ -236,7 +236,11 @@ def main() -> int:
     }
     for shape in args.shapes:
         print(f"[eqs02] === {shape} n={args.n} ===", flush=True)
-        out["shapes"][shape] = run_shape(shape, args.n)
+        # n = 64 keeps the original bare key (EQS02_IMPACT.md quotes it);
+        # any other refinement lands under its own key so a refinement run can
+        # NEVER overwrite an existing one.
+        key = shape if args.n == 64 else f"{shape}_n{args.n}"
+        out["shapes"][key] = run_shape(shape, args.n)
 
     p = HERE / "results.json"
     d = json.loads(p.read_text()) if p.exists() else {}
