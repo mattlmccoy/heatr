@@ -1238,7 +1238,7 @@ if __name__ == "__main__":
 # behavior, so production output is unaffected and fresh clones (no canonical
 # path) silently skip it.
 # ---------------------------------------------------------------------------
-SYNCED_FROM_SHA256 = "5243529f819e302de2cd063dac1646a181914ef96d5561a72493461cb1985ea7"
+SYNCED_FROM_SHA256 = "4d51c55fa1e81aff880dc19fd2e5bbdc4a2f82bb0588ead08f1fce37d2260dfb"
 
 
 def _check_canonical_drift() -> None:
