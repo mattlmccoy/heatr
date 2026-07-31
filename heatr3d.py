@@ -376,22 +376,129 @@ def solve_eqs_3d(gamma: np.ndarray, grid: Grid, p: Params,
     return V.reshape(nx, ny, nz)
 
 
+# --------------------------------------------------------------------------- #
+# EQS-02 (2026-07-31): the Q_rf gradient stencil, and the default flip
+#
+# compute_qrf_3d used to form E = -np.gradient(V) over the WHOLE domain and only
+# afterwards zero Q outside the part, so the outermost in-part voxel was centrally
+# differenced against an OUTSIDE voxel -- across the material interface, where
+# grad V jumps by the conductivity contrast (sigma_doped/sigma_virgin = 4e6).
+# Q ~ |E|^2 squares that jump, and the fixed-power renormalization then rescales
+# the whole field down: no energy is invented, energy is MOVED from the part
+# interior into a one-voxel surface skin.
+#
+# Evidence (heatr3d_d1_spike/EQS02_IMPACT.md, results.json["eqs02_impact"],
+# ["task2"], ["task3"], n=64, L=60 mm, extruded circle d=20 mm and square 20 mm):
+#   * 73.7 % of absorbed power sat in a 31-33 % volume band; mask-confined it is
+#     31.9 % (circle) / 37.1 % (square) -- roughly volume-proportional.
+#   * interior mean Q rises 2.59x (circle) / 2.39x (square) under the correction,
+#     while the interior PATTERN is unchanged (rel L2 1.7e-16 / 2.0e-16).
+#   * max/mean drops 12.25 -> 1.86 (circle), 19.15 -> 2.20 (square); the legacy
+#     corner peak keeps growing with refinement (19.2 -> 29.1 -> 38.7 at
+#     n=64/96/128) while the mask-confined one grows slowly (2.20 -> 2.71 -> 3.17)
+#     -- most of the apparent 3-D grid dependence was this artifact.
+#   * against the independent conforming-FEM reference (Task 2), the mask-confined
+#     field differs by 10.8 % in unit-mean pattern L2 and the legacy field by
+#     90.4 %; in the interior the two post-processings are identical.
+#   * thermal topology INVERTS: surface-minus-interior mean T goes from +8.6 C /
+#     +18.0 C (legacy) to -35.3 C / -30.5 C (corrected); sigma_T moves -23.1 %
+#     (circle) but +10.9 % (square), i.e. geometry-dependently.
+#
+# DELIBERATE DEFAULT FLIP, signed off knowing it changes exploratory-labeled
+# published numbers (surface/interior attribution reverses): qrf_gradient defaults
+# to "masked". qrf_gradient="legacy" reproduces the pre-fix field bit-for-bit
+# (test_qrf_legacy_flag_reproduces_the_pre_fix_field_bit_for_bit) for historical
+# reproduction. Total absorbed power is identical under both.
+#
+# NOT fixed here: this is only the post-processing gradient. Any error in V itself
+# (harmonic face averaging at the staircase boundary, the cell-centred electrode
+# gauge) is present in both modes.
+# --------------------------------------------------------------------------- #
+QRF_GRADIENT_MODES = ("masked", "legacy")
+
+
+def _masked_grad_3d(V: np.ndarray, mask: np.ndarray, h: float):
+    """E = -grad V with a stencil that NEVER crosses the mask edge.
+
+    Port of heatr3d_d1_spike/metrics.masked_grad_nd (ndim=3), the D1 spike's
+    reference implementation; kept elementwise-identical to it so the corrected
+    drive is exactly the field EQS02_IMPACT.md measured (pinned by
+    test_qrf_default_is_the_part_confined_gradient_and_splits_power_by_volume).
+
+    Second-order central difference wherever BOTH neighbours along an axis are
+    inside the mask; one-sided (exact for a linear field) where only one is; zero
+    where neither is, and zero outside the mask. Works for real or complex V (V is
+    complex in the EQS solve)."""
+    V = np.asarray(V)
+    mask = np.asarray(mask, dtype=bool)
+    if V.ndim != 3 or mask.shape != V.shape:
+        raise ValueError("_masked_grad_3d: expected 3-D V and a matching mask")
+    out = []
+    for ax in range(3):
+        g = np.zeros(V.shape, dtype=V.dtype if np.iscomplexobj(V) else float)
+        fwd_ok = np.zeros(V.shape, bool)
+        bwd_ok = np.zeros(V.shape, bool)
+        s_lo, s_hi = [slice(None)] * 3, [slice(None)] * 3
+        s_lo[ax] = slice(0, -1)
+        s_hi[ax] = slice(1, None)
+        s_lo, s_hi = tuple(s_lo), tuple(s_hi)
+        fwd_ok[s_lo] = mask[s_lo] & mask[s_hi]        # i -> i+1 usable
+        bwd_ok[s_hi] = mask[s_lo] & mask[s_hi]        # i -> i-1 usable
+        dfwd = np.zeros_like(g)
+        dbwd = np.zeros_like(g)
+        dfwd[s_lo] = (V[s_hi] - V[s_lo]) / h
+        dbwd[s_hi] = (V[s_hi] - V[s_lo]) / h
+        both = fwd_ok & bwd_ok
+        g = np.where(both, 0.5 * (dfwd + dbwd),
+                     np.where(fwd_ok, dfwd, np.where(bwd_ok, dbwd, 0.0)))
+        g = np.where(mask, g, 0.0)
+        out.append(-g)
+    return tuple(out)
+
+
 def compute_qrf_3d(V: np.ndarray, gamma: np.ndarray, grid: Grid, p: Params,
-                   doped: np.ndarray, premix: bool = False) -> np.ndarray:
+                   doped: np.ndarray, premix: bool = False,
+                   qrf_gradient: str = "masked") -> np.ndarray:
     """Volumetric RF heating Qrf = 0.5*Re(gamma|E|^2), renormalized to a fixed total
     absorbed power (enforce_generator_power).
 
-    premix=False (default, bit-for-bit original): Qrf is zeroed OUTSIDE the doped
-    region (jet-only: only the printed part absorbs) and the fixed total power target
-    is power_density * doped_volume.
+    premix=False (default): Qrf is zeroed OUTSIDE the doped region (jet-only: only
+    the printed part absorbs) and the fixed total power target is
+    power_density * doped_volume.
 
     premix=True: the premixed conductive bed absorbs RF too, so Qrf is kept
     EVERYWHERE (not zeroed outside the part). The SAME total power target as the
     premix-off case for this geometry (power_density * doped_volume) is enforced over
     the whole domain, so premix REDISTRIBUTES a FIXED total absorbed power between the
-    bed and the part -- it does not invent energy."""
-    Ex, Ey, Ez = np.gradient(V, grid.h, edge_order=1)
-    Ex, Ey, Ez = -Ex, -Ey, -Ez
+    bed and the part -- it does not invent energy.
+
+    qrf_gradient (EQS-02; see the module note above this function for the full
+    evidence, heatr3d_d1_spike/EQS02_IMPACT.md):
+      * "masked" (NEW DEFAULT, 2026-07-31): E is formed with a stencil confined to
+        the doped region (_masked_grad_3d), so no difference is ever taken across
+        the material interface. This is a DELIBERATE DEFAULT FLIP -- it changes
+        previously published (exploratory-labeled) heatr3d numbers. Surface-vs-
+        interior attribution of absorbed dose REVERSES (73.7 % of power in a
+        31-33 % volume band becomes ~volume-proportional), peak/mean ratios fall
+        by 6.6-8.7x, and sigma_T moves geometry-dependently (-23 % circle, +11 %
+        square). Total absorbed power is unchanged.
+      * "legacy": the pre-fix whole-domain np.gradient, retained VERBATIM so any
+        historical result can be reproduced bit-for-bit.
+    In premix mode the same non-crossing rule is applied to the bed as well (the
+    stencil is confined to the doped region and, separately, to its complement), so
+    the bed still absorbs; the two regions never difference into each other."""
+    if qrf_gradient not in QRF_GRADIENT_MODES:
+        raise ValueError(f"unknown qrf_gradient {qrf_gradient!r}; "
+                         f"expected one of {QRF_GRADIENT_MODES}")
+    if qrf_gradient == "legacy":
+        Ex, Ey, Ez = np.gradient(V, grid.h, edge_order=1)
+        Ex, Ey, Ez = -Ex, -Ey, -Ez
+    else:
+        Ex, Ey, Ez = _masked_grad_3d(V, doped, grid.h)
+        if premix:
+            bx, by, bz = _masked_grad_3d(V, ~np.asarray(doped, dtype=bool),
+                                         grid.h)
+            Ex, Ey, Ez = Ex + bx, Ey + by, Ez + bz
     e2 = np.real(Ex * np.conj(Ex) + Ey * np.conj(Ey) + Ez * np.conj(Ez))
     Q = 0.5 * np.real(gamma * e2)
     Q = np.clip(np.nan_to_num(Q), 0.0, None)
@@ -634,7 +741,8 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         powder_loss_region: str = "part",
         premix_frac: float = 0.0,
         premix_budget: str = "floor_added",
-        T0_override: np.ndarray | None = None) -> Result:
+        T0_override: np.ndarray | None = None,
+        qrf_gradient: str = "masked") -> Result:
     """Coupled 3-D solve. If densify=False (default): stop at the phi=0.90 crossing
     and report sigma_T (relative density held constant). If densify=True: evolve
     relative density (physics_dual) and run the FULL exposure, capturing T_phi90 in
@@ -685,7 +793,13 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     (not zeroed outside the part) and the SAME fixed total absorbed power is enforced,
     so premix redistributes a fixed power between bed and part. See build_gamma for the
     floor_added (masked=premix+jet) vs budget_fixed (masked held at sigma_doped)
-    variants."""
+    variants.
+
+    qrf_gradient (EQS-02, default "masked" since 2026-07-31): passed straight to
+    compute_qrf_3d; see its docstring and the module note above it. "masked" is the
+    corrected part-confined stencil (a DELIBERATE default flip that changes
+    previously published numbers); "legacy" reproduces the pre-fix cross-interface
+    np.gradient bit-for-bit. Inert when qrf_override is supplied (no EQS solve)."""
     # ---- resolve the volumetric powder-loss coefficient h_eff [W/(m^3 K)] ----
     h_eff_loss = 0.0
     if powder_loss_mode is not None:
@@ -712,7 +826,8 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
             _deps = eps_perturb_value * np.asarray(eps_perturb_field, dtype=float)
             gamma = gamma + 1j * _omega * EPS0 * _deps
         V = solve_eqs_3d(gamma, grid, p)
-        Qrf = compute_qrf_3d(V, gamma, grid, p, part, premix=premix_on)
+        Qrf = compute_qrf_3d(V, gamma, grid, p, part, premix=premix_on,
+                             qrf_gradient=qrf_gradient)
     else:
         Qrf = np.array(qrf_override, dtype=np.float64, copy=True)
         if Qrf.shape != part.shape:

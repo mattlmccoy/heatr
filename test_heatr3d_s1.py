@@ -687,3 +687,298 @@ def test_n200_thermal_march_clean_with_qrf_override():
     assert res.clamp_bound is False
     assert res.cfl_violated is False
     assert abs(res.energy_residual_frac) < 0.05
+
+
+# --------------------------------------------------------------------------- #
+# EQS-02: the part-confined Q_rf gradient (compute_qrf_3d default flip)
+#
+# Defect (D1 spike, heatr3d_d1_spike/EQS02_IMPACT.md): compute_qrf_3d formed
+# E = -np.gradient(V) over the WHOLE domain and only afterwards zeroed Q outside
+# the part, so the outermost in-part voxel was differenced ACROSS the material
+# interface (sigma contrast 4e6). Q ~ |E|^2 squares that jump, and the fixed-power
+# renormalization then moved absorbed power from the interior into the surface
+# skin: 73.7 % of the power in a 31-33 % volume band (results.json["eqs02_impact"]).
+#
+# Fix: qrf_gradient="masked" (NEW DEFAULT) uses a stencil confined to the doped
+# region (port of heatr3d_d1_spike/metrics.masked_grad_3d); qrf_gradient="legacy"
+# retains the pre-fix whole-domain np.gradient verbatim for historical runs.
+# --------------------------------------------------------------------------- #
+import importlib.util                                                # noqa: E402
+import subprocess                                                    # noqa: E402
+import sys                                                           # noqa: E402
+from pathlib import Path                                             # noqa: E402
+
+from scipy.ndimage import distance_transform_edt                     # noqa: E402
+
+_REPO_ROOT = Path(__file__).resolve().parent
+_SPIKE_DIR = _REPO_ROOT / "heatr3d_d1_spike"
+
+# The commit whose heatr3d.py is the PRE-EQS-02-fix implementation. The legacy
+# flag is asserted bit-for-bit against THIS source, not against HEAD, because
+# HEAD stops being pre-fix the moment the fix lands.
+PRE_EQS02_FIX_SHA = "4fe5afc3eb79cf1cee1842fb694ae82cdb9b6150"
+
+EQS02_SURFACE_BAND_H = 1.5   # "surface" = within 1.5 voxels of the part boundary
+                             # (the D1 Task-2 / eqs02_impact rule)
+EQS02_SKIN_BAND_H = 0.5      # the single outermost voxel layer -- the layer that
+                             # actually touches the interface, so the layer the
+                             # cross-interface stencil corrupts
+
+_EQS02_SOLVE_CACHE: dict = {}
+
+
+def _eqs02_bands(part, h, width=EQS02_SURFACE_BAND_H):
+    """(interior, surface_band) masks; width in voxels (eqs02_impact uses 1.5)."""
+    depth = (distance_transform_edt(part) - 0.5) * h      # >0 inside the part
+    interior = part & (depth > width * h)
+    return interior, part & ~interior
+
+
+def _eqs02_case(shape="cylinder", n=32, uniform=False):
+    """Cached (grid, part, p, gamma, V) for an EQS-02 test case.
+
+    iterative=True is passed EXPLICITLY: these tests exercise compute_qrf_3d's
+    post-processing, which does not care which linear solver produced V, and at
+    n=32 the direct complex LU that run() would auto-select takes >3.5 min
+    (measured 2026-07-31, ./.venv312: 3:39 wall) against ~62 s for the
+    ILU-BiCGSTAB path. The cache makes the whole EQS-02 block pay for one solve
+    per case rather than one per test.
+    """
+    key = (shape, n, uniform)
+    if key not in _EQS02_SOLVE_CACHE:
+        import heatr3d
+        grid = Grid(n=n, L=0.060)
+        if uniform:
+            part = np.ones((n, n, n), dtype=bool)
+        else:
+            part = make_geometry(grid, shape, diam=0.020)
+        p = Params()
+        gamma = heatr3d.build_gamma(part, p, None, h=grid.h)
+        V = heatr3d.solve_eqs_3d(gamma, grid, p, iterative=True)
+        _EQS02_SOLVE_CACHE[key] = (grid, part, p, gamma, V)
+    return _EQS02_SOLVE_CACHE[key]
+
+
+def _reference_masked_qrf(V, gamma, grid, p, part):
+    """The D1 reference post-processing, verbatim from
+    heatr3d_d1_spike/run_eqs02_impact.py:corrected_qrf -- the SAME V and gamma,
+    metrics.masked_grad_3d for E, and every other step of compute_qrf_3d's Q
+    definition unchanged (clip, zero outside, renormalize to the same
+    p_target = power_density_w_per_m3 * doped_volume)."""
+    if str(_SPIKE_DIR) not in sys.path:
+        sys.path.insert(0, str(_SPIKE_DIR))
+    import metrics as M
+    Ex, Ey, Ez = M.masked_grad_3d(V, part, grid.h)
+    e2 = np.real(Ex * np.conj(Ex) + Ey * np.conj(Ey) + Ez * np.conj(Ez))
+    Q = 0.5 * np.real(gamma * e2)
+    Q = np.clip(np.nan_to_num(Q), 0.0, None)
+    Q[~part] = 0.0
+    p_target = p.power_density_w_per_m3 * (int(part.sum()) * grid.dV)
+    p_now = Q.sum() * grid.dV
+    if p_now > 1e-18:
+        Q *= p_target / p_now
+    return Q
+
+
+def test_qrf_default_is_the_part_confined_gradient_and_splits_power_by_volume():
+    """EQS-02 RED: the DEFAULT Q_rf must be the part-confined-gradient field.
+
+    Two independent assertions, both failing before the fix:
+      (a) EXACTNESS -- the shipped default must equal the D1 reference
+          post-processing (metrics.masked_grad_3d + the unchanged compute_qrf_3d
+          Q definition), so "corrected" means exactly what the D1 study measured,
+          not something near it. Asserted at rtol 1e-13, not bit-for-bit: the two
+          routes are the same operations on the same V, but the renormalization
+          divisor Q.sum() is a pairwise reduction whose last ulp depends on the
+          buffer alignment, and a 5.9e-16 relative difference in that single
+          scale factor was observed once at n=32 (identical, array_equal, on
+          repeat and at n=48/64). The legacy field differs by ~10^0, not 10^-13.
+      (b) PHYSICAL SPLIT -- the fraction of absorbed power landing in the
+          outermost voxel layer (the layer that touches the interface) must be
+          within 1.5x of that layer's VOLUME fraction. Measured here (n=32
+          extruded circle, 2816 part voxels): corrected 0.3210 power in 0.3182
+          volume = 1.009x; legacy 0.8369 in 0.3182 = 2.630x. The D1 1.5-voxel
+          band rule is also checked, at 1.25x: at n=32 that band is 59 % of the
+          part (the part is only ~5 voxels in radius), so it cannot discriminate
+          at 1.5x -- corrected 1.007x, legacy 1.528x.
+
+    Cross-check of the port against the published D1 table (measured 2026-07-31,
+    same script, n=64 extruded circle): surface-band (1.5 voxel) power fraction
+    0.7366 legacy / 0.3186 corrected against EQS02_IMPACT.md's 0.737 / 0.319, and
+    max/mean 12.255 / 1.857 against its 12.25 / 1.86.
+
+    Total absorbed power is IDENTICAL in both (the renormalization is unchanged),
+    so this test pins redistribution, not magnitude.
+    """
+    import heatr3d
+    grid, part, p, gamma, V = _eqs02_case("cylinder", n=32)
+    Q = heatr3d.compute_qrf_3d(V, gamma, grid, p, part)
+    Q_ref = _reference_masked_qrf(V, gamma, grid, p, part)
+    assert np.allclose(Q, Q_ref, rtol=1e-13, atol=0.0)
+
+    for width, gate in ((EQS02_SKIN_BAND_H, 1.5), (EQS02_SURFACE_BAND_H, 1.25)):
+        interior, band = _eqs02_bands(part, grid.h, width)
+        vol_frac = band.sum() / part.sum()
+        pow_frac = float(Q[band].sum() / Q[part].sum())
+        print(f"\nEQS02 default, {width}-voxel band: power frac={pow_frac:.4f} "
+              f"volume frac={vol_frac:.4f} ratio={pow_frac / vol_frac:.3f} "
+              f"(gate {gate})")
+        assert pow_frac < gate * vol_frac
+    # the total power target is untouched by the gradient choice
+    p_target = p.power_density_w_per_m3 * (int(part.sum()) * grid.dV)
+    assert abs(float(Q.sum() * grid.dV) - p_target) <= 1e-12 * p_target
+
+
+def _load_pre_fix_heatr3d(tmp_path):
+    """Import the PRE_EQS02_FIX_SHA heatr3d.py as a separate module."""
+    src = subprocess.run(["git", "show", f"{PRE_EQS02_FIX_SHA}:heatr3d.py"],
+                         cwd=str(_REPO_ROOT), capture_output=True)
+    if src.returncode != 0:
+        pytest.skip(f"pre-fix source {PRE_EQS02_FIX_SHA} not available: "
+                    f"{src.stderr.decode()[:200]}")
+    path = tmp_path / "heatr3d_pre_eqs02.py"
+    path.write_bytes(src.stdout)
+    spec = importlib.util.spec_from_file_location("heatr3d_pre_eqs02", path)
+    mod = importlib.util.module_from_spec(spec)
+    # registered BEFORE exec: @dataclass(frozen=True) resolves annotations via
+    # sys.modules[cls.__module__] and raises AttributeError on None otherwise.
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_qrf_legacy_flag_reproduces_the_pre_fix_field_to_the_ulp(tmp_path):
+    """qrf_gradient="legacy" must reproduce the PRE-FIX Q_rf, so every historical
+    heatr3d number stays reproducible after the default flip.
+
+    The reference is the actual pre-fix source (git show
+    PRE_EQS02_FIX_SHA:heatr3d.py, imported in-process), not a re-derivation, and
+    it is fed the SAME V and gamma, so any difference is the post-processing.
+
+    DEVIATION from a plain np.array_equal, with evidence (measured 2026-07-31,
+    ./.venv312, n=32 extruded circle, the SAME V and gamma passed to both
+    modules, 30 paired evaluations in one process): 18/30 pairs were exactly
+    equal and 12/30 differed in at most 27 of 32768 voxels by at most 4.44e-16
+    relative (2 ulp), with the total absorbed power identical (one distinct value
+    of Q.sum() across all 60 evaluations). Repeating the SAME function twice is
+    array_equal; the ulp noise appears only across the two module objects, i.e.
+    it is numpy elementwise-kernel/alignment noise on freshly allocated
+    temporaries, not a behavioral difference -- the same non-bit-reproducibility
+    already documented in test_legacy_default_is_unchanged (7.1e-15 there).
+    Asserting array_equal here would commit a known-flaky gate; 1e-14 relative is
+    ~14 orders tighter than the stencil change this test must catch (the default
+    field differs from legacy by O(1), asserted below).
+    """
+    import heatr3d
+    grid, part, p, gamma, V = _eqs02_case("cylinder", n=32)
+    pre = _load_pre_fix_heatr3d(tmp_path)
+    assert "qrf_gradient" not in pre.compute_qrf_3d.__code__.co_varnames  # is pre-fix
+    Q_pre = pre.compute_qrf_3d(V, gamma, grid, p, part, premix=False)
+    Q_legacy = heatr3d.compute_qrf_3d(V, gamma, grid, p, part,
+                                      qrf_gradient="legacy")
+    assert np.allclose(Q_legacy, Q_pre, rtol=1e-14, atol=0.0)
+    assert float(Q_legacy.sum()) == float(Q_pre.sum())      # same total power
+
+    Q_default = heatr3d.compute_qrf_3d(V, gamma, grid, p, part)
+    assert not np.allclose(Q_default, Q_legacy, rtol=1e-3, atol=0.0)
+    interior, band = _eqs02_bands(part, grid.h, EQS02_SKIN_BAND_H)
+    vol_frac = band.sum() / part.sum()
+    legacy_frac = float(Q_legacy[band].sum() / Q_legacy[part].sum())
+    print(f"\nEQS02 legacy: outermost-layer power frac={legacy_frac:.4f} "
+          f"volume frac={vol_frac:.4f} ratio={legacy_frac / vol_frac:.3f}")
+    # the artifact itself, still present in the legacy mode (2.630x measured)
+    assert legacy_frac > 2.0 * vol_frac
+    # ... and identical total power in both modes: only the distribution moves
+    assert abs(float(Q_legacy.sum()) - float(Q_default.sum())) \
+        <= 1e-12 * float(Q_default.sum())
+
+
+def test_qrf_masked_equals_legacy_on_a_fully_doped_uniform_chamber():
+    """No interface inside the domain -> the two stencils must agree.
+
+    The whole chamber is doped, so the mask-confined stencil never has a missing
+    neighbour anywhere np.gradient has one, and both reduce to the same
+    second-order-interior / one-sided-edge differences of the same linear V.
+    Agreement is asserted at rtol 1e-12 rather than bit-for-bit because the two
+    forms of the interior central difference -- 0.5*((V[i+1]-V[i]) + (V[i]-V[i-1]))/h
+    (metrics port) and (V[i+1]-V[i-1])/(2h) (np.gradient) -- are algebraically
+    identical but not floating-point associative.
+    """
+    import heatr3d
+    grid, part, p, gamma, V = _eqs02_case(n=16, uniform=True)
+    Q_masked = heatr3d.compute_qrf_3d(V, gamma, grid, p, part)
+    Q_legacy = heatr3d.compute_qrf_3d(V, gamma, grid, p, part,
+                                      qrf_gradient="legacy")
+    rel = float(np.abs(Q_masked - Q_legacy).max() / Q_legacy.max())
+    print(f"\nEQS02 uniform chamber: max rel |masked-legacy| = {rel:.3e}")
+    assert rel < 1e-12
+
+
+def test_qrf_masked_gradient_keeps_the_premix_bed_absorbing():
+    """In premix mode the conductive BED absorbs too, so confining the stencil to
+    the part alone would silently kill premix. The masked mode therefore applies
+    the same non-crossing rule to the bed (the doped region and its complement,
+    each differenced only within itself).
+
+    RED evidence for this branch (measured 2026-07-31, ./.venv312, n=16 sphere,
+    premix_frac=0.5): with the complement term omitted -- i.e. a stencil confined
+    to the part only -- the bed's share of absorbed power is 0.0000, and the
+    renormalization then dumps the entire generator power into the part. With it,
+    the bed carries 0.9742 (legacy: 0.9668) and the fixed total power target is
+    hit to 1 ulp in both modes.
+    """
+    import heatr3d
+    n = 16
+    grid = Grid(n=n, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = Params()
+    gamma = heatr3d.build_gamma(part, p, None, h=grid.h, premix_frac=0.5)
+    V = heatr3d.solve_eqs_3d(gamma, grid, p, iterative=True)
+    p_target = p.power_density_w_per_m3 * (int(part.sum()) * grid.dV)
+    fracs = {}
+    for mode in ("masked", "legacy"):
+        Q = heatr3d.compute_qrf_3d(V, gamma, grid, p, part, premix=True,
+                                   qrf_gradient=mode)
+        assert abs(float(Q.sum() * grid.dV) - p_target) <= 1e-12 * p_target
+        fracs[mode] = float(Q[~part].sum() / Q.sum())
+    print(f"\nEQS02 premix bed power fraction: masked={fracs['masked']:.4f} "
+          f"legacy={fracs['legacy']:.4f}")
+    assert fracs["masked"] > 0.5          # the bed still absorbs (0.9742 measured)
+    assert abs(fracs["masked"] - fracs["legacy"]) < 0.05
+
+
+def test_qrf_gradient_rejects_an_unknown_mode():
+    """A typo must fail loudly rather than silently picking a stencil."""
+    import heatr3d
+    grid, part, p, gamma, V = _eqs02_case(n=16, uniform=True)
+    with pytest.raises(ValueError) as exc:
+        heatr3d.compute_qrf_3d(V, gamma, grid, p, part, qrf_gradient="mask")
+    assert "qrf_gradient" in str(exc.value)
+
+
+def test_run_threads_the_qrf_gradient_choice_through_to_the_drive():
+    """run(qrf_gradient=...) must reach compute_qrf_3d, and the default must be
+    the corrected stencil. Checked on the CHEAP uniform chamber (n=16) where the
+    two stencils agree, by spying on the call rather than by comparing thermal
+    output -- this pins the wiring, not the physics. n=8 keeps run()'s
+    auto-selected DIRECT EQS solve cheap (N=512)."""
+    import heatr3d
+    seen = []
+    real = heatr3d.compute_qrf_3d
+
+    def _spy(*a, **k):
+        seen.append(k.get("qrf_gradient", "MISSING"))
+        return real(*a, **k)
+
+    n = 8
+    grid = Grid(n=n, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = Params()
+    heatr3d.compute_qrf_3d = _spy
+    try:
+        heatr3d.run(grid, part, p, max_time_s=2 * p.dt_s, phi_target=2.0)
+        heatr3d.run(grid, part, p, max_time_s=2 * p.dt_s, phi_target=2.0,
+                    qrf_gradient="legacy")
+    finally:
+        heatr3d.compute_qrf_3d = real
+    assert seen == ["masked", "legacy"]
