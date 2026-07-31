@@ -516,7 +516,8 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         powder_path_len_m: float = 0.0,
         powder_loss_region: str = "part",
         premix_frac: float = 0.0,
-        premix_budget: str = "floor_added") -> Result:
+        premix_budget: str = "floor_added",
+        T0_override: np.ndarray | None = None) -> Result:
     """Coupled 3-D solve. If densify=False (default): stop at the phi=0.90 crossing
     and report sigma_T (relative density held constant). If densify=True: evolve
     relative density (physics_dual) and run the FULL exposure, capturing T_phi90 in
@@ -601,13 +602,28 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
             raise ValueError("qrf_override shape must match part.shape")
         Qrf[~part] = 0.0
 
-    T = np.full(part.shape, p.preheat_c, dtype=np.float64)       # bed preheat
+    # T0_override (VALIDATION HOOK; default None == original behavior,
+    # bit-for-bit): replaces the uniform preheat initial condition so an
+    # analytic initial field (e.g. a Fourier mode) can be marched.
+    if T0_override is not None:
+        T = np.array(T0_override, dtype=np.float64, copy=True)
+        if T.shape != part.shape:
+            raise ValueError("T0_override shape must match part.shape")
+    else:
+        T = np.full(part.shape, p.preheat_c, dtype=np.float64)   # bed preheat
     rho_rel = np.full(part.shape, p.rho_rel, dtype=np.float64)   # evolving density field
     nsteps = int(max_time_s / p.dt_s)
     top = (slice(None), -1, slice(None))     # open top face (y max)
     h = grid.h
     drho_cap = p.dens_max_drho_rate * p.dt_s
 
+    # Empty-part-mask guard (S1 benchmarks): a part-free domain is a legitimate
+    # pure-conduction / pure-powder configuration, but every part-masked
+    # reduction below (phi[part].mean(), T[part].max/std) is a zero-size
+    # reduction on it -- .max() raises. INERT for any non-empty mask (the only
+    # case that ever ran before: an empty mask crashed), so legacy arithmetic is
+    # unchanged; part-free runs now report mean_phi=0.0 and sigma_T/T_max_c=nan.
+    _has_part = bool(np.asarray(part).any())
     T_phi90 = None; reached = False; t90 = float("nan"); phi_hist = []
     clamp_bound = False   # THM-01/02 manifest flag (latched if a clamp binds)
     # ---- S1 energy audit state (read-only w.r.t. the solve) ----
@@ -617,7 +633,8 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     e_stored_acc = 0.0
     for it in range(nsteps):
         phi, dphi = phase_fraction(T, p)
-        pmult = _sched_mult(float(phi[part].mean()), power_schedule)
+        pmult = _sched_mult(float(phi[part].mean()) if _has_part else 0.0,
+                            power_schedule)
         # property fields (density-dependent solid props, per voxel)
         rho_s_eff = p.rho_powder + rho_rel * (p.rho_solid - p.rho_powder)
         k_s_eff = p.k_powder + rho_rel * (p.k_solid - p.k_powder)
@@ -753,7 +770,7 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
             rho_new[part] = np.clip(rho_rel[part] + drho[part], 0.0, 1.0)
             rho_rel = rho_new
 
-        mean_phi = float(phi_now[part].mean())
+        mean_phi = float(phi_now[part].mean()) if _has_part else 0.0
         phi_hist.append(mean_phi)
         if not reached and mean_phi >= phi_target:
             T_phi90 = T.copy(); reached = True; t90 = (it + 1) * p.dt_s
@@ -765,8 +782,8 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         if densify and stop_mean_rho is not None and float(rho_rel[part].mean()) >= stop_mean_rho:
             break
         if verbose and it % 200 == 0:
-            print(f"  t={it*p.dt_s:6.1f}s  Tmax={T[part].max():6.1f}  phi={mean_phi:.3f}  "
-                  f"rho={rho_rel[part].mean():.3f}")
+            print(f"  t={it*p.dt_s:6.1f}s  Tmax={(T[part].max() if _has_part else float('nan')):6.1f}  phi={mean_phi:.3f}  "
+                  f"rho={(rho_rel[part].mean() if _has_part else float('nan')):.3f}")
 
     # ---- S1 energy audit: stored energy accumulated per step (v2) ----
     # Sensible + latent were banked inside the loop with each step's own
@@ -777,10 +794,11 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
 
     if T_phi90 is None:
         T_phi90 = T.copy()
-    sigma_T = float(T_phi90[part].std())
+    sigma_T = float(T_phi90[part].std()) if _has_part else float("nan")
     return Result(sigma_T=sigma_T, T_phi90=T_phi90, part=part, Qrf=Qrf,
                   phi_final=phase_fraction(T_phi90, p)[0], t_phi90_s=t90,
-                  reached=reached, phi_hist=phi_hist, T_max_c=float(T_phi90[part].max()),
+                  reached=reached, phi_hist=phi_hist, T_max_c=(float(T_phi90[part].max()) if _has_part
+                           else float("nan")),
                   rho_final=(rho_rel if densify else None),
                   exposure_s=(nsteps * p.dt_s if densify else t90),
                   clamp_bound=clamp_bound,

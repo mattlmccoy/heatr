@@ -237,6 +237,61 @@ def test_adiabatic_uniform_heating_matches_analytic_plateau():
     assert abs(res_c.energy_residual_frac) < 1e-9
 
 
+def test_conduction_decay_matches_fourier_mode():
+    """No source, no convection, uniform powder medium, initial condition =
+    lowest cosine Fourier mode compatible with Neumann walls. The mode decays
+    as exp(-alpha k^2 t) exactly; second-order spatial accuracy expected.
+
+    Three nested references, all measured 2026-07-30 (./.venv312, n=24,
+    L=0.060, t_end=400 s, 8000 forward-Euler steps of dt=0.05,
+    alpha = k_powder/(rho_powder*cp_powder) = 3.7504e-07 m^2/s):
+
+      continuous  amp_exact = 5 exp(-alpha k^2 t)      rel err -1.566e-03
+      semi-disc.  amp0 exp(-lambda_d t)                rel err -1.054e-05
+      fully disc. amp0 (1 - lambda_d dt)^nsteps        rel err +2.741e-13
+
+    with the discrete decay rate lambda_d = alpha (2/h^2)(1 - cos(k h)) (the
+    plan's step-4 documented form) and amp0 = 5 cos(pi/2n): the cell-centred
+    grid never samples the mode's true peak, so the observed (max-min)/2 starts
+    at 5 cos(pi/48) = 4.98929, not 5. That sampling factor (-2.14e-03) is why
+    the raw discrete-rate comparison looks WORSE than the continuous one --
+    the two errors partially cancel in the continuous form. Once both discrete
+    effects are accounted for, the solver reproduces the analytic mode to
+    2.7e-13: the discrete Laplacian eigenvalue, the zero-flux (Neumann) wall
+    treatment, the harmonic face averaging on a uniform k, the uniform property
+    maps and the explicit time integrator are all exactly as intended.
+
+    Spatial convergence (documented, not asserted -- n=48 doubles runtime):
+    the continuous-reference error is -1.566e-03 at n=24 and -3.992e-04 at
+    n=48, ratio 3.92 ~ 4, i.e. second order in h as expected.
+    """
+    n = 24
+    grid = Grid(n=n, L=0.060)
+    part = np.zeros((n, n, n), dtype=bool)     # all powder, no part
+    p = dataclasses.replace(Params(), conv_h=0.0)
+    q = np.zeros((n, n, n))
+    kx = np.pi / grid.L
+    x = grid.x.reshape(-1, 1, 1)
+    T0 = p.preheat_c + 5.0 * np.cos(kx * (x + grid.L / 2.0)) * np.ones((n, n, n))
+    t_end = 400.0
+    res = run(grid, part, p, qrf_override=q, max_time_s=t_end, phi_target=2.0,
+              T0_override=T0)
+    alpha = p.k_powder / (p.rho_powder * p.cp_powder)
+    decay = np.exp(-alpha * kx ** 2 * t_end)
+    amp_num = float((res.T_final.max() - res.T_final.min()) / 2.0)
+    amp_exact = 5.0 * decay
+    assert abs(amp_num - amp_exact) / amp_exact < 0.05
+    # discrete references (see docstring): grid sampling factor + discrete rate
+    amp0 = 5.0 * np.cos(np.pi / (2 * n))
+    lam_d = alpha * (2.0 / grid.h ** 2) * (1.0 - np.cos(kx * grid.h))
+    amp_semi = amp0 * np.exp(-lam_d * t_end)
+    assert abs(amp_num - amp_semi) / amp_semi < 1e-4
+    amp_full = amp0 * (1.0 - lam_d * p.dt_s) ** int(t_end / p.dt_s)
+    assert abs(amp_num - amp_full) / amp_full < 1e-9
+    # the mean is conserved exactly: zero-flux walls, no source, no sinks
+    assert abs(float(res.T_final.mean()) - p.preheat_c) < 1e-9
+
+
 def test_legacy_default_is_unchanged():
     """Default Params must still take the legacy apparent_cp path.
 
