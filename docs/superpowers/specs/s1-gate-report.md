@@ -508,3 +508,8 @@ benchmarks and the standing gate delivered, and two newly measured blockers
       and (c) the canonical sync plan in section 9 (and its timing).
 
 Signature: ______________________  Date: ____________
+
+
+---
+SIGNED OFF: Matt McCoy, 2026-07-31 (via session): S1 canonical-sync package approved.
+Execution note: the physical canonical sync of heatr3d.py to dissertation_materials/analysis-3dfgm/ is deliberately deferred until the EQS-02 fix lands, so the canonical file is synced once with the complete S1+EQS-02 change set and one SYNCED_FROM_SHA256 update.

@@ -615,3 +615,7 @@ Immediate consequences if approved:
 5. `jit_fix.py` (or equivalent) ships with the environment documentation.
 
 Matt — approve / modify / reject: ______________________  date: ____________
+
+
+---
+SIGNED OFF: Matt McCoy, 2026-07-31 (via session): D1 recommendation (a) approved.
