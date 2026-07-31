@@ -447,6 +447,79 @@ git add heatr3d.py test_heatr3d_s1.py
 git commit -m "feat(heatr3d): opt-in enthalpy-conserving phase update (S1 fix)"
 ```
 
+### Task 4b: Audit property upgrade (Task-4 finding 2)
+
+The Task-1 audit books stored energy with initial-state solid properties, so
+it drifts to +0.38 on HEALTHY molten runs (solver blends to cp_liquid=3279,
+rho_liquid=1010 while the audit holds cp_solid/rho_s). The standing gate must
+be meaningful AT melt, which is where the instability lives. Fix: accumulate
+stored energy per step with the SAME property maps the solver used that step.
+
+**Files:**
+- Modify: `heatr3d.py` (run() audit block)
+- Test: `test_heatr3d_s1.py` (append)
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+def test_audit_stays_tight_through_melt_both_schemes():
+    # Healthy uniform molten run: residual must stay small ABOVE the window
+    # (Task-4 finding: the v1 audit drifted to +0.38 here).
+    grid, part, p, q = bulk_crossing_case()
+    for scheme in ("apparent_cp", "enthalpy"):
+        pp = dataclasses.replace(p, phase_update=scheme)
+        res = run(grid, part, pp, qrf_override=q, max_time_s=3.0,
+                  phi_target=2.0)
+        assert abs(res.energy_residual_frac) < 0.02, scheme
+```
+
+(If bulk_crossing_case's legacy arm still books the latent-skip discrepancy
+at 3.0 s, the legacy assertion may need its own looser bound; keep the
+enthalpy bound at 0.02 and record the legacy value in the test docstring -
+the AUDIT upgrade must not mask the SCHEME defect the Task-4 test pins.)
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `./.venv312/bin/python -m pytest test_heatr3d_s1.py::test_audit_stays_tight_through_melt_both_schemes -v`
+Expected: FAIL on the residual bound (v1 audit drift).
+
+- [ ] **Step 3: Implement per-step stored-energy accumulation**
+
+In run(), replace the post-loop stored-energy computation with per-step
+accumulation placed right after T is updated (dT applied):
+
+```python
+        # S1 audit v2: bank stored energy with THIS step's property maps
+        e_stored_acc += float((rho * cp * dT).sum()) * dV
+```
+
+and latent banking from the actual phi change across the step:
+
+```python
+        phi_new, _ = phase_fraction(T, p)
+        e_stored_acc += float((rho_s_eff[part] * p.latent_j_per_kg
+                               * (phi_new[part] - phi[part])).sum()) * dV
+```
+
+(initialize `e_stored_acc = 0.0` before the loop; delete the old post-loop
+sensible/latent estimate; keep the residual formula, using e_stored_acc).
+Note phase_fraction(T) after the update is one extra evaluation per step;
+if profiling shows it matters, reuse the next iteration's phi instead -
+correctness first, measure before optimizing.
+
+- [ ] **Step 4: Run the whole S1 file**
+
+Run: `./.venv312/bin/python -m pytest test_heatr3d_s1.py -v`
+Expected: ALL PASS including the Task 1 benign test (machine-precision
+residual must survive the accumulation change) and Task 4's healing test.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add heatr3d.py test_heatr3d_s1.py
+git commit -m "fix(heatr3d): S1 audit v2 banks stored energy with per-step properties"
+```
+
 ### Task 5: Analytic benchmark 1 - adiabatic uniform heating with latent plateau
 
 **Files:**
@@ -677,7 +750,7 @@ line), print:
 Run: `./.venv312/bin/python -m pytest test_heatr3d_s1.py -m slow -v`
 Expected: PASS (budget hours; run overnight if needed). Paste the
 `[s1-energy]` line and runtime into `docs/superpowers/plans/s1-findings.md`.
-If it FAILS: the mechanism fix is incomplete at scale - record the failure
+The audit here relies on Task 4b's per-step property accounting; if the residual assertion fails, first check whether the failure is audit drift (healthy fields, smooth phi history) vs a real blow-up (clamp_bound, phi discontinuity). If it FAILS for real: the mechanism fix is incomplete at scale - record the failure
 signature in s1-findings.md, and add source-aware substepping as the next
 fix (n_sub = ceil(max_source_dT / (0.5 * dt_pc_c)) applied to the enthalpy
 deposit), then rerun. Do not weaken the assertions.
