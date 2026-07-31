@@ -124,6 +124,19 @@ not the part volume). Peak RSS 0.64 GB at n=64, 1.86 GB at n=96.
 If the wall clock exceeds the estimate materially, the n = 96 spot check is the part
 that gets cut, and that cut will be stated in the report.
 
+### Actual (recorded after the fact — nothing above was edited)
+
+| item | estimated | actual |
+|---|---|---|
+| n = 64, 8 shapes x 2 arms | ~1.0-1.4 h wall | **50 min wall** (18:35 -> 19:25), 6272 s summed per-shard time |
+| n = 96 spot check (cylinder + dumbbell) | ~1.1 h | **30 min wall** (19:27 -> 19:57), 2836 s summed |
+| **total** | ~2.1-2.5 h | **~1.4 h wall** (2.53 h of serial compute, 3-way parallel) |
+
+The estimate was conservative in the right direction. The EQS solves were the surprise:
+50-222 s rather than the assumed ~450 s (the ~570 s cylinder figure in
+`results.json["eqs02_impact"]` was evidently a contended measurement). Nothing was cut;
+the full 8-shape set and the n = 96 spot check both ran.
+
 ## 5. Files
 
 - `rank_utils.py` + `test_rank_utils.py` — pure ranking/flip logic (TDD'd).

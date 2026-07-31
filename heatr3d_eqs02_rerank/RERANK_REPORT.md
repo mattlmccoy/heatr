@@ -139,9 +139,45 @@ Only `(dumbbell, cylinder)` is a legacy-vs-masked inversion, i.e. attributable t
 **Outlier.** `lshape` is the only shape whose
 phi_bar=0.90 crossing gets *later* under masked (532.6 -> 680.9 s) and whose T_max *rises* (298.6 -> 379.3 C), alongside the largest sigma_T increase in the set (33.20 -> 66.42 C, +100 %). Its Q_rf is the expected volume-proportional field (surface-band power fraction 0.501 vs volume fraction 0.498); the thermal response, not the drive, is what differs. Mechanism consistent with the data but NOT independently verified here: with power distributed by volume, a part of strongly varying section thickness heats its thick region faster than its thin arms lose heat to the powder, so the spread widens and the mean melt fraction crosses later. The legacy surface-weighted drive happened to compensate that (thin arms carry more skin per unit volume). Flagged as the single result in this campaign most worth an independent check.
 
-## 5. n = 96 refinement spot check
+## 5. n = 96 refinement spot check (the ranking-flip pair)
 
-NOT RUN (see README section 4: the n=96 check is the part that gets cut if wall time overruns).
+| shape | n | legacy sigma_T [C] | masked sigma_T [C] | rel | legacy t90 [s] | masked t90 [s] |
+|---|---|---|---|---|---|---|
+| cylinder | 64 | 26.131 | 20.103 | -23.1 % | 397.0 | 323.4 |
+| cylinder | 96 | 20.714 | 19.952 | -3.7 % | 369.9 | 322.8 |
+| dumbbell | 64 | 20.007 | 26.006 | +30.0 % | 797.3 | 688.3 |
+| dumbbell | 96 | 19.012 | 25.702 | +35.2 % | 787.0 | 662.4 |
+
+- n=64 legacy order: `dumbbell < cylinder`  ->  masked `cylinder < dumbbell`
+- n=96 legacy order: `dumbbell < cylinder`  ->  masked `cylinder < dumbbell`
+- inverted pairs at n=96: [('dumbbell', 'cylinder')]
+
+**The ranking flip PERSISTS under refinement.** The n=64 inversion is reproduced at n=96.
+
+**Second finding: the corrected drive is far more grid-stable.** sigma_T change
+from n=64 to n=96, per arm:
+
+| shape | legacy n64 -> n96 | legacy change | masked n64 -> n96 | masked change |
+|---|---|---|---|---|
+| cylinder | 26.131 -> 20.714 | **-20.7 %** | 20.103 -> 19.952 | **-0.8 %** |
+| dumbbell | 20.007 -> 19.012 | **-5.0 %** | 26.006 -> 25.702 | **-1.2 %** |
+
+This is consistent with EQS02_IMPACT's Task-3 result that the legacy corner peak
+keeps growing with refinement (19.2 -> 29.1 -> 38.7 at n=64/96/128) while the
+mask-confined one grows slowly (2.20 -> 2.71 -> 3.17): much of heatr3d's known
+sigma_T grid-non-convergence was the cross-interface stencil. Two shapes is not a
+convergence study, and no claim of grid convergence is made here.
+
+### n=96 gates
+
+| shape | arm | reached | energy residual frac | clamp_bound | cfl_violated | substeps | gate |
+|---|---|---|---|---|---|---|---|
+| cylinder | legacy | True | -8.63e-14 | False | False | 1 | PASS |
+| cylinder | masked | True | -8.81e-14 | False | False | 1 | PASS |
+| dumbbell | legacy | True | -1.43e-13 | False | False | 1 | PASS |
+| dumbbell | masked | True | -1.02e-13 | False | False | 1 | PASS |
+
+**All n=96 gates pass: True**
 
 ## 6. Exposure statement
 

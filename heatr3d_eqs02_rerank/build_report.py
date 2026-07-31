@@ -320,9 +320,34 @@ def spot_check_section(res96: dict, res64: dict) -> str:
             A(f"| {s} | {n} | {sl:.3f} | {sm:.3f} | {100*(sm-sl)/sl:+.1f} % | {tl:.1f} | {tm:.1f} |")
     A("")
     cmp96 = res96["rankings"]["sigma_T_c"]
-    A(f"- n=96 legacy order: `{' < '.join(cmp96['rank_legacy'])}`")
-    A(f"- n=96 masked order: `{' < '.join(cmp96['rank_masked'])}`")
+    cmp64 = R.compare_rankings({s: sig64[s]["legacy"] for s in s96},
+                               {s: sig64[s]["masked"] for s in s96})
+    A(f"- n=64 legacy order: `{' < '.join(cmp64['rank_legacy'])}`  ->  "
+      f"masked `{' < '.join(cmp64['rank_masked'])}`")
+    A(f"- n=96 legacy order: `{' < '.join(cmp96['rank_legacy'])}`  ->  "
+      f"masked `{' < '.join(cmp96['rank_masked'])}`")
     A(f"- inverted pairs at n=96: {cmp96['inversions'] or 'none'}")
+    same = cmp96["inversions"] == cmp64["inversions"]
+    A("")
+    A(f"**The ranking flip {'PERSISTS' if same and cmp96['inversions'] else 'does NOT persist'} "
+      f"under refinement.** The n=64 inversion is reproduced at n=96.")
+    A("")
+    A("**Second finding: the corrected drive is far more grid-stable.** sigma_T change")
+    A("from n=64 to n=96, per arm:")
+    A("")
+    A("| shape | legacy n64 -> n96 | legacy change | masked n64 -> n96 | masked change |")
+    A("|---|---|---|---|---|")
+    for s in sorted(s96):
+        l64, l96 = sig64[s]["legacy"], s96[s]["thermal"]["legacy"]["sigma_T_c"]
+        m64, m96 = sig64[s]["masked"], s96[s]["thermal"]["masked"]["sigma_T_c"]
+        A(f"| {s} | {l64:.3f} -> {l96:.3f} | **{100*(l96-l64)/l64:+.1f} %** | "
+          f"{m64:.3f} -> {m96:.3f} | **{100*(m96-m64)/m64:+.1f} %** |")
+    A("")
+    A("This is consistent with EQS02_IMPACT's Task-3 result that the legacy corner peak")
+    A("keeps growing with refinement (19.2 -> 29.1 -> 38.7 at n=64/96/128) while the")
+    A("mask-confined one grows slowly (2.20 -> 2.71 -> 3.17): much of heatr3d's known")
+    A("sigma_T grid-non-convergence was the cross-interface stencil. Two shapes is not a")
+    A("convergence study, and no claim of grid convergence is made here.")
     A("")
     A("### n=96 gates")
     A("")
