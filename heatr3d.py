@@ -1065,6 +1065,20 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     e_resid_frac = (e_in - e_stored - e_loss) / max(e_in, 1e-30)
 
     if T_phi90 is None:
+        # P0b instrumentation (2026-07-30): the melt-onset read state never
+        # existed in this run (mean phi never crossed phi_target within
+        # max_time_s), so every T_phi90-derived metric below (sigma_T, T_max_c,
+        # phi_final) is a FINAL-TIMESTEP read, not a melt-onset read. Numerical
+        # behavior is unchanged (T_phi90 = final T, exactly as before); this
+        # warning only makes the fallback loud. Consumers must check
+        # Result.reached before quoting any of these as melt-onset values.
+        logger.warning(
+            "MELT-ONSET FALLBACK: mean melt fraction never crossed "
+            "phi_target=%.2f within max_time_s=%.1f s (final mean phi=%.4f). "
+            "sigma_T / T_phi90 / T_max_c are FINAL-TIMESTEP reads, not "
+            "melt-onset reads. Check Result.reached before quoting.",
+            phi_target, max_time_s, (phi_hist[-1] if phi_hist else float("nan")),
+        )
         T_phi90 = T.copy()
     sigma_T = float(T_phi90[part].std()) if _has_part else float("nan")
     # ---- S1 standing conservation gate (always on, one line per solve) ----
