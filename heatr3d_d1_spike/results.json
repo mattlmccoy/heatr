@@ -78,5 +78,484 @@
   },
   "tol": 1e-09,
   "gate_ok": true
+ },
+ "task2_ref": {
+  "engine": "heatr3d (voxel FV, EQS only)",
+  "shape": "cylinder",
+  "part_diam_m": 0.02,
+  "python": "3.12.7",
+  "runs": {
+   "n96": {
+    "shape": "cylinder",
+    "n": 96,
+    "h_m": 0.000625,
+    "L_m": 0.06,
+    "n_unknowns": 884736,
+    "n_voxels_in_part": 77952,
+    "voxel_volume_in_part_m3": 1.9031250000000002e-05,
+    "ok": true,
+    "wall_gamma_s": 0.004425625083968043,
+    "wall_eqs_s": 636.7955465000123,
+    "wall_qrf_s": 0.040580667089670897,
+    "peak_rss_gb": 1.8428955078125,
+    "z_mid_m": 0.0003125000000000003,
+    "z_invariance_rel_std": 1.0482378968141397e-05,
+    "q_in_part": {
+     "mean": 1591549.4309189538,
+     "max": 25504449.280040152,
+     "p99": 19816500.97164919,
+     "p99_over_mean": 12.451074774477615
+    },
+    "e_in_part": {
+     "mean": 2265.307932365885,
+     "max": 10788.720039808319
+    },
+    "p_total_w": 30.289175107176344,
+    "electrode_gauge": {
+     "note": "cell-centred electrodes span L-h, not L",
+     "span_m": 0.059375,
+     "expected_E_ratio_vs_fem": 1.0105263157894737
+    },
+    "npz": "ref_heatr3d_cylinder_n96.npz"
+   },
+   "n64": {
+    "shape": "cylinder",
+    "n": 64,
+    "h_m": 0.0009375,
+    "L_m": 0.06,
+    "n_unknowns": 262144,
+    "n_voxels_in_part": 23040,
+    "voxel_volume_in_part_m3": 1.8984374999999996e-05,
+    "ok": true,
+    "wall_gamma_s": 0.001001209020614624,
+    "wall_eqs_s": 102.98091095802374,
+    "wall_qrf_s": 0.009717166074551642,
+    "peak_rss_gb": 0.763946533203125,
+    "z_mid_m": 0.0004687500000000004,
+    "z_invariance_rel_std": 1.935870108420761e-06,
+    "q_in_part": {
+     "mean": 1591549.430918953,
+     "max": 19504336.327924266,
+     "p99": 19504323.803047374,
+     "p99_over_mean": 12.254928074578038
+    },
+    "e_in_part": {
+     "mean": 2507.397113645651,
+     "max": 10817.404693538974
+    },
+    "p_total_w": 30.214571227602004,
+    "electrode_gauge": {
+     "note": "cell-centred electrodes span L-h, not L",
+     "span_m": 0.0590625,
+     "expected_E_ratio_vs_fem": 1.0158730158730158
+    },
+    "npz": "ref_heatr3d_cylinder_n64.npz"
+   }
+  }
+ },
+ "task2": {
+  "engine": "dolfinx (P1 CG, conforming tets)",
+  "scalar_path": "complex",
+  "shape": "extruded circle d=20mm, full height",
+  "gate": {
+   "qrf_pattern_rel_l2_fine_lt": 0.1,
+   "improves_or_holds_under_refinement": null,
+   "as_written_all_points": {
+    "coarse": 0.9031803180394822,
+    "fine": 0.9037810456580881,
+    "improves_or_holds": true,
+    "fine_under_10pct": false,
+    "gate_ok": false
+   },
+   "interior_only": {
+    "coarse": 0.04775482891950163,
+    "fine": 0.02553801373366744,
+    "improves_or_holds": true,
+    "fine_under_10pct": true,
+    "gate_ok": true
+   },
+   "surface_band_only": {
+    "coarse": 0.8090219426770544,
+    "fine": 0.8011004738155877,
+    "improves_or_holds": true,
+    "fine_under_10pct": false,
+    "gate_ok": false
+   },
+   "maskgrad_all_points": {
+    "coarse": 0.17652460972777445,
+    "fine": 0.10790598069422491,
+    "improves_or_holds": true,
+    "fine_under_10pct": false,
+    "gate_ok": false
+   },
+   "maskgrad_interior": {
+    "coarse": 0.047754828919521514,
+    "fine": 0.025538013733723816,
+    "improves_or_holds": true,
+    "fine_under_10pct": true,
+    "gate_ok": true
+   },
+   "gate_ok": false,
+   "gate_ok_interior": true,
+   "gate_ok_maskgrad": false
+  },
+  "levels": {
+   "coarse": {
+    "matched_to": "n64",
+    "target_nodes_in_part": 23040,
+    "lc_part_m": 0.0009375,
+    "lc_bed_m": 0.00375,
+    "lc_over_voxel_h": 1.0,
+    "n_nodes_in_part": 19821,
+    "node_count_ratio_vs_voxels": 0.8602864583333333,
+    "n_dofs_total": 24784,
+    "n_cells_total": 143892,
+    "part_volume_m3": 1.8849555921538758e-05,
+    "part_volume_rel_err_vs_analytic": 0.0,
+    "doped_volume_assembled_m3": 1.882892871009083e-05,
+    "match_history": [
+     {
+      "lc_part_m": 0.0009375,
+      "n_nodes_in_part": 19821,
+      "ratio_vs_target": 0.8602864583333333
+     }
+    ],
+    "wall_mesh_s": 2.7209705419372767,
+    "wall_solve_s": 0.45022175007034093,
+    "wall_post_s": 0.09241737495176494,
+    "petsc_options": {
+     "ksp_type": "gmres",
+     "pc_type": "gamg",
+     "ksp_rtol": "1e-10",
+     "ksp_max_it": "500"
+    },
+    "direct_lu_cross_check": {
+     "wall_lu_s": 18.93924820900429,
+     "max_dV_over_860": 2.240432948827558e-08,
+     "speedup_lu_over_iterative": 42.06648880478407
+    },
+    "peak_rss_gb": 0.772186279296875,
+    "p_target_w": 29.9671707733586,
+    "heatr3d_wall_eqs_s": 102.98091095802374,
+    "heatr3d_peak_rss_gb": 0.763946533203125,
+    "eqs_solve_speedup_vs_heatr3d": 228.73375384892978,
+    "comparison": {
+     "diagnostic_maskgrad": {
+      "what": "heatr3d V re-post-processed with a stencil that never crosses the part boundary (metrics.masked_grad_2d); isolates compute_qrf_3d's whole-domain np.gradient from the FV solve itself",
+      "qrf_pattern_rel_l2_vs_fem": {
+       "all": 0.17652460972777445,
+       "interior": 0.047754828919521514,
+       "surface_band": 0.29875127226395204
+      },
+      "emag_pattern_rel_l2_vs_fem": {
+       "all": 0.0872797913976034,
+       "interior": 0.023665721005527402,
+       "surface_band": 0.15539855208367898
+      },
+      "q_maskgrad_p99_over_mean": 1.680690959905988,
+      "q_maskgrad_max_over_mean": 1.857308020972484,
+      "emag_mean_ratio_fem_over_maskgrad": 0.963306439732671,
+      "emag_maskgrad_gauge_residual": -0.021402981858873904
+     },
+     "analytic_anchor": {
+      "what": "an infinitely long cylinder of gamma_i in an unbounded uniform transverse field E0 through gamma_e has a UNIFORM interior field E_in = 2*gamma_e/(gamma_i+gamma_e) * E0",
+      "E_in_over_E0": 0.11610632017673131,
+      "E0_plate_v_per_m": 14333.333333333334,
+      "E_in_analytic_v_per_m": 1664.1905891998156,
+      "E_in_fem_v_per_m": 1843.5987068235725,
+      "caveat": "the 60 mm box with Neumann side walls is NOT unbounded (R/L = 1/6), so this anchors the UNIFORMITY and the order of magnitude, not the exact value"
+     },
+     "uniformity_cv": {
+      "fem": 0.024789058677560608,
+      "heatr3d": 2.11557105235421,
+      "heatr3d_maskgrad": 0.18032887761719704,
+      "note": "an infinite cylinder in a uniform transverse field has a UNIFORM interior field, so CV -> 0 is the physically expected answer (finite 60 mm box + Neumann walls perturb it slightly)"
+     },
+     "power_fraction_in_surface_band": {
+      "fem": 0.28912495409240163,
+      "heatr3d": 0.7287405010611817,
+      "heatr3d_maskgrad": 0.2983003067511321,
+      "area_fraction": 0.28888888888888886
+     },
+     "interior_mean_ratio_fem_over_heatr3d": 2.6221157582569257,
+     "ref_npz": "ref_heatr3d_cylinder_n64.npz",
+     "n_points_compared": 360,
+     "n_points_interior": 256,
+     "n_points_surface_band": 104,
+     "eval_missed_q": 0,
+     "eval_missed_e": 0,
+     "qrf_pattern_rel_l2": {
+      "all": 0.9031803180394822,
+      "interior": 0.04775482891950163,
+      "surface_band": 0.8090219426770544
+     },
+     "emag_pattern_rel_l2": {
+      "all": 0.5835178787520896,
+      "interior": 0.02366572100551765,
+      "surface_band": 0.5825190790494861
+     },
+     "qrf_abs_mean_ratio_fem_over_heatr3d": 1.0005609436412919,
+     "emag_mean_ratio_fem_over_heatr3d": 0.7352639531574287,
+     "emag_gauge_expected_ratio": 0.984375,
+     "emag_gauge_residual": -0.25306519044324705,
+     "qrf_max_ratio_fem_over_heatr3d": 0.1025653082966678,
+     "q_fem": {
+      "mean": 1592442.1908006854,
+      "max": 2000468.1944655727,
+      "p99_over_mean": 1.0861872570516697
+     },
+     "q_heatr3d": {
+      "mean": 1591549.4212730206,
+      "max": 19504335.60516646,
+      "p99_over_mean": 11.423481383789373
+     }
+    }
+   },
+   "fine": {
+    "matched_to": "n96",
+    "target_nodes_in_part": 77952,
+    "lc_part_m": 0.0005799361188747663,
+    "lc_bed_m": 0.0023197444754990654,
+    "lc_over_voxel_h": 0.9278977901996261,
+    "n_nodes_in_part": 77043,
+    "node_count_ratio_vs_voxels": 0.9883389778325123,
+    "n_dofs_total": 94054,
+    "n_cells_total": 561132,
+    "part_volume_m3": 1.8849555921538758e-05,
+    "part_volume_rel_err_vs_analytic": 0.0,
+    "doped_volume_assembled_m3": 1.88416199401506e-05,
+    "match_history": [
+     {
+      "lc_part_m": 0.000625,
+      "n_nodes_in_part": 62277,
+      "ratio_vs_target": 0.7989147167487685
+     },
+     {
+      "lc_part_m": 0.0005799361188747663,
+      "n_nodes_in_part": 77043,
+      "ratio_vs_target": 0.9883389778325123
+     }
+    ],
+    "wall_mesh_s": 24.913597416016273,
+    "wall_solve_s": 1.4775482079712674,
+    "wall_post_s": 0.25759845797438174,
+    "petsc_options": {
+     "ksp_type": "gmres",
+     "pc_type": "gamg",
+     "ksp_rtol": "1e-10",
+     "ksp_max_it": "500"
+    },
+    "direct_lu_cross_check": null,
+    "peak_rss_gb": 1.48321533203125,
+    "p_target_w": 29.987369493337894,
+    "heatr3d_wall_eqs_s": 636.7955465000123,
+    "heatr3d_peak_rss_gb": 1.8428955078125,
+    "eqs_solve_speedup_vs_heatr3d": 430.9812316542673,
+    "comparison": {
+     "diagnostic_maskgrad": {
+      "what": "heatr3d V re-post-processed with a stencil that never crosses the part boundary (metrics.masked_grad_2d); isolates compute_qrf_3d's whole-domain np.gradient from the FV solve itself",
+      "qrf_pattern_rel_l2_vs_fem": {
+       "all": 0.10790598069422491,
+       "interior": 0.025538013733723816,
+       "surface_band": 0.22495446822280354
+      },
+      "emag_pattern_rel_l2_vs_fem": {
+       "all": 0.0517356778880154,
+       "interior": 0.012810365197596516,
+       "surface_band": 0.11112392815846718
+      },
+      "q_maskgrad_p99_over_mean": 1.4626138695928022,
+      "q_maskgrad_max_over_mean": 1.813492219396244,
+      "emag_mean_ratio_fem_over_maskgrad": 0.9787003001197663,
+      "emag_maskgrad_gauge_residual": -0.010997591457920453
+     },
+     "analytic_anchor": {
+      "what": "an infinitely long cylinder of gamma_i in an unbounded uniform transverse field E0 through gamma_e has a UNIFORM interior field E_in = 2*gamma_e/(gamma_i+gamma_e) * E0",
+      "E_in_over_E0": 0.11610632017673131,
+      "E0_plate_v_per_m": 14333.333333333334,
+      "E_in_analytic_v_per_m": 1664.1905891998156,
+      "E_in_fem_v_per_m": 1827.3436180311235,
+      "caveat": "the 60 mm box with Neumann side walls is NOT unbounded (R/L = 1/6), so this anchors the UNIFORMITY and the order of magnitude, not the exact value"
+     },
+     "uniformity_cv": {
+      "fem": 0.011873150219774569,
+      "heatr3d": 2.120846029633705,
+      "heatr3d_maskgrad": 0.10929602243246767,
+      "note": "an infinite cylinder in a uniform transverse field has a UNIFORM interior field, so CV -> 0 is the physically expected answer (finite 60 mm box + Neumann walls perturb it slightly)"
+     },
+     "power_fraction_in_surface_band": {
+      "fem": 0.202407483723139,
+      "heatr3d": 0.6178420619955252,
+      "heatr3d_maskgrad": 0.20591555830490252,
+      "area_fraction": 0.2019704433497537
+     },
+     "interior_mean_ratio_fem_over_heatr3d": 2.088472892267618,
+     "ref_npz": "ref_heatr3d_cylinder_n96.npz",
+     "n_points_compared": 812,
+     "n_points_interior": 648,
+     "n_points_surface_band": 164,
+     "eval_missed_q": 0,
+     "eval_missed_e": 0,
+     "qrf_pattern_rel_l2": {
+      "all": 0.9037810456580881,
+      "interior": 0.02553801373366744,
+      "surface_band": 0.8011004738155877
+     },
+     "emag_pattern_rel_l2": {
+      "all": 0.5409411190890596,
+      "interior": 0.01281036519756911,
+      "surface_band": 0.5762552088226282
+     },
+     "qrf_abs_mean_ratio_fem_over_heatr3d": 1.0006694869867458,
+     "emag_mean_ratio_fem_over_heatr3d": 0.8066645660655046,
+     "emag_gauge_expected_ratio": 0.9895833333333334,
+     "emag_gauge_residual": -0.18484422797591116,
+     "qrf_max_ratio_fem_over_heatr3d": 0.07024331157346997,
+     "q_fem": {
+      "mean": 1592614.9492634258,
+      "max": 1791516.069228193,
+      "p99_over_mean": 1.038990811053414
+     },
+     "q_heatr3d": {
+      "mean": 1591549.427632863,
+      "max": 25504436.352696482,
+      "p99_over_mean": 12.451063216490812
+     }
+    }
+   }
+  }
+ },
+ "task3_ref": {
+  "engine": "heatr3d (voxel FV, EQS only)",
+  "shape": "square",
+  "part_diam_m": 0.02,
+  "python": "3.12.7",
+  "runs": {
+   "n64": {
+    "shape": "square",
+    "n": 64,
+    "h_m": 0.0009375,
+    "L_m": 0.06,
+    "n_unknowns": 262144,
+    "n_voxels_in_part": 30976,
+    "voxel_volume_in_part_m3": 2.5523437499999996e-05,
+    "ok": true,
+    "wall_gamma_s": 0.0013608329463750124,
+    "wall_eqs_s": 206.15408391691744,
+    "wall_qrf_s": 0.0109432089375332,
+    "peak_rss_gb": 0.6345062255859375,
+    "z_mid_m": 0.0004687500000000004,
+    "z_invariance_rel_std": 9.035856448417046e-07,
+    "q_in_part": {
+     "mean": 1591549.4309189531,
+     "max": 30485615.12965102,
+     "p99": 11918684.07769963,
+     "p99_over_mean": 7.48873006779176
+    },
+    "e_in_part": {
+     "mean": 2719.2136469568995,
+     "max": 14383.796645247676
+    },
+    "p_total_w": 40.62181242822046,
+    "electrode_gauge": {
+     "note": "cell-centred electrodes span L-h, not L",
+     "span_m": 0.0590625,
+     "expected_E_ratio_vs_fem": 1.0158730158730158
+    },
+    "corner": {
+     "band_m": 0.001,
+     "n_voxels_in_band": 256,
+     "q_corner_max": 30485615.12965102,
+     "q_corner_max_over_mean": 19.154676906295503
+    },
+    "npz": "ref_heatr3d_square_n64.npz"
+   },
+   "n96": {
+    "shape": "square",
+    "n": 96,
+    "h_m": 0.000625,
+    "L_m": 0.06,
+    "n_unknowns": 884736,
+    "n_voxels_in_part": 98304,
+    "voxel_volume_in_part_m3": 2.4000000000000004e-05,
+    "ok": true,
+    "wall_gamma_s": 0.003279209020547569,
+    "wall_eqs_s": 676.6130994580453,
+    "wall_qrf_s": 0.04345620796084404,
+    "peak_rss_gb": 1.8831329345703125,
+    "z_mid_m": 0.0003125000000000003,
+    "z_invariance_rel_std": 6.2236030273043644e-06,
+    "q_in_part": {
+     "mean": 1591549.4309189534,
+     "max": 46342001.16740444,
+     "p99": 13138675.966031045,
+     "p99_over_mean": 8.255273578555983
+    },
+    "e_in_part": {
+     "mean": 2499.102290014344,
+     "max": 15893.683617333558
+    },
+    "p_total_w": 38.19718634205488,
+    "electrode_gauge": {
+     "note": "cell-centred electrodes span L-h, not L",
+     "span_m": 0.059375,
+     "expected_E_ratio_vs_fem": 1.0105263157894737
+    },
+    "corner": {
+     "band_m": 0.001,
+     "n_voxels_in_band": 1152,
+     "q_corner_max": 46342001.16740444,
+     "q_corner_max_over_mean": 29.117538084033484
+    },
+    "npz": "ref_heatr3d_square_n96.npz"
+   }
+  }
+ },
+ "task3_ref_n128": {
+  "engine": "heatr3d (voxel FV, EQS only)",
+  "shape": "square",
+  "part_diam_m": 0.02,
+  "python": "3.12.7",
+  "runs": {
+   "n128": {
+    "shape": "square",
+    "n": 128,
+    "h_m": 0.00046875,
+    "L_m": 0.06,
+    "n_unknowns": 2097152,
+    "n_voxels_in_part": 225792,
+    "voxel_volume_in_part_m3": 2.3255859374999995e-05,
+    "ok": true,
+    "wall_gamma_s": 0.011773833073675632,
+    "wall_eqs_s": 1684.4803166660713,
+    "wall_qrf_s": 0.19770879193674773,
+    "peak_rss_gb": 3.7201385498046875,
+    "z_mid_m": 0.00023437499999999847,
+    "z_invariance_rel_std": 3.8478761862562715e-05,
+    "q_in_part": {
+     "mean": 1591549.4309189525,
+     "max": 61603556.855475396,
+     "p99": 13179670.438799158,
+     "p99_over_mean": 8.281031165453205
+    },
+    "e_in_part": {
+     "mean": 2385.9765740009966,
+     "max": 17148.110955031458
+    },
+    "p_total_w": 37.012849753812446,
+    "electrode_gauge": {
+     "note": "cell-centred electrodes span L-h, not L",
+     "span_m": 0.05953125,
+     "expected_E_ratio_vs_fem": 1.0078740157480315
+    },
+    "corner": {
+     "band_m": 0.001,
+     "n_voxels_in_band": 1536,
+     "q_corner_max": 61603556.855475396,
+     "q_corner_max_over_mean": 38.70665633043255
+    },
+    "npz": "ref_heatr3d_square_n128.npz"
+   }
+  }
  }
 }
