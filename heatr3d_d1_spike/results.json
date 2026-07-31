@@ -1,0 +1,29 @@
+{
+ "task0": {
+  "dolfinx_version": "0.11.0",
+  "petsc_scalar_type": "<class 'numpy.complex128'>",
+  "complex_build": true,
+  "poisson_umax": 0.056064658380808416,
+  "poisson_ref": 0.0562,
+  "poisson_rel_err": 0.0024082138646189335,
+  "gate_ok": true,
+  "jit_space_fix": {
+   "needed": true,
+   "prefix": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/heatr3d_d1_spike/env",
+   "link": "/Users/mattmccoy/.cache/heatr3d_d1_spike/env",
+   "patched_vars": [
+    "BLDSHARED",
+    "CFLAGS",
+    "CONFIGURE_CFLAGS",
+    "CONFIGURE_CPPFLAGS",
+    "CONFIGURE_LDFLAGS",
+    "CPPFLAGS",
+    "LDFLAGS",
+    "LDSHARED",
+    "PY_CFLAGS",
+    "PY_CPPFLAGS",
+    "PY_LDFLAGS"
+   ]
+  }
+ }
+}
