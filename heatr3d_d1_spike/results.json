@@ -25,5 +25,58 @@
     "PY_LDFLAGS"
    ]
   }
+ },
+ "task1": {
+  "scalar_path": "complex",
+  "n_cells_per_axis": 24,
+  "n_dofs": 15625,
+  "n_cells": 82944,
+  "v_err_max": 2.580691216280684e-11,
+  "v_err_tol": 0.00086,
+  "transverse_std": 5.027568745526734e-12,
+  "transverse_std_tol": 8.6e-07,
+  "vi_max_abs": 1.1102230246251565e-16,
+  "wall_s": 2.8979428749298677,
+  "wall_solve_s": 2.8199982499936596,
+  "gate_ok": true,
+  "heatr3d_conventions": {
+   "gamma": "sigma + 1j*omega*eps0*eps_r, omega=2*pi*27.12e6 (heatr3d.build_gamma, binary blend path)",
+   "bvp": "div(gamma grad V)=0; V=860 at y_min, V=0 at y_max, Neumann x/z walls (heatr3d.solve_eqs_3d)",
+   "qrf": "Q = 0.5*Re(gamma*|E|^2) = 0.5*sigma*|E|^2, E=-grad V, clipped >=0, zeroed outside the doped region (heatr3d.compute_qrf_3d, premix=False)",
+   "power_renorm_basis": "Q scaled so integral(Q dV) = power_density_w_per_m3 * V_doped, with power_density_w_per_m3 = 10/(pi*0.01^2*0.02) = 1.59155e+06 W/m^3 (heatr3d.py:59, :400-405)",
+   "deviations": [
+    "FEM Galerkin form with DG0 gamma replaces heatr3d's harmonic face-averaged finite volume (identical for the uniform-material plate case).",
+    "heatr3d's cell-centered grid places electrodes at y=-+(L/2 - h/2), spanning L-h; the FEM mesh places them on the true faces y=-+L/2 (O(h/L) gauge difference).",
+    "erf edge regularization and premix variants of build_gamma are not replicated (voxel-staircase remedies)."
+   ]
+  }
+ },
+ "task1_qrf_convention_check": {
+  "case": "fully doped chamber, uniform |E| = 860/0.060 V/m",
+  "q_raw_analytic_w_per_m3": 4108888.888888889,
+  "checks": {
+   "scale": {
+    "got": 0.38734301996403986,
+    "expected": 0.3873430199640503,
+    "rel": 2.69427765406617e-14
+   },
+   "q_uniform_min": {
+    "got": 1591549.4309188672,
+    "expected": 1591549.4309189534,
+    "rel": 5.4127968932884905e-14
+   },
+   "q_uniform_max": {
+    "got": 1591549.4309189476,
+    "expected": 1591549.4309189534,
+    "rel": 3.6572951981678995e-15
+   },
+   "p_target_W": {
+    "got": 343.7746770784754,
+    "expected": 343.7746770784939,
+    "rel": 5.373901093228115e-14
+   }
+  },
+  "tol": 1e-09,
+  "gate_ok": true
  }
 }
