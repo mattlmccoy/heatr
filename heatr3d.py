@@ -86,6 +86,14 @@ class Params:
     # step crosses the melt window). "enthalpy" = exact piecewise-linear
     # enthalpy inversion (energy-conserving by construction; S1 fix).
     phase_update: str = "apparent_cp"
+    # S1b / THM-03: explicit-conduction stability. True (default) = run() AUTO-
+    # SUBSTEPS the thermal update whenever dt_s exceeds CFL_SAFETY * dt_stable
+    # (see dt_stable_thermal), so a fine grid can never march an unstable
+    # conduction step. Inert wherever the criterion is already satisfied
+    # (n <= 169 at dt_s = 0.05 s, L = 0.060 m), i.e. every historical heatr3d
+    # result. False = legacy single-step behavior, with Result.cfl_violated
+    # latched and a warning logged when the criterion is broken.
+    enforce_cfl: bool = True
     # densification (physics_dual; ported from shape_circle_6min.yaml)
     dens_k0_ss: float = 0.005
     dens_ea_ss: float = 48000.0
@@ -123,6 +131,58 @@ class Grid:
         c = (np.arange(self.n) + 0.5) * self.h - self.L / 2.0
         self.x = self.y = self.z = c           # centered coords
         self.dV = self.h ** 3
+
+
+# --------------------------------------------------------------------------- #
+# S1b / THM-03: explicit-conduction stability criterion
+# (docs/superpowers/plans/s1-findings.md section 13.3)
+# --------------------------------------------------------------------------- #
+# Safety factor on the explicit 6-neighbour bound dt < h^2/(6 alpha). 0.9 keeps a
+# 10 % margin from the marginal-stability point (where the amplification factor
+# of the checkerboard mode is exactly -1 and the scheme merely oscillates).
+CFL_SAFETY = 0.9
+
+
+def alpha_max_thermal(p: Params) -> float:
+    """Largest thermal diffusivity k/(rho cp) present in the domain [m^2/s].
+
+    The BINDING medium is the POWDER BED (3.750381e-07), not the melt: the
+    Task-3 note used alpha_liquid = 7.85e-08 and wrongly cleared the CFL. The
+    powder is ~98 % of the voxels.
+
+        powder  0.197/(490*1072)   = 3.750381e-07   <- binding
+        solid   0.10 /(460*2500)   = 8.695652e-08
+        liquid  0.26 /(1010*3279)  = 7.850700e-08
+
+    The max over the three PURE materials also bounds every blended state the
+    solver constructs: inside the part cp >= cp_solid = 2500 and rho >= 460, so
+    even with the largest conductivity (k_liquid = 0.26) the blend cannot exceed
+    0.26/(460*2500) = 2.26e-07 < 3.75e-07.
+
+    NOT covered (documented, not silently assumed): the `heatsink_kgain` hook in
+    run() multiplies k in lattice voxels, which raises the local alpha above this
+    bound. Runs using it must set their own dt or accept the substepping this
+    bound implies for the unmodified materials."""
+    return max(p.k_powder / (p.rho_powder * p.cp_powder),
+               p.k_solid / (p.rho_solid * p.cp_solid),
+               p.k_liquid / (p.rho_liquid * p.cp_liquid))
+
+
+def dt_stable_thermal(grid: Grid, p: Params) -> float:
+    """Explicit 6-neighbour conduction stability limit dt < h^2/(6 alpha_max) [s].
+    At L = 0.060 m: 1.5623 s at n=32, 0.1736 s at n=96, 0.0400 s at n=200."""
+    return grid.h ** 2 / (6.0 * alpha_max_thermal(p))
+
+
+def cfl_substeps(grid: Grid, p: Params) -> int:
+    """Number of thermal substeps per p.dt_s needed to satisfy
+    dt_sub <= CFL_SAFETY * dt_stable_thermal. 1 whenever the step is already
+    stable -- which is every historical heatr3d configuration (n <= 169 at
+    dt_s = 0.05 s, L = 0.060 m), so the default path is unchanged."""
+    dt_limit = CFL_SAFETY * dt_stable_thermal(grid, p)
+    if p.dt_s <= dt_limit:
+        return 1
+    return int(np.ceil(p.dt_s / dt_limit))
 
 
 # --------------------------------------------------------------------------- #
@@ -532,6 +592,15 @@ class Result:
     # reached). Needed by the S1 analytic benchmarks, which compare the whole
     # final field against a closed-form solution.
     T_final: np.ndarray | None = None
+    # S1b / THM-03 provenance. n_substeps_used = thermal substeps per p.dt_s that
+    # run() actually took (1 = the legacy single step, i.e. every historical
+    # configuration). cfl_violated = True iff the steps ACTUALLY marched broke
+    # dt <= CFL_SAFETY * dt_stable_thermal -- only possible with
+    # Params.enforce_cfl=False, since the default substeps the violation away.
+    # When True, the explicit conduction update was unstable and the numbers are
+    # not trustworthy (the THM-01 dT clamp may be hiding the divergence).
+    n_substeps_used: int = 1
+    cfl_violated: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -663,7 +732,34 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     nsteps = int(max_time_s / p.dt_s)
     top = (slice(None), -1, slice(None))     # open top face (y max)
     h = grid.h
-    drho_cap = p.dens_max_drho_rate * p.dt_s
+    # ---- S1b / THM-03: explicit-conduction stability (findings 13.3) ----
+    # The powder bed sets alpha_max, so dt_s = 0.05 s is unstable for n > 169 at
+    # L = 0.060 m. With enforce_cfl (default) the thermal update is SUBSTEPPED so
+    # each sub-step satisfies the bound; Qrf (and therefore the EQS solve) is held
+    # fixed across the substeps of one dt_s, which is exact here because Qrf is
+    # computed once per run. n_sub == 1 for every historical configuration, and
+    # dt_sub is then p.dt_s exactly, so the default path is arithmetically
+    # unchanged.
+    dt_stable = dt_stable_thermal(grid, p)
+    n_sub = cfl_substeps(grid, p) if p.enforce_cfl else 1
+    dt_sub = p.dt_s / n_sub
+    cfl_violated = dt_sub > CFL_SAFETY * dt_stable
+    if cfl_violated:
+        logger.warning(
+            "THM-03 CFL VIOLATION: dt_s=%.4g s exceeds %.2f * h^2/(6 alpha_max) "
+            "= %.4g s (h=%.4g m, alpha_max=%.4e m^2/s, grid n=%d). The explicit "
+            "conduction update is UNSTABLE: the checkerboard mode grows by "
+            "|1 - 12 alpha dt/h^2| = %.4f per step and the THM-01 dT clamp may "
+            "hide it. Running anyway because Params.enforce_cfl is False; set it "
+            "True to auto-substep (n_sub would be %d).",
+            p.dt_s, CFL_SAFETY, CFL_SAFETY * dt_stable, h, alpha_max_thermal(p),
+            grid.n, abs(1.0 - 2.0 * p.dt_s / dt_stable), cfl_substeps(grid, p))
+    elif n_sub > 1:
+        logger.info(
+            "THM-03: substepping the thermal update %d x (dt_sub=%.4g s) to "
+            "satisfy dt <= %.2f * h^2/(6 alpha_max) = %.4g s at n=%d.",
+            n_sub, dt_sub, CFL_SAFETY, CFL_SAFETY * dt_stable, grid.n)
+    drho_cap = p.dens_max_drho_rate * dt_sub
 
     # Empty-part-mask guard (S1 benchmarks): a part-free domain is a legitimate
     # pure-conduction / pure-powder configuration, but every part-masked
@@ -679,7 +775,11 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     e_in = 0.0
     e_loss = 0.0
     e_stored_acc = 0.0
-    for it in range(nsteps):
+    # THM-03: the march is over nsteps * n_sub SUBSTEPS of dt_sub. With n_sub=1
+    # (every historical configuration) this is exactly the original loop:
+    # it == the step index, isub == 0, dt_sub == p.dt_s.
+    for _it_sub in range(nsteps * n_sub):
+        it, isub = divmod(_it_sub, n_sub)
         phi, dphi = phase_fraction(T, p)
         pmult = _sched_mult(float(phi[part].mean()) if _has_part else 0.0,
                             power_schedule)
@@ -747,13 +847,13 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         if heatsink_field is not None and heatsink_h != 0.0:
             num -= heatsink_h * np.asarray(heatsink_field, dtype=float) * (T - p.ambient_c)
         # ---- S1 energy audit (per step, before the dT clamp) ----
-        e_in += float((Qrf * (pmult if pmult != 1.0 else 1.0)).sum()) * dV * p.dt_s
-        e_loss += float(q_conv.sum()) * dV * p.dt_s
+        e_in += float((Qrf * (pmult if pmult != 1.0 else 1.0)).sum()) * dV * dt_sub
+        e_loss += float(q_conv.sum()) * dV * dt_sub
         if h_eff_loss != 0.0:
-            e_loss += float(q_loss.sum()) * dV * p.dt_s
+            e_loss += float(q_loss.sum()) * dV * dt_sub
         if heatsink_field is not None and heatsink_h != 0.0:
             e_loss += float((heatsink_h * np.asarray(heatsink_field, dtype=float)
-                             * (T - p.ambient_c)).sum()) * dV * p.dt_s
+                             * (T - p.ambient_c)).sum()) * dV * dt_sub
         if p.phase_update == "enthalpy":
             # Energy-conserving update: deposit num*dt into volumetric
             # enthalpy and invert exactly. Latent uses the SOLID density
@@ -762,13 +862,13 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
             rho_L_map = np.zeros(part.shape)
             rho_L_map[part] = rho_s_eff[part] * p.latent_j_per_kg
             H = enthalpy_from_T(T, rho_cp_map, rho_L_map, p)
-            H = H + p.dt_s * np.nan_to_num(num)
+            H = H + dt_sub * np.nan_to_num(num)
             T_new = T_from_enthalpy(H, rho_cp_map, rho_L_map, p)
             dT_raw = T_new - T
             dT = np.clip(dT_raw, -p.max_dt_step_c, p.max_dt_step_c)
         else:
             dTdt = num / np.maximum(rho * cp_eff, 1e-9)
-            dT_raw = p.dt_s * np.nan_to_num(dTdt)
+            dT_raw = dt_sub * np.nan_to_num(dTdt)
             dT = np.clip(dT_raw, -p.max_dt_step_c, p.max_dt_step_c)
         # THM-01 per-step dT-cap binding diagnostic (clamp arithmetic above is
         # UNCHANGED -> output bit-identical; cap is dormant in production).
@@ -813,22 +913,31 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         e_stored_acc += float((rho_s_eff[part] * p.latent_j_per_kg
                                * (phi_now[part] - phi[part])).sum()) * dV
         if densify:
-            drho = np.clip(p.dt_s * densify_rate(T, phi_now, rho_rel, p), 0.0, drho_cap)
+            drho = np.clip(dt_sub * densify_rate(T, phi_now, rho_rel, p), 0.0, drho_cap)
             rho_new = np.array(rho_rel, copy=True)
             rho_new[part] = np.clip(rho_rel[part] + drho[part], 0.0, 1.0)
             rho_rel = rho_new
 
         mean_phi = float(phi_now[part].mean()) if _has_part else 0.0
-        phi_hist.append(mean_phi)
+        # THM-03: phi_hist stays ONE ENTRY PER dt_s STEP (its historical meaning),
+        # so it is appended on the last substep of a step -- or on whichever
+        # substep exits the loop, matching the original append-then-break order.
         if not reached and mean_phi >= phi_target:
-            T_phi90 = T.copy(); reached = True; t90 = (it + 1) * p.dt_s
+            # sub-step resolved melt-onset time; == (it+1)*p.dt_s when n_sub == 1
+            T_phi90 = T.copy(); reached = True
+            t90 = (it + (isub + 1) / n_sub) * p.dt_s
             if not densify:
+                phi_hist.append(mean_phi)
                 break
         # densify runs stop at a target MEAN relative density (realistic process
         # stop) so baseline vs FGM are compared at matched densification, not at
         # over-exposed saturation where all non-uniformity is erased.
         if densify and stop_mean_rho is not None and float(rho_rel[part].mean()) >= stop_mean_rho:
+            phi_hist.append(mean_phi)
             break
+        if isub < n_sub - 1:
+            continue                       # more substeps before this step ends
+        phi_hist.append(mean_phi)
         if verbose and it % 200 == 0:
             print(f"  t={it*p.dt_s:6.1f}s  Tmax={(T[part].max() if _has_part else float('nan')):6.1f}  phi={mean_phi:.3f}  "
                   f"rho={(rho_rel[part].mean() if _has_part else float('nan')):.3f}")
@@ -863,7 +972,9 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
                   energy_stored_j=e_stored,
                   energy_loss_j=e_loss,
                   energy_residual_frac=e_resid_frac,
-                  T_final=T.copy())
+                  T_final=T.copy(),
+                  n_substeps_used=n_sub,
+                  cfl_violated=cfl_violated)
 
 
 def make_fgm(res: Result, magnitude: float = 1.0, baseline: float = 0.5,

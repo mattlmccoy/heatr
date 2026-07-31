@@ -497,3 +497,133 @@ def test_eqs_small_system_still_uses_direct_fallback_when_ilu_fails(monkeypatch)
     y_prof = np.real(V).mean(axis=(0, 2))
     y_lin = np.linspace(p.v_lo, p.v_hi, n)
     assert np.max(np.abs(y_prof - y_lin)) < 1e-6 * abs(p.v_lo)
+
+
+# --------------------------------------------------------------------------- #
+# S1b / THM-03: explicit-conduction CFL guard + auto-substepping
+# (docs/superpowers/plans/s1-findings.md section 13.3)
+# --------------------------------------------------------------------------- #
+def test_cfl_stability_criterion_and_substep_count():
+    """The binding diffusivity is the POWDER BED, not the liquid: alpha_powder =
+    0.197/(490*1072) = 3.750381e-07 m^2/s, 4.78x the liquid value the Task-3 note
+    used. dt_stable = h^2/(6 alpha_max); with the 0.9 safety factor the explicit
+    update needs substepping above n = 169 at dt_s = 0.05 s, L = 0.060 m.
+
+    Expected counts (arithmetic, findings 13.3 + this task): n=32 -> 1 (default
+    working grid, unchanged), n=96 -> 1 (largest full-physics grid today),
+    n=169 -> 1 / n=170 -> 2 (the 0.9-factor threshold), n=184 -> 2, n=200 -> 2
+    (dt_stable = 0.0400 s, 0.9*dt_stable = 0.0360 s, ceil(0.05/0.0360) = 2)."""
+    from heatr3d import (CFL_SAFETY, alpha_max_thermal, cfl_substeps,
+                         dt_stable_thermal)
+    p = Params()
+    assert CFL_SAFETY == 0.9
+    assert abs(alpha_max_thermal(p) - 3.750381e-07) < 1e-12
+    for n, expect in ((32, 1), (96, 1), (160, 1), (169, 1),
+                      (170, 2), (184, 2), (200, 2)):
+        assert cfl_substeps(Grid(n=n, L=0.060), p) == expect, n
+    assert abs(dt_stable_thermal(Grid(n=200, L=0.060), p) - 0.0400) < 1e-4
+    assert abs(dt_stable_thermal(Grid(n=32, L=0.060), p) - 1.5623) < 1e-3
+
+
+def _checkerboard_cfl_case(cfl_ratio=1.25, nsteps=20, n=32, amp0=1e-3):
+    """The n=200 CFL ratio (1.25) reproduced on a CHEAP n=32 grid by raising
+    dt_s instead of refining h -- the instability depends only on
+    dt/(h^2/(6 alpha)), so this is the same discrete mode with the same
+    amplification factor at 1/244 of the voxel count. All powder, no source, no
+    convection, 3-D checkerboard initial perturbation (the fastest discrete
+    mode), exactly like scripts/analysis/s1_cfl_powder_mode.py."""
+    from heatr3d import dt_stable_thermal
+    grid = Grid(n=n, L=0.060)
+    p0 = dataclasses.replace(Params(), conv_h=0.0)
+    dt = cfl_ratio * dt_stable_thermal(grid, p0)
+    p = dataclasses.replace(p0, dt_s=dt)
+    part = np.zeros((n, n, n), dtype=bool)
+    i, j, k = np.indices((n, n, n))
+    T0 = p.preheat_c + amp0 * ((-1.0) ** (i + j + k))
+    q = np.zeros((n, n, n))
+    return grid, part, p, q, T0, (nsteps + 0.5) * dt
+
+
+def test_cfl_substepping_bounds_the_checkerboard_mode_legacy_grows():
+    """THM-03 RED/GREEN pair on one case, CFL ratio 1.25 (= n=200 at dt 0.05 s).
+
+    enforce_cfl=False (legacy single step): predicted per-step amplification
+    |1 - 12 alpha dt/h^2| = 1.5003 -> the checkerboard GROWS ~3.3e3x in 20 steps.
+    enforce_cfl=True: n_sub = ceil(1.25/0.9) = 2, so dt_sub gives ratio 0.625 and
+    amplification 0.25 -> the mode DECAYS. Both arms are source-free with
+    zero-flux walls, so the domain mean temperature is conserved exactly; that is
+    the energy-clean check here (no RF input means residual_frac has no
+    meaningful denominator)."""
+    grid, part, p, q, T0, tmax = _checkerboard_cfl_case()
+    nsteps = 20
+    amp0 = 1e-3
+
+    p_legacy = dataclasses.replace(p, enforce_cfl=False)
+    r_legacy = run(grid, part, p_legacy, qrf_override=q, max_time_s=tmax,
+                   phi_target=2.0, T0_override=T0)
+    amp_legacy = float(np.abs(r_legacy.T_final - p.preheat_c).max())
+    growth_legacy = (amp_legacy / amp0) ** (1.0 / nsteps)
+    assert r_legacy.n_substeps_used == 1
+    assert r_legacy.cfl_violated is True
+    assert r_legacy.clamp_bound is False          # growth is genuine, not clipped
+    assert amp_legacy > 100 * amp0                # it blows up
+    assert abs(growth_legacy - 1.5003) < 1e-3     # at the closed-form rate
+
+    r_fixed = run(grid, part, p, qrf_override=q, max_time_s=tmax,
+                  phi_target=2.0, T0_override=T0)
+    amp_fixed = float(np.abs(r_fixed.T_final - p.preheat_c).max())
+    assert r_fixed.n_substeps_used == 2
+    assert r_fixed.cfl_violated is False
+    assert r_fixed.clamp_bound is False
+    assert amp_fixed < amp0                       # bounded (in fact decaying)
+    assert abs(float(r_fixed.T_final.mean()) - p.preheat_c) < 1e-9   # energy-clean
+    assert abs(float(r_legacy.T_final.mean()) - p.preheat_c) < 1e-9
+
+
+def test_energy_gate_stays_exact_under_substepping():
+    """The standing [s1-energy] gate must remain meaningful when the thermal
+    update is substepped: the audit banks in and stored PER SUBSTEP with dt_sub,
+    so an n_sub=2 run on the enthalpy scheme must still book machine-precision
+    conservation. RED demonstrated by reverting the audit's dt_sub back to
+    p.dt_s: residual_frac = +0.5000 measured (the audit then books 2x the
+    energy actually deposited, so half of `in` is unaccounted). GREEN with
+    dt_sub: residual_frac = -1.09e-15 measured (in = stored = 255.7 J)."""
+    from heatr3d import cfl_substeps, dt_stable_thermal
+    grid, part, p0 = small_sphere_case()
+    p = dataclasses.replace(p0, phase_update="enthalpy",
+                            dt_s=1.25 * dt_stable_thermal(grid, p0))
+    assert cfl_substeps(grid, p) == 2
+    q = np.zeros(part.shape)
+    q[part] = p.power_density_w_per_m3
+    res = run(grid, part, p, qrf_override=q, max_time_s=20.5 * p.dt_s,
+              phi_target=2.0)
+    assert res.n_substeps_used == 2
+    assert res.clamp_bound is False
+    assert res.energy_in_j > 0.0
+    assert abs(res.energy_residual_frac) < 1e-9
+
+
+def test_cfl_guard_is_inert_at_the_default_working_grid():
+    """DEFAULT MUST PRESERVE HISTORICAL RESULTS. At n=32, dt_s=0.05 the CFL ratio
+    is 0.032, so n_sub=1 and enforce_cfl=True must be arithmetically identical to
+    the legacy single-step path. Compared at rtol=1e-12 (not array_equal) because
+    heatr3d is not bit-reproducible run-to-run at the 1e-15 level; see
+    test_legacy_default_is_unchanged.
+
+    qrf_override (a fixed uniform part source) instead of the EQS path so the
+    comparison isolates the thermal loop -- the only thing THM-03 touches -- and
+    stays cheap."""
+    grid, part, p = small_sphere_case()
+    q = np.zeros(part.shape)
+    q[part] = p.power_density_w_per_m3
+    assert Params().enforce_cfl is True
+    r_on = run(grid, part, p, qrf_override=q, max_time_s=60.0)
+    r_off = run(grid, part, dataclasses.replace(p, enforce_cfl=False),
+                qrf_override=q, max_time_s=60.0)
+    assert r_on.n_substeps_used == 1
+    assert r_on.cfl_violated is False
+    assert r_off.cfl_violated is False           # not violated at n=32 either way
+    assert np.allclose(r_on.T_final, r_off.T_final, rtol=1e-12, atol=0.0)
+    assert np.allclose(r_on.T_phi90, r_off.T_phi90, rtol=1e-12, atol=0.0)
+    assert abs(r_on.energy_in_j - r_off.energy_in_j) <= 1e-12 * abs(r_off.energy_in_j)
+    assert abs(r_on.sigma_T - r_off.sigma_T) <= 1e-12 * abs(r_off.sigma_T)
