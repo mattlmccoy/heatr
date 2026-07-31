@@ -146,9 +146,27 @@ def test_enthalpy_update_conserves_energy_on_window_crossing():
 
 
 def test_legacy_default_is_unchanged():
+    """Default Params must still take the legacy apparent_cp path.
+
+    DEVIATION from the plan's `np.array_equal` form, with evidence: heatr3d's
+    default path is NOT bit-reproducible run-to-run. Repeating this identical
+    n=32 / 20 s solve in one process, run 3 of 7 differed from runs 1-2 by
+    max|dT| = 7.1e-15 C (2026-07-30, ./.venv312: numpy 1.26.4, scipy 1.13.1,
+    OpenBLAS MAX_THREADS=3). The EQS solve is exactly reproducible (6/6
+    np.array_equal on V), so the drift is inside the thermal loop; root-causing
+    it is a separate S1 item, not this task. Asserting array_equal here would
+    commit a known-flaky gate, so the tolerance is 1e-12 C -- still ~1e12 x
+    tighter than any real scheme change (the enthalpy branch moves T by O(1) C).
+
+    The bit-for-bit constraint itself was verified out-of-band across the
+    Task-4 commit boundary: HEAD (5ae12e5..c4bd6b8 state) vs this working tree,
+    default Params, n=32 sphere, 30 s -> np.array_equal True on T_phi90, Qrf,
+    phi_final and an identical sigma_T = 21.19205274948017.
+    """
     grid, part, p = small_sphere_case()
     r1 = run(grid, part, p, max_time_s=20.0)
     r2 = run(grid, part, p, max_time_s=20.0)
-    assert np.array_equal(r1.T_phi90 if r1.T_phi90 is not None else np.zeros(1),
-                          r2.T_phi90 if r2.T_phi90 is not None else np.zeros(1))
+    a = r1.T_phi90 if r1.T_phi90 is not None else np.zeros(1)
+    b = r2.T_phi90 if r2.T_phi90 is not None else np.zeros(1)
+    assert np.allclose(a, b, rtol=0.0, atol=1e-12)
     assert Params().phase_update == "apparent_cp"
