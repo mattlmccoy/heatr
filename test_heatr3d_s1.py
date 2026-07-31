@@ -145,6 +145,41 @@ def test_enthalpy_update_conserves_energy_on_window_crossing():
     assert res_legacy.phi_final.max() > res.phi_final.max()
 
 
+def test_audit_stays_tight_through_melt_both_schemes():
+    """Healthy uniform molten run: the audit must stay tight ABOVE the window.
+
+    Task-4 finding 2: the v1 audit booked the whole run with initial-state
+    solid properties (cp_solid, rho_s_eff at t=0) while the solver blends to
+    cp_liquid=3279 / rho_liquid=1010, so it drifted to +0.3795 (both schemes)
+    at t_end=3.0 s on this healthy, limiter-free case -- the standing gate was
+    unusable exactly where the instability lives.
+
+    Measured after the v2 per-step banking (2026-07-30, ./.venv312, n=32,
+    bulk_crossing_case mult=130, phi_target=2.0, clamp_bound False both arms):
+        t=3.0 s  apparent_cp  in=2553.131 stored=2553.246 resid=-4.5e-05
+        t=3.0 s  enthalpy     in=2553.131 stored=2553.131 resid=-1.5e-16
+    The enthalpy arm is exact by construction: its update deposits num*dt into
+    the SAME H(T) the audit books (rho*cp sensible slope + rho_s_eff*L across
+    the window, and phase_fraction's phi IS the enthalpy ramp fraction).
+
+    This upgrade does NOT mask the legacy scheme defect: on the same case at
+    t=1.0 s (mid-window, phi_mean 0.669) the legacy arm still books
+    resid=-0.0802 (stored 919.3 > in 851.0) against the enthalpy arm's
+    +2e-16 -- see test_enthalpy_update_conserves_energy_on_window_crossing,
+    whose differential control asserts exactly that. The legacy residual
+    happens to cancel to ~1e-4 once the part is FULLY molten (its skipped
+    latent is offset by paying the resolved part of the latent at the blended
+    liquid density rho ~ 740-1010 instead of rho_s_eff = 473.5), which is why
+    this test's window-crossing sibling is the discriminating one.
+    """
+    grid, part, p, q = bulk_crossing_case()
+    for scheme in ("apparent_cp", "enthalpy"):
+        pp = dataclasses.replace(p, phase_update=scheme)
+        res = run(grid, part, pp, qrf_override=q, max_time_s=3.0,
+                  phi_target=2.0)
+        assert abs(res.energy_residual_frac) < 0.02, scheme
+
+
 def test_legacy_default_is_unchanged():
     """Default Params must still take the legacy apparent_cp path.
 

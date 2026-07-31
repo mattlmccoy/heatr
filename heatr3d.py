@@ -609,8 +609,7 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     dV = grid.dV
     e_in = 0.0
     e_loss = 0.0
-    T0 = T.copy()
-    phi0, _ = phase_fraction(T0, p)
+    e_stored_acc = 0.0
     for it in range(nsteps):
         phi, dphi = phase_fraction(T, p)
         pmult = _sched_mult(float(phi[part].mean()), power_schedule)
@@ -724,9 +723,25 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
                 "runaway/instability; results at these cells are non-physical.",
                 it, 100.0 * _n_temp_clip / T_cand.size, p.temp_min_c, p.temp_max_c,
             )
+        T_prev = T
         T = np.clip(T_cand, p.temp_min_c, p.temp_max_c)
 
         phi_now = phase_fraction(T, p)[0]
+        # ---- S1 audit v2: bank stored energy with THIS step's property maps ----
+        # v1 booked the whole run with initial-state solid properties and drifted
+        # to +0.38 on a HEALTHY molten run (the solver blends cp -> cp_liquid and
+        # rho -> rho_liquid once phi > 0). Banking per step with the same rho, cp,
+        # rho_s_eff maps the update used makes the gate meaningful AT melt, which
+        # is where the instability lives.
+        # DEVIATION from the plan snippet (which banks `dT`): this banks the
+        # ACTUAL applied change T - T_prev, i.e. AFTER the temp_min/temp_max
+        # clamp. Banking `dT` would credit energy into a voxel pinned at
+        # temp_max_c and so erase the saturation surplus that
+        # test_legacy_phase_update_skips_latent_on_window_crossing pins
+        # (resid > 0.10). The audit must show clamp-destroyed energy, not hide it.
+        e_stored_acc += float((rho * cp * (T - T_prev)).sum()) * dV
+        e_stored_acc += float((rho_s_eff[part] * p.latent_j_per_kg
+                               * (phi_now[part] - phi[part])).sum()) * dV
         if densify:
             drho = np.clip(p.dt_s * densify_rate(T, phi_now, rho_rel, p), 0.0, drho_cap)
             rho_new = np.array(rho_rel, copy=True)
@@ -748,21 +763,11 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
             print(f"  t={it*p.dt_s:6.1f}s  Tmax={T[part].max():6.1f}  phi={mean_phi:.3f}  "
                   f"rho={rho_rel[part].mean():.3f}")
 
-    # ---- S1 energy audit: stored energy from the STATE CHANGE ----
-    # Deliberately a first-order sensible-heat model on initial-state properties.
-    # It is an AUDIT, not a solver term: its job is to be O(few %) on healthy
-    # runs and O(>>1) on latent-skip blow-ups. Property-drift refinements are
-    # out of scope.
-    phiN, _ = phase_fraction(T, p)
-    rho_s_eff0 = p.rho_powder + rho_rel * (p.rho_solid - p.rho_powder)
-    rho_map = np.full(part.shape, p.rho_powder)
-    cp_map = np.full(part.shape, p.cp_powder)
-    rho_map[part] = rho_s_eff0[part]
-    cp_map[part] = p.cp_solid
-    e_sensible = float((rho_map * cp_map * (T - T0)).sum()) * dV
-    e_latent = float((rho_map[part] * p.latent_j_per_kg
-                      * (phiN[part] - phi0[part])).sum()) * dV
-    e_stored = e_sensible + e_latent
+    # ---- S1 energy audit: stored energy accumulated per step (v2) ----
+    # Sensible + latent were banked inside the loop with each step's own
+    # property maps (see the audit v2 block above), so the books follow the
+    # solver's property blending instead of a fixed initial-state model.
+    e_stored = e_stored_acc
     e_resid_frac = (e_in - e_stored - e_loss) / max(e_in, 1e-30)
 
     if T_phi90 is None:
