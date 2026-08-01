@@ -1,0 +1,221 @@
+{
+ "what": "Phase A close-out STEP 1: cross-family parity band, measured from BOTH engines' own same-method spreads. The four Task-4 arms are re-judged from their RECORDED numbers; nothing was re-run and parity_tolerances.json is untouched.",
+ "combination_rule": "sum",
+ "combination_rule_statement": "tolerance = 1.5 * (heatr3d_spread + dolfinx_spread); the sum is the triangle-inequality BOUND on |A-B| when both engines converge to the same continuum answer. Root-sum-square was considered and rejected: it is smaller than the sum, so it is not a bound.",
+ "safety_factor": 1.5,
+ "provenance": {
+  "heatr3d": "parity_tolerances.json (n=64 vs n=96, extruded circle, coupling off; 1.5x linear refinement)",
+  "dolfinx": "dolfinx spread = MAX of the two pair spreads (conservative; declared before computing) | primary pair: coarse->mid is a 1.5x LINEAR refinement, the SAME ratio Task 1 used for heatr3d (n=64->n=96), so the two spreads are commensurable. mid->fine (1.31x) is the required level finer than the Task-4 mesh and is a convergence-trend check."
+ },
+ "verdict_carrying": [
+  "t90_rel"
+ ],
+ "diagnostic_only": [
+  "curve_rel_l2",
+  "sigma_T_rel"
+ ],
+ "band": {
+  "t90_rel": {
+   "heatr3d_spread": 0.001859024012393564,
+   "dolfinx_spread": 0.07153846153846152,
+   "combined_spread": 0.07339748555085508,
+   "tolerance": 0.11009622832628263,
+   "task1_same_method_tolerance": 0.0027885360185903457,
+   "dolfinx_spread_source": "max(coarse_vs_mid, mid_vs_fine)",
+   "widening_vs_task1": 39.4817307692293
+  },
+  "curve_rel_l2": {
+   "heatr3d_spread": 0.00139388743745654,
+   "dolfinx_spread": 0.004341564835040532,
+   "combined_spread": 0.005735452272497072,
+   "tolerance": 0.008603178408745608,
+   "task1_same_method_tolerance": 0.0020908311561848103,
+   "dolfinx_spread_source": "max(coarse_vs_mid, mid_vs_fine)",
+   "widening_vs_task1": 4.114716955167261
+  },
+  "sigma_T_rel": {
+   "heatr3d_spread": 0.007577767675115235,
+   "dolfinx_spread": 0.00827890130749464,
+   "combined_spread": 0.015856668982609876,
+   "tolerance": 0.023785003473914816,
+   "task1_same_method_tolerance": 0.011366651512672854,
+   "dolfinx_spread_source": "max(coarse_vs_mid, mid_vs_fine)",
+   "widening_vs_task1": 2.092525089503848
+  }
+ },
+ "band_strict": {
+  "t90_rel": {
+   "heatr3d_spread": 0.001859024012393564,
+   "dolfinx_spread": 0.0020040080160321693,
+   "dolfinx_spread_source": "mid_vs_fine",
+   "combined_spread": 0.0038630320284257333,
+   "tolerance": 0.0057945480426386,
+   "task1_same_method_tolerance": 0.0027885360185903457,
+   "widening_vs_task1": 2.0779893119572637
+  },
+  "curve_rel_l2": {
+   "heatr3d_spread": 0.00139388743745654,
+   "dolfinx_spread": 0.0013759311240328113,
+   "dolfinx_spread_source": "mid_vs_fine",
+   "combined_spread": 0.0027698185614893514,
+   "tolerance": 0.004154727842234027,
+   "task1_same_method_tolerance": 0.0020908311561848103,
+   "widening_vs_task1": 1.9871178167323937
+  },
+  "sigma_T_rel": {
+   "heatr3d_spread": 0.007577767675115235,
+   "dolfinx_spread": 0.007222230910438419,
+   "dolfinx_spread_source": "mid_vs_fine",
+   "combined_spread": 0.014799998585553654,
+   "tolerance": 0.02219999787833048,
+   "task1_same_method_tolerance": 0.011366651512672854,
+   "widening_vs_task1": 1.9530815960689358
+  }
+ },
+ "verdict_band": "band_strict",
+ "verdict_band_note": "the STRICTER of the two is verdict-carrying; the pre-declared MAX rule is reported alongside so the looser reading is visible, not silently benefited from",
+ "arms": {
+  "circle_off": {
+   "n_eqs_solves_ok": true,
+   "t90_rel": {
+    "measured": 0.006971340046475777,
+    "tolerance_declared_max_rule": 0.11009622832628263,
+    "pass_declared_max_rule": true,
+    "margin_declared_max_rule": 0.06332042570809439,
+    "tolerance": 0.0057945480426386,
+    "pass": false,
+    "margin": 1.2030860724905326,
+    "role": "verdict"
+   },
+   "curve_rel_l2": {
+    "measured": 0.004802034113621331,
+    "tolerance_declared_max_rule": 0.008603178408745608,
+    "pass_declared_max_rule": true,
+    "margin_declared_max_rule": 0.5581697699933547,
+    "tolerance": 0.004154727842234027,
+    "pass": false,
+    "margin": 1.1557999214310133,
+    "role": "diagnostic"
+   },
+   "sigma_T_rel": {
+    "measured": 0.03747797106176329,
+    "tolerance_declared_max_rule": 0.023785003473914816,
+    "pass_declared_max_rule": false,
+    "margin_declared_max_rule": 1.5756975231416572,
+    "tolerance": 0.02219999787833048,
+    "pass": false,
+    "margin": 1.6881970560161947,
+    "role": "diagnostic"
+   },
+   "verdict_carrying_pass": false,
+   "verdict_carrying_pass_declared_max_rule": true
+  },
+  "circle_coupled": {
+   "n_eqs_solves_ok": true,
+   "t90_rel": {
+    "measured": 0.007187500000000036,
+    "tolerance_declared_max_rule": 0.11009622832628263,
+    "pass_declared_max_rule": true,
+    "margin_declared_max_rule": 0.06528379863022252,
+    "tolerance": 0.0057945480426386,
+    "pass": false,
+    "margin": 1.240390095502106,
+    "role": "verdict"
+   },
+   "curve_rel_l2": {
+    "measured": 0.004852415416329581,
+    "tolerance_declared_max_rule": 0.008603178408745608,
+    "pass_declared_max_rule": true,
+    "margin_declared_max_rule": 0.5640258966845128,
+    "tolerance": 0.004154727842234027,
+    "pass": false,
+    "margin": 1.1679261796653333,
+    "role": "diagnostic"
+   },
+   "sigma_T_rel": {
+    "measured": 0.04288773854597466,
+    "tolerance_declared_max_rule": 0.023785003473914816,
+    "pass_declared_max_rule": false,
+    "margin_declared_max_rule": 1.8031419920964045,
+    "tolerance": 0.02219999787833048,
+    "pass": false,
+    "margin": 1.9318802993146942,
+    "role": "diagnostic"
+   },
+   "verdict_carrying_pass": false,
+   "verdict_carrying_pass_declared_max_rule": true
+  },
+  "square_off": {
+   "n_eqs_solves_ok": true,
+   "t90_rel": {
+    "measured": 0.00015710919088770265,
+    "tolerance_declared_max_rule": 0.11009622832628263,
+    "pass_declared_max_rule": true,
+    "margin_declared_max_rule": 0.0014270170129905976,
+    "tolerance": 0.0057945480426386,
+    "pass": true,
+    "margin": 0.027113277814185065,
+    "role": "verdict"
+   },
+   "curve_rel_l2": {
+    "measured": 0.010785353411702905,
+    "tolerance_declared_max_rule": 0.008603178408745608,
+    "pass_declared_max_rule": false,
+    "margin_declared_max_rule": 1.2536475357455095,
+    "tolerance": 0.004154727842234027,
+    "pass": false,
+    "margin": 2.595922963248429,
+    "role": "diagnostic"
+   },
+   "sigma_T_rel": {
+    "measured": 0.05073061553298375,
+    "tolerance_declared_max_rule": 0.023785003473914816,
+    "pass_declared_max_rule": false,
+    "margin_declared_max_rule": 2.132882410070714,
+    "tolerance": 0.02219999787833048,
+    "pass": false,
+    "margin": 2.2851630802407477,
+    "role": "diagnostic"
+   },
+   "verdict_carrying_pass": true,
+   "verdict_carrying_pass_declared_max_rule": true
+  },
+  "square_coupled": {
+   "n_eqs_solves_ok": true,
+   "t90_rel": {
+    "measured": 0.0017333753545540856,
+    "tolerance_declared_max_rule": 0.11009622832628263,
+    "pass_declared_max_rule": true,
+    "margin_declared_max_rule": 0.015744184709189417,
+    "tolerance": 0.0057945480426386,
+    "pass": true,
+    "margin": 0.2991390082193153,
+    "role": "verdict"
+   },
+   "curve_rel_l2": {
+    "measured": 0.010838452884915077,
+    "tolerance_declared_max_rule": 0.008603178408745608,
+    "pass_declared_max_rule": false,
+    "margin_declared_max_rule": 1.2598196120049294,
+    "tolerance": 0.004154727842234027,
+    "pass": false,
+    "margin": 2.6087034569963947,
+    "role": "diagnostic"
+   },
+   "sigma_T_rel": {
+    "measured": 0.04257566336573178,
+    "tolerance_declared_max_rule": 0.023785003473914816,
+    "pass_declared_max_rule": false,
+    "margin_declared_max_rule": 1.7900213221505228,
+    "tolerance": 0.02219999787833048,
+    "pass": false,
+    "margin": 1.9178228574197334,
+    "role": "diagnostic"
+   },
+   "verdict_carrying_pass": true,
+   "verdict_carrying_pass_declared_max_rule": true
+  }
+ },
+ "all_arms_verdict_carrying_pass": false,
+ "all_arms_verdict_carrying_pass_declared_max_rule": true
+}

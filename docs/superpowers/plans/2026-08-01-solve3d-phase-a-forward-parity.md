@@ -70,3 +70,62 @@
 ## Out of scope for Phase A
 
 Adjoint (Phase B), objective/chi/regularization (Phase C prep), eps_r channel and drive reconciliation (Phase D), any Studio integration, any dissertation edit.
+
+---
+
+## Addendum: Phase A close-out (approved by Matt 2026-08-01, both parts)
+
+Added after Task 5 because the Task-4 gate failed for a tolerance-derivation
+reason, not an implementation one. Additive only: `parity_tolerances.json` and
+the recorded Task-4 verdict are untouched. Full write-up in
+`solve3d/PHASE_A_REPORT.md` sections C1-C8.
+
+### Task A1: derive the cross-family tolerance from measurement
+
+- [x] Declare the combination rule BEFORE computing: SUM (triangle inequality)
+      x the same 1.5 safety factor Task 1 used; root-sum-square considered and
+      rejected as not being a bound. Frozen in `solve3d/gates.py`
+      (`COMBINATION_RULE`, `combine_spreads`), pinned by a test.
+- [x] Run the extruded-circle anchor at three dolfinx in-part element sizes
+      (19821 / 77043 / 174028 in-part nodes; the last is finer than the Task-4
+      mesh, as required). Measured dolfinx spreads: t90 0.0715 (coarse-mid) and
+      0.00200 (mid-fine); curve 0.00434 / 0.00138; sigma_T 0.00828 / 0.00722.
+- [x] Freeze `solve3d/results/parity_tolerances_crossfamily.json` with both raw
+      spreads alongside, and BOTH readings of the band (the pre-declared MAX
+      rule and the stricter mid-vs-fine rule) so the looser one is visible
+      rather than silently benefited from.
+- [x] Re-judge the four Task-4 arms from their RECORDED numbers, without
+      re-running. **t90 passes 4/4 under the pre-declared band**; under the
+      strict band the two square arms pass and the two circle arms sit at
+      1.20x / 1.24x. `curve_rel_l2` and `sigma_T_rel` still fail (now
+      diagnostic-only). Reported as-is; nothing widened.
+
+### Task A2: add the design-relevant (shape/density) parity gate
+
+- [x] Implement the shape metrics test-first (`solve3d/shape_metrics.py`,
+      `test_shape_metrics.py`): IoU at phi>=0.8 and phi>=0.9, symmetric
+      melt-front surface distance in mm, in-part melt fraction, and
+      out-of-part (bed) melt fraction. Red: `ImportError`. Green: 8 passed.
+- [x] Score both engines on ONE shared evaluation grid against the ANALYTIC
+      nominal shape; verify the extrusion premise by measuring the
+      plane-to-plane spread rather than assuming z-invariance.
+- [x] Measure each shape's OWN self-spread and build the band per shape.
+      A circle-derived bed-melt band is identically zero and cannot bound the
+      square, which does spill; the missing square spreads were MEASURED
+      (heatr3d square n=64 + dolfinx square coarse) instead of the band being
+      widened.
+- [x] Emit `solve3d/results/phase_a_shape_gate.json`. **All four arms PASS all
+      seven shape checks**; the circle arms also pass under the strictest
+      available band. IoU 0.973-0.987, melt-front distance 0.067-0.129 mm, bed
+      melt agreeing to 0.0004-0.0009 absolute.
+
+### Task A3: verdict and record
+
+- [x] Phase A closes as **PASSED on the verdict-carrying gates** (shape metrics,
+      `n_eqs_solves`, and t90 under the pre-declared band), with one recorded
+      open item: a converged ~0.5 % (~1.6 s) cross-family t90 offset on the
+      circle that refinement does not remove and that needs the COMSOL 3-D
+      anchor (Gate S3) to adjudicate. sigma_T and the heating curve are
+      REPORTED DIAGNOSTICS with their bands stated; both still fail.
+- [x] `solve3d/PHASE_A_REPORT.md` close-out sections C1-C8 added, every number
+      printed from the JSONs by `solve3d/make_report_tables.py`.

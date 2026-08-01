@@ -1,0 +1,63 @@
+{
+ "what": "melt-onset fields for the four Task-4 arms, exported on the shared evaluation grid; phase_a_gate.json is NOT rewritten -- the recorded Task-4 verdict stands",
+ "repro_rtol": 1e-09,
+ "arms": {
+  "circle_off": {
+   "sigma_T_midplane_c": 20.699707813129972,
+   "eval_missed_midplane": 0,
+   "eval_missed_grid": 0,
+   "eval_npz": "eval_dolfinx_circle_off.npz",
+   "eval_z_plane_mean_spread_c": 0.08781579352793756,
+   "shape": "circle",
+   "arm": "off",
+   "t90_s": 325.00000000000006,
+   "t90_rel_vs_recorded": 0.0,
+   "sigma_T_rel_vs_recorded": 0.0,
+   "n_eqs_solves": 1,
+   "reproduces_recorded_run": true
+  },
+  "circle_coupled": {
+   "sigma_T_midplane_c": 19.76920068462825,
+   "eval_missed_midplane": 0,
+   "eval_missed_grid": 0,
+   "eval_npz": "eval_dolfinx_circle_coupled.npz",
+   "eval_z_plane_mean_spread_c": 0.0811228555168384,
+   "shape": "circle",
+   "arm": "coupled",
+   "t90_s": 322.3,
+   "t90_rel_vs_recorded": 0.0,
+   "sigma_T_rel_vs_recorded": 0.0,
+   "n_eqs_solves": 6,
+   "reproduces_recorded_run": true
+  },
+  "square_off": {
+   "sigma_T_midplane_c": 18.82263171830493,
+   "eval_missed_midplane": 0,
+   "eval_missed_grid": 0,
+   "eval_npz": "eval_dolfinx_square_off.npz",
+   "eval_z_plane_mean_spread_c": 0.12673150678742218,
+   "shape": "square",
+   "arm": "off",
+   "t90_s": 318.3,
+   "t90_rel_vs_recorded": 0.0,
+   "sigma_T_rel_vs_recorded": 0.0,
+   "n_eqs_solves": 1,
+   "reproduces_recorded_run": true
+  },
+  "square_coupled": {
+   "sigma_T_midplane_c": 18.767908708903445,
+   "eval_missed_midplane": 0,
+   "eval_missed_grid": 0,
+   "eval_npz": "eval_dolfinx_square_coupled.npz",
+   "eval_z_plane_mean_spread_c": 0.10758806689452172,
+   "shape": "square",
+   "arm": "coupled",
+   "t90_s": 317.85,
+   "t90_rel_vs_recorded": 0.0,
+   "sigma_T_rel_vs_recorded": 0.0,
+   "n_eqs_solves": 6,
+   "reproduces_recorded_run": true
+  }
+ },
+ "all_reproduce": true
+}

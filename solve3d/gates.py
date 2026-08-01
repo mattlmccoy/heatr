@@ -132,3 +132,93 @@ def _jsonable(o):
     if isinstance(o, (np.bool_,)):
         return bool(o)
     raise TypeError(f"not JSON serializable: {type(o)}")
+
+
+# --------------------------------------------------------------------------- #
+# Phase A close-out: the CROSS-FAMILY tolerance rule
+#
+# DECLARED BEFORE ANY NUMBER WAS COMPUTED (Matt-approved close-out, 2026-08-01).
+#
+# The Task-1 tolerance is heatr3d's n=64-vs-n=96 spread: two grids of ONE
+# method. It bounds grid refinement inside that method and nothing else, which
+# is why the Task-4 gate was unachievable by any correct implementation.
+#
+# The cross-family band is built from BOTH engines' own same-method spreads:
+#
+#     |A - B|  <=  |A - A_inf| + |A_inf - B_inf| + |B_inf - B|
+#
+# and, if the two discretizations converge to the SAME continuum answer
+# (A_inf == B_inf, which is the premise of doing parity at all), the middle
+# term vanishes and the bound is the SUM of the two engines' own errors. So:
+#
+#     COMBINATION RULE = SUM (triangle inequality), then the SAME 1.5x safety
+#     factor Task 1 used.
+#
+# Root-sum-square was considered and REJECTED: RSS is the right combination for
+# independent RANDOM errors, but discretization errors are systematic and RSS is
+# strictly smaller than the sum, i.e. it is not a bound. Recording the rejection
+# so the choice cannot look like it was fitted to the answer.
+#
+# Honest caveat kept with the rule: a coarse-fine DIFFERENCE under-estimates the
+# fine level's distance to its own limit by roughly 1/(r^p - 1) (Richardson;
+# ~0.8x at r=1.5, p=2). The 1.5x safety factor is what covers that, and it is
+# the same factor Task 1 already used -- not a new allowance invented here.
+# --------------------------------------------------------------------------- #
+COMBINATION_RULE = "sum"
+CROSS_FAMILY_SAFETY = 1.5
+
+
+def combine_spreads(spread_a: float, spread_b: float,
+                    safety: float = CROSS_FAMILY_SAFETY) -> float:
+    """Cross-family tolerance = safety * (spread_a + spread_b). See the note
+    above for why the combination is a SUM and not a root-sum-square."""
+    return float(safety) * (float(spread_a) + float(spread_b))
+
+
+# --------------------------------------------------------------------------- #
+# Shared evaluation grid for the shape metrics
+# --------------------------------------------------------------------------- #
+# Fine in (x, y) -- the field plane, where the melt front lives and where CAD
+# tolerance is quoted -- and a handful of z-planes, because both anchors are
+# FULL-HEIGHT extrusions. The planes are not there to resolve z structure; they
+# are there to MEASURE that there is none (plane-to-plane spread is reported).
+# The z stations stay away from the +-30 mm domain faces so point location is
+# unambiguous.
+EVAL_HALF_XY_M = 0.015              # +-15 mm covers the 20 mm part plus 5 mm bed
+EVAL_N_XY = 200                     # -> 0.15 mm pixels
+EVAL_Z_M = (-0.020, -0.010, 0.0, 0.010, 0.020)
+
+
+def eval_grid_axes():
+    h = 2.0 * EVAL_HALF_XY_M / EVAL_N_XY
+    c = (np.arange(EVAL_N_XY) + 0.5) * h - EVAL_HALF_XY_M
+    return c, c, np.asarray(EVAL_Z_M, dtype=float), h
+
+
+def eval_grid_points() -> tuple[np.ndarray, tuple[int, int, int], float]:
+    """(N,3) points, the (nz, nx, ny) reshape, and the (x, y) pixel size [m]."""
+    x, y, z, h = eval_grid_axes()
+    Z, X, Y = np.meshgrid(z, x, y, indexing="ij")
+    pts = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()])
+    return pts, (z.size, x.size, y.size), h
+
+
+def nominal_part_mask(shape: str, diam_m: float = 0.020) -> np.ndarray:
+    """The ANALYTIC nominal shape on the (x, y) evaluation grid -- deliberately
+    not either engine's discretized mask, so neither engine is scored against
+    its own staircase."""
+    x, y, _, _ = eval_grid_axes()
+    X, Y = np.meshgrid(x, y, indexing="ij")
+    half = diam_m / 2.0
+    if shape == "circle":
+        return np.sqrt(X ** 2 + Y ** 2) <= half
+    if shape == "square":
+        return (np.abs(X) <= half) & (np.abs(Y) <= half)
+    raise ValueError(f"unknown anchor shape {shape!r}")
+
+
+def phase_fraction_phi(T, t_pc_c: float = 180.0, dt_pc_c: float = 10.0):
+    """heatr3d.phase_fraction's phi, as a pure function so BOTH engines' fields
+    are converted to melt fraction by ONE implementation."""
+    Te = np.asarray(T, dtype=float)
+    return np.clip((Te - t_pc_c) / dt_pc_c + 0.5, 0.0, 1.0)

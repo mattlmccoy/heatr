@@ -152,3 +152,113 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# --------------------------------------------------------------------------- #
+# Phase A close-out tables (STEP 1 cross-family band, STEP 2 shape parity)
+# --------------------------------------------------------------------------- #
+def refinement_table() -> str:
+    d = _load("dolfinx_refinement.json")
+    lv = d["levels"]
+    out = ["### Close-out STEP 1a: dolfinx's OWN mesh convergence "
+           "(extruded circle, coupling off)", "",
+           "| level | in-part nodes | cells | lc_part [m] | t90 [s] | "
+           "sigma_T [C] | n_sub | energy resid | z-plane spread [C] | wall [s] |",
+           "|---|---|---|---|---|---|---|---|---|---|"]
+    for k in ("coarse", "mid", "fine"):
+        v = lv[k]
+        out.append(f"| {k} | {v['n_nodes_in_part']} | {v['n_cells_total']} | "
+                   f"{v['lc_part_m']!r} | {v['t90_s']!r} | "
+                   f"{v['sigma_T_midplane_c']!r} | {v['n_substeps_used']} | "
+                   f"{v['energy_residual_frac']!r} | "
+                   f"{v['eval_z_plane_mean_spread_c']!r} | "
+                   f"{round(v['wall_total_s'])} |")
+    sp = d["spreads"]
+    out += ["", "| pair | t90 | curve rel-L2 | sigma_T |", "|---|---|---|---|"]
+    for k in ("coarse_vs_mid", "mid_vs_fine"):
+        out.append(f"| {k} | {sp[k]['t90_rel_spread']!r} | "
+                   f"{sp[k]['curve_rel_l2_spread']!r} | "
+                   f"{sp[k]['sigma_T_rel_spread']!r} |")
+    ex = d.get("extra_levels", {})
+    if ex:
+        out += ["", "Extra level measured for the square (needed because the "
+                    "bed-melt band cannot be borrowed from the circle):", "",
+                "| level | in-part nodes | cells | t90 [s] | sigma_T [C] |",
+                "|---|---|---|---|---|"]
+        for k, v in ex.items():
+            out.append(f"| {k} | {v['n_nodes_in_part']} | {v['n_cells_total']} "
+                       f"| {v['t90_s']!r} | {v['sigma_T_midplane_c']!r} |")
+    return "\n".join(out)
+
+
+def crossfamily_table() -> str:
+    d = _load("parity_tolerances_crossfamily.json")
+    out = ["### Close-out STEP 1b: the measured CROSS-FAMILY band "
+           "(`parity_tolerances_crossfamily.json`)", "",
+           f"Rule, declared before computing: tolerance = "
+           f"{d['safety_factor']} x (heatr3d_spread + dolfinx_spread), a "
+           f"triangle-inequality SUM. Two readings are reported; the STRICTER "
+           f"one carries the verdict.", "",
+           "| quantity | heatr3d spread | dolfinx spread (declared MAX rule) | "
+           "band (MAX rule) | dolfinx spread (strict, mid-vs-fine) | "
+           "band (strict) | Task-1 same-method band |",
+           "|---|---|---|---|---|---|---|"]
+    for q, b in d["band"].items():
+        bs = d["band_strict"][q]
+        out.append(f"| {q} | {b['heatr3d_spread']!r} | {b['dolfinx_spread']!r} "
+                   f"| {b['tolerance']!r} | {bs['dolfinx_spread']!r} | "
+                   f"{bs['tolerance']!r} | {b['task1_same_method_tolerance']!r} |")
+    out += ["", "Four Task-4 arms re-judged from their RECORDED numbers "
+                "(nothing re-run):", "",
+            "| arm | quantity | measured | pass (MAX-rule band) | "
+            "pass (strict band) | role |", "|---|---|---|---|---|---|"]
+    for name, a in d["arms"].items():
+        for q in ("t90_rel", "curve_rel_l2", "sigma_T_rel"):
+            v = a[q]
+            out.append(f"| {name} | {q} | {v['measured']!r} | "
+                       f"{'PASS' if v['pass_declared_max_rule'] else 'FAIL'} | "
+                       f"{'PASS' if v['pass'] else 'FAIL'} "
+                       f"(margin {v['margin']:.3g}x) | {v['role']} |")
+    return "\n".join(out)
+
+
+def shape_gate_table() -> str:
+    d = _load("phase_a_shape_gate.json")
+    out = ["### Close-out STEP 2: SHAPE/DENSITY parity gate "
+           "(`phase_a_shape_gate.json`)", "",
+           "Band rule: " + d["band_rule"], "",
+           "| shape | quantity | heatr3d self-spread | dolfinx self-spread | "
+           "tolerance |", "|---|---|---|---|---|"]
+    for sh, b in d["band_by_shape"].items():
+        for k, v in b.items():
+            out.append(f"| {sh} | {k} | {v['heatr3d_self_spread']!r} | "
+                       f"{v['dolfinx_self_spread']!r} | {v['tolerance']!r} |")
+    out += ["", "| arm | quantity | measured | tolerance | margin | result |",
+            "|---|---|---|---|---|---|"]
+    for name, a in d["arms"].items():
+        for k, c in a["checks"].items():
+            if not isinstance(c, dict):
+                continue
+            out.append(f"| {name} | {k} | {c['measured']!r} | "
+                       f"{c['tolerance']!r} | {c['margin']:.4g}x | "
+                       f"{'PASS' if c['pass'] else 'FAIL'} |")
+    out += ["", f"`all_arms_pass` = `{str(d['all_arms_pass']).lower()}`", "",
+            "Raw shape numbers (dolfinx vs heatr3d) at the melt-onset read:", "",
+            "| arm | IoU phi>=0.8 | IoU phi>=0.9 | front SSD [mm] | "
+            "in-part melt frac d / h | bed melt frac d / h |",
+            "|---|---|---|---|---|---|"]
+    for name, a in d["arms"].items():
+        m = a["metrics"]
+        out.append(
+            f"| {name} | {m['phi0p8']['iou']!r} | {m['phi0p9']['iou']!r} | "
+            f"{m['front_ssd_mm_phi0p9']!r} | "
+            f"{m['phi0p9']['in_part_melt_frac_a']!r} / "
+            f"{m['phi0p9']['in_part_melt_frac_b']!r} | "
+            f"{m['phi0p9']['out_of_part_frac_a']!r} / "
+            f"{m['phi0p9']['out_of_part_frac_b']!r} |")
+    return "\n".join(out)
+
+
+def closeout_tables() -> str:
+    return "\n\n".join([refinement_table(), crossfamily_table(),
+                        shape_gate_table()])
