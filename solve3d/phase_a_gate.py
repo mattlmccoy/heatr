@@ -190,7 +190,7 @@ def run_arm(shape: str, arm: str, ref: dict) -> dict:
     }
 
 
-def build(reuse: bool = True) -> dict:
+def build(reuse: bool = True, only: tuple[str, ...] | None = None) -> dict:
     """Run every arm not already recorded and (re)write phase_a_gate.json."""
     tol_doc = gates.load_tolerances()
     refs = _refs()
@@ -216,6 +216,8 @@ def build(reuse: bool = True) -> dict:
             name = f"{shape}_{arm}"
             if reuse and name in doc.get("arms", {}):
                 continue
+            if only is not None and name not in only:
+                continue
             ref = refs["runs"].get(name)
             if ref is None:
                 raise KeyError(f"heatr3d reference {name!r} missing from "
@@ -225,7 +227,8 @@ def build(reuse: bool = True) -> dict:
             gates.write_json(GATE_JSON.name, doc)
     # ---- verdict ---------------------------------------------------------- #
     tol = doc["tolerances"]
-    verdict = {}
+    verdict = {"arms_present": sorted(doc["arms"])}
+    verdict["all_four_arms_present"] = len(doc["arms"]) == 4
     for name, a in doc["arms"].items():
         checks = {
             "t90": a["t90_rel_diff"] <= tol["t90_rel"],
@@ -235,8 +238,9 @@ def build(reuse: bool = True) -> dict:
         }
         checks["arm_ok"] = all(checks.values())
         verdict[name] = checks
-    verdict["gate_ok"] = all(v["arm_ok"] for v in verdict.values()
-                             if isinstance(v, dict))
+    verdict["gate_ok"] = (verdict["all_four_arms_present"]
+                          and all(v["arm_ok"] for v in verdict.values()
+                                  if isinstance(v, dict)))
     doc["verdict"] = verdict
     gates.write_json(GATE_JSON.name, doc)
     return doc
@@ -246,8 +250,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fresh", action="store_true",
                     help="ignore cached arms and re-run all four")
+    ap.add_argument("--only", nargs="+", default=None,
+                    help="run only these arm names (e.g. circle_off)")
     args = ap.parse_args()
-    doc = build(reuse=not args.fresh)
+    doc = build(reuse=not args.fresh,
+                only=tuple(args.only) if args.only else None)
     print(json.dumps(doc["verdict"], indent=1))
     return 0
 
