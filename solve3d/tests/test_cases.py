@@ -50,3 +50,28 @@ def test_segmented_march_reproduces_a_monolithic_run():
     assert t[0] == 0.0 and abs(c[0] - p.preheat_c) < 1e-12
     assert np.all(np.diff(t) > 0)
     assert np.all(np.diff(c) > 0)
+
+
+def test_segmented_coupled_march_reproduces_a_monolithic_coupled_run():
+    """The coupled arm cannot use qrf_override (heatr3d makes the S4 coupling
+    INERT when a drive override is supplied), so the curve sampler instead
+    chains segments whose length IS the re-solve interval.
+
+    That is only legitimate if the EQS schedule and the arithmetic survive:
+    heatr3d.run always does one pre-loop solve and then schedules the next
+    re-solve at the first interval multiple STRICTLY after t_start_s, so a
+    chain of interval-length segments performs exactly the same solves, at
+    exactly the same times, as one monolithic call. Pinned here, cheaply, at
+    n=32, including the n_eqs_solves census."""
+    n = 32
+    grid = heatr3d.Grid(n=n)
+    part = heatr3d.make_geometry(grid, "cylinder", diam=0.020)
+    p = dataclasses.replace(heatr3d.Params(), phase_update="enthalpy",
+                            eqs_update_interval_s=20.0,
+                            sigma_temp_coeff_per_K=-0.002)
+    mono = heatr3d.run(grid, part, p, max_time_s=100.0, phi_target=2.0)
+    seg = cases.march_sampled_coupled(grid, part, p, max_time_s=100.0,
+                                      phi_target=2.0)
+    assert seg["n_eqs_solves"] == mono.n_eqs_solves
+    assert np.allclose(seg["T_final"], mono.T_final, rtol=1e-12, atol=0.0)
+    assert np.allclose(seg["Qrf"], mono.Qrf, rtol=1e-12, atol=0.0)

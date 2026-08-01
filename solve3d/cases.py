@@ -156,6 +156,76 @@ def march_sampled(grid: heatr3d.Grid, part: np.ndarray, p: heatr3d.Params,
     return out
 
 
+def march_sampled_coupled(grid: heatr3d.Grid, part: np.ndarray,
+                          p: heatr3d.Params, max_time_s: float = MAX_TIME_S,
+                          phi_target: float = PHI_TARGET) -> dict:
+    """Coupled-arm curve sampler: chains heatr3d.run in segments whose length
+    IS p.eqs_update_interval_s.
+
+    qrf_override CANNOT be used here -- heatr3d logs the coupling INERT when a
+    drive override is supplied -- so the sample interval is pinned to the
+    re-solve interval instead. heatr3d.run always performs one pre-loop solve
+    and schedules the next re-solve at the first interval multiple STRICTLY
+    after t_start_s, so a chain of interval-length segments performs exactly
+    the same solves at exactly the same times as one monolithic call. Pinned by
+    test_cases.test_segmented_coupled_march_reproduces_a_monolithic_coupled_run
+    (fields to rel 1e-12, n_eqs_solves exactly).
+    """
+    seg_len = float(p.eqs_update_interval_s)
+    if seg_len <= 0.0:
+        raise ValueError("march_sampled_coupled requires eqs_update_interval_s > 0")
+    T = np.full(part.shape, p.preheat_c, dtype=np.float64)
+    t_now = 0.0
+    curve_t = [0.0]
+    curve_T = [float(T[part].mean())]
+    curve_phi = [float(heatr3d.phase_fraction(T, p)[0][part].mean())]
+    e_in = e_stored = e_loss = 0.0
+    n_solves = n_skipped = 0
+    clamp_bound = False
+    Qrf = None
+    out: dict = {"reached": False, "t90_s": float("nan")}
+    while t_now < max_time_s - 1e-12:
+        seg = min(seg_len, max_time_s - t_now)
+        res = heatr3d.run(grid, part, p, max_time_s=seg, phi_target=phi_target,
+                          T0_override=T, t_start_s=t_now,
+                          qrf_gradient="masked")
+        e_in += res.energy_in_j
+        e_stored += res.energy_stored_j
+        e_loss += res.energy_loss_j
+        n_solves += res.n_eqs_solves
+        n_skipped += res.n_eqs_resolves_skipped
+        clamp_bound = clamp_bound or bool(res.clamp_bound)
+        Qrf = res.Qrf
+        T = res.T_final
+        if res.reached:
+            out.update({"reached": True, "t90_s": t_now + res.t_phi90_s,
+                        "T_phi90": res.T_phi90.copy(),
+                        "sigma_T_c": float(res.sigma_T),
+                        "T_max_c": float(res.T_max_c)})
+            curve_t.append(t_now + res.t_phi90_s)
+            curve_T.append(float(res.T_phi90[part].mean()))
+            curve_phi.append(float(heatr3d.phase_fraction(res.T_phi90, p)[0][part].mean()))
+            break
+        t_now += seg
+        curve_t.append(t_now)
+        curve_T.append(float(T[part].mean()))
+        curve_phi.append(float(heatr3d.phase_fraction(T, p)[0][part].mean()))
+    if not out["reached"]:
+        logger.warning("march_sampled_coupled: phi_target=%.2f never reached "
+                       "in %.1f s", phi_target, max_time_s)
+        out.update({"T_phi90": T.copy(), "sigma_T_c": float(T[part].std()),
+                    "T_max_c": float(T[part].max())})
+    out.update({
+        "curve_t_s": curve_t, "curve_part_mean_T_c": curve_T,
+        "curve_part_mean_phi": curve_phi, "T_final": T, "Qrf": Qrf,
+        "n_eqs_solves": int(n_solves), "n_eqs_resolves_skipped": int(n_skipped),
+        "energy_in_j": e_in, "energy_stored_j": e_stored, "energy_loss_j": e_loss,
+        "energy_residual_frac": (e_in - e_stored - e_loss) / max(e_in, 1e-30),
+        "clamp_bound": clamp_bound,
+    })
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Task 1: measure heatr3d's own self-discretization spread
 # --------------------------------------------------------------------------- #
@@ -248,13 +318,117 @@ def write_tolerances(path: Path | None = None) -> dict:
     return doc
 
 
+# --------------------------------------------------------------------------- #
+# Task 4: the heatr3d reference side of the coupled-forward parity gate
+# --------------------------------------------------------------------------- #
+# Re-solve interval and sigma(T) coefficient for the COUPLED arm.
+# -0.002 /K is the S4 re-score's best-behaved value; |a| is well inside the
+# 1/(T_max - T_ref) ~ 0.0044 /K validity bound at these temperatures, so the
+# (1 + a dT) factor never changes sign. There is NO validated nonzero value in
+# this repo (heatr3d.py sec S4-COUPLING), so this arm is EXPLORATORY by
+# construction -- it exists to exercise the re-solve semantics, not to claim
+# physics.
+COUPLED_INTERVAL_S = 60.0
+COUPLED_SIGMA_TEMP_COEFF = -0.002
+REF_GRID = 96                        # heatr3d.EQS_MAX_GRID_FULL_PHYSICS
+
+
+def run_anchor_coupled(shape: str, n: int, p: heatr3d.Params) -> dict:
+    grid = heatr3d.Grid(n=n)
+    part = make_part(grid, shape)
+    t0 = time.perf_counter()
+    m = march_sampled_coupled(grid, part, p)
+    wall = time.perf_counter() - t0
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    npz = RESULTS / f"anchor_heatr3d_{shape}_n{n}_coupled.npz"
+    np.savez_compressed(
+        npz, x=grid.x, y=grid.y, z=grid.z, h=grid.h, L=grid.L, n=n,
+        part=part, Qrf=m["Qrf"], T_phi90=m["T_phi90"], T_final=m["T_final"],
+        curve_t_s=np.asarray(m["curve_t_s"]),
+        curve_part_mean_T_c=np.asarray(m["curve_part_mean_T_c"]),
+        curve_part_mean_phi=np.asarray(m["curve_part_mean_phi"]),
+        t90_s=m["t90_s"], sigma_T_c=m["sigma_T_c"])
+    return {
+        "shape": shape, "n": n, "arm": "coupled", "npz": npz.name,
+        "eqs_update_interval_s": p.eqs_update_interval_s,
+        "sigma_temp_coeff_per_K": p.sigma_temp_coeff_per_K,
+        "n_voxels_in_part": int(part.sum()),
+        "part_volume_m3": float(part.sum() * grid.dV),
+        "t90_s": m["t90_s"], "reached": bool(m["reached"]),
+        "sigma_T_c": m["sigma_T_c"], "T_max_c": m["T_max_c"],
+        "n_eqs_solves": m["n_eqs_solves"],
+        "n_eqs_resolves_skipped": m["n_eqs_resolves_skipped"],
+        "energy_residual_frac": m["energy_residual_frac"],
+        "clamp_bound": m["clamp_bound"], "wall_total_s": wall,
+        "curve_t_s": m["curve_t_s"],
+        "curve_part_mean_T_c": m["curve_part_mean_T_c"],
+        "curve_part_mean_phi": m["curve_part_mean_phi"],
+        "sample_dt_s": COUPLED_INTERVAL_S,
+    }
+
+
+def build_task4_references(n: int = REF_GRID) -> dict:
+    """The four heatr3d reference runs the Task-4 gate scores against:
+    {circle, square} x {defaults-off, coupled}. Existing npz artifacts are
+    reused (an anchor run costs 6-30 min at n=96)."""
+    p_off = heatr3d.Params(phase_update="enthalpy")
+    p_cpl = heatr3d.Params(phase_update="enthalpy",
+                           eqs_update_interval_s=COUPLED_INTERVAL_S,
+                           sigma_temp_coeff_per_K=COUPLED_SIGMA_TEMP_COEFF)
+    doc = {"grid_n": n, "engine": "heatr3d", "phase_update": "enthalpy",
+           "qrf_gradient": "masked",
+           "coupled_arm": {"eqs_update_interval_s": COUPLED_INTERVAL_S,
+                           "sigma_temp_coeff_per_K": COUPLED_SIGMA_TEMP_COEFF,
+                           "label": "EXPLORATORY: no validated nonzero "
+                                    "coefficient exists in this repo"},
+           "runs": {}}
+    out_json = RESULTS / "task4_heatr3d_refs.json"
+    if out_json.exists():
+        doc = json.loads(out_json.read_text())
+    # Reuse the Task-1 circle/off run at the reference grid instead of paying
+    # for it twice: it is the SAME configuration (enthalpy, masked Q, coupling
+    # off) and its npz is already on disk.
+    tol_p = RESULTS / "parity_tolerances.json"
+    if "circle_off" not in doc["runs"] and tol_p.exists():
+        t1 = json.loads(tol_p.read_text())["measurement"]["runs"].get(f"n{n}")
+        if t1 is not None and (RESULTS / t1["npz"]).exists():
+            rec = dict(t1)
+            rec["arm"] = "off"
+            rec["sample_dt_s"] = SAMPLE_DT_S
+            rec["reused_from"] = "parity_tolerances.json (Task 1)"
+            doc["runs"]["circle_off"] = rec
+    for shape in ("circle", "square"):
+        key = f"{shape}_off"
+        if key not in doc["runs"]:
+            print(f"[task4-ref] {key} n={n}", flush=True)
+            rec = run_anchor(shape, n, p_off)
+            rec["arm"] = "off"
+            rec["sample_dt_s"] = SAMPLE_DT_S
+            doc["runs"][key] = rec
+            out_json.write_text(json.dumps(doc, indent=1))
+        key = f"{shape}_coupled"
+        if key not in doc["runs"]:
+            print(f"[task4-ref] {key} n={n}", flush=True)
+            doc["runs"][key] = run_anchor_coupled(shape, n, p_cpl)
+            out_json.write_text(json.dumps(doc, indent=1))
+    out_json.write_text(json.dumps(doc, indent=1))
+    print(json.dumps({k: {kk: vv for kk, vv in v.items()
+                          if not kk.startswith("curve_")}
+                      for k, v in doc["runs"].items()}, indent=1))
+    return doc
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--task4-refs", action="store_true",
+                    help="build the four heatr3d reference runs for Task 4")
     ap.add_argument("--measure", action="store_true",
                     help="run Task 1 and write results/parity_tolerances.json")
     ap.add_argument("--anchor", nargs=2, metavar=("SHAPE", "N"),
                     help="run one anchor case and cache its npz")
     args = ap.parse_args()
+    if args.task4_refs:
+        build_task4_references()
     if args.measure:
         write_tolerances()
     if args.anchor:

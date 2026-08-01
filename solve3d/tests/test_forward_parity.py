@@ -98,3 +98,33 @@ def test_eqs_qrf_pattern():
     assert rel > PLAN_GATE_AS_WRITTEN, (
         "if this ever drops below the plan's mis-cited 0.05, re-derive the gate "
         "instead of celebrating")
+
+
+def test_anchor_parity():
+    """Task 4: the dolfinx coupled forward vs heatr3d on BOTH extrusion anchors,
+    in BOTH arms (coupling defaults-off, and coupling armed with
+    eqs_update_interval_s = 60 s / sigma_temp_coeff_per_K = -0.002 /K), scored
+    against the FROZEN Task-1 tolerances.
+
+    Gate quantities (all like-for-like, both engines read the same way):
+      * t90 relative difference
+      * part-mean heating-curve relative L2 on the common time span
+      * melt-onset std(T) over the part, read at heatr3d's own in-part
+        mid-plane voxel centres
+      * n_eqs_solves EXACT equality (re-solve schedule semantics)
+    """
+    from solve3d import phase_a_gate
+
+    doc = phase_a_gate.build(reuse=True)
+    tol = doc["tolerances"]
+    failures = []
+    for name, arm in doc["arms"].items():
+        # the census is a semantics gate, not a tolerance gate: exact or bust
+        assert arm["n_eqs_solves_dolfinx"] == arm["n_eqs_solves_heatr3d"], name
+        for key, tkey in (("t90_rel_diff", "t90_rel"),
+                          ("curve_rel_l2", "curve_rel_l2"),
+                          ("sigma_T_rel_diff", "sigma_T_rel")):
+            if arm[key] > tol[tkey]:
+                failures.append(f"{name}.{key} = {arm[key]:.6g} > "
+                                f"tolerance {tol[tkey]:.6g}")
+    assert not failures, "\n".join(failures)

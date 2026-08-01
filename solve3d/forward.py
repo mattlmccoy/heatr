@@ -635,9 +635,11 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
         it, isub = divmod(it_sub, n_sub)
         t_now = it * p.dt_s + isub * dt_sub
         if resolve_hook is not None and isub == 0:
-            new_q = resolve_hook(t_now, T, rho_rel)
+            new_q = resolve_hook(t_now,
+                                 cell_average_p1(cell_dofs, T),
+                                 cell_average_p1(cell_dofs, rho_rel))
             if new_q is not None:
-                qf.x.array[:] = new_q
+                qf.x.array[:] = np.asarray(new_q).astype(st)
                 F = _assemble_real(fem.form(ufl.inner(qf, v) * ufl.dx))
         phi, _ = phase_fraction(T, p)
         rho, cp, rho_L = nodal_props(phi)
@@ -749,8 +751,114 @@ def _wstd(v: np.ndarray, w: np.ndarray) -> float:
     return float(np.sqrt(float(np.dot((v - mu) ** 2, w)) / tot))
 
 
-def run_forward(*args, **kwargs):
-    """Coupled EQS + enthalpy-march forward. Wired in plan Task 4."""
-    raise NotImplementedError(
-        "run_forward is wired in Phase A Task 4 (coupled-forward parity). "
-        "Task 2 provides eqs_case; Task 3 provides march_enthalpy.")
+def run_forward(shape: str, target_nodes_in_part: int, lc0: float,
+                p: ForwardParams | None = None, max_time_s: float = 1500.0,
+                phi_target: float = 0.90, sample_dt_s: float = 10.0,
+                L: float = L_DOMAIN, petsc_options=None) -> dict:
+    """The Phase A coupled forward: EQS -> enthalpy march, with the in-march
+    EQS re-solve schedule ported from heatr3d.run (S4-COUPLING, 699ed79).
+
+    Re-solve semantics, port-for-port:
+      * schedule on ABSOLUTE time; the next re-solve is the first multiple of
+        eqs_update_interval_s STRICTLY greater than the march start, so the
+        pre-loop solve is never double-counted;
+      * the check runs at the TOP of a full step, before any thermal work, so
+        the drive used by step `it` belongs to time it*dt_s;
+      * every re-solve rebuilds gamma from the BASE sigma through
+        apply_sigma_coupling (never compounding), re-solves, and reapplies the
+        fixed-power renormalization;
+      * eqs_resolve_drift_rtol > 0 turns a low-drift re-solve into a pointwise
+        Q *= sigma/sigma_last rescale plus a re-renormalization (heatr3d's D1
+        adaptive skip), counted separately.
+    n_eqs_solves counts FULL solves including the pre-loop one, exactly as
+    heatr3d.Result.n_eqs_solves does.
+    """
+    p = p or ForwardParams()
+    case = eqs_case(shape, target_nodes_in_part, lc0, p=p,
+                    petsc_options=petsc_options)
+    msh, mats = case["msh"], case["mats"]
+    sigma_base = np.real(mats.sigma.x.array).astype(float).copy()
+    coupling_on = float(p.eqs_update_interval_s) > 0.0
+
+    census = {"n_eqs_solves": 1, "n_eqs_resolves_skipped": 0,
+              "wall_eqs_s": case["wall_solve_s"], "resolve_times_s": []}
+    sigma_last = sigma_base.copy()
+    if coupling_on:
+        # heatr3d applies the coupling BEFORE the pre-loop solve, using the
+        # initial T / rho state.
+        T0 = np.full(sigma_base.size, p.preheat_c)
+        rho0 = np.full(sigma_base.size, p.rho_rel)
+        mats.sigma.x.array[:] = apply_sigma_coupling(
+            mats, T0, rho0, p).astype(dolfinx.default_scalar_type)
+        sigma_last = np.real(mats.sigma.x.array).astype(float).copy()
+        import time as _t
+        t0 = _t.perf_counter()
+        Vr, Vi = solve_eqs(msh, mats, p, petsc_options=petsc_options)
+        census["wall_eqs_s"] = _t.perf_counter() - t0
+        drive = qrf_dg0(msh, Vr, Vi, mats, p)
+        case.update(drive)
+        case["Vr"], case["Vi"] = Vr, Vi
+
+    q_fn = case["q"]
+    p_target = case["p_target_w"]
+    state = {"next": (float(p.eqs_update_interval_s) if coupling_on
+                      else float("inf")),
+             "q": np.real(q_fn.x.array).astype(float).copy()}
+
+    vol_cells = None
+
+    def hook(t_now: float, T_cells: np.ndarray, rho_cells: np.ndarray):
+        if not coupling_on or t_now < state["next"] - 1e-12:
+            return None
+        while t_now >= state["next"] - 1e-12:
+            state["next"] += float(p.eqs_update_interval_s)
+        nonlocal sigma_last, vol_cells
+        mats.sigma.x.array[:] = sigma_base.astype(dolfinx.default_scalar_type)
+        sigma_new = apply_sigma_coupling(mats, T_cells, rho_cells, p)
+        skip = False
+        if p.eqs_resolve_drift_rtol > 0.0:
+            drift = float(np.max(np.abs(sigma_new - sigma_last))) / max(
+                p.sigma_doped, 1e-30)
+            skip = drift < p.eqs_resolve_drift_rtol
+        if skip:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                ratio = np.where(sigma_last > 0.0, sigma_new / sigma_last, 1.0)
+            q_new = np.clip(np.nan_to_num(state["q"] * ratio), 0.0, None)
+            q_new = np.where(mats.mask, q_new, 0.0)
+            if vol_cells is None:
+                import femutils as fu
+                vol_cells = np.real(fu.cell_volumes(msh, mats.dg0)).astype(float)
+            p_now = float(np.dot(q_new, vol_cells))
+            if p_now > 1e-18:
+                q_new = q_new * (p_target / p_now)
+            state["q"] = q_new
+            census["n_eqs_resolves_skipped"] += 1
+        else:
+            mats.sigma.x.array[:] = sigma_new.astype(dolfinx.default_scalar_type)
+            import time as _t
+            t0 = _t.perf_counter()
+            Vr_, Vi_ = solve_eqs(msh, mats, p, petsc_options=petsc_options)
+            census["wall_eqs_s"] += _t.perf_counter() - t0
+            d = qrf_dg0(msh, Vr_, Vi_, mats, p)
+            state["q"] = np.real(d["q"].x.array).astype(float).copy()
+            sigma_last = sigma_new.copy()
+            census["n_eqs_solves"] += 1
+        census["resolve_times_s"].append(float(t_now))
+        return state["q"]
+
+    import time as _t
+    t0 = _t.perf_counter()
+    march = march_enthalpy(msh, p, mats=mats, q_dg0=q_fn,
+                           max_time_s=max_time_s, phi_target=phi_target,
+                           L=L, sample_dt_s=sample_dt_s,
+                           resolve_hook=hook if coupling_on else None)
+    march["wall_march_s"] = _t.perf_counter() - t0
+    out = {k: v for k, v in case.items() if k not in ("msh", "mats", "q")}
+    out.update(march)
+    out.update(census)
+    out["msh"] = msh
+    out["mats"] = mats
+    out["q"] = q_fn
+    out["shape"] = shape
+    out["coupling_on"] = bool(coupling_on)
+    return out
