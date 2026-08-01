@@ -2204,27 +2204,62 @@ function renderRunCards() {
 
   // ── Wire buttons after innerHTML is set ──────────────────────────────────────
   function _wireCardHandlers(card, run, allItems, hero, caps) {
+    // Thumbnails are served small + local-cached via /thumb/; full-res stays /files/ (viewer).
+    const thumbUrl = (u) => (typeof u === "string" && u.startsWith("/files/"))
+      ? "/thumb/" + u.slice("/files/".length) : u;
+    // The full image list is deferred (not shipped in the run-view payload). Fetch it once,
+    // on demand, the first time the user clicks a hero thumb or expands "All images".
+    let _imgLoaded = false;
+    async function ensureImages() {
+      if (_imgLoaded) return run.images || [];
+      try {
+        const data = await fetchJson(`/api/results-images/${encodeURIComponent(run.name)}`);
+        run.images = Array.isArray(data.images) ? data.images : [];
+      } catch (_e) {
+        run.images = [];
+      }
+      _imgLoaded = true;
+      // Rebuild allItems in place so the image viewer navigates the full set.
+      allItems.length = 0;
+      (run.images || []).forEach((img) => allItems.push({ url: img.url, title: `${run.name}/${img.path}` }));
+      return run.images;
+    }
+
     const heroWrap = card.querySelector(".run-hero");
     hero.forEach((img) => {
-      const idx = allItems.findIndex((it) => it.url === img.url);
       const b = document.createElement("button");
       b.type = "button";
       b.className = "thumb-btn";
-      b.innerHTML = `<img src="${img.url}" alt="${img.path}" loading="lazy" />`;
-      b.onclick = () => openViewer(allItems, Math.max(0, idx));
+      b.innerHTML = `<img src="${thumbUrl(img.url)}" alt="${img.path}" loading="lazy" />`;
+      b.onclick = async () => {
+        await ensureImages();
+        const idx = allItems.findIndex((it) => it.url === img.url);
+        openViewer(allItems, Math.max(0, idx));
+      };
       heroWrap.appendChild(b);
     });
 
+    // Populate the "All images" gallery lazily, the first time the <details> is opened.
+    const details = card.querySelector(".run-details");
     const allWrap = card.querySelector(".run-all-images");
-    (run.images || []).forEach((img, idx) => {
-      const fig = document.createElement("figure");
-      fig.innerHTML = `
-        <button type="button" class="thumb-btn"><img src="${img.url}" alt="${img.path}" loading="lazy" /></button>
-        <figcaption>${img.path}</figcaption>
-      `;
-      fig.querySelector("button").onclick = () => openViewer(allItems, idx);
-      allWrap.appendChild(fig);
-    });
+    if (details && allWrap) {
+      details.addEventListener("toggle", async () => {
+        if (!details.open || allWrap.dataset.loaded) return;
+        allWrap.dataset.loaded = "1";
+        allWrap.textContent = "Loading images…";
+        const imgs = await ensureImages();
+        allWrap.textContent = "";
+        imgs.forEach((img, idx) => {
+          const fig = document.createElement("figure");
+          fig.innerHTML = `
+            <button type="button" class="thumb-btn"><img src="${thumbUrl(img.url)}" alt="${img.path}" loading="lazy" /></button>
+            <figcaption>${img.path}</figcaption>
+          `;
+          fig.querySelector("button").onclick = () => openViewer(allItems, idx);
+          allWrap.appendChild(fig);
+        });
+      });
+    }
 
     const backfillBtn = card.querySelector(".run-backfill-btn");
     if (backfillBtn && caps.length) {
@@ -2257,9 +2292,14 @@ function renderRunCards() {
       fgmActionBtn.addEventListener("click", async (ev) => {
         ev.stopPropagation();
 
-        // Collect parameters via simple prompts
+        // Collect parameters via simple prompts.
+        // Defaults follow HEATR_STANDARD_PARAMETERS.md and the fgm_iterate backend
+        // defaults (rfam_gui_server.py): 4 bpp, T_phi90 proxy, magnitude 0.7.
         const bppRaw = window.prompt(
-          "FGM bits-per-pixel (2 = 4 levels, 4 = 16 levels):", "2"
+          "FGM bits-per-pixel (2 = 4 levels, 4 = 16 levels):\n" +
+          "  4 = 16 saturation levels  ← recommended (campaign standard)\n" +
+          "  2 = 4 levels (only if printer/job constraints require it)",
+          "4"
         );
         if (bppRaw === null) return;  // cancelled
         const bpp = parseInt(bppRaw, 10);
@@ -2269,22 +2309,24 @@ function renderRunCards() {
         }
 
         const proxyRaw = window.prompt(
-          "Proxy field (Qrf | T | rho_rel):\n" +
-          "  Qrf     = RF power deposition  [overheated → less ink]  ← recommended\n" +
-          "  T       = final temperature    [overheated → less ink]\n" +
+          "Proxy field (T_phi90 | Qrf | T | rho_rel):\n" +
+          "  T_phi90 = T at phi=0.90 sintering completion  ← recommended (standard)\n" +
+          "  Qrf     = RF power deposition  [overheated → less ink]\n" +
+          "  T       = final temperature    [more diffused, less contrast]\n" +
           "  rho_rel = relative density     [under-dense → more ink]",
-          "Qrf"
+          "T_phi90"
         );
         if (proxyRaw === null) return;
-        const proxy = proxyRaw.trim() || "Qrf";
+        const proxy = proxyRaw.trim() || "T_phi90";
 
         const magRaw = window.prompt(
-          "Gradient magnitude:\n" +
-          "  0.0 = flat (uniform saturation, no FGM effect)\n" +
-          "  0.5 = gentle gradient  ← good starting point\n" +
-          "  1.0 = full contrast\n" +
-          "  1.5 = exaggerated",
-          "0.5"
+          "Gradient magnitude (per-shape tuned; campaign values 0.3 / 0.5 / 0.7 / 0.85):\n" +
+          "  0.0  = flat (uniform saturation, no FGM effect)\n" +
+          "  0.5  = small baseline non-uniformity (sigma_0 ~ 10-15 C)\n" +
+          "  0.7  = standard default (sigma_0 ~ 15-22 C)\n" +
+          "  0.85 = large baseline non-uniformity (sigma_0 > 22 C)\n" +
+          "  1.0  = aggressive 3-D value; over-corrects in 2-D",
+          "0.7"
         );
         if (magRaw === null) return;
         const magnitude = parseFloat(magRaw);

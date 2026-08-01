@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 import yaml
 import numpy as np
 from shapes import make_shape_from_svg
+import gui_cache
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "webui" / "static"
@@ -1455,6 +1456,34 @@ def _collect_images_recursive(root: Path) -> list[dict[str, str]]:
             })
     images.sort(key=lambda it: it["path"])
     return images
+
+
+def _scan_run_files(root: Path) -> tuple[int, list[dict[str, str]]]:
+    """Single os.walk over a run dir returning (disk_bytes, image_list).
+
+    Replaces the per-card pair of full walks (a `rglob("*")` for disk_bytes AND
+    `_collect_images_recursive`'s three `rglob` passes) with one traversal. Output is identical:
+    disk_bytes is the sum of every file's size; image_list matches _collect_images_recursive
+    (png/gif/svg, {path, url}, sorted by path). Halving the per-run traversals is the main
+    cold-cache win on the results run-view.
+    """
+    disk_bytes = 0
+    images: list[dict[str, str]] = []
+    exts = (".png", ".gif", ".svg")
+    for dirpath, _dirnames, filenames in os.walk(root):
+        d = Path(dirpath)
+        for fn in filenames:
+            fp = d / fn
+            try:
+                disk_bytes += fp.stat().st_size
+            except OSError:
+                continue
+            if fn.lower().endswith(exts):
+                rel_to_root = fp.relative_to(root).as_posix()
+                rel_to_outputs = fp.relative_to(OUTPUTS_DIR).as_posix()
+                images.append({"path": rel_to_root, "url": _url_for_output_rel(rel_to_outputs)})
+    images.sort(key=lambda it: it["path"])
+    return disk_bytes, images
 
 
 def _build_artifact(output_dir: Path) -> dict[str, Any]:
@@ -4179,11 +4208,33 @@ def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
         _finish_job(job_id, "failed", str(exc))
 
 
+def _candidate_result_dirs() -> list["Path"]:
+    """All directories under OUTPUTS_DIR that could back a result card, newest-mtime first.
+
+    Prunes `_archive*` subtrees at the os.walk level (which `rglob("*")` cannot), so archived
+    runs are never descended into. Behavior-preserving: `_archive` is already dropped by
+    `_should_skip_result_path`, so the resulting card set is identical — this only avoids the
+    cost of traversing the archive (the main cold-cache win once runs have been archived).
+    """
+    out: list[tuple[float, Path]] = []
+    root = OUTPUTS_DIR
+    for dirpath, dirnames, _files in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not d.lower().startswith("_archive")]
+        d = Path(dirpath)
+        if d == root:
+            continue
+        try:
+            mt = d.stat().st_mtime
+        except OSError:
+            mt = 0.0
+        out.append((mt, d))
+    out.sort(key=lambda t: t[0], reverse=True)
+    return [p for _mt, p in out]
+
+
 def _collect_results() -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    for p in sorted(OUTPUTS_DIR.rglob("*"), key=lambda q: q.stat().st_mtime, reverse=True):
-        if not p.is_dir():
-            continue
+    for p in _candidate_result_dirs():
         if _should_skip_result_path(p):
             continue
         has_summary = (p / "summary.json").exists()
@@ -4526,6 +4577,26 @@ def _load_or_build_manifest(run_dir: Path) -> dict[str, Any]:
     if (not manifest_path.exists()) or (prev_raw != next_raw):
         manifest_path.write_text(json.dumps(manifest, indent=2))
     return manifest
+
+
+def _manifest_for_listing(run_dir: Path) -> dict[str, Any]:
+    """Fast manifest read for LIST views (the run-view grid).
+
+    Returns the cached report_manifest.json as-is when present, WITHOUT re-walking every file in
+    the run (the expensive _iter_rel_files + capability re-resolve). Only when no valid cached
+    manifest exists does it fall back to a full build. Detail/backfill/action paths still call
+    _load_or_build_manifest so a guaranteed-fresh manifest is produced where correctness matters;
+    a list badge that is momentarily stale self-heals the next time the run is opened.
+    """
+    manifest_path = run_dir / "report_manifest.json"
+    if manifest_path.exists():
+        try:
+            raw = json.loads(manifest_path.read_text())
+            if isinstance(raw, dict):
+                return raw
+        except Exception:
+            pass
+    return _load_or_build_manifest(run_dir)
 
 
 def _iso_from_epoch(epoch: float | int | None) -> str:
@@ -5055,9 +5126,7 @@ def _preferred_images(root: Path, limit: int = 3) -> list[dict[str, str]]:
 def _collect_run_cards() -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     stars = _load_run_stars()
-    for p in sorted(OUTPUTS_DIR.rglob("*"), key=lambda q: q.stat().st_mtime, reverse=True):
-        if not p.is_dir():
-            continue
+    for p in _candidate_result_dirs():
         if _should_skip_result_path(p):
             continue
         has_summary = (p / "summary.json").exists()
@@ -5073,19 +5142,19 @@ def _collect_run_cards() -> list[dict[str, Any]]:
                 summary = json.loads((p / "summary.json").read_text())
             except Exception:
                 summary = {}
-        images = _collect_images_recursive(p)
         try:
-            disk_bytes = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+            disk_bytes, images = _scan_run_files(p)   # one walk for size + image list
         except Exception:
-            disk_bytes = 0
+            disk_bytes, images = 0, []
         hero = _preferred_images(p, limit=3)
         if rel.startswith("runs/"):
             toks = rel.split("/")
             group = toks[1] if len(toks) > 1 else "runs"
         else:
             group = rel.split("/")[0] if "/" in rel else "runs"
-        manifest = _load_or_build_manifest(p)
-        run_type = str(manifest.get("run_type", _get_run_type(p)))
+        manifest = _manifest_for_listing(p)
+        # `or _get_run_type(p)` is lazy: only reads run files when the cached manifest lacks a type.
+        run_type = str(manifest.get("run_type") or _get_run_type(p))
         caps = [str(v) for v in manifest.get("backfill_capabilities", []) if str(v)]
 
         # For fgm_iterate runs, attach best-iteration metrics for richer card display.
@@ -5127,11 +5196,47 @@ def _collect_run_cards() -> list[dict[str, Any]]:
             "starred": bool(stars.get(rel, False)),
             "hero_images": hero,
             "image_count": len(images),
-            "images": images,
+            # Full image list is deferred: fetched per-run via /api/results-images/<name> when the
+            # card's "All images" section is expanded. Shipping all ~28k refs inflated the run-view
+            # payload to ~6 MB and slowed the browser render.
             "fgm_best": fgm_best,
             "disk_bytes": disk_bytes,
         })
     return cards
+
+
+# Stale-while-revalidate cache: the run-view endpoint returns instantly from memory and rebuilds in
+# the background, instead of re-walking the (slow, Dropbox-backed) outputs tree on every request.
+_CARDS_CACHE = gui_cache.BackgroundValue(lambda: _collect_run_cards(), ttl_s=45.0)
+
+
+def _hero_image_paths_for_prewarm(cards: list, limit: int = 400) -> list:
+    """Disk paths of the newest cards' hero images, for thumbnail prewarming."""
+    paths = []
+    for c in cards:
+        for h in c.get("hero_images", []):
+            url = h.get("url", "")
+            if url.startswith("/files/"):
+                p = ROOT / url[len("/files/"):]
+                paths.append(p)
+    return paths[:limit]
+
+
+def _run_image_list(name: str) -> list[dict[str, str]]:
+    """Full image list for a single run, resolved on demand for the deferred "All images" panel.
+
+    Rejects any path that escapes OUTPUTS_DIR (returns []). Reuses the single-walk _scan_run_files.
+    """
+    try:
+        base = OUTPUTS_DIR.resolve()
+        target = (OUTPUTS_DIR / name).resolve()
+        target.relative_to(base)
+    except (ValueError, OSError):
+        return []
+    if not target.is_dir():
+        return []
+    _disk_bytes, images = _scan_run_files(target)
+    return images
 
 
 def _pick_preview_image(folder: Path, preferred: list[str]) -> str | None:
@@ -5563,7 +5668,10 @@ class Handler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 return self._json({"error": "path not found"}, status=404)
         if path == "/api/results-runview":
-            return self._json(_collect_run_cards())
+            return self._json(_CARDS_CACHE.get())
+        if path.startswith("/api/results-images/"):
+            name = unquote(path[len("/api/results-images/"):])
+            return self._json({"images": _run_image_list(name)})
         if path == "/api/examples":
             return self._json(_examples_payload())
         if path.startswith("/api/convergence/"):
@@ -5820,6 +5928,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_result_detail(name))
             except FileNotFoundError:
                 return self._json({"error": "not found"}, status=404)
+        if path.startswith("/thumb/"):
+            # small local-cached JPEG thumbnail (keeps the hot path off Dropbox); falls back to the
+            # full-res original if the source can't be thumbnailed.
+            rel = path[len("/thumb/"):]
+            safe = _safe_rel_path(rel)
+            if safe is None or not safe.exists() or not safe.is_file():
+                return self._text("not found", status=404)
+            data = gui_cache.get_or_make_thumb(safe, max_px=320)
+            if data is None:
+                return self._serve_file(safe)
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
+            return None
+
         if path.startswith("/files/"):
             rel = path[len("/files/"):]
             safe = _safe_rel_path(rel)
@@ -6077,10 +6203,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/tools/generate-fgm":
             # Payload keys (all optional except output_dir):
             #   output_dir         — relative path under ROOT (e.g. "outputs_eqs/runs/.../my_run")
-            #   bpp                — 2 or 4 (default 2)
-            #   proxy_field        — "Qrf" | "T" | "rho_rel" (default "Qrf")
+            #   bpp                — 2 or 4 (default 4, the campaign standard)
+            #   proxy_field        — "T_phi90" | "Qrf" | "T" | "rho_rel" (default "T_phi90")
             #   invert             — bool (default true)
-            #   magnitude          — float 0–2 (default 1.0)
+            #   magnitude          — float 0–2 (default 0.7; per-shape tuned 0.3–0.85,
+            #                        see HEATR_STANDARD_PARAMETERS.md section 4)
             #   baseline_saturation— float 0–1 (default 0.5)
             #   dpi                — int (default 720)
             #   smoothing_sigma    — float (default 1.5)
@@ -6118,10 +6245,10 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 from fgm_generator import generate_fgm  # local import for fast server startup
                 import base64 as _b64
-                bpp               = int(payload.get("bpp", 2))
-                proxy_field       = str(payload.get("proxy_field", "Qrf")).strip()
+                bpp               = int(payload.get("bpp", 4))
+                proxy_field       = str(payload.get("proxy_field", "T_phi90")).strip()
                 invert            = bool(payload.get("invert", True))
-                magnitude         = float(payload.get("magnitude", 1.0))
+                magnitude         = float(payload.get("magnitude", 0.7))
                 baseline          = float(payload.get("baseline_saturation", 0.5))
                 dpi               = int(payload.get("dpi", 720))
                 sigma             = float(payload.get("smoothing_sigma", 1.5))
@@ -6905,8 +7032,18 @@ def main() -> None:
     server.timeout = None
     _SERVER_REF = server
     print(f"RFAM GUI running at http://{host}:{port}")
-    print("Prewarp flows are disabled in this interface.")
     print("Stop via the ⏻ Quit button in the UI or Ctrl-C.")
+
+    def _prewarm():
+        # Build the card cache and pre-generate hero thumbnails so the first browse is already warm.
+        try:
+            cards = _CARDS_CACHE.get()
+            n = gui_cache.prewarm_thumbs(_hero_image_paths_for_prewarm(cards), max_px=320)
+            print(f"[prewarm] card cache built ({len(cards)} cards); {n} hero thumbnails cached")
+        except Exception as exc:  # never let prewarm crash the server
+            print(f"[prewarm] skipped: {exc}")
+
+    threading.Thread(target=_prewarm, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
