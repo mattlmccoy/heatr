@@ -5,6 +5,14 @@ before any prediction was scored. All numbers in `results.json`,
 `grid_sensitivity.json`, `fit_window_sensitivity.json`; fields in `fields.npz`;
 figures in `figs/`.
 
+> **FOLLOW-UP (2026-08-01), no number below is changed:** items 1 and 2 of §7
+> ("re-solve the EQS during the march", "add sigma(T)/sigma(rho_rel)") have since
+> been implemented and re-scored. See `S4_RESCORE_COUPLED.md`. Summary: the
+> verdict is unchanged (NOT PASSED), un-freezing Q_rf alone is provably inert,
+> and a uniform-dopant sigma(T) feedback does not reproduce the late-time
+> topology at any coefficient inside the law's validity domain -- which promotes
+> §4.2 candidate 4 (dopant non-uniformity) to the leading explanation.
+
 ## Verdict
 
 **GATE S4: NOT PASSED.** Two of the three pre-registered criteria are met and one
