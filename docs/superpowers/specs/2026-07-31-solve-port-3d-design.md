@@ -43,7 +43,7 @@ in their worktree adjoint2d/ and the root FGM_*/SHAPE_* reports):
 | Transient thermal-phase adjoint (coupled T, rho reverse march, clip VJPs) | 2-D proven | LARGEST PORT ITEM: implement in dolfinx with the enthalpy forward; Griewank-style checkpointing (store state at intervals, recompute segments) - the 2-D store-everything approach does not fit 3-D memory |
 | FD/subgradient gate protocol (single-cell + multi-cell + random probes, eps sweeps, paired-difference estimator, subgradient labeling) | proven; measured failure mechanisms | port verbatim as the acceptance protocol for every gradient layer |
 | Actuator: conductivity channel | proven | matches D1 dJ/dsigma |
-| Actuator: permittivity channel | MISSING in 2-D (their #1 gap, queued) | add dJ/d-eps_r in dolfinx (cheap: complex-symmetric A^H = conj(A) reuse); do not declare the 3-D solve complete without it - the 2-D evidence says this channel decides shapes (their cross: J 343 with eps vs 1036 without) |
+| Actuator: permittivity channel | LANDED in 2-D (commit 890dc22): census 13/18 -> 17/18 vs best stored masks. DEPLOYABILITY CAVEAT (2026-08-01): rfam_eqs_coupled.py:290-292 asserts the real binder's eps_r is FIXED at 20 with only sigma varying - until Matt settles the material question (VNA dielectric vs carbon-black loading), conductivity-only is the deployable channel and eps results are MODEL-ONLY | add dJ/d-eps_r in dolfinx (cheap: complex-symmetric A^H = conj(A) reuse) as a MODEL-ONLY channel, badged as such; do not present eps-channel maps as printable until the material question is settled - the 2-D evidence says this channel decides shapes (their cross: J 343 with eps vs 1036 without) |
 | Optimizer: L-BFGS-B on subgradients, box constraints | proven with known stalls | same, plus multi-start and scaled first step (their rectangle lesson); iteration-based budget accounting (not wall clock) |
 | Drive convention | 2-D pins power-enforcement OFF | RECONCILE: one convention for the 3-D solve, chosen with the 2-D lane, before any cross-lane map comparison; D1 proved differentiating through the renormalization is tractable (and that freezing it is wrong by up to 150% per dof) |
 | Regularization / rim structure | CONFIRMED load-bearing rim sculpture: one-cell blur costs +37% to +892% J on 5/6 shapes (rectangle, the stalled map, IMPROVES); the shapes losing most to blur lose most to the grid change - one mechanism, two witnesses | RESOLVED 2026-08-01: regularization is MANDATORY from Phase A. Filter + Heaviside projection parameterization (the topology-optimization standard the 2-D lane already queued), with the filter radius a PHYSICAL length (candidate: the printer's dopant edge scale, ~50-100 um class, or a solver-convergence-derived length from S2) - on an unstructured FEM mesh there is no cell scale to hide in, which forces the honest choice |
@@ -131,9 +131,35 @@ option.
    solved-vs-uniform win DOES transfer 6/6; rankings vs historical 5/6
    (circle flips). The port's filtering-by-construction is the designed
    answer, verified by the Phase C acceptance gates.
-2. STILL OWED: the 2-D lane's frozen conventions doc (objective functional,
-   FD-gate checklist, optimizer/budget rule, outside-part saturation,
-   drive convention per arm).
+2. PARTIALLY RECEIVED 2026-08-01 (cross-session reply; the full
+   FROZEN_CONVENTIONS_2D.md lands at geo-prewarp root when their topology
+   pass fixes the physical filter radius + beta schedule). FROZEN NOW,
+   with their citations:
+   - Drive per arm: voltage-driven, per-shape calibrated v_cal
+     (geometry_dual_readstate campaign), enforce_generator_power=False;
+     absorbed power reported per arm; dose NOT matched (stated limit).
+   - Outside-part saturation = 1.0 (adjoint2d/control.py:39-61,
+     deliberate and load-bearing; historical masks mix outside=1/asstored,
+     solve arms are outside=1.0).
+   - FD-gate checklist: L0 bit-identity vs production before any gradient;
+     central-difference gates at max-sensitivity cell + random cell +
+     random direction; 1e-5 subgradient standard with the measured
+     evaluation floor reported; filter/projection TRANSPOSE checked
+     against the adjoint exactly; flag-off bit-identity regression per
+     new channel.
+   - Optimizer/budget: L-BFGS-B, box [0,1], filtered full-depth SINGLE
+     start at 40 forward-equivalents per shape (multi-start splitting the
+     budget costs depth, 7/18 vs 9/18); warm-start only where a strong
+     historical mask exists; adjoints counted at measured
+     forward-equivalent cost.
+   - NEW WITNESS for the physical-radius requirement: their 1.5-2 CELL
+     filter at grid 120 cuts the square's one-cell-blur cost +152.7% ->
+     +9.9% (smoothing robustness fixed in-grid) but grid-160 transfer
+     recovers only IoU 0.8063 vs 0.7767 unfiltered (0.968 in-grid) - a
+     cell-count radius does NOT fix grid transfer. Physical length stands.
+   - STILL OWED: physical filter radius value + beta continuation
+     schedule (their topology pass); their full-fix grid hold-out rerun
+     is that pass's acceptance test.
 3. RECEIVED 2026-08-01: Matt's approval of this updated spec.
 4. Sequencing note: the S4 field-coupling finding (frozen Q_rf) is being
    fixed in heatr3d now; the solve3d forward inherits whatever coupling
