@@ -1,0 +1,20 @@
+{
+ "star": {
+  "J": 36.78465982999434,
+  "IoU": 0.920863309352518,
+  "grow": 2.5830258302583027,
+  "under": 5.535055350553505,
+  "stop_s": 161.5,
+  "horizon": false,
+  "energy_gate": true
+ },
+ "square": {
+  "J": 78.80495606872935,
+  "IoU": 0.9615384615384616,
+  "grow": 4.0,
+  "under": 0.0,
+  "stop_s": 424.0,
+  "horizon": false,
+  "energy_gate": true
+ }
+}
