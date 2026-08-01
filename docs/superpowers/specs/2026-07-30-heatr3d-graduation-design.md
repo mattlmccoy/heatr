@@ -145,6 +145,14 @@ and a rewrite restarts the trust ladder.
 - Deliverable: documented convergence bands (value plus band at the working
   grid) for the headline metrics; the working grid chosen from the study,
   not asserted.
+- ABSORBED from the S4 re-score (Matt, 2026-08-01): the coupled-march
+  densification question. The S4 coupling study proved sigma_density_coeff
+  is inert under the pre-registered densify=False march; S2 adds at least
+  one densify=True march with the in-march EQS re-solve enabled
+  (eqs_update_interval_s > 0) to exercise the density-coupling term and
+  characterize its effect on the convergence of the headline metrics. Any
+  re-scoring of S4 FLIR cases under that coupling requires its own explicit
+  re-registration; S2 itself only characterizes the term.
 
 ### Gate S3: cross-anchors (the strongest available substitutes for the rig)
 

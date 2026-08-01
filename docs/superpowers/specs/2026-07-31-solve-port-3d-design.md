@@ -1,10 +1,12 @@
 # Direct-Solve 3-D Port: Solved Volumetric Dopant Fields for RFAM Print Studio
 
 Date: 2026-07-31
-Status: DRAFT updated 2026-08-01 with the 2-D robustness results
-(SOLVE_ROBUSTNESS_VALIDATION.md, landed this date). The former [PENDING-2D]
-decisions are now evidence-based and RESOLVED below. Awaiting Matt's final
-approval.
+Status: APPROVED by Matt 2026-08-01 (updated same date with the 2-D
+robustness results, SOLVE_ROBUSTNESS_VALIDATION.md; the former [PENDING-2D]
+decisions are evidence-based and RESOLVED below). Phase A may start.
+Companion decision, same date: the untested sigma_density_coeff /
+densify=True coupled-march question from the S4 re-score is ABSORBED INTO
+S2 scope (graduation ladder), not re-registered as an S4 extension.
 Owner: Matt McCoy
 
 ## 1. Goal
@@ -132,7 +134,7 @@ option.
 2. STILL OWED: the 2-D lane's frozen conventions doc (objective functional,
    FD-gate checklist, optimizer/budget rule, outside-part saturation,
    drive convention per arm).
-3. Matt's approval of this updated spec.
+3. RECEIVED 2026-08-01: Matt's approval of this updated spec.
 4. Sequencing note: the S4 field-coupling finding (frozen Q_rf) is being
    fixed in heatr3d now; the solve3d forward inherits whatever coupling
    law lands, so Phase A parity targets the coupled forward, not the
