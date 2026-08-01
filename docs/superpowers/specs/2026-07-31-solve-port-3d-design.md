@@ -118,6 +118,16 @@ option.
   solve still standardizes one convention).
 - Phase E: library campaign (the 3-D analog of their 18-shape library) and
   Studio integration behind badges.
+  PRODUCT DIRECTION (Matt, 2026-08-01): the DIRECT SOLVE is the PRIMARY
+  FGM generator for heatr3d/Studio (the inversion heuristic is legacy).
+  Dwell scheduling + rotation (the 2-D lane's dwell-duration adjoint work)
+  is built in as a composable FEATURE the Studio can employ or SUGGEST to
+  the user based on the imported geometry type (their evidence: helps via
+  temporal structure on cross-like shapes, dose-only on T/L, null on
+  star - a geometry classifier can drive the suggestion). Requirements
+  carried: part+sat co-rotation from the first commit (regression-tested),
+  theta/theta+180 gauge redundancy halves candidate sets, power scheduling
+  p(t) is NOT a primary actuator (retired in 2-D).
 
 ## 6. Out of scope
 
