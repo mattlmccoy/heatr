@@ -242,13 +242,36 @@ def reverse_march(case: Case, tr: fwd.Trajectory,
 # ---------------------------------------------------------------------------
 
 def eqs_vjp(case: Case, st: fwd.ElectricState, gQ: np.ndarray,
-            Gx, Gy, pre_masked: bool = False) -> np.ndarray:
+            Gx, Gy, pre_masked: bool = False, with_eps: bool = False):
     """dJ/dsigma for one electrical state, given dJ/dQ_rf.
 
     `pre_masked` says the caller has already applied the cap subgradient mask
     and any power scale, which is what `reverse_march` does when a temporal
     schedule is active (the mask then depends on the step's own p_k and cannot
     be reconstructed here).
+
+    `with_eps` additionally returns dJ/d(eps_r), the PERMITTIVITY channel, and
+    the return becomes the pair `(dJ_dsigma, dJ_deps)`. The complex material
+    coefficient is
+
+        gamma = sigma + 1j * omega * EPS0 * eps_r
+
+    so `d gamma / d sigma = 1` and `d gamma / d eps_r = 1j * omega * EPS0`.
+    Three consequences, and each one is why the permittivity branch is written
+    the way it is below:
+
+      * the DIRECT term of the absorbed power, Q_raw = 0.5*pf*Re(gamma)*|E|^2,
+        has no permittivity dependence at all, because Re(gamma) = sigma. The
+        whole permittivity sensitivity travels through the field.
+      * the assembled-operator term is the SAME complex quantity in both
+        channels, multiplied by the respective d gamma / d parameter, so the
+        permittivity branch reuses `base`, `dgf_dk` and `dgf_dn` untouched.
+      * at omega = 0 the channel is exactly dead, which is asserted in
+        `tests/test_eps_channel.py` rather than assumed.
+
+    The conductivity accumulation is left byte-for-byte where it was, so
+    `with_eps=True` cannot perturb the conductivity gradient by a rounding
+    order change. That bit-identity is a unit test, not an intention.
     """
     p = case.pins
     # Q_rf = doped ? clip(max(raw,0), 0, max_qrf) : 0, raw = 0.5*pf*sigma*|E|^2
@@ -260,6 +283,9 @@ def eqs_vjp(case: Case, st: fwd.ElectricState, gQ: np.ndarray,
 
     # direct sigma dependence
     dJ_dsigma = g_raw * (0.5 * p.power_factor * st.e2)
+    dJ_deps = np.zeros_like(dJ_dsigma) if with_eps else None
+    # d gamma / d eps_r
+    c_eps = 1j * p.omega * EPS0
 
     # dependence through the field
     coef = g_raw * (0.5 * p.power_factor * np.real(st.gamma))
@@ -267,7 +293,7 @@ def eqs_vjp(case: Case, st: fwd.ElectricState, gQ: np.ndarray,
     py = -(Gy.T @ (coef * np.conj(st.Ey)).ravel())
     pvec = px + py
     if not np.any(pvec):
-        return dJ_dsigma
+        return (dJ_dsigma, dJ_deps) if with_eps else dJ_dsigma
 
     lam = st.op.solve_transpose(pvec).reshape(case.part_mask.shape)
 
@@ -295,7 +321,12 @@ def eqs_vjp(case: Case, st: fwd.ElectricState, gQ: np.ndarray,
         np.add.at(dJ_dsigma,
                   (slice(i0 + di, i1 + di), slice(j0 + dj, j1 + dj)),
                   2.0 * np.real(base * dgf_dn))
-    return dJ_dsigma
+        if with_eps:
+            dJ_deps[i0:i1, j0:j1] += 2.0 * np.real(base * dgf_dk * c_eps)
+            np.add.at(dJ_deps,
+                      (slice(i0 + di, i1 + di), slice(j0 + dj, j1 + dj)),
+                      2.0 * np.real(base * dgf_dn * c_eps))
+    return (dJ_dsigma, dJ_deps) if with_eps else dJ_dsigma
 
 
 # ---------------------------------------------------------------------------
@@ -305,8 +336,30 @@ def eqs_vjp(case: Case, st: fwd.ElectricState, gQ: np.ndarray,
 def gradient(case: Case, s: np.ndarray, tr: fwd.Trajectory,
              seeds: dict[int, np.ndarray], grad_ops=None,
              with_schedule: bool = False,
-             seeds_rho: dict[int, np.ndarray] | None = None):
+             seeds_rho: dict[int, np.ndarray] | None = None,
+             eps_covary: bool = False):
     """dJ/ds over the whole domain (zero outside the part).
+
+    `eps_covary` selects the ACTUATOR, and it must match the forward that
+    produced `tr`. With it False the dopant moves conductivity only, which is
+    the two-sided per-node production hook `fgm_feedback.sat_map_npz_direct`
+    (`rfam_eqs_coupled.py:342` sets `eps_geometry_only = True` there). With it
+    True the dopant moves BOTH conductivity and relative permittivity through
+    the same effective fill `fill_frac * s`, which is the other production
+    hook, `fgm_feedback.saturation_map_npz`, and the channel every historical
+    dopant map was scored in (`rfam_eqs_coupled.py:2527-2532`).
+
+    The permittivity term is added to the SAME dJ/ds, because both channels are
+    driven by one design variable:
+
+        dJ/ds = dJ/dsigma * fill * (sigma_d0 - sigma_v)          state A
+              + dJ/dsigma * inrange * sigma_d0                   state B
+              + (dJ/deps_A + dJ/deps_B) * fill * (eps_d - eps_v)
+
+    The permittivity field is assembled ONCE in the forward and handed to both
+    electrical states, so both states contribute to the same permittivity
+    chain factor. The conductivity chain is unchanged and the flag-off path is
+    bit-identical.
 
     `seeds_rho` seeds the relative-density co-state, which is what a
     density-region objective needs. Temperature and density seeds may be given
@@ -322,13 +375,26 @@ def gradient(case: Case, s: np.ndarray, tr: fwd.Trajectory,
     gQ_a, gQ_b, gP_step = reverse_march(case, tr, seeds, seeds_rho)
 
     ds = np.zeros(case.part_mask.shape)
+    d_eps_total = np.zeros(case.part_mask.shape) if eps_covary else None
     if np.any(gQ_a):
-        dsig_a = eqs_vjp(case, tr.state_a, gQ_a, Gx, Gy, pre_masked=True)
+        if eps_covary:
+            dsig_a, deps_a = eqs_vjp(case, tr.state_a, gQ_a, Gx, Gy,
+                                     pre_masked=True, with_eps=True)
+            d_eps_total += deps_a
+        else:
+            dsig_a = eqs_vjp(case, tr.state_a, gQ_a, Gx, Gy, pre_masked=True)
         ds += dsig_a * case.fill_frac * (p.sigma_d0 - p.sigma_v)
     if np.any(gQ_b):
-        dsig_b = eqs_vjp(case, tr.state_b, gQ_b, Gx, Gy, pre_masked=True)
+        if eps_covary:
+            dsig_b, deps_b = eqs_vjp(case, tr.state_b, gQ_b, Gx, Gy,
+                                     pre_masked=True, with_eps=True)
+            d_eps_total += deps_b
+        else:
+            dsig_b = eqs_vjp(case, tr.state_b, gQ_b, Gx, Gy, pre_masked=True)
         _sig_b, inrange = fwd.sigma_state_b(case, s)
         ds += dsig_b * inrange * p.sigma_d0
+    if eps_covary:
+        ds = ds + d_eps_total * case.fill_frac * (p.eps_d - p.eps_v)
     if not with_schedule:
         return ds
     n_seg = int(tr.n_seg) if tr.n_seg else 1
