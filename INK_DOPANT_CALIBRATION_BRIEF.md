@@ -112,7 +112,33 @@ D3: the measured s -> (sigma, eps_r) table becomes the single actuator
 contract consumed by rfam_eqs_coupled, heatr3d, and solve3d; no solver keeps
 a private assumption.
 
-## 7. Risks and limits
+## 7. Baseline sources (located 2026-08-01; PDF only, no raw data files exist)
+
+- PRIMARY: Jared Allison dissertation, previous-work/Jared_Allison_Dissertation_Final.pdf,
+  Ch. 3 "Permittivity Measurements of Graphite-Doped Nylon 12 Powders". HP 4194A
+  impedance analyzer, coaxial chamber (a=1.59 cm, b=7.94 cm, Teflon base),
+  40 kHz-40 MHz, parasitic de-embedding (R=3.06 ohm, L=119 nH, C=5.22 pF),
+  10-60 wt% graphite (Arkema 42 um nylon 12, Loud Wolf 44 um graphite).
+  Percolation ~30 wt%; eps_r knee at 37.5 wt%; tan-delta peak ~4.1 at 35 wt%;
+  30 wt%: sigma_DC 0.0103 / sigma_eff(27.12 MHz) 0.0161 S/m.
+  Journal versions: previous-work/Seepersad-volumetric_fusion...RPJ-09-2020-0218.pdf
+  (Ch. 3) and Computational_design_strategy...RPJ-08-2021-0193.pdf (Ch. 4;
+  Table 1: sigma_doped 0.04 S/m, eps_r doped 13.8, virgin eps_r 2, 27.12 MHz).
+  This coaxial-chamber protocol is the fixture template for M2.
+- Best transcription without opening PDFs:
+  dissertation_materials/heatr_audit/findings/COMSOL_validation_basis.md.
+- Only machine-readable eps_r(wt%) curve (hand-digitized from Fig. 3.6):
+  binderjet/code/RF_electrode_calculations.py:37-41 -
+  wt% [10,20,30,33,35,37.5,40,50,60] -> eps_r [4,5,10,12,13,16,40,140,240].
+- PROVENANCE FLAG: the solvers' eps_r=20 (rfam_eqs_coupled.py:290-292) and the
+  paper tex property table (rfam_prewarp_paper.tex:158,472) do NOT trace to any
+  Allison measurement - published doped value is 13.8, and the in-repo A/B
+  study (outputs_eqs/jared_exp1_match/EPS_SENSITIVITY.md, OVERNIGHT_REPORT.md:33-40)
+  found 13.8 fits better. Also stale: impedance_calculations.py:12-14 uses 150
+  (~50 wt% on the curve). MISSION_CONTROL.md Tier-3 VNA sweep is the open task
+  this brief's M2 supersedes/implements for the CB ink.
+
+## 8. Risks and limits
 
 - Single-layer coupons are thin for contact impedance fixtures; the short
   stack in section 4 is the fallback geometry.
