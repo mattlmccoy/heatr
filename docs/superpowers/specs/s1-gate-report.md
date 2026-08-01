@@ -513,3 +513,56 @@ Signature: ______________________  Date: ____________
 ---
 SIGNED OFF: Matt McCoy, 2026-07-31 (via session): S1 canonical-sync package approved.
 Execution note: the physical canonical sync of heatr3d.py to dissertation_materials/analysis-3dfgm/ is deliberately deferred until the EQS-02 fix lands, so the canonical file is synced once with the complete S1+EQS-02 change set and one SYNCED_FROM_SHA256 update.
+
+
+---
+
+# S1 CLOSE-OUT CRITERION (added 2026-07-31, per Matt's direction)
+
+S1 is defined CLOSED when all four of the following hold. Each is stated
+with its evidence; none requires new solves.
+
+## C1. Thermal/phase core passes all S1 criteria including full scale
+MET. Enthalpy phase update (energy-exact through melt, discriminating
+tests), THM-03 CFL guard + auto-substepping (closed-form verified), n=200
+thermal-only march clean (t90 638.975 s, residual -3.2933e-13, no clamps,
+2 substeps), analytic benchmarks passed (latent plateau, Fourier decay,
+EQS parallel plate). Sections 3-4.2 of this report.
+
+## C2. A formalized EQS validity domain, enforced in code
+MET. heatr3d native EQS is certified for n <= 96 full physics and
+n <= 128 EQS-only (measured ceilings; n=128 completed at 1684 s / 3.72 GB).
+Above the domain the solver raises an informative MemoryError (EQS-01
+guard) rather than attempting an unsafe solve. The guard is regression-
+tested (test_heatr3d_s1.py).
+
+## C3. Large-N delegation with measured cross-engine agreement
+MET, via decision D1(a) (signed off by Matt 2026-07-31). Above the native
+domain, large-N EQS is delegated to dolfinx. The agreement evidence
+(heatr3d_d1_spike/results.json, EQS-02-corrected fields):
+- dolfinx vs heatr3d, extruded circle, in-part mid-plane normalized Q_rf:
+  10.8% whole-part / 2.6% interior at the n=96-matched mesh, improving
+  under refinement (task2).
+- dolfinx at the n=200-equivalent resolution agrees with its own fine
+  reference to 1.19% all / 0.16% interior (task4), completing in 29.6 s /
+  2.40 GB where the native direct solve is infeasible (~29.8 GB estimate).
+The heatr3d/dolfinx residual is localized to the part-surface band and is
+the documented harmonic-vs-DG0 boundary-layer discretization difference,
+shrinking under refinement.
+
+## C4. The un-closed remainder is explicitly scoped OUT of S1
+The single-engine full-physics n=200 march remains impossible in native
+heatr3d and is NOT claimed. The @pytest.mark.slow full-physics test stays
+in the suite as the standing marker; it passes only if a native large-N
+EQS path is ever built (not planned; D1 delegates instead). This is a
+validity-domain statement, not a deficiency: every consumer (the Studio
+badge system, S2, the solve port) operates within the certified domain or
+on the delegated engine.
+
+## Verdict
+
+With C1-C4 met, **Gate S1 is CLOSED: PASSED WITHIN THE STATED VALIDITY
+DOMAIN** (native n <= 96 full physics; delegated large-N per D1 with
+measured agreement). The prior "partially passed" verdict is superseded by
+this criterion. Signed off implicitly by Matt's 2026-07-31 direction to
+write this criterion to complete S1; any objection reopens the gate.

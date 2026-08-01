@@ -982,3 +982,19 @@ def test_run_threads_the_qrf_gradient_choice_through_to_the_drive():
     finally:
         heatr3d.compute_qrf_3d = real
     assert seen == ["masked", "legacy"]
+
+
+def test_s1_closeout_criterion_pins():
+    """S1 close-out (s1-gate-report.md): the validity-domain constants and
+    the D1 cross-check evidence this closure cites must keep existing."""
+    import json
+    from pathlib import Path
+
+    import heatr3d as h3
+    assert h3.EQS_MAX_GRID_FULL_PHYSICS == 96
+    assert h3.EQS_MAX_GRID_EQS_ONLY == 128
+    d1 = json.loads((Path(__file__).parent / "heatr3d_d1_spike"
+                     / "results.json").read_text())
+    gate = d1["task4"]["gate"]
+    assert gate["gate_ok"] is True
+    assert gate["qrf_pattern_rel_l2_all"] < 0.05
