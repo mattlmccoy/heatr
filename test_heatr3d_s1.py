@@ -998,3 +998,153 @@ def test_s1_closeout_criterion_pins():
     gate = d1["task4"]["gate"]
     assert gate["gate_ok"] is True
     assert gate["qrf_pattern_rel_l2_all"] < 0.05
+
+
+# --------------------------------------------------------------------------- #
+# S4-COUPLING (2026-08-01): in-march EQS re-solve with sigma(T, rho_rel)
+# feedback. Motivated by heatr3d_s4_flir/S4_GATE_REPORT.md sec 4.2 candidate
+# mechanisms 1-3 (frozen Q_rf; no sigma(T)/sigma(rho) feedback; no densification
+# coupling into the EQS). The law and the clip bounds are ported from the 2-D
+# solver rfam_eqs_coupled.py (_FGMFeedback.sigma_at_mask, lines 418-449, and its
+# call site at lines 3031-3105). DEFAULT IS OFF and must stay bit-for-bit.
+# --------------------------------------------------------------------------- #
+def _coupling_case(n=24):
+    grid = Grid(n=n, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = Params(phase_update="enthalpy")
+    return grid, part, p
+
+
+def test_coupling_params_default_off_and_result_reports_solve_counts():
+    """The three new knobs default to the legacy (never-re-solve) values and the
+    Result carries an EQS re-solve census."""
+    p = Params()
+    assert p.eqs_update_interval_s == 0.0
+    assert p.sigma_temp_coeff_per_K == 0.0
+    assert p.sigma_density_coeff == 0.0
+    assert p.eqs_resolve_drift_rtol == 0.0
+    grid, part, p = _coupling_case()
+    res = run(grid, part, p, max_time_s=1.0, phi_target=2.0)
+    assert res.n_eqs_solves == 1            # the single pre-loop solve
+    assert res.n_eqs_resolves_skipped == 0
+
+
+def test_coupling_defaults_are_bit_for_bit_legacy():
+    """eqs_update_interval_s == 0 (the default) is the master switch: nonzero
+    sigma coefficients must then be COMPLETELY inert, so every legacy result is
+    reproduced. Tolerance 1e-12 C, not array_equal, for the known thermal-loop
+    nondeterminism documented in test_legacy_default_is_unchanged."""
+    grid, part, p = _coupling_case()
+    base = run(grid, part, p, max_time_s=20.0, phi_target=2.0)
+    coeffed = dataclasses.replace(p, sigma_temp_coeff_per_K=0.01,
+                                  sigma_density_coeff=2.0)
+    off = run(grid, part, coeffed, max_time_s=20.0, phi_target=2.0)
+    assert np.allclose(base.T_final, off.T_final, rtol=0.0, atol=1e-12)
+    assert np.array_equal(base.Qrf, off.Qrf)
+    assert off.n_eqs_solves == 1
+
+
+def test_zero_coefficient_resolves_reproduce_the_frozen_field():
+    """With re-solving ON but both coefficients zero, every re-solve rebuilds the
+    SAME gamma, so the drive must be unchanged -- this isolates the re-solve
+    plumbing from the physics."""
+    grid, part, p = _coupling_case()
+    base = run(grid, part, p, max_time_s=20.0, phi_target=2.0)
+    p_re = dataclasses.replace(p, eqs_update_interval_s=5.0)
+    res = run(grid, part, p_re, max_time_s=20.0, phi_target=2.0)
+    assert res.n_eqs_solves == 1 + 3        # t = 5, 10, 15 s (20 s is the exit)
+    assert np.allclose(base.Qrf, res.Qrf, rtol=1e-10, atol=0.0)
+    assert np.allclose(base.T_final, res.T_final, rtol=0.0, atol=1e-9)
+
+
+def test_sigma_coupling_law_matches_the_2d_solver_and_clips():
+    """The ported law, elementwise:
+        sigma_eff = sigma_local * (1 + a (T - T_ref)) * (1 + b (rho - rho_ref))
+    clipped to [1e-4, 25] x sigma_doped inside the part, untouched outside, and
+    the displacement (imaginary) part of gamma is NOT coupled."""
+    import heatr3d as h3
+    grid, part, p = _coupling_case(n=16)
+    p = dataclasses.replace(p, sigma_temp_coeff_per_K=0.002,
+                            sigma_density_coeff=0.6, sigma_ref_temp_c=23.0)
+    g0 = h3.build_gamma(part, p)
+    T = np.full(part.shape, 123.0)
+    rho = np.full(part.shape, 0.75)
+    g1 = h3.apply_sigma_coupling(g0, part, T, rho, p)
+    f = (1.0 + 0.002 * (123.0 - 23.0)) * (1.0 + 0.6 * (0.75 - p.rho_rel))
+    assert np.allclose(g1.real[part], g0.real[part] * f, rtol=1e-12, atol=0.0)
+    assert np.array_equal(g1.real[~part], g0.real[~part])
+    assert np.array_equal(g1.imag, g0.imag)
+    # clipping: a runaway factor is bounded at 25 x sigma_doped, a collapsing
+    # one at 1e-4 x sigma_doped (the 2-D bounds)
+    hot = h3.apply_sigma_coupling(g0, part, np.full(part.shape, 1e5), rho, p)
+    assert np.allclose(hot.real[part], 25.0 * p.sigma_doped)
+    cold = h3.apply_sigma_coupling(g0, part, np.full(part.shape, -1e5), rho, p)
+    assert np.allclose(cold.real[part], 1e-4 * p.sigma_doped)
+
+
+def test_coupling_moves_the_qrf_field_between_early_and_late_in_a_melt_case():
+    """The S4 question: does re-solving with sigma(T) feedback let the drive
+    RE-CONCENTRATE as the part heats? Compare the drive at 5 s against the drive
+    at 60 s of the same coupled march (positive sigma(T): hot voxels get more
+    conductive, so the field should redistribute measurably)."""
+    grid, part, p = _coupling_case()
+    p = dataclasses.replace(p, eqs_update_interval_s=5.0,
+                            sigma_temp_coeff_per_K=0.01,
+                            sigma_density_coeff=0.0,
+                            sigma_ref_temp_c=23.0)
+    early = run(grid, part, p, max_time_s=5.0, phi_target=2.0)
+    late = run(grid, part, p, max_time_s=60.0, phi_target=2.0)
+    q0 = early.Qrf[part]
+    q1 = late.Qrf[part]
+    # same total absorbed power (the renormalization is preserved)
+    assert abs(q1.sum() - q0.sum()) / q0.sum() < 1e-9
+    # but a DIFFERENT pattern
+    rel = float(np.linalg.norm(q1 - q0) / np.linalg.norm(q0))
+    assert rel > 1e-3, rel
+    # re-concentration metric: peak-to-mean must MOVE
+    pm0 = float(q0.max() / q0.mean())
+    pm1 = float(q1.max() / q1.mean())
+    assert abs(pm1 - pm0) / pm0 > 1e-3, (pm0, pm1)
+
+
+def test_energy_audit_stays_clean_under_resolves():
+    """Standing S1 gate must survive a drive that changes mid-march."""
+    grid, part, p = _coupling_case()
+    p = dataclasses.replace(p, eqs_update_interval_s=5.0,
+                            sigma_temp_coeff_per_K=0.01,
+                            sigma_density_coeff=0.6, sigma_ref_temp_c=23.0)
+    res = run(grid, part, p, max_time_s=60.0, phi_target=2.0, densify=True)
+    assert res.n_eqs_solves > 1
+    assert abs(res.energy_residual_frac) < 1e-2
+    assert not res.clamp_bound
+
+
+def test_drift_tolerance_skips_resolves_and_reports_the_census():
+    """D1 lesson (EQS-01: each re-solve is a full solve at the certified grid
+    ceiling): when the max sigma drift since the last solve is below
+    eqs_resolve_drift_rtol the solve is skipped and the drive is updated
+    pointwise instead. A huge tolerance must skip EVERY re-solve."""
+    grid, part, p = _coupling_case()
+    p = dataclasses.replace(p, eqs_update_interval_s=5.0,
+                            sigma_temp_coeff_per_K=0.01,
+                            sigma_ref_temp_c=23.0,
+                            eqs_resolve_drift_rtol=1e9)
+    res = run(grid, part, p, max_time_s=20.0, phi_target=2.0)
+    assert res.n_eqs_solves == 1
+    assert res.n_eqs_resolves_skipped == 3
+    # the pointwise fallback still preserves the fixed absorbed power
+    p_tgt = p.power_density_w_per_m3 * (int(part.sum()) * grid.dV)
+    assert abs(res.Qrf.sum() * grid.dV - p_tgt) / p_tgt < 1e-9
+
+
+def test_resolve_schedule_is_absolute_time_aware_for_chained_segments():
+    """t_start_s (default 0.0, inert) lets a chained march keep ONE global
+    re-solve schedule, so segment boundaries do not shift the physics."""
+    grid, part, p = _coupling_case()
+    p = dataclasses.replace(p, eqs_update_interval_s=5.0)
+    # a 4 s segment starting at t=3 s must contain exactly one trigger (t=5 s)
+    res = run(grid, part, p, max_time_s=4.0, phi_target=2.0, t_start_s=3.0)
+    assert res.n_eqs_solves == 2
+    # the same segment at t=0 contains none
+    res0 = run(grid, part, p, max_time_s=4.0, phi_target=2.0)
+    assert res0.n_eqs_solves == 1

@@ -108,6 +108,34 @@ class Params:
     dens_eta_activation: float = 6.0e4
     dens_rho_exp: float = 1.0
     dens_max_drho_rate: float = 0.04   # per second (= 0.02 per 0.5 s step in 2-D)
+    # ---- S4-COUPLING (2026-08-01): in-march EQS re-solve with sigma(T, rho) ----
+    # Motivation: heatr3d_s4_flir/S4_GATE_REPORT.md sec 4.2 lists "Q_rf is frozen"
+    # and "no sigma(T)/sigma(rho_rel) feedback" as the top two candidate
+    # mechanisms for the late-time topology miss. All four knobs below default to
+    # the legacy values, and eqs_update_interval_s == 0.0 is the MASTER SWITCH:
+    # with it at 0 the coefficients are completely inert and every historical
+    # result is reproduced bit-for-bit (test_coupling_defaults_are_bit_for_bit_legacy).
+    #
+    # eqs_update_interval_s: simulated seconds between EQS re-solves. 0.0 = never
+    #   re-solve (legacy: one solve before the march, held for the whole run).
+    #   The schedule is on ABSOLUTE time (see run(t_start_s=...)), so a chained
+    #   segmented march keeps one global schedule.
+    # sigma_temp_coeff_per_K / sigma_density_coeff / sigma_ref_temp_c: the
+    #   sigma(T, rho_rel) law, ported from the 2-D solver (see
+    #   apply_sigma_coupling). The reference density is p.rho_rel (the initial
+    #   relative density), mirroring the 2-D solver's rho_rel_init.
+    # eqs_resolve_drift_rtol: D1/EQS-01 cost control. A re-solve is a FULL solve
+    #   at the certified grid ceiling (n=96 -> ~26 s at the S4 grid, 322 s cubic),
+    #   so when the max sigma drift since the last solve is below this relative
+    #   tolerance the solve is SKIPPED and the drive is updated pointwise
+    #   (Q *= sigma/sigma_last, then re-renormalized). 0.0 = never skip.
+    #   Ported concept: rfam_eqs_coupled.py electric.eqs_adaptive_rtol (l. 2901-2907,
+    #   3065-3082).
+    eqs_update_interval_s: float = 0.0
+    sigma_temp_coeff_per_K: float = 0.0
+    sigma_density_coeff: float = 0.0
+    sigma_ref_temp_c: float = 23.0
+    eqs_resolve_drift_rtol: float = 0.0
 
 
 # Universal gas constant [J/(mol*K)]. Kept at 8.314 (NOT the full 8.31446261815324
@@ -611,6 +639,71 @@ def build_gamma(part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     return s + 1j * omega * EPS0 * e
 
 
+# --------------------------------------------------------------------------- #
+# S4-COUPLING: sigma(T, rho_rel) feedback, ported from the 2-D solver
+#
+# SOURCE (read 2026-08-01): rfam_eqs_coupled.py, _FGMFeedback.sigma_at_mask,
+# lines 418-449:
+#
+#     base = (sigma_d0
+#             * (1.0 + sigma_temp_coeff * (T_field[mask] - sigma_ref_temp))
+#             * (1.0 + sigma_density_coeff * (rho_field[mask] - rho_rel_init)))
+#     ... nan_to_num(base, nan=sigma_d0, posinf=25*sigma_d0, neginf=1e-4*sigma_d0)
+#
+# and its call site, lines 3038-3046 (the periodic `update_interval` re-solve):
+#
+#     sigma[:, :] = sigma_v
+#     sigma[part_mask] = np.clip(fb.sigma_at_mask(...), 1e-4*sigma_d0, 25*sigma_d0)
+#
+# so the clip bounds below (1e-4 and 25 x sigma_doped) are the 2-D convention
+# verbatim. Reference values for the coefficients exist only in ARCHIVED 2-D
+# configs (configs/_archive_old/rfam_eqs_comsol_mimic.yaml l. 83-85:
+# sigma_temp_coeff_per_K 0.002, sigma_density_coeff 0.6, sigma_ref_temp_c 23.0);
+# every CURRENT config (e.g. configs/shape_circle_6min.yaml) sets both to 0.0.
+# There is therefore NO validated nonzero value in this repo -- any nonzero use
+# is exploratory and must be labelled as such.
+#
+# TWO DELIBERATE DIFFERENCES from the 2-D port, both documented rather than hidden:
+#  1. The factor multiplies the LOCAL baseline sigma (which already carries the
+#     edge_width_m erf blend, the premix floor and the FGM `sat` map) instead of
+#     the flat scalar sigma_doped. With edge_width_m=0, premix_frac=0 and
+#     sat=None -- the S4 configuration -- sigma_local == sigma_doped inside the
+#     part, so the two forms are identical there.
+#  2. Only the REAL (conduction) part of gamma is coupled. The 2-D solver
+#     likewise leaves eps_r untouched by T/rho (it only rebuilds eps_r for an FGM
+#     saturation change), so permittivity feedback remains NOT modelled -- a named
+#     simplification, not an omission.
+# --------------------------------------------------------------------------- #
+SIGMA_COUPLING_CLIP_LO = 1e-4      # x p.sigma_doped   (2-D: rfam_eqs_coupled l. 3045)
+SIGMA_COUPLING_CLIP_HI = 25.0      # x p.sigma_doped
+
+
+def apply_sigma_coupling(gamma: np.ndarray, part: np.ndarray, T: np.ndarray,
+                         rho_rel: np.ndarray, p: Params) -> np.ndarray:
+    """Return gamma with the in-part conductivity rescaled by the sigma(T, rho)
+    law (see the module note above).
+
+        sigma_eff = clip( sigma_local * (1 + a (T - T_ref)) * (1 + b (rho - rho_ref)),
+                          1e-4 * sigma_doped, 25 * sigma_doped )        inside part
+        sigma_eff = sigma_local                                          outside
+
+    a = p.sigma_temp_coeff_per_K, b = p.sigma_density_coeff,
+    T_ref = p.sigma_ref_temp_c, rho_ref = p.rho_rel (initial relative density).
+    The imaginary (displacement) part of gamma is returned unchanged. With both
+    coefficients 0 the factor is exactly 1.0, so gamma is returned bit-for-bit.
+    """
+    part = np.asarray(part, dtype=bool)
+    f = ((1.0 + p.sigma_temp_coeff_per_K * (np.asarray(T, dtype=float) - p.sigma_ref_temp_c))
+         * (1.0 + p.sigma_density_coeff * (np.asarray(rho_rel, dtype=float) - p.rho_rel)))
+    s0 = np.real(gamma)
+    s = np.nan_to_num(s0 * f, nan=p.sigma_doped,
+                      posinf=SIGMA_COUPLING_CLIP_HI * p.sigma_doped,
+                      neginf=SIGMA_COUPLING_CLIP_LO * p.sigma_doped)
+    s = np.clip(s, SIGMA_COUPLING_CLIP_LO * p.sigma_doped,
+                SIGMA_COUPLING_CLIP_HI * p.sigma_doped)
+    return np.where(part, s, s0) + 1j * np.imag(gamma)
+
+
 def densify_rate(T: np.ndarray, phi: np.ndarray, rho_rel: np.ndarray,
                  p: Params) -> np.ndarray:
     """physics_dual densification rate d(rho_rel)/dt (>=0). Solid-state Arrhenius
@@ -708,6 +801,12 @@ class Result:
     # not trustworthy (the THM-01 dT clamp may be hiding the divergence).
     n_substeps_used: int = 1
     cfl_violated: bool = False
+    # S4-COUPLING census. n_eqs_solves = FULL EQS solves this call performed
+    # (1 = the legacy single pre-loop solve; 0 when qrf_override bypassed it).
+    # n_eqs_resolves_skipped = scheduled re-solves that the drift tolerance
+    # turned into a cheap pointwise Q rescale instead of a solve.
+    n_eqs_solves: int = 1
+    n_eqs_resolves_skipped: int = 0
 
 
 # --------------------------------------------------------------------------- #
@@ -742,7 +841,8 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         premix_frac: float = 0.0,
         premix_budget: str = "floor_added",
         T0_override: np.ndarray | None = None,
-        qrf_gradient: str = "masked") -> Result:
+        qrf_gradient: str = "masked",
+        t_start_s: float = 0.0) -> Result:
     """Coupled 3-D solve. If densify=False (default): stop at the phi=0.90 crossing
     and report sigma_T (relative density held constant). If densify=True: evolve
     relative density (physics_dual) and run the FULL exposure, capturing T_phi90 in
@@ -799,7 +899,13 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     compute_qrf_3d; see its docstring and the module note above it. "masked" is the
     corrected part-confined stencil (a DELIBERATE default flip that changes
     previously published numbers); "legacy" reproduces the pre-fix cross-interface
-    np.gradient bit-for-bit. Inert when qrf_override is supplied (no EQS solve)."""
+    np.gradient bit-for-bit. Inert when qrf_override is supplied (no EQS solve).
+
+    t_start_s (S4-COUPLING; default 0.0 == original behavior, bit-for-bit): the
+    ABSOLUTE simulated time at which this call's march begins. Only used to place
+    the Params.eqs_update_interval_s re-solve schedule, so a march chained through
+    T0_override keeps ONE global schedule instead of restarting it in every
+    segment. Inert when eqs_update_interval_s == 0."""
     # ---- resolve the volumetric powder-loss coefficient h_eff [W/(m^3 K)] ----
     h_eff_loss = 0.0
     if powder_loss_mode is not None:
@@ -814,6 +920,34 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
         else:
             raise ValueError(f"unknown powder_loss_mode {powder_loss_mode!r}")
     premix_on = float(premix_frac) > 0.0
+    # T0_override (VALIDATION HOOK; default None == original behavior,
+    # bit-for-bit): replaces the uniform preheat initial condition so an
+    # analytic initial field (e.g. a Fourier mode) can be marched.
+    # (S4-COUPLING moved this block ABOVE the EQS solve -- pure allocation, no
+    # arithmetic change -- because the coupled gamma needs the initial T/rho.)
+    if T0_override is not None:
+        T = np.array(T0_override, dtype=np.float64, copy=True)
+        if T.shape != part.shape:
+            raise ValueError("T0_override shape must match part.shape")
+    else:
+        T = np.full(part.shape, p.preheat_c, dtype=np.float64)   # bed preheat
+    rho_rel = np.full(part.shape, p.rho_rel, dtype=np.float64)   # evolving density field
+
+    # ---- S4-COUPLING: is the in-march EQS re-solve armed for this call? ----
+    _resolve_dt = float(p.eqs_update_interval_s)
+    _coupling_on = _resolve_dt > 0.0 and qrf_override is None
+    if _resolve_dt > 0.0 and qrf_override is not None:
+        logger.warning(
+            "S4-COUPLING: eqs_update_interval_s=%.4g s requested but qrf_override "
+            "was supplied, so there is no EQS to re-solve. Coupling is INERT for "
+            "this call.", _resolve_dt)
+    n_eqs_solves = 0
+    n_eqs_skipped = 0
+    gamma = None
+    _sigma_at_last_solve = None
+    # fixed absorbed-power target; identical to compute_qrf_3d's internal target
+    _p_target = p.power_density_w_per_m3 * (int(np.asarray(part).sum()) * grid.dV)
+
     if qrf_override is None:
         gamma = build_gamma(part, p, sat, edge_width_m=edge_width_m, h=grid.h,
                             premix_frac=premix_frac, premix_budget=premix_budget)
@@ -825,7 +959,22 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
             _omega = 2.0 * np.pi * p.freq_hz
             _deps = eps_perturb_value * np.asarray(eps_perturb_field, dtype=float)
             gamma = gamma + 1j * _omega * EPS0 * _deps
+        _gamma_base = gamma
+        if _coupling_on:
+            # EQS-01 cost guard: every re-solve is a FULL solve. Say so, with the
+            # expected count, before spending the time.
+            _n_exp = int(max(0.0, max_time_s) / _resolve_dt)
+            logger.warning(
+                "S4-COUPLING ARMED: sigma(T,rho) feedback with an EQS re-solve every "
+                "%.4g s -> up to %d ADDITIONAL full EQS solves in this %.4g s segment "
+                "(grid %s, N=%d unknowns; EQS-01 certified ceiling n=%d for the full "
+                "pipeline). Set eqs_resolve_drift_rtol > 0 to skip low-drift re-solves.",
+                _resolve_dt, _n_exp, max_time_s, "x".join(str(s) for s in part.shape),
+                int(np.prod(part.shape)), EQS_MAX_GRID_FULL_PHYSICS)
+            gamma = apply_sigma_coupling(_gamma_base, part, T, rho_rel, p)
+            _sigma_at_last_solve = np.real(gamma).copy()
         V = solve_eqs_3d(gamma, grid, p)
+        n_eqs_solves = 1
         Qrf = compute_qrf_3d(V, gamma, grid, p, part, premix=premix_on,
                              qrf_gradient=qrf_gradient)
     else:
@@ -834,16 +983,12 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
             raise ValueError("qrf_override shape must match part.shape")
         Qrf[~part] = 0.0
 
-    # T0_override (VALIDATION HOOK; default None == original behavior,
-    # bit-for-bit): replaces the uniform preheat initial condition so an
-    # analytic initial field (e.g. a Fourier mode) can be marched.
-    if T0_override is not None:
-        T = np.array(T0_override, dtype=np.float64, copy=True)
-        if T.shape != part.shape:
-            raise ValueError("T0_override shape must match part.shape")
-    else:
-        T = np.full(part.shape, p.preheat_c, dtype=np.float64)   # bed preheat
-    rho_rel = np.full(part.shape, p.rho_rel, dtype=np.float64)   # evolving density field
+    # Re-solve schedule on ABSOLUTE time: the next multiple of the interval
+    # STRICTLY greater than t_start_s (the solve at t_start_s itself is the
+    # pre-loop one above, so a chained segmented march never double-solves).
+    _next_resolve_t = float("inf")
+    if _coupling_on:
+        _next_resolve_t = _resolve_dt * (np.floor(t_start_s / _resolve_dt + 1e-9) + 1.0)
     nsteps = int(max_time_s / p.dt_s)
     top = (slice(None), -1, slice(None))     # open top face (y max)
     h = grid.h
@@ -895,6 +1040,42 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
     # it == the step index, isub == 0, dt_sub == p.dt_s.
     for _it_sub in range(nsteps * n_sub):
         it, isub = divmod(_it_sub, n_sub)
+        # ---- S4-COUPLING: scheduled EQS re-solve (inert unless armed) -------- #
+        # Placed at the TOP of a full step, before any thermal work, so the drive
+        # used by step `it` is the one belonging to time t_start_s + it*dt_s.
+        if _coupling_on and isub == 0 and (t_start_s + it * p.dt_s) >= _next_resolve_t - 1e-12:
+            while (t_start_s + it * p.dt_s) >= _next_resolve_t - 1e-12:
+                _next_resolve_t += _resolve_dt
+            gamma_new = apply_sigma_coupling(_gamma_base, part, T, rho_rel, p)
+            sigma_new = np.real(gamma_new)
+            # D1 adaptive skip (EQS-01 cost control): if the conductivity has
+            # barely moved since the last FULL solve, do not pay for another one;
+            # rescale the frozen field pointwise and re-renormalize the power.
+            # Ported from rfam_eqs_coupled.py lines 3065-3082.
+            _skip = False
+            if p.eqs_resolve_drift_rtol > 0.0 and _sigma_at_last_solve is not None:
+                _drift = float(np.max(np.abs(sigma_new - _sigma_at_last_solve))) / max(
+                    p.sigma_doped, 1e-30)
+                _skip = _drift < p.eqs_resolve_drift_rtol
+            if _skip:
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    _ratio = np.where(_sigma_at_last_solve > 0.0,
+                                      sigma_new / _sigma_at_last_solve, 1.0)
+                Q_new = np.clip(np.nan_to_num(Qrf * _ratio), 0.0, None)
+                if not premix_on:
+                    Q_new[~part] = 0.0
+                _p_now = Q_new.sum() * dV
+                if _p_now > 1e-18:
+                    Q_new *= _p_target / _p_now
+                Qrf = Q_new
+                n_eqs_skipped += 1
+            else:
+                gamma = gamma_new
+                V = solve_eqs_3d(gamma, grid, p)
+                Qrf = compute_qrf_3d(V, gamma, grid, p, part, premix=premix_on,
+                                     qrf_gradient=qrf_gradient)
+                _sigma_at_last_solve = sigma_new.copy()
+                n_eqs_solves += 1
         phi, dphi = phase_fraction(T, p)
         pmult = _sched_mult(float(phi[part].mean()) if _has_part else 0.0,
                             power_schedule)
@@ -1103,7 +1284,9 @@ def run(grid: Grid, part: np.ndarray, p: Params, sat: np.ndarray | None = None,
                   energy_residual_frac=e_resid_frac,
                   T_final=T.copy(),
                   n_substeps_used=n_sub,
-                  cfl_violated=cfl_violated)
+                  cfl_violated=cfl_violated,
+                  n_eqs_solves=n_eqs_solves,
+                  n_eqs_resolves_skipped=n_eqs_skipped)
 
 
 def make_fgm(res: Result, magnitude: float = 1.0, baseline: float = 0.5,
