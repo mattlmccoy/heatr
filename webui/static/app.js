@@ -281,6 +281,7 @@ function modeTag(mode) {
   if (m === "orientation_optimizer") return "orient";
   if (m === "placement_optimizer") return "place";
   if (m === "turntable") return "tt";
+  if (m === "fgm_solve") return "fgmsolve";
   return "run";
 }
 
@@ -716,6 +717,15 @@ function buildPayload(includeOutput = true) {
     payload.placement_ga_seed = Number(byId("placementGaSeed")?.value);
     payload.placement_temp_ceiling_c = Number(byId("placementTempCeilingC")?.value);
     payload.placement_min_rho_floor = Number(byId("placementMinRhoFloor")?.value);
+  }
+
+  if (mode === "fgm_solve") {
+    // Shape-fidelity SOLVE (production recipe). Geometry comes from the shared
+    // shape field; the drive comes from the per-shape calibrated config on the
+    // server, so no exposure/voltage fields are read here.
+    payload.budget           = parseFloat(byId("fgmSolveBudget")?.value) || 40;
+    payload.filter_radius_mm = parseFloat(byId("fgmSolveRadiusMm")?.value) || 1.0;
+    payload.warm_start       = String(byId("fgmSolveWarmStart")?.value || "auto");
   }
 
   if (mode === "fgm_iterate") {
@@ -1896,6 +1906,25 @@ async function launchRun(ev) {
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
       alert("FGM Iterate error: " + err.message);
+    }
+    return;
+  }
+
+  // fgm_solve (shape-fidelity SOLVE) uses a dedicated endpoint (not /api/run)
+  if (mode === "fgm_solve") {
+    const btn = ev.target?.querySelector('[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = "Queuing…"; }
+    try {
+      await fetchJson("/api/tools/fgm-solve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
+      await loadJobs();
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
+      alert("FGM Solve error: " + err.message);
     }
     return;
   }

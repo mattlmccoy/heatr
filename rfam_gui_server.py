@@ -17,7 +17,7 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import yaml
@@ -1590,8 +1590,35 @@ def _parse_heatr_progress(line: str, job_id: str) -> None:
             }
 
 
-def _run_command(cmd: list[str], log_path: Path, job_id: str | None = None) -> int:
+def _run_command(cmd: list[str], log_path: Path, job_id: str | None = None,
+                 line_cb: "Callable[[str], None] | None" = None) -> int:
+    """Run a subprocess with its output appended to the job log.
+
+    ``line_cb``, when given, is called once for every NEW line appended to the
+    log while the process runs (a simple log tail read in the existing 0.2 s
+    poll loop). Used by the fgm_solve mode to surface SOLVE_PROGRESS lines as
+    job-card progress; all other callers are unchanged (default None).
+    """
     _write_job_log(log_path, f"$ {' '.join(cmd)}")
+    _tail_pos = log_path.stat().st_size if log_path.exists() else 0
+
+    def _drain_tail() -> None:
+        nonlocal _tail_pos
+        if line_cb is None:
+            return
+        try:
+            with log_path.open("r", encoding="utf-8", errors="replace") as fh:
+                fh.seek(_tail_pos)
+                chunk = fh.read()
+                _tail_pos = fh.tell()
+        except OSError:
+            return
+        for ln in chunk.splitlines():
+            try:
+                line_cb(ln)
+            except Exception:
+                pass
+
     with log_path.open("a", encoding="utf-8") as logf:
         proc = subprocess.Popen(cmd, cwd=ROOT, stdout=logf, stderr=subprocess.STDOUT)
         if job_id is not None:
@@ -1600,6 +1627,7 @@ def _run_command(cmd: list[str], log_path: Path, job_id: str | None = None) -> i
         try:
             while True:
                 rc = proc.poll()
+                _drain_tail()
                 if rc is not None:
                     return int(rc)
                 if job_id is not None and _is_cancel_requested(job_id):
@@ -2027,6 +2055,107 @@ def _launch_fgm_resimulate_mode(payload: dict[str, Any], job: dict[str, Any]) ->
         _set_job_progress(job_id, progress_label="Re-simulation failed")
         raise RuntimeError(f"FGM re-simulation exited with code {rc}")
     _set_job_progress(job_id, completed_runs=1, progress_pct=100.0, progress_label="Re-simulation complete")
+
+
+def _launch_fgm_solve_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
+    """Shape-fidelity SOLVE: gradient-solved 4 bits per pixel dopant map.
+
+    Shells scripts/solve_fgm.py as a job (the fgm_iterate job pattern; see
+    _launch_fgm_resimulate_mode above for the config-patch-then-_run_command
+    shape this reuses). The solve uses the per-shape calibrated configuration
+    from outputs_eqs/fgm_calibrated_control/configs (first name in sorted
+    order, the deterministic library_solve.shape_config convention: within a
+    shape those configs differ only in a stored-map path the solve never
+    reads), patched with an fgm_solve block built from the payload.
+
+    Payload keys:
+        shape             : geometry shape (must have a calibrated config)
+        output_name       : run directory name
+        budget            : forward-equivalents (default 40, campaign standard)
+        filter_radius_mm  : physical filter radius (default 1.0, frozen)
+        warm_start        : "auto" (default) or "cold"
+    Progress: the entry point prints SOLVE_PROGRESS lines; a log tail turns
+    them into job-card progress denominated in forward-solve equivalents.
+    """
+    job_id = str(job["id"])
+    output_name = str(payload.get("output_name", "")).strip()
+    shape = str(payload.get("shape", "")).strip()
+    if not _is_valid_output_name(output_name):
+        raise ValueError("output_name must use only letters, numbers, '_' or '-'")
+    if not shape or shape not in SUPPORTED_SHAPES:
+        raise ValueError(f"invalid shape: {shape!r}")
+
+    budget = float(payload.get("budget", 40.0))
+    if budget <= 0:
+        raise ValueError("budget must be > 0")
+    filter_radius_mm = float(payload.get("filter_radius_mm", 1.0))
+    if filter_radius_mm <= 0:
+        raise ValueError("filter_radius_mm must be > 0")
+    warm_start = str(payload.get("warm_start", "auto")).strip() or "auto"
+    if warm_start not in ("auto", "cold"):
+        raise ValueError("warm_start must be 'auto' or 'cold'")
+
+    cal_cfg_dir = OUTPUTS_DIR / "fgm_calibrated_control" / "configs"
+    candidates = sorted(cal_cfg_dir.glob(f"{shape}_m*.yaml"))
+    if not candidates:
+        raise FileNotFoundError(
+            f"no calibrated configuration for shape {shape!r} in "
+            f"{cal_cfg_dir.relative_to(ROOT)}; the solve mode requires the "
+            f"per-shape calibrated voltage drive")
+    base_cfg_path = candidates[0]
+    with open(base_cfg_path, "r", encoding="utf-8") as fh:
+        base_cfg = yaml.safe_load(fh) or {}
+    base_cfg["fgm_solve"] = {
+        "budget_forward_equivalents": budget,
+        "filter_radius_mm": filter_radius_mm,
+        "warm_start": warm_start,
+        # conductivity only; the permittivity channel stays model-only and off
+        "eps_channel_model_only": False,
+    }
+    GUI_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    cfg_path = GUI_CONFIG_DIR / f"fgm_solve_{job_id}.yaml"
+    with open(cfg_path, "w", encoding="utf-8") as fh:
+        yaml.dump(base_cfg, fh, default_flow_style=False, allow_unicode=True)
+
+    out_dir = OUTPUTS_DIR / "runs" / shape / "fgm_solve" / output_name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _register_job_output(job, out_dir)
+
+    smoke = " (reduced budget: smoke class, not a quality solve)" if budget < 20 else ""
+    _set_job_progress(job_id, total_runs=1, completed_runs=0, progress_pct=3.0,
+                      progress_label=f"Shape-fidelity solve starting, budget "
+                                     f"{budget:g} forward-equivalents{smoke}")
+
+    def _solve_progress(line: str) -> None:
+        if not line.startswith("SOLVE_PROGRESS"):
+            return
+        kv: dict[str, str] = {}
+        for tok in line.split()[1:]:
+            k, _, v = tok.partition("=")
+            kv[k] = v
+        try:
+            ev = int(kv["eval"]); pool = max(int(kv["pool"]), 1)
+            fe = float(kv["fe_spent"]); fe_b = float(kv["fe_budget"])
+            j_val = float(kv["J"]); iou = float(kv["IoU"])
+        except (KeyError, ValueError):
+            return
+        pct = min(95.0, 5.0 + 90.0 * ev / pool)
+        _set_job_progress(
+            job_id, progress_pct=pct,
+            progress_label=(f"Solve {ev}/{pool} gradient evals "
+                            f"• {fe:.1f}/{fe_b:g} forward-equivalents "
+                            f"• J={j_val:.1f} • IoU={iou:.4f}"))
+
+    cmd = [sys.executable, "scripts/solve_fgm.py",
+           "--config", str(cfg_path), "--output-dir", str(out_dir)]
+    rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id,
+                      line_cb=_solve_progress)
+    if rc != 0:
+        _set_job_progress(job_id, progress_label="Shape-fidelity solve failed")
+        raise RuntimeError(f"fgm_solve exited with code {rc}")
+    _set_job_progress(job_id, completed_runs=1, progress_pct=100.0,
+                      progress_label="Shape-fidelity solve complete "
+                                     "(map + results.json in the run folder)")
 
 
 def _fgm_iter_extract_optimal_time(log_path: Path, fallback_s: float, target_phi: float = 0.90) -> tuple[float, str, str]:
@@ -4192,6 +4321,8 @@ def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
             _launch_fgm_resimulate_mode(payload, job)
         elif mode == "fgm_iterate":
             _launch_fgm_iterate_mode(payload, job)
+        elif mode == "fgm_solve":
+            _launch_fgm_solve_mode(payload, job)
         elif mode == "fgm_gradient_descent":
             _launch_fgm_gradient_descent(payload, job)
         elif mode == "prewarp":
@@ -5987,6 +6118,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/tools/fgm-resimulate",
             "/api/tools/fgm-to-rip",
             "/api/tools/fgm-iterate",
+            "/api/tools/fgm-solve",
             "/api/tools/fgm-continue",
             "/api/tools/fgm-gradient-descent",
             "/api/tools/prewarp",
@@ -6463,6 +6595,34 @@ class Handler(BaseHTTPRequestHandler):
             job_payload["mode"]        = "fgm_iterate"
             job_payload["output_name"] = output_name
             job = _make_job(mode="fgm_iterate", output_name=output_name)
+            with JOBS_LOCK:
+                JOBS[job["id"]]["_payload"] = job_payload
+            _enqueue_job(job["id"])
+            _maybe_start_next_job()
+            with JOBS_LOCK:
+                status = str(JOBS[job["id"]]["status"])
+                qpos   = JOBS[job["id"]].get("queue_position", None)
+            return self._json({
+                "ok": True, "job_id": job["id"], "status": status,
+                "queue_position": qpos, "output_name": output_name,
+            }, status=202)
+
+        if path == "/api/tools/fgm-solve":
+            # Shape-fidelity SOLVE: gradient-solved 4 bits per pixel dopant map
+            # (production recipe; see _launch_fgm_solve_mode). Payload keys:
+            #   shape, output_name, budget, filter_radius_mm, warm_start
+            shape       = str(payload.get("shape", "")).strip()
+            output_name = str(payload.get("output_name", "")).strip()
+            if not shape or shape not in SUPPORTED_SHAPES:
+                return self._json({"error": f"invalid shape: {shape!r}"}, status=400)
+            if not output_name:
+                output_name = f"{shape}_fgmsolve"
+            if not _is_valid_output_name(output_name):
+                return self._json({"error": "output_name contains invalid characters"}, status=400)
+            job_payload = dict(payload)
+            job_payload["mode"]        = "fgm_solve"
+            job_payload["output_name"] = output_name
+            job = _make_job(mode="fgm_solve", output_name=output_name)
             with JOBS_LOCK:
                 JOBS[job["id"]]["_payload"] = job_payload
             _enqueue_job(job["id"])

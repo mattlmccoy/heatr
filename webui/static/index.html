@@ -123,6 +123,7 @@
             <option value="orientation_optimizer">⤾ │ Orientation Optimizer</option>
             <option value="placement_optimizer">◫ │ Placement Optimizer</option>
             <option value="shell_sweep">◌ │ Shell Thickness Sweep</option>
+            <option value="fgm_solve">◈ │ FGM Solve (shape fidelity)</option>
             <option value="fgm_iterate">⟳ │ FGM Iterative Optimize</option>
             <option value="fgm_import">📥 │ Import FGM PNG</option>
             <option value="prewarp">⬡ │ Geometry Pre-Warp (ILT)</option>
@@ -677,6 +678,41 @@
         </details>
 
         <!-- ── FGM Iterative Optimize ────────────────────────────────────── -->
+        <div class="mode-section hidden" data-mode="fgm_solve">
+          <p class="field-help" style="margin-bottom:8px;">
+            <strong>Deliverable map (SOLVE): recommended for printing.</strong>
+            Gradient-solved 4 bpp printable dopant map, re-verified through the forward
+            model; best known method on 13 of 18 library shapes
+            (SHAPE_LIBRARY_SOLVE_REPORT). Production recipe: filtered full-depth single
+            start, 1.0 mm physical filter radius, no projection, conductivity-only
+            channel, warm start from the best stored historical mask when one exists.
+            About 40 forward solves at the standard budget (tens of minutes).
+            <br><br>
+            <strong>Geometry note:</strong> L_shape, T_shape, cross, star and rectangle
+            are limited by geometry, not by the dopant map; consider the Orientation
+            Optimizer or Turntable modes for those instead.
+            <br>
+            <strong>Grid note:</strong> all reported numbers carry the solve grid; no
+            grid hold-out is run by this mode.
+          </p>
+          <label>Solve budget (forward-equivalents)
+            <input id="fgmSolveBudget" type="number" value="40" min="1" step="1" />
+            <span class="field-help">Campaign standard is 40. Below 20 is a smoke-test
+              class run, not a quality solve (the run labels itself).</span>
+          </label>
+          <label>Filter radius [mm]
+            <input id="fgmSolveRadiusMm" type="number" value="1.0" min="0.1" step="0.05" />
+            <span class="field-help">Physical length, frozen at 1.0 mm
+              (FROZEN_CONVENTIONS_2D.md section 1.2); change only for research.</span>
+          </label>
+          <label>Warm start
+            <select id="fgmSolveWarmStart">
+              <option value="auto" selected>Auto (historical mask when available)</option>
+              <option value="cold">Cold (uniform full depth)</option>
+            </select>
+          </label>
+        </div>
+
         <div class="mode-section" data-mode="fgm_iterate">
           <p class="field-help" style="margin-bottom:8px;">
             Runs <em>K</em> simulations on the selected geometry. Iter-0 is a baseline
