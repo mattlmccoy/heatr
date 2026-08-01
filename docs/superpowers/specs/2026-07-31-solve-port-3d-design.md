@@ -58,7 +58,7 @@ as heatr3d_d1_spike/, which it imports from and eventually absorbs):
 - `solve3d/adjoint.py` - steady EQS adjoint (lift from spike adjoint_core)
   + the new transient reverse march with checkpointing.
 - `solve3d/objective.py` - shape-fidelity J, chi construction from STL,
-  stop-time envelope handling, optional regularization [PENDING-2D].
+  stop-time envelope handling, MANDATORY filter + Heaviside projection regularization (resolved 2026-08-01).
 - `solve3d/gates.py` - the ported FD/subgradient protocol + energy gate +
   the S1-style standing prints.
 - `solve3d/solve.py` - optimizer loop, budgets, multi-start, artifacts
