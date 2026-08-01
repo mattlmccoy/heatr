@@ -131,9 +131,19 @@ option.
 
 ## 6. Out of scope
 
-- Turntable/rotation (design requirement on record: part and sat must
-  co-rotate from the first commit, with a regression test - the 2-D lane's
-  co-rotation defect must be impossible here by construction).
+- Turntable/rotation (design requirement on record, STRENGTHENED
+  2026-08-01 after the 2-D lane's "dielectric ghost" finding, their commit
+  2408329: rfam_eqs_coupled rasterized eps_r ONCE at startup and never
+  rebuilt it at rotation events, leaving a rotating part inside a
+  stationary permittivity outline of its 0-degree self - measured 8.0-20.6
+  pp of J on the T_shape and ~260 s shift in optimal stops, larger than
+  every actuator effect their dwell campaign measured. Requirement here:
+  ALL material rasters/fields - conductivity AND permittivity AND any
+  future property channel - co-rotate with the part at every rotation
+  event, from the first commit, with a regression test that rotates a
+  non-rotation-invariant shape and checks field-frame consistency. Their
+  (angle, duration) turntable-program JSON schema, tt_program_mode, is the
+  interface to copy).
 - Mechanics/shrinkage (P2 lane; the solved map feeds it, not vice versa).
 - Multi-part beds; temporal power scheduling as a design variable (their
   temporal work may promote this later).
