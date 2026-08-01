@@ -28,6 +28,15 @@ README, and a densification-visual smoke campaign on 2–3 Tier-1 shapes.
 This spec covers the LIBRARY only. The full-library physics campaign is a
 separate plan (explicitly out of scope here).
 
+**Downstream consumer (Matt, 2026-08-01): the "Grade and Print" tool** — the
+intended ultimate RFAM 3-D print tool — must be able to enumerate and load this
+library programmatically. Design consequence: a clean, importable public API
+(`shape_library_3d.iter_parts()`, `load_part_stl(name)`, the `SHAPES` registry
+with full metadata) plus stable on-disk artifacts (`stl/*.stl` +
+`library_manifest.json`) that a tool can discover without importing internals.
+No Grade-and-Print code is written here; the API contract is the handoff, same
+posture as the solve3d STL handoff.
+
 ## 2. Sizing / normalization convention (the one Matt approved)
 
 **Equal-VOLUME normalization**, the 3-D analog of the 2-D equal-area
