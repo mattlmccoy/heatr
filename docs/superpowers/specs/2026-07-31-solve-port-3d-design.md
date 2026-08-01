@@ -1,10 +1,10 @@
 # Direct-Solve 3-D Port: Solved Volumetric Dopant Fields for RFAM Print Studio
 
 Date: 2026-07-31
-Status: DRAFT, approved-to-draft by Matt; PROVISIONAL pending two inputs from
-the 2-D solve workstream (their grid hold-out 120->160 and rim-perturbation
-tests, deliverable SOLVE_ROBUSTNESS_VALIDATION.md). Sections marked
-[PENDING-2D] update when those land.
+Status: DRAFT updated 2026-08-01 with the 2-D robustness results
+(SOLVE_ROBUSTNESS_VALIDATION.md, landed this date). The former [PENDING-2D]
+decisions are now evidence-based and RESOLVED below. Awaiting Matt's final
+approval.
 Owner: Matt McCoy
 
 ## 1. Goal
@@ -35,7 +35,7 @@ in their worktree adjoint2d/ and the root FGM_*/SHAPE_* reports):
 
 | ingredient | 2-D status | 3-D port action |
 |---|---|---|
-| Objective J = whole-domain sum (phi - chi)^2, chi = part indicator | proven, subgradient character measured | volume integral; chi from the voxelized/meshed STL. [PENDING-2D: sub-voxel fill convention - adopt whatever their robustness tests validate] |
+| Objective J = whole-domain sum (phi - chi)^2, chi = part indicator | proven, subgradient character measured | volume integral; chi must be MESH-INDEPENDENT (signed-distance or sub-cell fill from the STL, never a binary raster on the solve grid). RESOLVED 2026-08-01: the 2-D grid hold-out showed rim solutions tune themselves to the solve grid's boundary rasterization (SOLVED class empties at 160: square IoU 0.9816 -> 0.7767; circle ranking FLIPS) |
 | Envelope stop-time (t_stop = argmin, no dt*/ds term) | verified exactly (0.0 rel diff) | dimension-free; re-verify with the same S1-vs-S2 exact-agreement gate in 3-D |
 | Steady EQS adjoint | 2-D proven | ALREADY DONE in 3-D (D1 Task 5, dolfinx) |
 | Transient thermal-phase adjoint (coupled T, rho reverse march, clip VJPs) | 2-D proven | LARGEST PORT ITEM: implement in dolfinx with the enthalpy forward; Griewank-style checkpointing (store state at intervals, recompute segments) - the 2-D store-everything approach does not fit 3-D memory |
@@ -44,7 +44,7 @@ in their worktree adjoint2d/ and the root FGM_*/SHAPE_* reports):
 | Actuator: permittivity channel | MISSING in 2-D (their #1 gap, queued) | add dJ/d-eps_r in dolfinx (cheap: complex-symmetric A^H = conj(A) reuse); do not declare the 3-D solve complete without it - the 2-D evidence says this channel decides shapes (their cross: J 343 with eps vs 1036 without) |
 | Optimizer: L-BFGS-B on subgradients, box constraints | proven with known stalls | same, plus multi-start and scaled first step (their rectangle lesson); iteration-based budget accounting (not wall clock) |
 | Drive convention | 2-D pins power-enforcement OFF | RECONCILE: one convention for the 3-D solve, chosen with the 2-D lane, before any cross-lane map comparison; D1 proved differentiating through the renormalization is tractable (and that freezing it is wrong by up to 150% per dof) |
-| Regularization / rim structure | none in 2-D; rim structure possibly breakpoint sculpture | [PENDING-2D: if their rim-perturbation test shows J collapses under 1-2 cell smoothing, the 3-D objective ADDS a smoothness/TV term and a filter+projection parameterization from day one; if J is insensitive, port without] |
+| Regularization / rim structure | CONFIRMED load-bearing rim sculpture: one-cell blur costs +37% to +892% J on 5/6 shapes (rectangle, the stalled map, IMPROVES); the shapes losing most to blur lose most to the grid change - one mechanism, two witnesses | RESOLVED 2026-08-01: regularization is MANDATORY from Phase A. Filter + Heaviside projection parameterization (the topology-optimization standard the 2-D lane already queued), with the filter radius a PHYSICAL length (candidate: the printer's dopant edge scale, ~50-100 um class, or a solver-convergence-derived length from S2) - on an unstructured FEM mesh there is no cell scale to hide in, which forces the honest choice |
 
 ## 3. Architecture
 
@@ -97,8 +97,17 @@ option.
   is the port's decisive demonstration. Compare against uniform, the
   corrected-design inversion map, and the 2-D solved map extruded (where
   meaningful). Budgets and baselines pre-registered.
-- Phase D: eps_r channel + drive reconciliation + the 2-D lane's validated
-  conventions folded in [PENDING-2D].
+  ACCEPTANCE now includes (2026-08-01, from the 2-D robustness lesson):
+  a built-in mesh hold-out (solve on mesh A, score on refined mesh B) and
+  a smoothing-robustness check (J insensitive to sub-filter-radius
+  perturbation) - a 3-D map is not called solved unless it survives both.
+  The 2-D result predicts these pass BY CONSTRUCTION with filtering on;
+  the gate verifies the prediction.
+- Phase D: eps_r channel + drive reconciliation + the 2-D lane's frozen
+  conventions folded in (their conventions doc still owed; drive lesson
+  from the robustness report: pinned voltage vs dose-matched changed
+  margins <= 4.5 points and NO rankings in 2-D - reassuring, but the 3-D
+  solve still standardizes one convention).
 - Phase E: library campaign (the 3-D analog of their 18-shape library) and
   Studio integration behind badges.
 
@@ -114,9 +123,17 @@ option.
 
 ## 7. Inputs awaited before Phase A starts
 
-1. SOLVE_ROBUSTNESS_VALIDATION.md (grid hold-out + rim perturbation) - sets
-   the regularization decision and the chi convention.
-2. The 2-D lane's frozen recording of: exact objective functional, FD-gate
-   checklist, optimizer settings and budget rule, outside-part saturation
-   convention, drive convention per arm (requested 2026-07-31).
-3. Matt's approval of this spec once 1-2 are folded in.
+1. RECEIVED 2026-08-01: SOLVE_ROBUSTNESS_VALIDATION.md - regularization
+   and chi decisions folded in above. Headline kept honest: absolute
+   fidelity does NOT transfer across grids in 2-D (unregularized); the
+   solved-vs-uniform win DOES transfer 6/6; rankings vs historical 5/6
+   (circle flips). The port's filtering-by-construction is the designed
+   answer, verified by the Phase C acceptance gates.
+2. STILL OWED: the 2-D lane's frozen conventions doc (objective functional,
+   FD-gate checklist, optimizer/budget rule, outside-part saturation,
+   drive convention per arm).
+3. Matt's approval of this updated spec.
+4. Sequencing note: the S4 field-coupling finding (frozen Q_rf) is being
+   fixed in heatr3d now; the solve3d forward inherits whatever coupling
+   law lands, so Phase A parity targets the coupled forward, not the
+   frozen one.
