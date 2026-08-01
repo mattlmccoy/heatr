@@ -1,0 +1,70 @@
+{
+ "shape": "cross",
+ "arm": "deliverable",
+ "program_key": "moves",
+ "n_holds": 150,
+ "n_steps": 1500,
+ "dt_s": 0.5,
+ "dopant_map_key": "sat_D_refined_4bpp_discovered_lib",
+ "stored_recommended_stop_s": 471.5,
+ "march": {
+  "J": 34.03803269301838,
+  "IoU": 0.9829222011385199,
+  "t_stop_s": 471.5,
+  "at_horizon": false,
+  "under_pct": 0.0,
+  "growth_pct": 1.7374517374517375,
+  "max_T_c": NaN,
+  "energy_residual_rel": 0.0042748886892778745,
+  "n_positions": 4,
+  "positions_deg": [
+   0.0,
+   90.0,
+   180.0,
+   270.0
+  ]
+ },
+ "engine_arms": {
+  "eps_static": {
+   "engine": {
+    "J": 34.101153332072414,
+    "IoU": 0.9829222011385199,
+    "t_stop_s": 471.0,
+    "at_horizon": false,
+    "under_pct": 0.0,
+    "growth_pct": 1.7374517374517375,
+    "max_T_c": 195.48461145373133,
+    "energy_residual_rel": 0.004320337956441022,
+    "energy_gate_PASS": true,
+    "n_events": 149,
+    "wall_s": 436.8063395830104
+   },
+   "vs_march": {
+    "J_rel_gap_pct": -0.18509825295166402,
+    "IoU_gap": 0.0,
+    "stop_gap_s": 0.5
+   }
+  },
+  "eps_corot": {
+   "engine": {
+    "J": 34.101153332072414,
+    "IoU": 0.9829222011385199,
+    "t_stop_s": 471.0,
+    "at_horizon": false,
+    "under_pct": 0.0,
+    "growth_pct": 1.7374517374517375,
+    "max_T_c": 195.48461145373133,
+    "energy_residual_rel": 0.004320337956441022,
+    "energy_gate_PASS": true,
+    "n_events": 149,
+    "wall_s": 400.81024829193484
+   },
+   "vs_march": {
+    "J_rel_gap_pct": -0.18509825295166402,
+    "IoU_gap": 0.0,
+    "stop_gap_s": 0.5
+   }
+  }
+ },
+ "wall_s": 876.9175896249944
+}

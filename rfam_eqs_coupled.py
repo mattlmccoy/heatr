@@ -1626,6 +1626,200 @@ def make_domain(
     return x, y, part_poly_ref, p_mask, d_mask, hi, lo, fill_frac, part_id_mask, part_polys
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Turntable PROGRAM mode: an explicit ordered list of (angle, duration) holds.
+#
+# WHY THIS EXISTS. The shipped turntable block below drives a FIXED rotation
+# increment at a FIXED interval, so every position gets the SAME dwell. Most
+# geometries do not want that: the asymmetric-dwell solve
+# (DWELL_SCHEDULE_REPORT.md) parks 74 percent of a T_shape's exposure at one
+# orientation and drops two others to a single control step. Program mode makes
+# that executable on the production engine.
+#
+# It is OPT IN. Nothing here runs unless `turntable.program` or
+# `turntable.program_json` is present in the config, so every existing
+# fixed-step and legacy-phases config takes exactly the path it took before.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _program_segments_from_obj(obj: object) -> list[dict]:
+    """Normalize one program container into an ordered list of holds.
+
+    Accepts either a bare list of holds, or the dwell campaign's deliverable
+    JSON object (a dict carrying a `moves` list). A hold is a dict with
+
+        angle_deg    (or position_deg)   the ABSOLUTE turntable position
+        duration_s   (or dwell_s)        how long to hold it
+        move_at_s    optional            when the move happens; when absent the
+                                         starts are accumulated from durations
+
+    Returns holds as `{"angle_deg", "duration_s", "start_s"}`.
+    """
+    if isinstance(obj, dict):
+        if "moves" in obj:
+            obj = obj["moves"]
+        elif "program" in obj:
+            obj = obj["program"]
+        else:
+            raise ValueError(
+                "turntable program object carries neither 'moves' nor 'program'")
+    if not isinstance(obj, (list, tuple)) or len(obj) == 0:
+        raise ValueError("turntable program must be a non-empty ordered list of holds")
+
+    segs: list[dict] = []
+    t_acc = 0.0
+    for i, raw in enumerate(obj):
+        if not isinstance(raw, dict):
+            raise ValueError(f"turntable program entry {i} is not a mapping: {raw!r}")
+        if "angle_deg" in raw:
+            ang = float(raw["angle_deg"])
+        elif "position_deg" in raw:
+            ang = float(raw["position_deg"])
+        else:
+            raise ValueError(
+                f"turntable program entry {i} has no 'angle_deg'/'position_deg'")
+        if "duration_s" in raw:
+            dur = float(raw["duration_s"])
+        elif "dwell_s" in raw:
+            dur = float(raw["dwell_s"])
+        else:
+            raise ValueError(
+                f"turntable program entry {i} has no 'duration_s'/'dwell_s'")
+        if not math.isfinite(dur) or dur < 0.0:
+            raise ValueError(
+                f"turntable program entry {i} has a non-finite or negative "
+                f"duration_s: {dur!r}")
+        start = float(raw["move_at_s"]) if "move_at_s" in raw else t_acc
+        if segs and start < segs[-1]["start_s"] - 1e-12:
+            raise ValueError(
+                f"turntable program entry {i} starts at {start} s, before entry "
+                f"{i - 1} at {segs[-1]['start_s']} s; the program must be ordered")
+        segs.append({"angle_deg": ang, "duration_s": dur, "start_s": start})
+        t_acc = start + dur
+    return segs
+
+
+def parse_turntable_program(
+    tt_cfg: dict,
+    dt_s: float,
+    n_steps: int,
+    base_dir: "Path | str | None" = None,
+) -> tuple[list[int], list[float], list[dict]]:
+    """Compile an explicit turntable program into the engine's event queue.
+
+    Parameters
+    ----------
+    tt_cfg   the `turntable` config block. Either `program` (an inline ordered
+             list of holds) or `program_json` (a path to the dwell campaign's
+             `<shape>_turntable_deliverable.json`). `program_json_key` selects
+             which program inside that file, default `moves`; pass
+             `reduced_program` for the half-turn-reduced one.
+    dt_s     the outer time step, `thermal.dt_s`.
+    n_steps  the outer step count, `thermal.n_steps`.
+    base_dir directory that a relative `program_json` is resolved against.
+
+    Returns
+    -------
+    event_steps  the engine's rotation sentinels. The time loop fires an event
+                 at the top of outer step `k` when the sentinel equals `k + 1`,
+                 so a move commanded at time `t` gives `round(t / dt) + 1`.
+                 STRICTLY INCREASING by construction: the loop pops at most one
+                 event per outer step, so two holds landing inside the same
+                 step are MERGED (their deltas summed) rather than queued, which
+                 would otherwise stall the queue on a past sentinel and freeze
+                 every later rotation.
+    deltas       the INCREMENTAL rotation for each event, in degrees. The
+                 engine accumulates these into `tt_current_rot`, which is the
+                 extra rotation added to `geometry.part.rotation_deg`, so the
+                 program's angles are absolute positions relative to the
+                 config's own base orientation.
+    segments     the normalized program, for reporting.
+
+    Holds past the horizon are dropped; when the program ends before the
+    horizon the part simply stays where the last hold left it (no wrap, no
+    repeat).
+    """
+    dt = float(dt_s)
+    if dt <= 0.0:
+        raise ValueError(f"dt_s must be positive, got {dt_s!r}")
+
+    raw_inline = tt_cfg.get("program", None)
+    raw_path = str(tt_cfg.get("program_json", "") or "").strip()
+    if raw_inline:
+        obj: object = raw_inline
+    elif raw_path:
+        p = Path(raw_path)
+        if not p.is_absolute() and base_dir is not None:
+            p = Path(base_dir) / p
+        if not p.exists():
+            raise FileNotFoundError(f"turntable.program_json not found: {p}")
+        doc = json.loads(p.read_text())
+        key = str(tt_cfg.get("program_json_key", "moves"))
+        obj = doc.get(key, doc) if isinstance(doc, dict) else doc
+    else:
+        raise ValueError(
+            "parse_turntable_program needs turntable.program or turntable.program_json")
+
+    segs = _program_segments_from_obj(obj)
+
+    event_steps: list[int] = []
+    deltas: list[float] = []
+    prev_angle = 0.0
+    for seg in segs:
+        k = int(round(float(seg["start_s"]) / dt))     # outer step index
+        if k >= int(n_steps):
+            break
+        delta = float(seg["angle_deg"]) - prev_angle
+        prev_angle = float(seg["angle_deg"])
+        sentinel = k + 1
+        if event_steps and sentinel == event_steps[-1]:
+            deltas[-1] += delta                        # merge, see docstring
+            continue
+        if abs(delta) < 1e-12:
+            continue                                   # already at that angle
+        event_steps.append(sentinel)
+        deltas.append(delta)
+    # a merge can zero a delta out; such an event is a no-op remap, drop it
+    kept = [(s, d) for s, d in zip(event_steps, deltas) if abs(d) >= 1e-12]
+    event_steps = [s for s, _ in kept]
+    deltas = [d for _, d in kept]
+    return event_steps, deltas, segs
+
+
+def corotate_sat_map(
+    sat: np.ndarray,
+    cumulative_deg: float,
+    part_mask_rot: np.ndarray,
+    outside: float = 1.0,
+) -> np.ndarray:
+    """Turn the dopant saturation map WITH the part.
+
+    The dopant is printed into the part, so when the turntable turns the part
+    the printed grading turns with it. The engine as shipped remaps
+    temperature, relative density and melt fraction at a rotation event but
+    leaves `_FgmFeedback.sat_map` in the LAB frame (`:286`, `:443`), which
+    silently shears the design away from the geometry it was solved for.
+
+    Convention is inherited, not re-derived: `geometry.part.rotation_deg = +90`
+    equals `np.rot90(k=-1)` in array coordinates, proved against the real
+    engine with zero mismatched cells in `test_orientation_map_rotation.py`.
+    This delegates to that same helper so the two can never drift apart.
+
+    NOTE: the shared helper clips to [0, 1]. A two-sided per-node map with
+    saturation above 1 must not be co-rotated through it; the caller checks.
+    """
+    _repo = str(Path(__file__).resolve().parent)
+    if _repo not in sys.path:
+        sys.path.insert(0, _repo)
+    from scripts.analysis.orientation_map_rotation import rotate_sat_map
+
+    return rotate_sat_map(
+        np.asarray(sat, dtype=float),
+        float(cumulative_deg),
+        part_mask_rot=np.asarray(part_mask_rot, dtype=bool),
+        outside=float(outside),
+    )
+
+
 def _build_rotated_part_mask(
     geom_cfg: dict,
     extra_rot_deg: float,
@@ -2663,6 +2857,7 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         "time_s": [],
         "mean_T_part_c": [],
         "max_T_part_c": [],
+        "min_T_part_c": [],
         "ui_abs_part": [],
         "ui_rms_part": [],
         "mean_phi_part": [],
@@ -2800,9 +2995,44 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     tt_current_rot   = 0.0        # cumulative rotation applied [degrees]
     tt_event_steps: list[int] = []  # pre-computed step indices for each rotation
 
+    # ── Program mode (opt in; see parse_turntable_program) ───────────────────
+    # Active ONLY when turntable.program / turntable.program_json is present.
+    # Every other turntable config takes the exact path it took before.
+    tt_program_mode      = bool(tt_cfg.get("program")) or bool(
+        str(tt_cfg.get("program_json", "") or "").strip())
+    tt_corotate_dopant   = bool(tt_cfg.get("corotate_dopant", True))
+    tt_corotate_eps_geom = bool(tt_cfg.get("corotate_eps_geometry", False))
+    tt_program_segments: list[dict] = []
+    _tt_base_sat: np.ndarray | None = None
+
     if tt_enabled:
         _tt_phases_legacy = tt_cfg.get("phases", [])
-        if _tt_phases_legacy:
+        if tt_program_mode:
+            # ── Explicit ordered (angle, duration) program ────────────────────
+            tt_event_steps, tt_rotation_deg_list, tt_program_segments = (
+                parse_turntable_program(tt_cfg, dt, n_steps,
+                                        base_dir=cfg.get("_config_dir", None))
+            )
+            if tt_corotate_dopant and getattr(_fgm_fb, "enabled", False) \
+                    and _fgm_fb.sat_map is not None:
+                _tt_base_sat = np.asarray(_fgm_fb.sat_map, dtype=float).copy()
+                _sat_hi = float(np.max(_tt_base_sat))
+                if _sat_hi > 1.0 + 1e-9:
+                    raise ValueError(
+                        "turntable program mode cannot co-rotate a saturation "
+                        f"map whose maximum is {_sat_hi:.4f} > 1: the shared "
+                        "rotation helper (orientation_map_rotation.rotate_sat_map, "
+                        "the convention proved against the engine) clips to "
+                        "[0, 1]. Set turntable.corotate_dopant: false to run the "
+                        "lab-frame behaviour explicitly.")
+            _tt_span_s = (tt_program_segments[-1]["start_s"]
+                          + tt_program_segments[-1]["duration_s"])
+            print(f"  [turntable] PROGRAM mode: {len(tt_program_segments)} holds, "
+                  f"{len(tt_event_steps)} rotation events over {_tt_span_s:.1f}s "
+                  f"(horizon {n_steps * dt:.1f}s); "
+                  f"corotate_dopant={tt_corotate_dopant and _tt_base_sat is not None} "
+                  f"corotate_eps_geometry={tt_corotate_eps_geom}")
+        elif _tt_phases_legacy:
             # ── Legacy phases-based mode (backward compat) ───────────────────────
             # Convert phases to time-based events by equally spacing them.
             # Only uses angle_deg from each phase; ignores until_phi_mean.
@@ -2815,7 +3045,9 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
             for _i in range(1, len(_tt_angles)):
                 _tt_delta_seq.append(_tt_angles[_i] - _tt_angles[_i - 1])
             tt_rotation_deg_list: list[float] = _tt_delta_seq
-            print(f"  [turntable] legacy-phases → time-based: {len(_n_evts)} events "
+            # `_n_evts` is already an int; the old `len(_n_evts)` here raised
+            # TypeError and made the ONLY arbitrary-angle branch unusable.
+            print(f"  [turntable] legacy-phases → time-based: {_n_evts} events "
                   f"every {_interval*dt:.1f}s")
         else:
             # ── New time-based mode ───────────────────────────────────────────────
@@ -2852,6 +3084,17 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     _T_phi90_reached: bool = False
     _phi90_target: float = 0.90
 
+    # ── Optional early stop after the phi90 crossing (opt-in) ────────────────
+    # thermal.stop_after_phi_bar: stop the time loop stop_margin_s seconds
+    # after mean part melt fraction first crosses this value. Exact for the
+    # dual-read-state extraction (heating peak is pre-melt; melt-onset is the
+    # crossing itself); only the post-melt tail is truncated.
+    _th_cfg = cfg.get("thermal", {}) if isinstance(cfg.get("thermal", {}), dict) else {}
+    _stop_after_phi = _th_cfg.get("stop_after_phi_bar", None)
+    _stop_after_phi = float(_stop_after_phi) if _stop_after_phi is not None else None
+    _stop_margin_steps = int(round(float(_th_cfg.get("stop_margin_s", 60.0)) / dt))
+    _stop_cross_step: int | None = None
+
     # ── Animation snapshot setup (all runs + turntable events) ──────────────────
     rep_cfg = cfg.get("reporting", {}) if isinstance(cfg.get("reporting", {}), dict) else {}
     gif_max_frames = int(rep_cfg.get("gif_max_frames", 36))
@@ -2884,6 +3127,18 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
                 part_mask=part_mask,
             )
         )
+
+    # ── Adaptive EQS refactorization (opt-in) ────────────────────────────────
+    # electric.eqs_adaptive_rtol > 0: skip the sparse EQS re-solve while the
+    # max relative sigma drift (vs the last factorized state, in units of
+    # sigma_d0) stays below rtol; meanwhile Qrf is updated pointwise as
+    # sigma_new * |E_frozen|^2 (first-order exact; |E| redistribution is
+    # second-order in the drift). A full re-solve fires when drift exceeds
+    # rtol or the FGM map updates. Default 0.0 = off (canonical behavior).
+    _eqs_adaptive_rtol = float(elec.get("eqs_adaptive_rtol", 0.0) or 0.0)
+    _sig_at_last_eqs: np.ndarray | None = None
+    _eqs_solves_skipped = 0
+    _eqs_solves_full = 0
 
     # ── Progress bar initialisation ──────────────────────────────────────────
     _pb_t0       = time.perf_counter()
@@ -2961,6 +3216,31 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
                 x_cryst = np.clip(_remap_field(x_cryst, 0.0), 0.0, 1.0)
             part_mask, doped_mask = new_part_mask, new_doped_mask
             part_id_mask = new_part_id_mask
+            # ── PROGRAM MODE ONLY: turn the printed dopant with the part ──────
+            # The dopant is printed INTO the part, so it has to follow the part
+            # through the move. Without this the saturation map stays in the
+            # LAB frame (:286, :443) while the geometry and the thermal fields
+            # rotate, which shears the design off the part it was solved for.
+            # Guarded by tt_program_mode so no existing turntable config sees a
+            # behaviour change.
+            if tt_program_mode and tt_corotate_dopant and _tt_base_sat is not None:
+                _fgm_fb.sat_map = corotate_sat_map(
+                    _tt_base_sat, tt_current_rot, new_part_mask, outside=1.0
+                ).astype(np.float32)
+            # ── PROGRAM MODE ONLY, opt in: re-rasterize the permittivity ──────
+            # eps_r is built once at startup from the ORIGINAL fill fraction
+            # (:2532) and is never rebuilt at a rotation event, so the
+            # un-rotated part leaves a stationary dielectric ghost in every
+            # post-event EQS solve. Invisible for a four-fold symmetric part at
+            # multiples of 90 degrees; NOT invisible at 45 degrees. Default
+            # False keeps the engine's shipped behaviour.
+            if tt_program_mode and tt_corotate_eps_geom:
+                _fill_eps_new = (
+                    _new_fill if getattr(_fgm_fb, "eps_geometry_only", False)
+                    else _fgm_fb.effective_fill(_new_fill)
+                )
+                eps_r[:] = eps_v + _fill_eps_new * (eps_d - eps_v)
+                _stamp_passive(sigma, eps_r)
             # Recompute sigma from rotated thermal/density fields for consistency.
             # _fgm_fb.sigma_at_mask() includes FGM saturation scaling when enabled.
             sigma[:, :] = sigma_v
@@ -3037,24 +3317,48 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
                 eps_r[:] = eps_v + _eff_fill * (eps_d - eps_v)
             # Re-stamp passive conductor cells (the sigma reset above wiped them).
             _stamp_passive(sigma, eps_r)
-            T_keep = T.copy()
-            rho_keep = rho_rel.copy()
-            phi_keep = phi.copy()
-            gamma, V, Ex, Ey, E_mag, Qrf = solve_electric_state(
-                sigma, eps_r, omega, elec_hi, elec_lo, v_hi, v_lo, dx, dy, elec, x, y, power_factor, max_qrf
-            )
-            Qrf, p_doped_eff_w_per_m, qrf_scale_applied = enforce_generator_power(
-                Qrf,
-                doped_mask,
-                dA,
-                target_power_w_per_m,
-                max_qrf,
-            )
-            if zero_qrf_outside_doped:
-                Qrf = np.where(doped_mask, Qrf, 0.0)
-            T = T_keep
-            rho_rel = rho_keep
-            phi = phi_keep
+
+            # ── Adaptive skip: frozen-field pointwise Qrf update ─────────────
+            _eqs_skip = False
+            if (_eqs_adaptive_rtol > 0.0 and not _fgm_updated
+                    and _sig_at_last_eqs is not None):
+                _drift = float(np.max(np.abs(
+                    sigma[doped_mask] - _sig_at_last_eqs[doped_mask]))) / sigma_d0
+                if _drift < _eqs_adaptive_rtol:
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        _ratio = np.where(_sig_at_last_eqs > 0,
+                                          sigma / _sig_at_last_eqs, 1.0)
+                    Qrf = Qrf * _ratio
+                    Qrf, p_doped_eff_w_per_m, qrf_scale_applied = enforce_generator_power(
+                        Qrf, doped_mask, dA, target_power_w_per_m, max_qrf,
+                    )
+                    if zero_qrf_outside_doped:
+                        Qrf = np.where(doped_mask, Qrf, 0.0)
+                    _eqs_solves_skipped += 1
+                    _eqs_skip = True
+
+            if not _eqs_skip:
+                T_keep = T.copy()
+                rho_keep = rho_rel.copy()
+                phi_keep = phi.copy()
+                gamma, V, Ex, Ey, E_mag, Qrf = solve_electric_state(
+                    sigma, eps_r, omega, elec_hi, elec_lo, v_hi, v_lo, dx, dy, elec, x, y, power_factor, max_qrf
+                )
+                Qrf, p_doped_eff_w_per_m, qrf_scale_applied = enforce_generator_power(
+                    Qrf,
+                    doped_mask,
+                    dA,
+                    target_power_w_per_m,
+                    max_qrf,
+                )
+                if zero_qrf_outside_doped:
+                    Qrf = np.where(doped_mask, Qrf, 0.0)
+                T = T_keep
+                rho_rel = rho_keep
+                phi = phi_keep
+                if _eqs_adaptive_rtol > 0.0:
+                    _sig_at_last_eqs = sigma.copy()
+                    _eqs_solves_full += 1
 
         p_conv_acc = 0.0
         p_qrf_acc = 0.0
@@ -3119,6 +3423,8 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         hist["time_s"].append((it + 1) * dt)
         hist["mean_T_part_c"].append(float(np.mean(T[part_mask])))
         hist["max_T_part_c"].append(float(np.max(T[part_mask])))
+        # min part temperature: Allison's FE.m stop condition minop1(T) > Ttarg
+        hist["min_T_part_c"].append(float(np.min(T[part_mask])))
         t_part_now = T[part_mask]
         t_avg = float(np.mean(t_part_now))
         denom = max(t_avg - ambient_c, 1e-9)
@@ -3225,6 +3531,18 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         )
         sys.stderr.flush()
 
+        # ── Early stop after phi90 crossing (opt-in, see setup above) ────────
+        if _stop_after_phi is not None:
+            if _stop_cross_step is None and hist["mean_phi_part"][-1] >= _stop_after_phi:
+                _stop_cross_step = it
+            if (_stop_cross_step is not None
+                    and it >= _stop_cross_step + _stop_margin_steps):
+                print(f"  [early-stop] phi_bar crossed {_stop_after_phi:.2f} at "
+                      f"step {_stop_cross_step}; stopping at step {it} "
+                      f"(+{_stop_margin_steps * dt:.0f} s margin, "
+                      f"{n_steps - it - 1} steps skipped)", flush=True)
+                break
+
         if it in gif_step_targets:
             _snap = _capture_animation_snapshot(
                 step_idx=it,
@@ -3290,6 +3608,11 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     # ── Progress bar final line ───────────────────────────────────────────────
     _pb_total_elapsed = time.perf_counter() - _pb_t0
     _pb_fin_T   = hist["mean_T_part_c"][-1]   if hist["mean_T_part_c"]   else 0.0
+    if _eqs_adaptive_rtol > 0.0:
+        print(f"  [eqs-adaptive] rtol={_eqs_adaptive_rtol:g}: "
+              f"{_eqs_solves_full} full solves, {_eqs_solves_skipped} skipped "
+              f"({100.0 * _eqs_solves_skipped / max(1, _eqs_solves_full + _eqs_solves_skipped):.0f}%)",
+              flush=True)
     _pb_fin_phi = hist["mean_phi_part"][-1]    if hist["mean_phi_part"]   else 0.0
     _pb_fin_rho = hist["mean_rho_rel_part"][-1] if hist["mean_rho_rel_part"] else 0.0
     _pb_fin_res = hist["energy_balance_residual_J_per_m"][-1] if hist["energy_balance_residual_J_per_m"] else 0.0
