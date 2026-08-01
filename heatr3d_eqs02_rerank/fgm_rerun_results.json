@@ -1,0 +1,476 @@
+{
+ "what": "FGM benefit of heatr3d 3-D per-voxel dopant maps re-measured under the corrected qrf_gradient='masked' default (EQS-02). Five arms per shape; the published maps were DESIGNED from legacy-Q temperature fields, so the correction hits design and evaluation both.",
+ "heatr3d_edited": false,
+ "n": 64,
+ "phase_update": "enthalpy",
+ "fgm_settings": {
+  "magnitude": 1.0,
+  "baseline": 0.5,
+  "bpp": 2,
+  "proxy": "T_phi90 (make_fgm default)"
+ },
+ "null_band_pct": 1.0,
+ "arms": {
+  "A": "legacy baseline (uniform dopant, legacy Q)",
+  "B": "masked baseline (uniform dopant, masked Q)",
+  "Cl": "legacy-designed map, LEGACY physics (old-regime reproduction)",
+  "C": "legacy-designed map, masked physics (as-published map, corrected world)",
+  "D": "masked-designed map, masked physics (honest go-forward)"
+ },
+ "shapes": {
+  "sphere": {
+   "n_voxels_in_part": 13992,
+   "published_pct": -54.0,
+   "published_source": "analysis-3dfgm/study_summary.csv row sphere,fgm3d (32.92 -> 15.15 C)",
+   "sigma_T_c": {
+    "A": 32.40264328438835,
+    "B": 27.103127427994465,
+    "Cl": 15.106367050546066,
+    "C": 18.892570317222805,
+    "D": 15.204928311683995
+   },
+   "deltas_pct": {
+    "old_regime_benefit_Cl_vs_A": -53.37921379449824,
+    "old_map_corrected_world_C_vs_B": -30.293762712752788,
+    "corrected_design_D_vs_B": -43.89972761601296,
+    "baseline_shift_B_vs_A": -16.355196117432797,
+    "D_vs_C": -19.519006379862933
+   },
+   "verdicts": {
+    "published_map_sign": "survives",
+    "corrected_design_sign": "survives"
+   },
+   "statement": "**sphere** (published -54.0 %): the sign of the published benefit SURVIVES when the as-published map is evaluated under masked physics (-30.3 % vs the masked baseline). Re-designing the map from the masked baseline gives -43.9 %.",
+   "sat": {
+    "C_legacy_designed": {
+     "mean": 0.5932914046121593,
+     "min": 0.0,
+     "max": 1.0,
+     "level_counts": {
+      "0/3": 816,
+      "1/3": 3472,
+      "2/3": 7680,
+      "3/3": 2024
+     }
+    },
+    "D_masked_designed": {
+     "mean": 0.5178197064989518,
+     "min": 0.0,
+     "max": 1.0,
+     "level_counts": {
+      "0/3": 1936,
+      "1/3": 4584,
+      "2/3": 5264,
+      "3/3": 2208
+     }
+    },
+    "map_agreement_C_vs_D": {
+     "identical_voxel_fraction": 0.38078902229845624,
+     "mean_abs_diff": 0.26453211358871737
+    },
+    "C_vs_published_map": null
+   },
+   "rerank_reproduction": {
+    "A_legacy_baseline": {
+     "stored_sigma_T_c": 32.40264372391805,
+     "here_sigma_T_c": 32.40264328438835,
+     "rel_diff": 1.3564624648908351e-08
+    },
+    "B_masked_baseline": {
+     "stored_sigma_T_c": 27.103127477948576,
+     "here_sigma_T_c": 27.103127427994465,
+     "rel_diff": 1.8431123944038953e-09
+    }
+   },
+   "gates": {
+    "A": {
+     "reached_phi90": true,
+     "energy_residual_frac": 4.652926256291464e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "B": {
+     "reached_phi90": true,
+     "energy_residual_frac": -4.963318338591977e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "Cl": {
+     "reached_phi90": true,
+     "energy_residual_frac": -4.881845366808915e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "C": {
+     "reached_phi90": true,
+     "energy_residual_frac": -5.130425739660264e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "D": {
+     "reached_phi90": true,
+     "energy_residual_frac": -5.3946719816286384e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    }
+   },
+   "all_gates_pass": true,
+   "wall_total_s": 1269.362644708017
+  },
+  "cone": {
+   "n_voxels_in_part": 5492,
+   "published_pct": -31.9,
+   "published_source": "analysis-3dfgm/cone_dumbbell_fgm_results_fixed.json (32.648 -> 22.247 C)",
+   "sigma_T_c": {
+    "A": 32.903919469989106,
+    "B": 43.12342868974253,
+    "Cl": 22.45915536715936,
+    "C": 34.54224843789328,
+    "D": 27.453919058392632
+   },
+   "deltas_pct": {
+    "old_regime_benefit_Cl_vs_A": -31.743221692346317,
+    "old_map_corrected_world_C_vs_B": -19.89911403749396,
+    "corrected_design_D_vs_B": -36.33641875762327,
+    "baseline_shift_B_vs_A": 31.058637950638076,
+    "D_vs_C": -20.52075270156606
+   },
+   "verdicts": {
+    "published_map_sign": "survives",
+    "corrected_design_sign": "survives"
+   },
+   "statement": "**cone** (published -31.9 %): the sign of the published benefit SURVIVES when the as-published map is evaluated under masked physics (-19.9 % vs the masked baseline). Re-designing the map from the masked baseline gives -36.3 %.",
+   "sat": {
+    "C_legacy_designed": {
+     "mean": 0.4180626365622724,
+     "min": 0.0,
+     "max": 1.0,
+     "level_counts": {
+      "0/3": 638,
+      "1/3": 3136,
+      "2/3": 1402,
+      "3/3": 316
+     }
+    },
+    "D_masked_designed": {
+     "mean": 0.3380674921097354,
+     "min": 0.0,
+     "max": 1.0,
+     "level_counts": {
+      "0/3": 1410,
+      "1/3": 2888,
+      "2/3": 900,
+      "3/3": 294
+     }
+    },
+    "map_agreement_C_vs_D": {
+     "identical_voxel_fraction": 0.5968681718863802,
+     "mean_abs_diff": 0.13437727603787328
+    },
+    "C_vs_published_map": {
+     "comparable": true,
+     "source": "cone_dumbbell_fgm_volumes_fixed.npz",
+     "identical_voxel_fraction": 0.1715222141296431,
+     "mean_abs_diff": 0.005462501781401824,
+     "published_mean_sat": 0.4235251383436742,
+     "this_campaign_mean_sat": 0.4180626365622724,
+     "note": "published map came from an apparent_cp + legacy-Q march; arm C's map comes from this campaign's enthalpy + legacy-Q march"
+    }
+   },
+   "rerank_reproduction": {
+    "A_legacy_baseline": {
+     "stored_sigma_T_c": 32.90391945574475,
+     "here_sigma_T_c": 32.903919469989106,
+     "rel_diff": 4.3290760009157956e-10
+    },
+    "B_masked_baseline": {
+     "stored_sigma_T_c": 43.123428678091436,
+     "here_sigma_T_c": 43.12342868974253,
+     "rel_diff": 2.701801884745791e-10
+    }
+   },
+   "gates": {
+    "A": {
+     "reached_phi90": true,
+     "energy_residual_frac": -4.1235548697849266e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "B": {
+     "reached_phi90": true,
+     "energy_residual_frac": -3.992262172090397e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "Cl": {
+     "reached_phi90": true,
+     "energy_residual_frac": -3.39260638961888e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "C": {
+     "reached_phi90": true,
+     "energy_residual_frac": -3.690896851432887e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "D": {
+     "reached_phi90": true,
+     "energy_residual_frac": -3.4650188580442335e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    }
+   },
+   "all_gates_pass": true,
+   "wall_total_s": 1980.9421766250161
+  },
+  "dumbbell": {
+   "n_voxels_in_part": 8328,
+   "published_pct": -44.2,
+   "published_source": "analysis-3dfgm/cone_dumbbell_fgm_results_fixed.json (20.127 -> 11.234 C)",
+   "sigma_T_c": {
+    "A": 20.00690956247026,
+    "B": 26.006175869389065,
+    "Cl": 11.36024431682308,
+    "C": 23.364395335084307,
+    "D": 19.964190465639557
+   },
+   "deltas_pct": {
+    "old_regime_benefit_Cl_vs_A": -43.21839521815469,
+    "old_map_corrected_world_C_vs_B": -10.158281431197667,
+    "corrected_design_D_vs_B": -23.232886811556597,
+    "baseline_shift_B_vs_A": 29.985972037242888,
+    "D_vs_C": -14.552933301633335
+   },
+   "verdicts": {
+    "published_map_sign": "survives",
+    "corrected_design_sign": "survives"
+   },
+   "statement": "**dumbbell** (published -44.2 %): the sign of the published benefit SURVIVES when the as-published map is evaluated under masked physics (-10.2 % vs the masked baseline). Re-designing the map from the masked baseline gives -23.2 %.",
+   "sat": {
+    "C_legacy_designed": {
+     "mean": 0.5333013128402178,
+     "min": 0.0,
+     "max": 1.0,
+     "level_counts": {
+      "0/3": 620,
+      "1/3": 3272,
+      "2/3": 3256,
+      "3/3": 1180
+     }
+    },
+    "D_masked_designed": {
+     "mean": 0.40794108229266723,
+     "min": 0.0,
+     "max": 1.0,
+     "level_counts": {
+      "0/3": 1432,
+      "1/3": 4232,
+      "2/3": 2032,
+      "3/3": 632
+     }
+    },
+    "map_agreement_C_vs_D": {
+     "identical_voxel_fraction": 0.3712776176753122,
+     "mean_abs_diff": 0.2185398655139289
+    },
+    "C_vs_published_map": {
+     "comparable": true,
+     "source": "cone_dumbbell_fgm_volumes_fixed.npz",
+     "identical_voxel_fraction": 0.21565802113352545,
+     "mean_abs_diff": 0.009285954421543006,
+     "published_mean_sat": 0.5425872672617608,
+     "this_campaign_mean_sat": 0.5333013128402178,
+     "note": "published map came from an apparent_cp + legacy-Q march; arm C's map comes from this campaign's enthalpy + legacy-Q march"
+    }
+   },
+   "rerank_reproduction": {
+    "A_legacy_baseline": {
+     "stored_sigma_T_c": 20.00690927318565,
+     "here_sigma_T_c": 20.00690956247026,
+     "rel_diff": 1.445923538405849e-08
+    },
+    "B_masked_baseline": {
+     "stored_sigma_T_c": 26.006175448240686,
+     "here_sigma_T_c": 26.006175869389065,
+     "rel_diff": 1.6194168159464798e-08
+    }
+   },
+   "gates": {
+    "A": {
+     "reached_phi90": true,
+     "energy_residual_frac": 3.18161039962093e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "B": {
+     "reached_phi90": true,
+     "energy_residual_frac": 2.641465720635089e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "Cl": {
+     "reached_phi90": true,
+     "energy_residual_frac": 2.27827813264876e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "C": {
+     "reached_phi90": true,
+     "energy_residual_frac": 2.69302739948019e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "D": {
+     "reached_phi90": true,
+     "energy_residual_frac": 2.499685703762808e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    }
+   },
+   "all_gates_pass": true,
+   "wall_total_s": 1635.9899513749406
+  },
+  "cylinder": {
+   "n_voxels_in_part": 23040,
+   "published_pct": null,
+   "published_source": "no published FGM claim (control)",
+   "sigma_T_c": {
+    "A": 26.13054971850866,
+    "B": 20.103141496882763,
+    "Cl": 11.413979622485297,
+    "C": 15.408185220464134,
+    "D": 20.156830594300867
+   },
+   "deltas_pct": {
+    "old_regime_benefit_Cl_vs_A": -56.319404890282115,
+    "old_map_corrected_world_C_vs_B": -23.354341296093644,
+    "corrected_design_D_vs_B": 0.2670681964131291,
+    "baseline_shift_B_vs_A": -23.06651902296795,
+    "D_vs_C": 30.818979041930888
+   },
+   "verdicts": {
+    "published_map_sign": "no published claim",
+    "corrected_design_sign": "null"
+   },
+   "statement": "**cylinder** (control, no published FGM claim): the legacy-designed map under masked physics gives -23.4 % vs the masked baseline; the masked-designed map gives +0.3 %.",
+   "sat": {
+    "C_legacy_designed": {
+     "mean": 0.5925925925925924,
+     "min": 0.0,
+     "max": 1.0,
+     "level_counts": {
+      "0/3": 1024,
+      "1/3": 5632,
+      "2/3": 13824,
+      "3/3": 2560
+     }
+    },
+    "D_masked_designed": {
+     "mean": 0.40740740740740733,
+     "min": 0.0,
+     "max": 1.0,
+     "level_counts": {
+      "0/3": 5632,
+      "1/3": 8448,
+      "2/3": 7168,
+      "3/3": 1792
+     }
+    },
+    "map_agreement_C_vs_D": {
+     "identical_voxel_fraction": 0.28888888888888886,
+     "mean_abs_diff": 0.3333333333333333
+    },
+    "C_vs_published_map": null
+   },
+   "rerank_reproduction": {
+    "A_legacy_baseline": {
+     "stored_sigma_T_c": 26.130549178929297,
+     "here_sigma_T_c": 26.13054971850866,
+     "rel_diff": 2.0649369464284994e-08
+    },
+    "B_masked_baseline": {
+     "stored_sigma_T_c": 20.103142032804296,
+     "here_sigma_T_c": 20.103141496882763,
+     "rel_diff": 2.665859555957644e-08
+    }
+   },
+   "gates": {
+    "A": {
+     "reached_phi90": true,
+     "energy_residual_frac": -1.0844806139692418e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "B": {
+     "reached_phi90": true,
+     "energy_residual_frac": -2.8668237710356006e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "Cl": {
+     "reached_phi90": true,
+     "energy_residual_frac": -1.4248400315097204e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "C": {
+     "reached_phi90": true,
+     "energy_residual_frac": -2.2251800985365697e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    },
+    "D": {
+     "reached_phi90": true,
+     "energy_residual_frac": -4.305765749729521e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1,
+     "pass": true
+    }
+   },
+   "all_gates_pass": true,
+   "wall_total_s": 1173.930272000027
+  }
+ },
+ "gates_all_pass": true,
+ "wall_total_s": 6060.2250447080005
+}

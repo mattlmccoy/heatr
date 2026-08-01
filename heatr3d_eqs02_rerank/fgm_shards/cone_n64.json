@@ -1,0 +1,228 @@
+{
+ "shape": "cone",
+ "n": 64,
+ "h_m": 0.0009375,
+ "L_m": 0.06,
+ "geometry": {
+  "diam": 0.024,
+  "zspan": 0.03,
+  "src": "run_3d_study.py"
+ },
+ "n_voxels_in_part": 5492,
+ "phase_update": "enthalpy",
+ "phi_target": 0.9,
+ "max_time_s": 1500.0,
+ "fgm_settings": {
+  "magnitude": 1.0,
+  "baseline": 0.5,
+  "bpp": 2,
+  "proxy": "T_phi90 (make_fgm default)"
+ },
+ "published_pct": -31.9,
+ "published_source": "analysis-3dfgm/cone_dumbbell_fgm_results_fixed.json (32.648 -> 22.247 C)",
+ "arms": {
+  "A_legacy_baseline": {
+   "sigma_T_c": 32.903919469989106,
+   "t_phi90_s": 1182.8,
+   "T_max_c": 311.68797314703875,
+   "T_mean_c": 223.37092795488735,
+   "T_min_c": 101.04163536328849,
+   "interior_mean_c": 228.10853709205358,
+   "surface_mean_c": 218.77605883476627,
+   "surface_minus_interior_mean_c": -9.332478257287306,
+   "gates": {
+    "reached_phi90": true,
+    "energy_residual_frac": -4.1235548697849266e-13,
+    "clamp_bound": false,
+    "cfl_violated": false,
+    "n_substeps_used": 1,
+    "pass": true
+   },
+   "wall_thermal_s": 834.647302916972
+  },
+  "B_masked_baseline": {
+   "sigma_T_c": 43.12342868974253,
+   "t_phi90_s": 1153.8,
+   "T_max_c": 306.5479596912038,
+   "T_mean_c": 239.62042366895395,
+   "T_min_c": 82.68375505626008,
+   "interior_mean_c": 254.3812677933437,
+   "surface_mean_c": 225.30431085964622,
+   "surface_minus_interior_mean_c": -29.07695693369749,
+   "gates": {
+    "reached_phi90": true,
+    "energy_residual_frac": -3.992262172090397e-13,
+    "clamp_bound": false,
+    "cfl_violated": false,
+    "n_substeps_used": 1,
+    "pass": true
+   },
+   "wall_thermal_s": 382.51694437500555
+  },
+  "Cl_legacyMap_legacyPhysics": {
+   "sigma_T_c": 22.45915536715936,
+   "t_phi90_s": 844.7,
+   "T_max_c": 241.81256991069998,
+   "T_mean_c": 210.82389838038222,
+   "T_min_c": 103.17079798302855,
+   "interior_mean_c": 222.59191058813138,
+   "surface_mean_c": 199.4104460813314,
+   "surface_minus_interior_mean_c": -23.181464506799983,
+   "gates": {
+    "reached_phi90": true,
+    "energy_residual_frac": -3.39260638961888e-13,
+    "clamp_bound": false,
+    "cfl_violated": false,
+    "n_substeps_used": 1,
+    "pass": true
+   },
+   "wall_thermal_s": 210.095903333975
+  },
+  "C_legacyMap_maskedPhysics": {
+   "sigma_T_c": 34.54224843789328,
+   "t_phi90_s": 955.8000000000001,
+   "T_max_c": 273.2496981923046,
+   "T_mean_c": 226.13036872568705,
+   "T_min_c": 79.06129266356037,
+   "interior_mean_c": 241.6723698608538,
+   "surface_mean_c": 211.05663448268461,
+   "surface_minus_interior_mean_c": -30.615735378169177,
+   "gates": {
+    "reached_phi90": true,
+    "energy_residual_frac": -3.690896851432887e-13,
+    "clamp_bound": false,
+    "cfl_violated": false,
+    "n_substeps_used": 1,
+    "pass": true
+   },
+   "wall_thermal_s": 232.4356868750183
+  },
+  "D_maskedMap_maskedPhysics": {
+   "sigma_T_c": 27.453919058392632,
+   "t_phi90_s": 818.5,
+   "T_max_c": 244.62320403277272,
+   "T_mean_c": 210.4202370664912,
+   "T_min_c": 73.8938386536412,
+   "interior_mean_c": 222.50630355809707,
+   "surface_mean_c": 198.69831318080176,
+   "surface_minus_interior_mean_c": -23.80799037729531,
+   "gates": {
+    "reached_phi90": true,
+    "energy_residual_frac": -3.4650188580442335e-13,
+    "clamp_bound": false,
+    "cfl_violated": false,
+    "n_substeps_used": 1,
+    "pass": true
+   },
+   "wall_thermal_s": 195.343568084063
+  }
+ },
+ "qrf": {
+  "A_legacy_baseline": {
+   "mean_w_per_m3": 1591549.4309189534,
+   "max_over_mean": 31.41813478543515,
+   "cv": 2.081525278021227,
+   "power_fraction_in_surface_band": 0.7997164210530339,
+   "interior_mean_w_per_m3": 647424.7776613312,
+   "surface_mean_w_per_m3": 2507228.434652314
+  },
+  "B_masked_baseline": {
+   "mean_w_per_m3": 1591549.4309189534,
+   "max_over_mean": 8.549213412469374,
+   "cv": 0.6566196441309923,
+   "power_fraction_in_surface_band": 0.5817986161819978,
+   "interior_mean_w_per_m3": 1351852.9045645087,
+   "surface_mean_w_per_m3": 1824024.1107117867
+  },
+  "C_legacyMap_masked": {
+   "mean_w_per_m3": 1591549.4309189534,
+   "max_over_mean": 7.075270134402534,
+   "cv": 0.8321217878302528,
+   "power_fraction_in_surface_band": 0.6107273851520587,
+   "interior_mean_w_per_m3": 1258339.4876536936,
+   "surface_mean_w_per_m3": 1914720.0502120892
+  },
+  "Cl_legacyMap_legacy": {
+   "mean_w_per_m3": 1591549.4309189534,
+   "max_over_mean": 9.883594710789165,
+   "cv": 1.0952170454169554,
+   "power_fraction_in_surface_band": 0.7027999777459089,
+   "interior_mean_w_per_m3": 960711.1044273278,
+   "surface_mean_w_per_m3": 2203381.150730056
+  },
+  "D_maskedMap_masked": {
+   "mean_w_per_m3": 1591549.4309189536,
+   "max_over_mean": 4.056444374557767,
+   "cv": 0.8136054641169089,
+   "power_fraction_in_surface_band": 0.6476722566377267,
+   "interior_mean_w_per_m3": 1138913.6948198804,
+   "surface_mean_w_per_m3": 2030547.6484268063
+  }
+ },
+ "sat": {
+  "C_legacy_designed": {
+   "mean": 0.4180626365622724,
+   "min": 0.0,
+   "max": 1.0,
+   "level_counts": {
+    "0/3": 638,
+    "1/3": 3136,
+    "2/3": 1402,
+    "3/3": 316
+   }
+  },
+  "D_masked_designed": {
+   "mean": 0.3380674921097354,
+   "min": 0.0,
+   "max": 1.0,
+   "level_counts": {
+    "0/3": 1410,
+    "1/3": 2888,
+    "2/3": 900,
+    "3/3": 294
+   }
+  },
+  "map_agreement_C_vs_D": {
+   "identical_voxel_fraction": 0.5968681718863802,
+   "mean_abs_diff": 0.13437727603787328
+  },
+  "C_vs_published_map": {
+   "comparable": true,
+   "source": "cone_dumbbell_fgm_volumes_fixed.npz",
+   "identical_voxel_fraction": 0.1715222141296431,
+   "mean_abs_diff": 0.005462501781401824,
+   "published_mean_sat": 0.4235251383436742,
+   "this_campaign_mean_sat": 0.4180626365622724,
+   "note": "published map came from an apparent_cp + legacy-Q march; arm C's map comes from this campaign's enthalpy + legacy-Q march"
+  }
+ },
+ "eqs_solves": {
+  "baseline": 65.53994537494145,
+  "fgm_legacy_designed": 31.273578415974043,
+  "fgm_masked_designed": 28.89356729190331
+ },
+ "deltas_pct": {
+  "old_regime_benefit_Cl_vs_A": -31.743221692346317,
+  "old_map_corrected_world_C_vs_B": -19.89911403749396,
+  "corrected_design_D_vs_B": -36.33641875762327,
+  "baseline_shift_B_vs_A": 31.058637950638076,
+  "D_vs_C": -20.52075270156606
+ },
+ "rerank_reproduction": {
+  "A_legacy_baseline": {
+   "stored_sigma_T_c": 32.90391945574475,
+   "here_sigma_T_c": 32.903919469989106,
+   "rel_diff": 4.3290760009157956e-10
+  },
+  "B_masked_baseline": {
+   "stored_sigma_T_c": 43.123428678091436,
+   "here_sigma_T_c": 43.12342868974253,
+   "rel_diff": 2.701801884745791e-10
+  }
+ },
+ "all_gates_pass": true,
+ "peak_rss_gb": 0.959014892578125,
+ "heatr3d_run_default_qrf_gradient": "masked",
+ "wall_total_s": 1980.9421766250161,
+ "python": "3.12.7"
+}
