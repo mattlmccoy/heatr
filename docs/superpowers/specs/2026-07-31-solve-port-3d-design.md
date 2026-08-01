@@ -105,6 +105,12 @@ option.
   perturbation) - a 3-D map is not called solved unless it survives both.
   The 2-D result predicts these pass BY CONSTRUCTION with filtering on;
   the gate verifies the prediction.
+  OBJECTIVE REFINEMENT (Matt, 2026-08-01): the goal is dense IF AND ONLY IF
+  in-bounds - out-of-bounds melt (bed growth) is the hard penalty side;
+  in-bounds under-density is a SOFT trade with a floor near 80-90% density.
+  The symmetric (phi-chi)^2 does not encode this; the Phase C objective
+  uses asymmetric weighting (or a hinge on in-bounds phi below the floor),
+  with sigma_T kept as a reported flatness diagnostic, never the objective.
 - Phase D: eps_r channel + drive reconciliation + the 2-D lane's frozen
   conventions folded in (their conventions doc still owed; drive lesson
   from the robustness report: pinned voltage vs dose-matched changed
