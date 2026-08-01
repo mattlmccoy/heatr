@@ -58,14 +58,16 @@ def probe_map(case) -> np.ndarray:
     return s
 
 
-def run_forward(case, s, p, n_seg, horizon, checkpoints=False):
+def run_forward(case, s, p, n_seg, horizon, checkpoints=False, window=None):
     return fwd.forward(case, s, keep_checkpoints=checkpoints, stop_after_phi=None,
                        shape_stop_patience=None, n_steps=horizon,
-                       p_seg=p, n_seg=n_seg, p_horizon=horizon)
+                       p_seg=p, n_seg=n_seg,
+                       p_horizon=horizon if window is None else int(window))
 
 
-def gate(case, ops, s, p0, n_seg, horizon, layer: str, fixed_index: int | None) -> dict:
-    tr = run_forward(case, s, p0, n_seg, horizon, checkpoints=True)
+def gate(case, ops, s, p0, n_seg, horizon, layer: str, fixed_index: int | None,
+         window=None) -> dict:
+    tr = run_forward(case, s, p0, n_seg, horizon, checkpoints=True, window=window)
     if fixed_index is None:
         st = so.optimal_stop(tr, case)
         index = st.index
@@ -76,7 +78,7 @@ def gate(case, ops, s, p0, n_seg, horizon, layer: str, fixed_index: int | None) 
                                with_schedule=True)
 
     def J_of(p):
-        t = run_forward(case, s, p, n_seg, horizon)
+        t = run_forward(case, s, p, n_seg, horizon, window=window)
         if fixed_index is None:
             return so.optimal_stop(t, case).J
         return so.shape_J_and_seed(t.T_at_end(min(fixed_index, t.n_outer - 1)), case)[0]
@@ -112,23 +114,27 @@ def gate(case, ops, s, p0, n_seg, horizon, layer: str, fixed_index: int | None) 
     return out
 
 
-def main(shape: str, out_path: str, n_seg: int = 16, horizon: int | None = None) -> dict:
+def main(shape: str, out_path: str, n_seg: int = 16, horizon: int | None = None,
+         window: int | None = None) -> dict:
     case = build_case(load_cfg(shape_config(shape)))
     horizon = int(case.pins.n_steps if horizon is None else horizon)
+    win = int(horizon if window is None else window)
     ops = gradops.gradient_matrices(case.x, case.y)
     s = probe_map(case)
     p0 = probe_schedule(n_seg)
 
-    base = run_forward(case, s, p0, n_seg, horizon)
+    base = run_forward(case, s, p0, n_seg, horizon, window=win)
     st = so.optimal_stop(base, case)
     res = {"shape": shape, "n_seg": n_seg, "horizon": horizon,
+           "schedule_window_steps": win,
+           "window_shorter_than_march": bool(win < horizon),
            "p_probe": [float(v) for v in p0],
-           "duty_cycle": sch.duty_cycle(p0, horizon, n_seg),
+           "duty_cycle": sch.duty_cycle(p0, win, n_seg),
            "base": {"t_stop_index": st.index, "t_stop_s": st.time_s, "J": st.J,
                     "at_horizon": bool(st.at_horizon), "n_outer": base.n_outer},
            "layers": []}
     for layer, fixed in (("P1_fixed_stop", st.index), ("P2_envelope_stop", None)):
-        r = gate(case, ops, s, p0, n_seg, horizon, layer, fixed)
+        r = gate(case, ops, s, p0, n_seg, horizon, layer, fixed, window=win)
         res["layers"].append(r)
         pr = r["probes"]
         print(f"{layer:20s} J0={r['J0']:.6f} "
@@ -152,4 +158,5 @@ if __name__ == "__main__":
     _out = sys.argv[2]
     _nseg = int(sys.argv[3]) if len(sys.argv) > 3 else 16
     _hor = int(sys.argv[4]) if len(sys.argv) > 4 else None
-    main(_shape, _out, _nseg, _hor)
+    _win = int(sys.argv[5]) if len(sys.argv) > 5 else None
+    main(_shape, _out, _nseg, _hor, _win)

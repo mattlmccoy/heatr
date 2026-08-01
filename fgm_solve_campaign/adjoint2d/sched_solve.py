@@ -57,6 +57,16 @@ from .pins import build_case, load_cfg
 
 SHAPES = ("cross", "T_shape", "L_shape", "star")
 HORIZON = {"cross": 2500, "T_shape": 1500, "L_shape": 1500, "star": 1500}
+# Schedule WINDOW, in outer steps. The 16 segments are laid over this window,
+# not over the whole march; past it the generator HOLDS the last segment level.
+# The window is 1.5x the later of the uniform-map and the library-baseline
+# J-optimal stop, MEASURED once per shape before any optimization (uniform /
+# baseline stops: cross 439 / 1505, T_shape 460 / 433, L_shape 526 / 525,
+# star 284 / 327) and rounded up. Laying the segments over the full march
+# instead leaves 10 to 13 of the 16 segments entirely after the stop with
+# exactly zero gradient, which is not a control resolution the optimizer can
+# use. The post-window hold term is part of dJ/dp[-1] and is FD-gated.
+WINDOW = {"cross": 2250, "T_shape": 700, "L_shape": 800, "star": 500}
 N_SEG_DEFAULT = 16
 P_BOX_CONT = (0.0, 1.5)
 P_BOX_BINARY = (0.0, 1.0)
@@ -79,6 +89,31 @@ def rounding_loss(J_relaxed: float, J_rounded: float) -> dict:
             "rel_loss": (b - a) / max(abs(a), 1e-30)}
 
 
+def iso_j_hold_gain(j_curve, rho_curve, stop_index: int, tol: float = 0.02) -> dict:
+    """How much densification a HOLD past the stop buys at iso shape fidelity.
+
+    The triangle showcase found mean rho only 0.684 at the shape-optimal stop:
+    densification lags the melt front. This asks the direct question. Starting
+    at the J-optimal stop, walk FORWARD while J stays inside a band of `tol`
+    around its value at the stop, and report the densest time reached.
+
+    The walk is contiguous on purpose. A later time inside the band that is
+    separated from the stop by an excursion outside it is NOT reachable by
+    holding, because the march passes through the excursion.
+    """
+    j = np.asarray(j_curve, dtype=float)
+    r = np.asarray(rho_curve, dtype=float)
+    i0 = int(stop_index)
+    limit = j[i0] * (1.0 + float(tol)) if j[i0] >= 0 else j[i0] * (1.0 - float(tol))
+    i = i0
+    while i + 1 < j.size and j[i + 1] <= limit:
+        i += 1
+    return {"index": int(i), "rho": float(r[i]), "rho_at_stop": float(r[i0]),
+            "d_rho": float(r[i] - r[i0]), "extra_steps": int(i - i0),
+            "J_at_stop": float(j[i0]), "J_at_hold_end": float(j[i]),
+            "J_band_tol": float(tol)}
+
+
 def rescue_verdict(iou_base: float, iou_arm: float, tol: float = 0.02) -> str:
     """Did scheduling move the shape? Comparative, with a 2 IoU point tie band."""
     d = float(iou_arm) - float(iou_base)
@@ -93,14 +128,16 @@ def rescue_verdict(iou_base: float, iou_arm: float, tol: float = 0.02) -> str:
 # forward / scoring with a schedule
 # ---------------------------------------------------------------------------
 
-def run_forward(case, s, p, n_seg, horizon, checkpoints=False):
+def run_forward(case, s, p, n_seg, horizon, checkpoints=False, window=None):
     return fwd.forward(case, s, keep_checkpoints=checkpoints, stop_after_phi=None,
                        shape_stop_patience=None, n_steps=horizon,
-                       p_seg=p, n_seg=n_seg, p_horizon=horizon)
+                       p_seg=p, n_seg=n_seg,
+                       p_horizon=horizon if window is None else int(window))
 
 
-def score(case, s, p, n_seg, horizon) -> dict:
-    tr = run_forward(case, s, p, n_seg, horizon)
+def score(case, s, p, n_seg, horizon, window=None) -> dict:
+    win = int(horizon if window is None else window)
+    tr = run_forward(case, s, p, n_seg, horizon, window=win)
     m = so.full_metrics(tr, case)
     m["P_abs_B_full_power_W_per_m"] = tr.P_abs_B
     m["frac_dT_clipped_max"] = tr.frac_dT_clipped_max
@@ -108,6 +145,13 @@ def score(case, s, p, n_seg, horizon) -> dict:
     m["frac_qrf_cap"] = tr.frac_qrf_cap
     m["n_outer"] = tr.n_outer
     m["horizon"] = int(horizon)
+    m["schedule_window_steps"] = win
+    # Densification readouts. rho is NOT in the objective; it is reported so
+    # the place-then-hold question can be answered with numbers.
+    m["mean_rho_part_at_stop"] = float(tr.mean_rho_rel_part[m["t_stop_index"]])
+    m["mean_rho_part_at_end"] = float(tr.mean_rho_rel_part[-1])
+    m["rho_curve"] = [float(v) for v in tr.mean_rho_rel_part]
+    m["J_curve"] = [float(v) for v in so.J_curve(tr, case)]
     m["sat_mean_in_part"] = float(np.mean(s[case.part_mask]))
     m["sat_max_in_part"] = float(np.max(s[case.part_mask]))
     m["energy_gate"] = eg.gate_from_trajectory(tr, m["t_stop_index"])
@@ -116,12 +160,14 @@ def score(case, s, p, n_seg, horizon) -> dict:
         m["p_seg"] = None
         m["duty_cycle"] = 1.0
         m["n_switches"] = 0
+        m["structure"] = {"structure": "NO SCHEDULE", "n_active_segments": 0}
     else:
         m["p_seg"] = [float(v) for v in np.asarray(p).ravel()]
-        m["duty_cycle"] = sch.duty_cycle(p, horizon, n_seg)
+        m["duty_cycle"] = sch.duty_cycle(p, win, n_seg)
         m["n_switches"] = sch.n_switches(p)
-        m["schedule_instructions"] = sch.instructions(p, horizon, n_seg,
+        m["schedule_instructions"] = sch.instructions(p, win, n_seg,
                                                       case.pins.dt, merge=True)
+        m["structure"] = sch.place_then_hold(p, win, n_seg, m["t_stop_index"])
     return m
 
 
@@ -135,7 +181,8 @@ class Budget(Exception):
 
 def joint_solve(case, ops, n_seg, horizon, s0, p0, n_evals: int,
                 s_box=S_BOX, p_box=P_BOX_CONT,
-                blocks=BLOCK_ORDER) -> tuple[dict, np.ndarray, np.ndarray, list[dict]]:
+                blocks=BLOCK_ORDER,
+                window=None) -> tuple[dict, np.ndarray, np.ndarray, list[dict]]:
     """Alternating L-BFGS-B on the dopant map and the power schedule.
 
     Alternating blocks rather than one joint vector, deliberately: the two
@@ -158,14 +205,14 @@ def joint_solve(case, ops, n_seg, horizon, s0, p0, n_evals: int,
         nonlocal best, best_s, best_p
         if len(rows) >= n_evals:
             raise Budget
-        tr = run_forward(case, s, p, n_seg, horizon, checkpoints=True)
+        tr = run_forward(case, s, p, n_seg, horizon, checkpoints=True, window=window)
         st = so.optimal_stop(tr, case)
         J, seed = so.shape_J_and_seed(tr.T_at_end(st.index), case)
         gs, gp = adjoint.gradient(case, s, tr, {st.index: seed}, grad_ops=ops,
                                   with_schedule=True)
         row = {"eval_index": len(rows) + 1, "J": float(J),
                "t_stop_index": int(st.index), "at_horizon": bool(st.at_horizon),
-               "duty_cycle": sch.duty_cycle(p, horizon, n_seg)}
+               "duty_cycle": sch.duty_cycle(p, int(horizon if window is None else window), n_seg)}
         rows.append(row)
         if J < best["J"]:
             best = row
@@ -214,17 +261,19 @@ def joint_solve(case, ops, n_seg, horizon, s0, p0, n_evals: int,
     return best, best_s, best_p, rows
 
 
-def schedule_only_solve(case, ops, n_seg, horizon, s_fixed, p0, n_evals, p_box):
+def schedule_only_solve(case, ops, n_seg, horizon, s_fixed, p0, n_evals, p_box,
+                        window=None):
     """Optimize the schedule alone, with the dopant map held fixed."""
     return joint_solve(case, ops, n_seg, horizon, s_fixed, p0, n_evals,
-                       p_box=p_box, blocks=("p",))
+                       p_box=p_box, blocks=("p",), window=window)
 
 
 # ---------------------------------------------------------------------------
 # driver
 # ---------------------------------------------------------------------------
 
-def main(shape: str, outdir: str, n_seg: int = N_SEG_DEFAULT) -> dict:
+def main(shape: str, outdir: str, n_seg: int = N_SEG_DEFAULT,
+         window: int | None = None, tag: str = "") -> dict:
     if shape not in SHAPES:
         raise ValueError(f"{shape!r} is not in the NOT RESCUED set {SHAPES}")
     out = Path(outdir).resolve()
@@ -236,11 +285,19 @@ def main(shape: str, outdir: str, n_seg: int = N_SEG_DEFAULT) -> dict:
     pm = case.part_mask
     ops = gradops.gradient_matrices(case.x, case.y)
     horizon = HORIZON[shape]
+    win = int(WINDOW[shape] if window is None else window)
     ones = np.ones(n_seg)
 
     res: dict = {
         "shape": shape, "config": str(cfg_path), "n_seg": n_seg,
+        "tag": tag,
         "horizon_steps": horizon, "horizon_s": horizon * case.pins.dt,
+        "schedule_window_steps": win,
+        "schedule_window_s": win * case.pins.dt,
+        "segment_length_steps": horizon / n_seg if win == horizon else win / n_seg,
+        "window_convention": (
+            "the 16 segments span the WINDOW; past it the generator holds the "
+            "last segment level, and that hold is inside dJ/dp[-1] and FD-gated"),
         "dt_s": case.pins.dt, "n_part_cells": case.n_part,
         "p_box_continuous": list(P_BOX_CONT), "p_box_binary": list(P_BOX_BINARY),
         "early_stop": "DISABLED on every arm; every march runs the full horizon",
@@ -255,7 +312,7 @@ def main(shape: str, outdir: str, n_seg: int = N_SEG_DEFAULT) -> dict:
     # --- measured cost model ------------------------------------------------
     s_u = np.ones(pm.shape)
     t_a = time.perf_counter()
-    tr_u = run_forward(case, s_u, ones, n_seg, horizon, checkpoints=True)
+    tr_u = run_forward(case, s_u, ones, n_seg, horizon, checkpoints=True, window=win)
     t_b = time.perf_counter()
     st_u = so.optimal_stop(tr_u, case)
     _J, seed = so.shape_J_and_seed(tr_u.T_at_end(st_u.index), case)
@@ -278,8 +335,10 @@ def main(shape: str, outdir: str, n_seg: int = N_SEG_DEFAULT) -> dict:
           f"co {n_co} resched {n_re}", flush=True)
 
     def record(tag, s, p, extra=None):
-        m = score(case, s, p, n_seg, horizon)
+        m = score(case, s, p, n_seg, horizon, window=win)
         m["arm"] = tag
+        m["iso_J_hold"] = iso_j_hold_gain(m["J_curve"], m["rho_curve"],
+                                          m["t_stop_index"])
         if extra:
             m.update(extra)
         res["arms"][tag] = m
@@ -287,6 +346,8 @@ def main(shape: str, outdir: str, n_seg: int = N_SEG_DEFAULT) -> dict:
         print(f"[{shape}] {tag:14s} J {m['J']:9.2f} IoU {m['IoU']:.4f} "
               f"under {m['part_under_melt_pct']:6.2f}% grow {m['bed_melt_pct_of_part']:5.2f}% "
               f"stop {m['t_stop_s']:7.1f}s duty {m['duty_cycle']:.3f} "
+              f"rho {m['mean_rho_part_at_stop']:.3f} "
+              f"{m['structure']['structure'][:15]:15s} "
               f"Eres {m['energy_gate']['rel_residual_at_index']*100:.2f}%", flush=True)
         return m
 
@@ -299,26 +360,26 @@ def main(shape: str, outdir: str, n_seg: int = N_SEG_DEFAULT) -> dict:
 
     # --- (ii) schedule alone, uniform map -----------------------------------
     _b, _s, p_sched, rows_s = schedule_only_solve(
-        case, ops, n_seg, horizon, s_u, ones, n_sched, P_BOX_CONT)
+        case, ops, n_seg, horizon, s_u, ones, n_sched, P_BOX_CONT, window=win)
     res["rows_SCHED_only"] = rows_s
     record("SCHED_only", s_u, p_sched)
 
     # --- (iii) co-optimized map and schedule --------------------------------
     _b, s_co, p_co, rows_co = joint_solve(
-        case, ops, n_seg, horizon, s_u, ones, n_co, p_box=P_BOX_CONT)
+        case, ops, n_seg, horizon, s_u, ones, n_co, p_box=P_BOX_CONT, window=win)
     res["rows_CO"] = rows_co
     record("CO_cont", s_co, p_co)
 
     s_co4 = pq.quantize_in_part(s_co, pm, bpp=4, sat_max=1.0)
     _b, _s, p_co4, rows_r = schedule_only_solve(
-        case, ops, n_seg, horizon, s_co4, p_co, n_re, P_BOX_CONT)
+        case, ops, n_seg, horizon, s_co4, p_co, n_re, P_BOX_CONT, window=win)
     res["rows_CO_4bpp_resched"] = rows_r
     record("CO_4bpp", s_co4, p_co4)
 
     # --- (iv) binary on/off -------------------------------------------------
     _b, _s, p_bin_relax, rows_b = schedule_only_solve(
         case, ops, n_seg, horizon, s_co4, np.clip(p_co4, *P_BOX_BINARY),
-        n_re, P_BOX_BINARY)
+        n_re, P_BOX_BINARY, window=win)
     res["rows_BIN"] = rows_b
     m_relax = record("BIN_relax", s_co4, p_bin_relax)
     p_bin = sch.round_binary(p_bin_relax)
@@ -340,15 +401,25 @@ def main(shape: str, outdir: str, n_seg: int = N_SEG_DEFAULT) -> dict:
         "class": rescue_verdict(base["IoU"], res["arms"]["CO_4bpp"]["IoU"]),
         "binary_dIoU_vs_continuous":
             res["arms"]["BIN_round"]["IoU"] - res["arms"]["CO_4bpp"]["IoU"],
+        "deliverable_mean_rho_at_stop": res["arms"]["CO_4bpp"]["mean_rho_part_at_stop"],
+        "baseline_mean_rho_at_stop": base["mean_rho_part_at_stop"],
+        "deliverable_structure": res["arms"]["CO_4bpp"]["structure"]["structure"],
+        "structure_by_arm": {k: v["structure"]["structure"]
+                             for k, v in res["arms"].items()},
+        "mean_rho_by_arm": {k: v["mean_rho_part_at_stop"]
+                            for k, v in res["arms"].items()},
+        "iso_J_hold_by_arm": {k: v["iso_J_hold"] for k, v in res["arms"].items()},
     }
     res["energy_gate_violations"] = [
         a for a, m in res["arms"].items() if not m["energy_gate"]["PASS"]]
     res["wall_s"] = time.perf_counter() - t0
 
-    np.savez_compressed(out / f"{shape}_sched_maps.npz", **maps,
+    suffix = f"_{tag}" if tag else ""
+    np.savez_compressed(out / f"{shape}{suffix}_sched_maps.npz", **maps,
                         p_SCHED_only=p_sched, p_CO_cont=p_co, p_CO_4bpp=p_co4,
                         p_BIN_relax=p_bin_relax, p_BIN_round=p_bin)
-    (out / f"{shape}_sched.json").write_text(json.dumps(res, indent=2, default=float))
+    (out / f"{shape}{suffix}_sched.json").write_text(
+        json.dumps(res, indent=2, default=float))
     v = res["verdict"]
     print(f"[{shape}] VERDICT {v['class']}  dIoU {v['dIoU_vs_baseline']:+.4f}  "
           f"dJ {v['dJ_rel_vs_baseline']*100:+.1f}%  wall {res['wall_s']:.0f} s", flush=True)
@@ -357,4 +428,6 @@ def main(shape: str, outdir: str, n_seg: int = N_SEG_DEFAULT) -> dict:
 
 if __name__ == "__main__":
     main(sys.argv[1], sys.argv[2],
-         int(sys.argv[3]) if len(sys.argv) > 3 else N_SEG_DEFAULT)
+         int(sys.argv[3]) if len(sys.argv) > 3 else N_SEG_DEFAULT,
+         int(sys.argv[4]) if len(sys.argv) > 4 else None,
+         sys.argv[5] if len(sys.argv) > 5 else "")

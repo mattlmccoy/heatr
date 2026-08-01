@@ -129,3 +129,84 @@ def test_instructions_merge_adjacent_equal_levels_when_asked():
     assert len(rows) == 2
     assert rows[0]["t_end_s"] == pytest.approx(10.0)
     assert rows[1]["level"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# schedule WINDOW shorter than the march: the generator holds the last level
+# ---------------------------------------------------------------------------
+
+def test_expand_full_holds_the_last_level_past_the_window():
+    # The schedule window is 30 steps but the march runs 50. Steps 30..49 are
+    # not "off" and they are not an error; the generator holds whatever the
+    # last segment commanded, which is exactly what `segment_index` clamps to.
+    p = np.array([1.2, 0.4, 0.7])
+    full = sch.expand_full(p, n_march=50, n_steps=30, n_seg=3)
+    assert full.shape == (50,)
+    for it in range(50):
+        assert full[it] == p[sch.segment_index(it, 30, 3)]
+    assert np.all(full[30:] == 0.7)
+
+
+def test_accumulate_folds_the_post_window_tail_into_the_last_segment():
+    # THE BUG THIS PINS. With a march longer than the schedule window the
+    # forward clamps and keeps heating at the last level, so those steps DO
+    # depend on p[-1]. Dropping them makes dJ/dp[-1] wrong.
+    per_step = np.ones(50)
+    out = sch.accumulate_to_segments(per_step, n_steps=30, n_seg=3)
+    assert out.sum() == pytest.approx(50.0)
+    assert out[-1] == pytest.approx(10.0 + 20.0)
+
+
+def test_accumulate_is_the_transpose_of_expand_full_for_any_march_length():
+    rng = np.random.default_rng(3)
+    n_steps, n_seg = 37, 5
+    p = rng.standard_normal(n_seg)
+    for n_march in (11, 37, 91):
+        v = rng.standard_normal(n_march)
+        lhs = float(np.dot(v, sch.expand_full(p, n_march, n_steps, n_seg)))
+        rhs = float(np.dot(sch.accumulate_to_segments(v, n_steps, n_seg), p))
+        assert lhs == pytest.approx(rhs, rel=1e-13, abs=1e-13)
+
+
+# ---------------------------------------------------------------------------
+# place-then-hold structure detection
+# ---------------------------------------------------------------------------
+
+def test_place_then_hold_detects_full_power_then_reduced_power():
+    p = np.array([1.4, 1.4, 1.4, 0.3, 0.3, 0.3, 0.3, 0.3])
+    r = sch.place_then_hold(p, n_steps=80, n_seg=8, stop_index=80)
+    assert r["structure"] == "PLACE_THEN_HOLD"
+    assert r["level_before"] == pytest.approx(1.4)
+    assert r["level_after"] == pytest.approx(0.3)
+    assert r["drop"] == pytest.approx(1.1)
+    assert r["split_step"] == 30
+
+
+def test_place_then_hold_calls_a_ramp_up_by_its_own_name():
+    p = np.array([0.2, 0.2, 0.2, 0.2, 1.3, 1.3, 1.3, 1.3])
+    r = sch.place_then_hold(p, n_steps=80, n_seg=8, stop_index=80)
+    assert r["structure"] == "RAMP_UP"
+    assert r["drop"] < 0.0
+
+
+def test_place_then_hold_calls_a_flat_schedule_flat():
+    p = np.full(8, 0.95)
+    r = sch.place_then_hold(p, n_steps=80, n_seg=8, stop_index=80)
+    assert r["structure"] == "FLAT"
+    assert r["drop"] == pytest.approx(0.0)
+
+
+def test_place_then_hold_only_looks_at_segments_the_march_actually_reached():
+    # Segments after the stop never acted. A big drop that lives entirely past
+    # the stop is not a discovered structure, it is an unconstrained tail.
+    p = np.array([1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    r = sch.place_then_hold(p, n_steps=80, n_seg=8, stop_index=20)
+    assert r["n_active_segments"] == 2
+    assert r["structure"] == "FLAT"
+
+
+def test_place_then_hold_reports_indeterminate_with_one_active_segment():
+    p = np.array([1.0, 0.0, 0.0, 0.0])
+    r = sch.place_then_hold(p, n_steps=80, n_seg=4, stop_index=5)
+    assert r["n_active_segments"] == 1
+    assert r["structure"] == "INDETERMINATE"

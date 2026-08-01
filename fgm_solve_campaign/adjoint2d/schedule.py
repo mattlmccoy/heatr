@@ -65,11 +65,35 @@ def expand(p_seg: np.ndarray, n_steps: int, n_seg: int) -> np.ndarray:
     return out
 
 
+def expand_full(p_seg: np.ndarray, n_march: int, n_steps: int, n_seg: int) -> np.ndarray:
+    """Per-outer-step power scale for a march of `n_march` steps.
+
+    When the march is LONGER than the schedule window `n_steps` the generator
+    holds the last segment's level for the remainder, which is exactly what
+    `segment_index` clamps to and what the forward march does.
+    """
+    p = np.asarray(p_seg, dtype=float).ravel()
+    if p.size != int(n_seg):
+        raise ValueError(f"expected {n_seg} segments, got {p.size}")
+    n_march, n_steps = int(n_march), int(n_steps)
+    out = np.empty(n_march, dtype=float)
+    for k, (lo, hi) in enumerate(segment_bounds(n_steps, n_seg)):
+        if lo >= n_march:
+            break
+        out[lo:min(hi, n_march)] = p[k]
+    if n_march > n_steps:
+        out[n_steps:] = p[-1]
+    return out
+
+
 def accumulate_to_segments(per_step: np.ndarray, n_steps: int, n_seg: int) -> np.ndarray:
-    """Adjoint of `expand`: segment-wise sums of a per-outer-step quantity.
+    """Adjoint of `expand_full`: segment-wise sums of a per-outer-step quantity.
 
     `per_step` may be SHORTER than `n_steps` when the march stopped early; the
-    missing steps contribute exactly zero.
+    missing steps contribute exactly zero. It may also be LONGER, when the
+    schedule window is shorter than the march; those trailing steps ran at the
+    LAST segment's level, so they belong to the last segment and dropping them
+    would make dJ/dp[-1] wrong.
     """
     v = np.asarray(per_step, dtype=float).ravel()
     out = np.zeros(int(n_seg), dtype=float)
@@ -77,6 +101,8 @@ def accumulate_to_segments(per_step: np.ndarray, n_steps: int, n_seg: int) -> np
         if lo >= v.size:
             break
         out[k] = float(np.sum(v[lo:min(hi, v.size)]))
+    if v.size > int(n_steps):
+        out[-1] += float(np.sum(v[int(n_steps):]))
     return out
 
 
@@ -123,6 +149,64 @@ def instructions(p_seg: np.ndarray, n_steps: int, n_seg: int, dt_s: float,
         else:
             out.append(dict(r))
     return out
+
+
+PLACE_THEN_HOLD_TOL = 0.15
+
+
+def place_then_hold(p_seg: np.ndarray, n_steps: int, n_seg: int,
+                    stop_index: int, tol: float = PLACE_THEN_HOLD_TOL) -> dict:
+    """Does the schedule run high early and lower later?
+
+    The question the triangle showcase raised: densification lags the melt
+    front, so a schedule could plausibly place the front at high power and then
+    hold at reduced power to finish densification without advancing the front.
+    This classifies the shape of an optimized schedule without assuming it.
+
+    Only the segments the march ACTUALLY REACHED are examined. Segments wholly
+    after `stop_index` never acted on the objective, carry exactly zero
+    gradient, and whatever level they hold is unconstrained noise; reading a
+    structure out of them would be a false positive.
+
+    The split point is the one maximizing the time-weighted level drop.
+    """
+    p = np.asarray(p_seg, dtype=float).ravel()
+    stop_index = int(stop_index)
+    active: list[tuple[float, float]] = []          # (weight in steps, level)
+    for k, (lo, hi) in enumerate(segment_bounds(n_steps, n_seg)):
+        if lo >= stop_index:
+            break
+        active.append((float(min(hi, stop_index) - lo), float(p[k])))
+    edges = [lo for lo, _hi in segment_bounds(n_steps, n_seg)]
+    base = {"n_active_segments": len(active),
+            "active_levels": [lv for _w, lv in active]}
+    if len(active) < 2:
+        return dict(base, structure="INDETERMINATE", drop=0.0, rise=0.0,
+                    level_before=float(active[0][1]) if active else float("nan"),
+                    level_after=float("nan"), split_step=None, split_segment=None)
+
+    def wmean(seq):
+        w = sum(x[0] for x in seq)
+        return sum(x[0] * x[1] for x in seq) / max(w, 1e-30)
+
+    cands = []
+    for m in range(1, len(active)):
+        a, b = wmean(active[:m]), wmean(active[m:])
+        cands.append((a - b, m, a, b))
+    best = max(cands, key=lambda c: c[0])
+    worst = min(cands, key=lambda c: c[0])
+    drop, m, lvl_a, lvl_b = best
+    rise = -worst[0]
+    if drop >= tol and drop >= rise:
+        structure = "PLACE_THEN_HOLD"
+    elif rise >= tol:
+        structure = "RAMP_UP"
+        drop, m, lvl_a, lvl_b = best[0], best[1], best[2], best[3]
+    else:
+        structure = "FLAT"
+    return dict(base, structure=structure, drop=float(drop), rise=float(rise),
+                level_before=float(lvl_a), level_after=float(lvl_b),
+                split_step=int(edges[m]), split_segment=int(m))
 
 
 # ---------------------------------------------------------------------------
