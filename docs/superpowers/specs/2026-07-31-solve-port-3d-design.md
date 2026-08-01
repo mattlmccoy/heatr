@@ -46,7 +46,7 @@ in their worktree adjoint2d/ and the root FGM_*/SHAPE_* reports):
 | Actuator: permittivity channel | LANDED in 2-D (commit 890dc22): census 13/18 -> 17/18 vs best stored masks. DEPLOYABILITY CAVEAT (2026-08-01): rfam_eqs_coupled.py:290-292 asserts the real binder's eps_r is FIXED at 20 with only sigma varying - until Matt settles the material question (VNA dielectric vs carbon-black loading), conductivity-only is the deployable channel and eps results are MODEL-ONLY | add dJ/d-eps_r in dolfinx (cheap: complex-symmetric A^H = conj(A) reuse) as a MODEL-ONLY channel, badged as such; do not present eps-channel maps as printable until the material question is settled - the 2-D evidence says this channel decides shapes (their cross: J 343 with eps vs 1036 without) |
 | Optimizer: L-BFGS-B on subgradients, box constraints | proven with known stalls | same, plus multi-start and scaled first step (their rectangle lesson); iteration-based budget accounting (not wall clock) |
 | Drive convention | 2-D pins power-enforcement OFF | RECONCILE: one convention for the 3-D solve, chosen with the 2-D lane, before any cross-lane map comparison; D1 proved differentiating through the renormalization is tractable (and that freezing it is wrong by up to 150% per dof) |
-| Regularization / rim structure | CONFIRMED load-bearing rim sculpture: one-cell blur costs +37% to +892% J on 5/6 shapes (rectangle, the stalled map, IMPROVES); the shapes losing most to blur lose most to the grid change - one mechanism, two witnesses | RESOLVED 2026-08-01: regularization is MANDATORY from Phase A. Filter + Heaviside projection parameterization (the topology-optimization standard the 2-D lane already queued), with the filter radius a PHYSICAL length (candidate: the printer's dopant edge scale, ~50-100 um class, or a solver-convergence-derived length from S2) - on an unstructured FEM mesh there is no cell scale to hide in, which forces the honest choice |
+| Regularization / rim structure | CONFIRMED load-bearing rim sculpture: one-cell blur costs +37% to +892% J on 5/6 shapes (rectangle, the stalled map, IMPROVES); the shapes losing most to blur lose most to the grid change - one mechanism, two witnesses. TOPOPT ablation (TOPOPT_REPORT.md, 2026-08-01) REALLOCATES CREDIT: grid transfer is bought by the PHYSICAL-radius filter + area-fill chi (4/6 improve-or-hold at 160; circle IoU 0.9616), while the Heaviside projection is what passes the sub-radius-sensitivity gate (152.7% -> 1.4% square) but COSTS in-grid fidelity (beta=0 control IoU 1.0000 vs 0.8734 projected). No 2-D map passes both gates in all forms; nothing labelled SOLVED there yet | UPDATED 2026-08-01: filter (frozen 2-D value: 1.0 mm physical radius, solver-convergence justified) + grid-independent area-fill chi are MANDATORY from Phase A of the solve layers. Projection sharpness (eta=0.5, beta continuation 1/2/4/8/16 in 2-D) is a TUNABLE fidelity-vs-robustness trade, not fixed-on; the 3-D solve reports both a low-beta and a continued-beta arm against the Phase C gates. Part of the residual grid-160 gap is FORWARD discretization (uniform arm alone moves 0.076 IoU) - Phase A forward parity quantifies how much of that gap is closable at all |
 
 ## 3. Architecture
 
@@ -131,10 +131,14 @@ option.
    solved-vs-uniform win DOES transfer 6/6; rankings vs historical 5/6
    (circle flips). The port's filtering-by-construction is the designed
    answer, verified by the Phase C acceptance gates.
-2. PARTIALLY RECEIVED 2026-08-01 (cross-session reply; the full
-   FROZEN_CONVENTIONS_2D.md lands at geo-prewarp root when their topology
-   pass fixes the physical filter radius + beta schedule). FROZEN NOW,
-   with their citations:
+2. RECEIVED IN FULL 2026-08-01: FROZEN_CONVENTIONS_2D.md at geo-prewarp
+   root (commit b04e356; companion TOPOPT_REPORT.md). Final frozen values:
+   filter radius 1.0 mm PHYSICAL (solver-convergence justified; printer
+   dopant edge scale is finer than any solve grid so not binding);
+   smoothed-Heaviside eta=0.5, beta continuation 1/2/4/8/16; chi =
+   grid-independent sub-cell AREA FILL (analytic circle test). Projection
+   status per the ablation: TUNABLE trade (see ingredient table), not
+   fixed-on. Earlier partial delivery, kept for the record:
    - Drive per arm: voltage-driven, per-shape calibrated v_cal
      (geometry_dual_readstate campaign), enforce_generator_power=False;
      absorbed power reported per arm; dose NOT matched (stated limit).
