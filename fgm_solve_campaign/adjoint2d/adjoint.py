@@ -160,9 +160,16 @@ def substep_vjp(c: fwd.SubstepCache, case: Case,
 # ---------------------------------------------------------------------------
 
 def reverse_march(case: Case, tr: fwd.Trajectory,
-                  seeds: dict[int, np.ndarray]
+                  seeds: dict[int, np.ndarray],
+                  seeds_rho: dict[int, np.ndarray] | None = None,
                   ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Accumulate the drive sensitivities in one backward sweep.
+
+    `seeds` are dJ/dT at the END of the given outer step; `seeds_rho` are
+    dJ/drho at the end of the given outer step. The substep vector-Jacobian
+    product is already coupled in (T, rho), so a density objective needs no new
+    physics in the reverse sweep, only its own seed on the rho co-state. With
+    `seeds_rho` empty the sweep is bit-for-bit the temperature-seeded one.
 
     Returns `(gRaw_a, gRaw_b, gP_step)`:
 
@@ -193,10 +200,13 @@ def reverse_march(case: Case, tr: fwd.Trajectory,
     horizon = int(tr.p_horizon) if tr.p_horizon else tr.n_outer
     q_cache: dict[tuple[bool, int], tuple[np.ndarray, np.ndarray]] = {}
 
-    last = max(seeds) if seeds else -1
+    sr = seeds_rho or {}
+    last = max(list(seeds) + list(sr)) if (seeds or sr) else -1
     for it in range(last, -1, -1):
         if it in seeds:
             gT = gT + seeds[it]
+        if it in sr:
+            gR = gR + sr[it]
         use_b = ui > 0 and it >= ui
         raw = tr.state_b.Qrf_raw if use_b else tr.state_a.Qrf_raw
         if p_full is None:
@@ -294,8 +304,13 @@ def eqs_vjp(case: Case, st: fwd.ElectricState, gQ: np.ndarray,
 
 def gradient(case: Case, s: np.ndarray, tr: fwd.Trajectory,
              seeds: dict[int, np.ndarray], grad_ops=None,
-             with_schedule: bool = False):
+             with_schedule: bool = False,
+             seeds_rho: dict[int, np.ndarray] | None = None):
     """dJ/ds over the whole domain (zero outside the part).
+
+    `seeds_rho` seeds the relative-density co-state, which is what a
+    density-region objective needs. Temperature and density seeds may be given
+    together; they travel back through the SAME single backward sweep.
 
     With `with_schedule=True` also returns dJ/dp_k, the temporal power-schedule
     gradient, folded from the per-outer-step sensitivities onto the
@@ -304,7 +319,7 @@ def gradient(case: Case, s: np.ndarray, tr: fwd.Trajectory,
     """
     p = case.pins
     Gx, Gy = grad_ops if grad_ops is not None else gradops.gradient_matrices(case.x, case.y)
-    gQ_a, gQ_b, gP_step = reverse_march(case, tr, seeds)
+    gQ_a, gQ_b, gP_step = reverse_march(case, tr, seeds, seeds_rho)
 
     ds = np.zeros(case.part_mask.shape)
     if np.any(gQ_a):

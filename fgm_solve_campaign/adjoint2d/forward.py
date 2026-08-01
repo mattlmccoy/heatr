@@ -348,6 +348,20 @@ class Trajectory:
             raise RuntimeError("trajectory was run without checkpoints")
         return self.ckpt_T[n + 1]
 
+    def rho_at_end(self, n: int) -> np.ndarray:
+        """Relative-density field at the END of outer step n (0-based).
+
+        Same checkpoint convention as `T_at_end`. Needs `keep_checkpoints`,
+        which every gradient run already sets because the reverse sweep
+        restarts each outer step from its own rho checkpoint.
+        """
+        if n == self.n_outer - 1:
+            return self.rho_final
+        if not self.ckpt_rho:
+            raise RuntimeError("trajectory was run without rho checkpoints "
+                               "(pass keep_checkpoints=True)")
+        return self.ckpt_rho[n + 1]
+
 
 def _stats(T: np.ndarray, phi: np.ndarray, rho: np.ndarray, case: Case) -> tuple[float, float, float, float]:
     pm = case.part_mask
