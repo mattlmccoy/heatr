@@ -60,6 +60,73 @@ from shapes import make_shape, rotate, fill_region_with_primitives
 EPS0 = 8.8541878128e-12
 R_GAS = 8.31446261815324
 
+# ---------------------------------------------------------------------------
+# Engine version (HEATR 2-D). Single source of truth; the GUI server reads it.
+#
+# v2.0.0 (2026-08-01) - the standardized "solve era" engine:
+#   * shape-fidelity FGM solve mode (scripts/solve_fgm.py + GUI fgm_solve)
+#   * turntable PROGRAM mode: arbitrary ordered (angle, duration) dwell
+#     programs with dopant co-rotation and opt-in eps_r co-rotation
+#   * loud melt-onset fallback and the standing energy-residual gate
+#     conventions (5 percent of integrated dose)
+#   * dual read-state sigma_T (heating-peak and melt-onset) stamped into
+#     every summary.json
+# v1.x = the pre-solve era (everything before the fgm_solve integration).
+# Versioning policy: bump MINOR for new modes/actuators, PATCH for fixes,
+# MAJOR for physics or convention changes. See CHANGELOG_ENGINE.md.
+# ---------------------------------------------------------------------------
+ENGINE_VERSION = "2.0.0"
+ENGINE_VERSION_NAME = "HEATR 2D v2.0"
+
+# sigma_T dual read-state constants (mirrors the campaign extractor
+# outputs_eqs/geometry_dual_readstate/dual_readstate.py; that file is the
+# reference implementation and test_engine_version.py pins agreement).
+_SIGMA_T_AMB_C = 23.0
+_SIGMA_T_PHI_MELT = 0.90
+
+
+def stamped_config_echo(cfg: dict) -> dict:
+    """Copy of cfg with the engine version stamped in, for used_config.yaml."""
+    echo = copy.deepcopy(cfg)
+    echo["engine_version"] = ENGINE_VERSION
+    echo["engine_version_name"] = ENGINE_VERSION_NAME
+    return echo
+
+
+def dual_read_state_from_hist(hist: dict) -> dict:
+    """Dual read-state sigma_T from a run history.
+
+    sigma_T(t) = ui_rms_part(t) * (mean_T_part_c(t) - 23 C).
+    heating-peak = max sigma_T over steps with phi_bar < 0.90;
+    melt-onset   = sigma_T at the first phi_bar >= 0.90 crossing
+    (None when melt is never reached).
+    """
+    ui = list(hist.get("ui_rms_part", []) or [])
+    T = list(hist.get("mean_T_part_c", []) or [])
+    phi = list(hist.get("mean_phi_part", []) or [])
+    n = min(len(ui), len(T), len(phi))
+    if n == 0:
+        return {
+            "sigma_T_heating_peak_c": None,
+            "sigma_T_heating_peak_idx": None,
+            "sigma_T_melt_onset_c": None,
+            "sigma_T_melt_onset_idx": None,
+            "sigma_T_melt_reached": False,
+        }
+    sig = [ui[i] * (T[i] - _SIGMA_T_AMB_C) for i in range(n)]
+    melt_idx = next((i for i in range(n) if phi[i] >= _SIGMA_T_PHI_MELT), None)
+    pre = [sig[i] for i in range(n) if phi[i] < _SIGMA_T_PHI_MELT] if melt_idx is not None else sig
+    hp = max(pre) if pre else None
+    hp_idx = sig.index(hp) if hp is not None else None
+    mo = sig[melt_idx] if melt_idx is not None else None
+    return {
+        "sigma_T_heating_peak_c": float(hp) if hp is not None else None,
+        "sigma_T_heating_peak_idx": hp_idx,
+        "sigma_T_melt_onset_c": float(mo) if mo is not None else None,
+        "sigma_T_melt_onset_idx": melt_idx,
+        "sigma_T_melt_reached": melt_idx is not None,
+    }
+
 # Module logger for clamp / stability diagnostics (THM-01/02). Emits WARNINGs only
 # when a numerical limiter actually BINDS; in the dissertation production config the
 # clamps are dormant, so this logger stays silent and output is bit-identical.
@@ -3702,6 +3769,8 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         melt_ref_c = float(phase_user.liquidus_c)
 
     summary = {
+        "engine_version": ENGINE_VERSION,
+        "engine_version_name": ENGINE_VERSION_NAME,
         "grid": {"nx": int(nx), "ny": int(ny), "dx_m": dx, "dy_m": dy},
         "thermal_substeps_per_step": int(n_substeps),
         "thermal_dt_sub_s": float(dt_sub),
@@ -3782,6 +3851,15 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         "antennae_count": int(len(antennae_resolved.get("instances", []))),
         "antennae_instances": antennae_resolved.get("instances", []),
     }
+    # v2.0 standard reporting: dual read-state sigma_T and the energy-residual
+    # fraction (|final residual| / final integrated dose), the standing gate
+    # quantity of HEATR_STANDARD_PARAMETERS.md.
+    summary.update(dual_read_state_from_hist(hist))
+    _res_final = abs(summary["energy_balance_residual_final_J_per_m"])
+    _dose_final = float(hist["energy_doped_J_per_m"][-1]) if hist["energy_doped_J_per_m"] else 0.0
+    summary["energy_residual_frac_final"] = (
+        float(_res_final / _dose_final) if _dose_final else None
+    )
     if provenance_table is not None:
         summary["provenance_file"] = str(
             Path(physics_cfg.get("provenance_file", "configs/experimental_pa12_provenance.yaml"))
@@ -4342,7 +4420,12 @@ def _generate_animation_gifs(
 def save_outputs(cfg: dict, state: SimState, summary: dict, hist: dict[str, list[float]], output_dir: Path,
                  tt_rotation_steps: list | None = None, opt_data: dict | None = None) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "used_config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False))
+    (output_dir / "used_config.yaml").write_text(
+        yaml.safe_dump(stamped_config_echo(cfg), sort_keys=False)
+    )
+    if isinstance(summary, dict):
+        summary.setdefault("engine_version", ENGINE_VERSION)
+        summary.setdefault("engine_version_name", ENGINE_VERSION_NAME)
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     ant_rows = summary.get("antennae_instances", []) if isinstance(summary, dict) else []
     if isinstance(ant_rows, list) and ant_rows:

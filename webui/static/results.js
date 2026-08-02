@@ -1554,6 +1554,18 @@ function metricLine(ex, fgmBest) {
   if (ex.mean_phi_part !== undefined) parts.push(`\u03c6\u0304 ${Number(ex.mean_phi_part).toFixed(3)}`);
   if (ex.mean_rho_rel_part !== undefined) parts.push(`\u03c1\u0304 ${Number(ex.mean_rho_rel_part).toFixed(3)}`);
   if (ex.t_final_s !== undefined) parts.push(`t ${Number(ex.t_final_s).toFixed(1)} s`);
+  // Dual read-state sigma_T (heating-peak and melt-onset) + the standing
+  // energy-residual gate (HEATR_STANDARD_PARAMETERS.md; v2 promotion pass).
+  if (ex.sigma_T_heating_peak_c != null)
+    parts.push(`\u03c3_T@peak ${Number(ex.sigma_T_heating_peak_c).toFixed(2)}\u00b0C`);
+  if (ex.sigma_T_melt_onset_c != null)
+    parts.push(`\u03c3_T@melt ${Number(ex.sigma_T_melt_onset_c).toFixed(2)}\u00b0C`);
+  else if (ex.sigma_T_melt_reached === false)
+    parts.push("melt not reached");
+  if (ex.energy_err_pct != null) {
+    const e = Number(ex.energy_err_pct);
+    parts.push(e > 5 ? `\u26a0 res ${e.toFixed(2)}%` : `res ${e.toFixed(2)}%`);
+  }
   return parts.join(" \u2022 ") || "No summary metrics";
 }
 
@@ -2145,6 +2157,12 @@ function renderRunCards() {
       'shell_sweep': 'shell-sweep',
     };
     const modeBadge = modeBadgeMap[String(run.run_type || '')] || String(run.run_type || '');
+    // Engine version chip: stamped by v2+ engines into summary.json; a run
+    // without the key predates versioning and is labeled pre-v2.
+    const _engVer = run.summary_excerpt?.engine_version;
+    const engineChip = _engVer
+      ? `<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:#12300f;border:1px solid #2a6a24;color:#7fd070;white-space:nowrap;" title="HEATR 2-D engine version stamped into this run's summary.json">v${_engVer}</span>`
+      : `<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:#1a1a1a;border:1px solid #3a3a3a;color:#808080;white-space:nowrap;" title="No engine_version in summary.json: run predates engine versioning">pre-v2</span>`;
     const createdDate = (run.run_created_at || '').split('T')[0] || 'unknown';
     const diskStr = run.disk_bytes > 0
       ? (run.disk_bytes >= 1e9 ? `${(run.disk_bytes/1e9).toFixed(1)} GB`
@@ -2160,6 +2178,7 @@ function renderRunCards() {
             <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:#0d1f30;
                          border:1px solid #1e3a50;color:#70a0c0;white-space:nowrap;"
                   title="Run mode">${modeBadge}</span>
+            ${engineChip}
             ${fgmBest && fgmBest.converged ? `<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:#0d2010;border:1px solid #2a5020;color:#70c070;" title="FGM converged">✓ conv</span>` : ''}
             ${fgmBest && fgmBest.aborted  ? `<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:#201008;border:1px solid #503020;color:#d09060;" title="Aborted early">⚠ abort</span>` : ''}
           </div>
@@ -2319,14 +2338,24 @@ function renderRunCards() {
         if (proxyRaw === null) return;
         const proxy = proxyRaw.trim() || "T_phi90";
 
+        // Quick-look calibrated gain: prefill the window-reselected per-shape
+        // magnitude from fgm_shape_standards.json when the run's shape has one.
+        const _std = _shapeStandardFor(run);
+        const _stdGain = _std && _std.quick_look_gain != null
+          ? Number(_std.quick_look_gain) : null;
+        const _stdLine = _stdGain != null
+          ? `  ${_stdGain.toFixed(3)} = CALIBRATED gain for ${run.group} ` +
+            `(${_std.quick_look_verdict || "?"} vs uniform, FGM_WINDOW_RESELECTION.md)\n`
+          : "";
         const magRaw = window.prompt(
           "Gradient magnitude (per-shape tuned; campaign values 0.3 / 0.5 / 0.7 / 0.85):\n" +
+          _stdLine +
           "  0.0  = flat (uniform saturation, no FGM effect)\n" +
           "  0.5  = small baseline non-uniformity (sigma_0 ~ 10-15 C)\n" +
           "  0.7  = standard default (sigma_0 ~ 15-22 C)\n" +
           "  0.85 = large baseline non-uniformity (sigma_0 > 22 C)\n" +
           "  1.0  = aggressive 3-D value; over-corrects in 2-D",
-          "0.7"
+          _stdGain != null ? _stdGain.toFixed(3) : "0.7"
         );
         if (magRaw === null) return;
         const magnitude = parseFloat(magRaw);
@@ -2726,8 +2755,31 @@ function _updateViewToggleBtn() {
   btn.title = VIEW_MODE === "grouped" ? "Switch to flat list view" : "Switch to grouped tree view (by shape → mode)";
 }
 
+// ── HEATR v2 promotion pass: engine version badge + per-shape standards ─────
+let _SHAPE_STANDARDS = null;
+
+function _shapeStandardFor(run) {
+  const shape = String(run?.group || "");
+  return _SHAPE_STANDARDS?.shapes?.[shape] || null;
+}
+
+async function _loadV2Meta() {
+  try {
+    const info = await fetchJson("/api/engine-version");
+    const el = byId("engineVersionBadge");
+    if (el && info?.engine_version && info.engine_version !== "unknown") {
+      el.textContent = `engine v${info.engine_version}`;
+      el.title = `${info.engine_version_name || "HEATR 2D"} (read live from the server; see CHANGELOG_ENGINE.md)`;
+    }
+  } catch (e) { /* badge keeps its placeholder */ }
+  try {
+    _SHAPE_STANDARDS = await fetchJson("/static/fgm_shape_standards.json");
+  } catch (e) { _SHAPE_STANDARDS = null; }
+}
+
 async function init() {
   _applyUrlState();
+  void _loadV2Meta();
   byId("refreshResults").onclick = refresh;
   byId("runSearch").oninput = renderRunCards;
   byId("runGroupFilter").onchange = renderRunCards;

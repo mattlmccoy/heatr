@@ -1035,6 +1035,32 @@ def _configure_placement_optimizer(cfg: dict[str, Any], payload: dict[str, Any])
 
 
 def _configure_turntable(cfg: dict[str, Any], payload: dict[str, Any]) -> None:
+    # Dwell PROGRAM mode (engine v2, rfam_eqs_coupled.parse_turntable_program):
+    # an ordered (angle, duration) hold program read from a JSON file. Both
+    # co-rotation flags default ON here: dopant co-rotation is the engine's own
+    # program-mode default, and eps_r co-rotation closes the measured
+    # dielectric ghost (8 to 21 percentage points of J on asymmetric parts,
+    # ENGINE_DWELL_SUPPORT_NOTES.md section 5.2).
+    program_json = str(payload.get("turntable_program_json", "") or "").strip()
+    if program_json:
+        prog_path = (ROOT / program_json).resolve()
+        try:
+            prog_path.relative_to(ROOT.resolve())
+        except ValueError:
+            raise ValueError("turntable_program_json must stay inside the repo")
+        if not prog_path.exists():
+            raise ValueError(f"turntable program JSON not found: {program_json}")
+        cfg["turntable"] = {
+            "enabled": True,
+            "program_json": str(prog_path),
+            "corotate_dopant": bool(payload.get("turntable_corotate_dopant", True)),
+            "corotate_eps_geometry": bool(payload.get("turntable_corotate_eps", True)),
+        }
+        cfg.pop("optimizer", None)
+        cfg.pop("orientation_optimizer", None)
+        cfg.pop("placement_optimizer", None)
+        return
+
     rot_deg = float(payload.get("turntable_rotation_deg", 90.0))
     total_rot = int(payload.get("turntable_total_rotations", 1))
     if total_rot < 1:
@@ -5181,6 +5207,28 @@ def _result_detail(name: str) -> dict[str, Any]:
     }
 
 
+_ENGINE_VERSION_CACHE: dict[str, str] | None = None
+
+
+def _engine_version_info() -> dict[str, str]:
+    """Engine version, read once from rfam_eqs_coupled (single source of
+    truth; no hardcoded duplicate in the GUI)."""
+    global _ENGINE_VERSION_CACHE
+    if _ENGINE_VERSION_CACHE is None:
+        try:
+            from rfam_eqs_coupled import ENGINE_VERSION, ENGINE_VERSION_NAME
+            _ENGINE_VERSION_CACHE = {
+                "engine_version": str(ENGINE_VERSION),
+                "engine_version_name": str(ENGINE_VERSION_NAME),
+            }
+        except Exception:
+            _ENGINE_VERSION_CACHE = {
+                "engine_version": "unknown",
+                "engine_version_name": "unknown",
+            }
+    return _ENGINE_VERSION_CACHE
+
+
 def _summary_excerpt(summary: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
 
@@ -5213,6 +5261,27 @@ def _summary_excerpt(summary: dict[str, Any]) -> dict[str, Any]:
     ab = summary.get("ab_bucket_id", None)
     if ab is not None:
         out["ab_bucket_id"] = str(ab)
+
+    # v2 promotion pass: engine version (absent = pre-v2, rendered as such by
+    # the front end), dual read-state sigma_T, and the energy-residual gate.
+    ev = summary.get("engine_version", None)
+    if ev is not None:
+        out["engine_version"] = str(ev)
+    if (v := _pick("sigma_T_heating_peak_c")) is not None:
+        out["sigma_T_heating_peak_c"] = v
+    if (v := _pick("sigma_T_melt_onset_c")) is not None:
+        out["sigma_T_melt_onset_c"] = v
+    if "sigma_T_melt_reached" in summary:
+        out["sigma_T_melt_reached"] = bool(summary["sigma_T_melt_reached"])
+    # Energy residual as a percent of integrated dose. v2 summaries carry the
+    # fraction directly; pre-v2 summaries carry the raw J-per-m pair.
+    if (v := _pick("energy_residual_frac_final")) is not None:
+        out["energy_err_pct"] = abs(v) * 100.0
+    else:
+        res = _pick("energy_balance_residual_final_J_per_m")
+        dose = _pick("energy_doped_total_J_per_m")
+        if res is not None and dose:
+            out["energy_err_pct"] = abs(res) / abs(dose) * 100.0
 
     return out
 
@@ -5685,6 +5754,20 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_static(path[len("/static/"):])
         if path == "/api/ping":
             return self._json({"ok": True, "ts": time.time()})
+        if path == "/api/engine-version":
+            return self._json(_engine_version_info())
+        if path == "/api/turntable-programs":
+            # Machine-readable dwell programs emitted by the dwell campaign
+            # (fgm_solve_campaign/out_dwell/*_turntable_*.json). Gate-result
+            # files are excluded; only executable programs are listed.
+            prog_dir = ROOT / "fgm_solve_campaign" / "out_dwell"
+            progs: list[str] = []
+            if prog_dir.exists():
+                for p in sorted(prog_dir.glob("*_turntable_*.json")):
+                    if "engine_program_gate" in p.name:
+                        continue
+                    progs.append(p.relative_to(ROOT).as_posix())
+            return self._json({"programs": progs})
 
         if path == "/api/heatr3d/status":
             query = urlparse(self.path).query
@@ -5726,6 +5809,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/meta":
             model_info = _experimental_model_info()
             return self._json({
+                **_engine_version_info(),
                 "shape_options": SUPPORTED_SHAPES,
                 "base_configs": _list_base_configs(),
                 "model_families": ["baseline", "experimental_pa12_hybrid"],

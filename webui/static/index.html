@@ -40,6 +40,9 @@
       <p>Operational control for electrothermal simulation runs</p>
     </div>
     <div class="header-tools">
+      <span class="engine-version-badge" id="engineVersionBadge"
+            title="HEATR 2-D engine version (read live from the server; see CHANGELOG_ENGINE.md)"
+            style="font-size:0.75rem;padding:2px 8px;border-radius:10px;background:#12300f;border:1px solid #2a6a24;color:#7fd070;white-space:nowrap;">engine …</span>
       <a class="heatr-hub-link" href="http://localhost:5050" title="Back to Research Toolkit Hub">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         Hub
@@ -133,6 +136,12 @@
         <label>Shape
           <select id="shape" name="shape"></select>
         </label>
+        <div class="preset-row" id="shapeStandardRow" style="align-items:center;">
+          <button id="applyShapeStandardBtn" type="button"
+                  title="One click: grid 120, voltage drive with this shape's calibrated voltage (dual-readstate campaign G1), enforce_generator_power false, T_phi90 proxy, 4 bpp, per-shape quick-look gain. Source: HEATR_STANDARD_PARAMETERS.md + fgm_shape_standards.json.">
+            ⚙ Standard parameters (this shape)</button>
+          <span id="shapeStandardInfo" class="field-help" style="margin:0;"></span>
+        </div>
         <div class="mode-section" data-mode="single sweep optimizer turntable orientation_optimizer placement_optimizer shell_sweep fgm_iterate">
           <details class="advanced-panel">
             <summary>Geometry Size</summary>
@@ -206,6 +215,35 @@
           <label>Rotation interval (s, optional)
             <input id="turntableIntervalS" name="turntable_interval_s" type="number" min="0.001" step="0.1" placeholder="Auto-space across run" />
           </label>
+          <details class="advanced-panel">
+            <summary>Dwell program (advanced, engine v2 program mode)</summary>
+            <p class="field-help">Executes an ordered (angle, duration) hold program instead
+              of fixed-step rotation; this is how the asymmetric-dwell deliverables run on
+              the shipped engine (ENGINE_DWELL_SUPPORT_NOTES.md). Selecting a program
+              disables the fixed-step fields above.</p>
+            <label>Program JSON (from the dwell campaign deliverables)
+              <select id="turntableProgramSelect">
+                <option value="" selected>none (fixed-step mode)</option>
+              </select>
+            </label>
+            <label>or program JSON path (repo-relative)
+              <input id="turntableProgramJson" type="text"
+                     placeholder="fgm_solve_campaign/out_dwell/..._turntable_deliverable.json" />
+            </label>
+            <label>Co-rotate dopant map with the part
+              <select id="ttCorotDopant">
+                <option value="true" selected>true (default; printed dopant turns with the part)</option>
+                <option value="false">false (lab-frame map, research only)</option>
+              </select>
+            </label>
+            <label>Co-rotate permittivity geometry (dielectric-ghost fix)
+              <select id="ttCorotEps"
+                      title="Without this, a rotated part sits inside a stationary permittivity outline of itself at 0 degrees (the dielectric ghost). Measured cost: zero on rotation-symmetric parts, 8 to 21 percentage points of the shape objective J on asymmetric parts (ENGINE_DWELL_SUPPORT_NOTES.md section 5.2). Default ON for program mode.">
+                <option value="true" selected>true (recommended for asymmetric parts)</option>
+                <option value="false">false (engine exactly as shipped pre-v2)</option>
+              </select>
+            </label>
+          </details>
         </div>
 
         <div class="mode-section hidden" data-mode="orientation_optimizer">
@@ -554,11 +592,22 @@
           </div>
         </details>
 
+        <p class="field-help" id="driveModeGuidance" style="margin:6px 0;">
+          Drive mode: use VOLTAGE drive (enforce_generator_power = false) for FGM and
+          uniformity comparisons; enforced generator power renormalizes absorbed power
+          every step and cancels the mechanism under test. Reserve enforced power for
+          absolute-dose studies (HEATR_STANDARD_PARAMETERS.md section 4).
+        </p>
         <details class="advanced-panel">
           <summary>Advanced Parameters (optional)</summary>
           <div class="adv-grid">
             <label>grid_nx <input id="advGridNx" type="number" min="16" step="1" placeholder="120" /></label>
             <label>grid_ny <input id="advGridNy" type="number" min="16" step="1" placeholder="120" /></label>
+            <p id="gridWarning" class="field-help" style="display:none;color:#e05050;">
+              Grid at or above 200 is in the documented melt-onset instability regime for
+              melt-state work: 120 is the validated standard, 160 is stable, never 240
+              (HEATR_STANDARD_PARAMETERS.md).
+            </p>
             <div class="adv-section">
               <strong>Electric + Thermal Controls</strong>
               <p class="field-help">These tune RF drive conditions and heat-loss boundaries.</p>
@@ -676,6 +725,40 @@
           <div id="yamlImportant" class="yaml-important"></div>
           <pre id="yamlPreview" class="summary yaml-preview">Select a config to preview.</pre>
         </details>
+
+        <!-- ── FGM method chooser: three named intents (HEATR_GUI_AUDIT.md 3.1) ── -->
+        <div class="mode-section hidden" data-mode="fgm_solve fgm_iterate fgm_import">
+          <div class="adv-section" style="margin-bottom:4px;">
+            <strong>FGM method, by intent</strong>
+            <p class="field-help" style="margin:2px 0 6px 0;">Pick what you need; nothing
+              was removed, the research options live inside each mode below.</p>
+          </div>
+          <div id="fgmMethodChooser" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+            <button type="button" class="fgm-method-card" id="fgmMethodQuick"
+                    style="flex:1 1 180px;text-align:left;padding:8px;border-radius:6px;border:1px solid #35506a;background:#0d1c2a;color:#cfe3f5;cursor:pointer;"
+                    title="Proportional inverse from an existing run's stored fields, with the per-shape calibrated gain (FGM_WINDOW_RESELECTION.md). Instant; good for previews and printer tests, not the deliverable.">
+              <strong>Quick look</strong><br>
+              <span style="font-size:11px;">seconds, 0 extra solves; per-shape calibrated
+              gain; run it from the Results tab (Generate FGM on a finished run)</span>
+            </button>
+            <button type="button" class="fgm-method-card" id="fgmMethodSolve" data-target-mode="fgm_solve"
+                    style="flex:1 1 180px;text-align:left;padding:8px;border-radius:6px;border:2px solid #3fa34d;background:#0f2412;color:#d9f0dc;cursor:pointer;box-shadow:0 0 6px rgba(63,163,77,0.35);"
+                    title="Gradient-solved 4 bpp printable map, re-verified through the forward model. Best known method on 13 of 18 library shapes (SHAPE_LIBRARY_SOLVE_REPORT).">
+              <strong>Deliverable map (SOLVE)</strong>
+              <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:#1d4023;border:1px solid #3fa34d;color:#8fe09a;margin-left:4px;">RECOMMENDED</span><br>
+              <span style="font-size:11px;">about 40 forward solves (tens of minutes);
+              the printing deliverable</span>
+            </button>
+            <button type="button" class="fgm-method-card" id="fgmMethodIterate" data-target-mode="fgm_iterate"
+                    style="flex:1 1 180px;text-align:left;padding:8px;border-radius:6px;border:1px solid #35506a;background:#0d1c2a;color:#cfe3f5;cursor:pointer;"
+                    title="The integral-mode iterate used by the historical campaigns; keep for A/B comparison against the solve.">
+              <strong>Legacy / comparison (iterate)</strong><br>
+              <span style="font-size:11px;">n forward solves; the historical-campaign
+              method (integral mode, m 0.7, n 12)</span>
+            </button>
+          </div>
+          <p id="fgmShapeHint" class="field-help" style="margin:2px 0 8px 0;"></p>
+        </div>
 
         <!-- ── FGM Iterative Optimize ────────────────────────────────────── -->
         <div class="mode-section hidden" data-mode="fgm_solve">

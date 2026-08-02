@@ -655,6 +655,19 @@ function buildPayload(includeOutput = true) {
     if (String(intervalRaw || "").trim() !== "") {
       payload.turntable_interval_s = Number(intervalRaw);
     }
+    // Dwell PROGRAM mode (engine v2): a program path switches the engine to
+    // ordered (angle, duration) holds; both co-rotation flags default true
+    // (dielectric-ghost decision, ENGINE_DWELL_SUPPORT_NOTES.md section 5.2).
+    const progSel = String(byId("turntableProgramSelect")?.value || "").trim();
+    const progTxt = String(byId("turntableProgramJson")?.value || "").trim();
+    const prog = progTxt || progSel;
+    if (prog) {
+      payload.turntable_program_json = prog;
+      payload.turntable_corotate_dopant =
+        String(byId("ttCorotDopant")?.value || "true") === "true";
+      payload.turntable_corotate_eps =
+        String(byId("ttCorotEps")?.value || "true") === "true";
+    }
   }
   if (mode === "orientation_optimizer") {
     const targetExposureS = Number(byId("exposureMinutes")?.value) * 60.0;
@@ -1729,6 +1742,11 @@ async function loadMeta() {
   if (byId("physicsDscProfileFile") && meta?.default_dsc_profile_file) {
     byId("physicsDscProfileFile").value = meta.default_dsc_profile_file;
   }
+  _setEngineVersionBadge(meta);
+  // Shape options are only now populated; refresh the per-shape standard
+  // hint and preset info (they may have raced this fetch on first load).
+  _updateFgmShapeHint();
+  _updateShapeStandardInfo();
   const dsc = meta?.model_info?.dsc_profile || {};
   if (byId("expMeltOnsetC") && Number.isFinite(Number(dsc.melt_onset_c))) byId("expMeltOnsetC").value = String(dsc.melt_onset_c);
   if (byId("expMeltPeakC") && Number.isFinite(Number(dsc.melt_peak_c))) byId("expMeltPeakC").value = String(dsc.melt_peak_c);
@@ -2935,4 +2953,138 @@ const AntennaWorkshop = {
   },
 };
 
+// ── HEATR v2 promotion pass: engine version badge, per-shape standards,
+//    FGM method chooser, grid guardrail, turntable dwell programs ─────────────
+
+function _setEngineVersionBadge(meta) {
+  const el = byId("engineVersionBadge");
+  if (!el) return;
+  const v = meta?.engine_version;
+  if (v && v !== "unknown") {
+    el.textContent = `engine v${v}`;
+    el.title = `${meta.engine_version_name || "HEATR 2D"} (read live from the server; see CHANGELOG_ENGINE.md)`;
+  } else {
+    el.textContent = "engine ?";
+  }
+}
+
+async function _loadShapeStandards() {
+  try {
+    state.shapeStandards = await fetchJson("/static/fgm_shape_standards.json");
+  } catch (e) {
+    state.shapeStandards = null;
+  }
+  _updateFgmShapeHint();
+  _updateShapeStandardInfo();
+}
+
+function _shapeStandard(shape) {
+  return state.shapeStandards?.shapes?.[shape] || null;
+}
+
+function _updateFgmShapeHint() {
+  const el = byId("fgmShapeHint");
+  if (!el) return;
+  const shape = byId("shape")?.value || "";
+  const std = _shapeStandard(shape);
+  if (!std) { el.textContent = ""; return; }
+  const bits = [];
+  if (std.solve_class) {
+    const iou = std.solve_iou_4bpp != null ? ` (deliverable IoU ${Number(std.solve_iou_4bpp).toFixed(3)} at grid 120)` : "";
+    bits.push(`SOLVE census for ${shape}: ${std.solve_class}${iou}.`);
+  } else {
+    bits.push(`SOLVE census for ${shape}: not available.`);
+  }
+  if (std.quick_look_gain != null) {
+    bits.push(`Quick-look calibrated gain m = ${Number(std.quick_look_gain).toFixed(3)} (${std.quick_look_verdict || "?"} vs uniform).`);
+  }
+  if (std.actuator_note) bits.push(std.actuator_note);
+  el.textContent = bits.join(" ");
+}
+
+function _updateShapeStandardInfo() {
+  const el = byId("shapeStandardInfo");
+  if (!el) return;
+  const shape = byId("shape")?.value || "";
+  const std = _shapeStandard(shape);
+  el.textContent = (std && std.v_cal_v != null)
+    ? `V_cal ${Number(std.v_cal_v).toFixed(1)} V, grid 120, voltage drive, T_phi90, 4 bpp`
+    : "no calibrated standard for this shape";
+}
+
+function _applyShapeStandard() {
+  const shape = byId("shape")?.value || "";
+  const std = _shapeStandard(shape);
+  const params = state.shapeStandards?.standard_parameters || {};
+  const set = (id, v) => { const e = byId(id); if (e && v != null) e.value = String(v); };
+  set("advGridNx", params.grid_nx ?? 120);
+  set("advGridNy", params.grid_ny ?? 120);
+  set("advEnforceGen", "false");
+  if (std && std.v_cal_v != null) set("advVoltage", Number(std.v_cal_v).toFixed(1));
+  set("fgmIterProxy", "T_phi90");
+  const info = byId("shapeStandardInfo");
+  if (info) {
+    const vtxt = std && std.v_cal_v != null ? `V_cal ${Number(std.v_cal_v).toFixed(1)} V` : "no V_cal for this shape (voltage unchanged)";
+    info.textContent = `Applied: grid 120, enforce_generator_power false, ${vtxt}, proxy T_phi90. Source: HEATR_STANDARD_PARAMETERS.md + dual-readstate campaign.`;
+  }
+  _updateGridWarning();
+  refreshMatch();
+}
+
+function _updateGridWarning() {
+  const el = byId("gridWarning");
+  if (!el) return;
+  const nx = Number(byId("advGridNx")?.value || 0);
+  const ny = Number(byId("advGridNy")?.value || 0);
+  el.style.display = (nx >= 200 || ny >= 200) ? "block" : "none";
+}
+
+async function _loadTurntablePrograms() {
+  const sel = byId("turntableProgramSelect");
+  if (!sel) return;
+  try {
+    const resp = await fetchJson("/api/turntable-programs");
+    (resp.programs || []).forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p;
+      opt.textContent = p.split("/").pop();
+      sel.appendChild(opt);
+    });
+  } catch (e) { /* leave the fixed-step default */ }
+}
+
+function _initV2Promotions() {
+  void _loadShapeStandards();
+  void _loadTurntablePrograms();
+
+  byId("shape")?.addEventListener("change", () => {
+    _updateFgmShapeHint();
+    _updateShapeStandardInfo();
+  });
+  byId("applyShapeStandardBtn")?.addEventListener("click", _applyShapeStandard);
+  byId("advGridNx")?.addEventListener("input", _updateGridWarning);
+  byId("advGridNy")?.addEventListener("input", _updateGridWarning);
+
+  // Method chooser: SOLVE and iterate cards switch the mode select; the
+  // quick-look card explains where the one-shot proportional inverse lives.
+  const switchMode = async (m) => {
+    const modeSel = byId("mode");
+    if (!modeSel) return;
+    modeSel.value = m;
+    modeSel.dispatchEvent(new Event("change"));
+  };
+  byId("fgmMethodSolve")?.addEventListener("click", () => switchMode("fgm_solve"));
+  byId("fgmMethodIterate")?.addEventListener("click", () => switchMode("fgm_iterate"));
+  byId("fgmMethodQuick")?.addEventListener("click", () => {
+    const shape = byId("shape")?.value || "";
+    const std = _shapeStandard(shape);
+    const m = std && std.quick_look_gain != null ? Number(std.quick_look_gain).toFixed(3) : "0.7";
+    const el = byId("fgmShapeHint");
+    if (el) {
+      el.textContent = `Quick look runs on a FINISHED run: open the Results tab, pick a baseline run of ${shape || "this shape"}, and use Generate FGM (4 bpp, proxy T_phi90, magnitude ${m}, the window-reselected gain from FGM_WINDOW_RESELECTION.md).`;
+    }
+  });
+}
+
 init();
+_initV2Promotions();
