@@ -163,3 +163,73 @@ Thumbnail sources, all on the square:
 Verification: rendered PNG viewed directly over three iterations
 (composition, Space Mono rendering, no clipped or overlapping text, colormap
 sanity, no em dashes).
+
+## gif_solve_vs_inversion_hexagon.gif (3.1 MB, 13.2 s, round 2, 2026-08-01)
+
+The head-to-head beat, on the HEXAGON, where the solve genuinely wins. Same
+layout language as gif_solve_vs_inversion.gif. Left INVERT: the best stored
+historical proportional-inverse 4-bits-per-pixel mask, one static guess, whose
+melt front runs to its own stop. Right SOLVE: phase A sweeps the iterates of a
+fresh filtered adjoint solve (budget 15 gradient evaluations, cold start,
+1.0 mm filter radius) purely as a visualization of the process; phase B then
+runs the STORED solved single-pass 4 bpp deliverable map to its own stop.
+Because the hexagon is a genuine win, the closing frame makes the head-to-head
+claim; each side's caption quotes only its own stored numbers, melt-region
+framing, grid-120 qualifier in the footer.
+
+- Invert arm: `HIST_best` in `fgm_solve_campaign/out_lib/hexagon.json`
+  (source arm `hist_cal_map_m0p8327_mag0p83_outside1_eps`, mask
+  `outputs_eqs/fgm_calibrated_control/runs/hexagon/map_m0p8327/fgm_baseline_T_phi90_4bpp_mag0p83.npz`,
+  outside1 convention, permittivity-co-varying channel). Stored J 69.63,
+  IoU 0.9211, stop index 403 (202.0 s).
+- Solve arm melt segment and end numbers: stored arm `A1_4bpp` in
+  `out_lib/hexagon.json`, map key `A1_4bpp` in `out_lib/hexagon_maps.npz`,
+  conductivity-only channel. Stored J 22.15, IoU 0.9767, stop index 896
+  (448.5 s). Head-to-head claim dJ +68.2 percent is the stored
+  `verdict.dJ_rel` (0.6819).
+- Display solve (phase A only): fresh 15-evaluation filtered solve by
+  `src/c2h_hexagon.py`; its per-iterate J values (best reached 23.6) are shown
+  in the sidebar objective panel but are NEVER captioned as end numbers.
+- NUMERIC GATE: the re-run of each stored arm reproduced its stored numbers
+  EXACTLY (delta 0 in all fields): HIST_best stop 403/403, J 69.6350/69.6350,
+  IoU 0.921053/0.921053; A1_4bpp stop 896/896, J 22.1502/22.1502,
+  IoU 0.976654/0.976654; U_uniform stop 652/652, J 251.2749/251.2749,
+  IoU 0.764901/0.764901. Printed by `src/c2h_hexagon.py`, cached in
+  `cache/c2h_arms.npz` / `cache/c2h_hexagon.npz`.
+- VERIFICATION: 8 frames extracted and reviewed visually (phase A iterates,
+  melt phase both sides, closing verdict frame, Space Mono, no clipped text).
+
+## fig_hexagon_ungraded_vs_graded.png (static 16:9, round 2, 2026-08-01)
+
+Two-sample comparison replacing a deck triptych: LEFT the hexagon with
+UNIFORM (ungraded) dopant, RIGHT with the SOLVED graded 4 bpp map; each side
+shows the end-state temperature at that arm's own optimal stop (melt front
+white dashed, nominal outline cyan) plus a small dopant-map inset. Message at
+a glance: same part, same power, the graded map turns a hot-cored blob into
+the hexagon. Rendered by `src/r6_hexagon_static.py` from `cache/c2h_hexagon.npz`.
+
+- Caption numbers are the STORED arms in `out_lib/hexagon.json`: U_uniform
+  J 251.3 / IoU 0.7649 at stop 326.5 s; A1_4bpp J 22.2 / IoU 0.9767 at stop
+  448.5 s. Fields are the gated re-runs above (delta 0 against stored).
+- HONESTY NOTE / source deviation: the brief pointed at
+  `outputs_eqs/geometry_dual_readstate/runs/hexagon/baseline/fields.npz` for
+  the uniform side, but that snapshot does NOT correspond to the stored
+  U_uniform arm (its melt region gives IoU 0.389 vs the stored 0.7649; it is a
+  different, longer-cooked run). The uniform field was therefore re-run with
+  the campaign's own forward to the stored stop 652 and gated (delta 0).
+- VERIFICATION: PNG viewed directly over two iterations (inset size/placement
+  fixed after the first look; composition, fonts, no em dashes).
+
+## fig_solve_census_wide.png (static 16:9, round 2, 2026-08-01)
+
+The 18-shape library census re-rendered as a denser 16:9 slide in the deck
+style (IoU dumbbell left, J-change bars right, bigger labels). All numbers
+read fresh from `fgm_solve_campaign/out_lib/<shape>.json`; nothing altered.
+The verdict header (J: 13 of 18, IoU: 13 of 18, IoU >= 0.95: 7 of 18) is
+recomputed from the JSONs and ASSERTED in `src/r5_census_wide.py` to equal
+the stored verdict; the render fails if any count changes. Grid-120 qualifier
+and melt-region framing in the footer. Layout content matches
+`fgm_solve_campaign/figs/fig_lib_census.png`.
+
+- VERIFICATION: PNG viewed directly over three iterations (clipped panel-B
+  title and footer overlap fixed; final render clean).
