@@ -40,13 +40,16 @@ def eval_axes():
 
 
 def main() -> None:
+    d = np.load(st.REPO / "solve3d" / "results" / "eval_dolfinx_square_off.npz")
+    Tpl = [d["T"][k] for k in range(5)]
     phi = load_planes()
     c = eval_axes()
     keep = np.abs(c) <= CROP
     cc = c[keep]
     X, Y = np.meshgrid(cc, cc, indexing="ij")
     cmap = plt.get_cmap(st.CMAP_PHI)
-    norm = colors.Normalize(0.0, 1.0)
+    tmin, tmax = 70.0, 235.0
+    norm = colors.Normalize(tmin, tmax)
 
     fig = plt.figure(figsize=(12.6, 7.6), dpi=st.DPI)
     ax = fig.add_axes([0.04, -0.03, 0.74, 0.95], projection="3d")
@@ -54,8 +57,9 @@ def main() -> None:
 
     for k in range(5):
         P = phi[k][np.ix_(keep, keep)]
+        Tk = Tpl[k][np.ix_(keep, keep)]
         zoff = k * GAP
-        fc = cmap(norm(P))
+        fc = cmap(norm(Tk))
         fc[..., 3] = 0.96
         zo = 10 * k
         ax.plot_surface(X, Y, np.full_like(X, zoff), facecolors=fc,
@@ -86,15 +90,20 @@ def main() -> None:
     ax.view_init(elev=33, azim=-60)
 
     st.title_block(fig, "ONE 3-D SIMULATION, READ LAYER BY LAYER",
-                   "melt fraction phi on the five exported z planes of the "
-                   "40 mm square arm, FEM engine, shared 0.15 mm grid")
+                   "temperature through the build on the five exported z planes "
+                   "of the 40 mm square arm, FEM engine, shared 0.15 mm grid")
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
     cax = fig.add_axes([0.86, 0.20, 0.013, 0.50])
     cb = fig.colorbar(sm, cax=cax)
     cb.ax.tick_params(labelsize=8, colors=st.DIM, length=2)
     cb.outline.set_edgecolor(st.DIM)
     cb.outline.set_linewidth(0.4)
-    cb.set_label("melt fraction phi", fontsize=9, color=st.DIM)
+    cb.set_label("temperature [C]", fontsize=9, color=st.DIM)
+    for tv in (175.0, 185.0):
+        cb.ax.axhline(tv, color=st.FG, lw=0.8, alpha=0.9)
+    cb.ax.text(-0.55, 180.0, "melt window\n175-185", fontsize=7.5, color=st.FG,
+               va="center", ha="right",
+               transform=cb.ax.get_yaxis_transform())
     fig.text(0.86, 0.76, "dash  phi=0.9 front", fontsize=9.5, color=st.FG)
     fig.text(0.86, 0.73, "cyan  nominal 20 mm", fontsize=9.5, color=st.ACCENT)
     fig.text(0.975, 0.048,

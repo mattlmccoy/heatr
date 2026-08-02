@@ -80,12 +80,20 @@ not shown here.
 
 ## fig4_layer_stack.png
 
-Deck caption: "Every printed layer is a slice of one solved 3-D field: the
-bridge from the solve to layerwise printing."
+Deck caption: "One 3-D simulation read layer by layer: the temperature field
+through the build, with the melt front and nominal bounds on every plane.
+Every printed layer is a slice of one simulated field."
+
+REVISED 2026-08-02 (Matt's feedback + honesty fix): color field is now
+TEMPERATURE (70-235 C, melt window 175-185 marked on the colorbar) - the phi
+version was saturated at 1.0 across the interior and showed no gradient.
+Title says SIMULATION, not solve (no 3-D solve exists yet; footer carries
+"the 3-D dopant solve is in progress"). The phi = 0.9 front stays as the
+dashed overlay.
 
 Data provenance: `solve3d/results/eval_dolfinx_square_off.npz` (T on the five
 exported z planes at z = -20, -10, 0, +10, +20 mm, 200x200 at 0.15 mm,
-committed Phase A close-out field export). Melt fraction via the shared
+committed Phase A close-out field export). Melt front via the shared
 `phase_fraction_phi` (same conversion as `solve3d/gates.py`).
 
 Honest scoping: the five planes are the close-out's exported sample of a
