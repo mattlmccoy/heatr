@@ -18,7 +18,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from adjoint2d import chi_area, geometry_intake as gi
+from adjoint2d import chi_area, geometry_contour as gc, geometry_intake as gi
 from adjoint2d.tests import fill_contract as fc
 
 HALF = 0.030
@@ -229,3 +229,36 @@ def test_touching_vertices_are_not_a_crossing():
     star = np.array([[0.0, 0.010], [0.003, 0.003], [0.010, 0.0], [0.003, -0.003],
                      [0.0, -0.010], [-0.003, -0.003], [-0.010, 0.0], [-0.003, 0.003]])
     gi.from_polygon(star, grid=GRID)              # must not raise
+
+
+# --- winding order, accepted either way and normalized ------------------------
+
+def test_a_clockwise_outline_is_accepted_and_normalized_to_counter_clockwise():
+    """The contour module emits counter-clockwise; a user's outline need not.
+
+    `geometry_contour` states a counter-clockwise convention for the loops IT
+    produces, and a clockwise loop from a MASK import is a hole and is refused
+    there. A hand-supplied or computer-aided-design-supplied outline carries no
+    such meaning: clockwise is just the other traversal of the same boundary.
+    The even-odd fill is winding invariant, so refusing would be gratuitous;
+    the intake accepts either order and normalizes the stored ring to
+    counter-clockwise so every consumer sees one convention.
+    """
+    ccw = fc.rotated_rect_polygon(0.020, 0.008, 13.0)
+    if gc.signed_area(ccw) < 0.0:
+        ccw = ccw[::-1].copy()
+    cw = ccw[::-1].copy()
+    assert gc.signed_area(cw) < 0.0
+
+    a = gi.from_polygon(ccw, grid=GRID)
+    b = gi.from_polygon(cw, grid=GRID)
+
+    assert np.array_equal(a.chi, b.chi), "the area fill must be winding invariant"
+    assert np.array_equal(a.part_mask, b.part_mask)
+    # both stored rings are counter-clockwise, whichever way they came in
+    for it in (a, b):
+        assert gc.signed_area(it.geometry.polygons[0]) > 0.0
+        pts = np.asarray(it.cfg["geometry"]["part"]["polygon_points"], dtype=float)
+        assert gc.signed_area(pts) > 0.0
+    assert a.info["winding_normalized"] is False
+    assert b.info["winding_normalized"] is True

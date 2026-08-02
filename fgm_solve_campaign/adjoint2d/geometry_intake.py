@@ -343,6 +343,9 @@ def _finish(polys: list[np.ndarray], grid: int, chamber_m: float,
         "voltage_is_calibrated": voltage_v is not None,
         **provenance,
     }
+    # Mask and PNG routes come out of `geometry_contour` counter-clockwise by
+    # construction, so nothing was flipped for them.
+    info.setdefault("winding_normalized", False)
     if info["n_part_cells"] < 50:
         raise IntakeError(
             f"the imported geometry covers only {info['n_part_cells']} cells at "
@@ -373,6 +376,18 @@ def from_polygon(poly: np.ndarray | Iterable[np.ndarray],
     keep[1:] = np.any(np.abs(np.diff(p, axis=0)) > 1e-15, axis=1)
     if not keep.all():
         p = p[keep]
+    # WINDING. `geometry_contour` emits counter-clockwise loops and treats a
+    # clockwise loop from a MASK import as an interior hole, because that is
+    # what it means there. A hand-drawn or computer-aided-design outline carries
+    # no such meaning: clockwise is simply the other traversal of the same
+    # boundary, and the even-odd fill is winding invariant (proven in
+    # `fill_contract.assert_winding_invariance`). Refusing would be gratuitous,
+    # and silently passing a clockwise ring through would leave two conventions
+    # alive downstream, so the ring is NORMALIZED to counter-clockwise here and
+    # the fact is recorded in the provenance.
+    flipped = bool(gc.signed_area(p) < 0.0)
+    if flipped:
+        p = p[::-1].copy()
     hit = find_self_intersection(p)
     if hit is not None:
         i, j = hit
@@ -384,6 +399,7 @@ def from_polygon(poly: np.ndarray | Iterable[np.ndarray],
             "pipeline would solve a part you did not draw. Fix the outline.")
     return _finish([p], grid, chamber_m, template, voltage_v, name,
                    "polygon", {"closed_ring_trimmed": True,
+                               "winding_normalized": flipped,
                                "self_intersection_checked": len(p) <=
                                MAX_VERTICES_FOR_CROSSING_CHECK}, n_sub)
 

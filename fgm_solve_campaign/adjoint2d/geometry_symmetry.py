@@ -37,6 +37,23 @@ less than roughly 3 percent of its area will be reported as symmetric.
 
 MIRRORS are read the same way, reflecting about a line through the centroid at
 angle beta and scanning beta over [0, 180).
+
+THE WHOLE-GROUP ACCEPTANCE RULE, and the octagon regression it fixes. An order
+N is accepted only when EVERY power of its generator is a symmetry, that is when
+
+    max over k = 1 .. N-1 of mismatch(k * 360 / N) < tol,
+
+and not when the generator 360 / N alone passes. MEASURED root cause: a
+near-circular part scores a small defect at almost every trial angle, so a
+generator that happens to fall near a multiple of the part's TRUE period passes
+by accident. On the octagon (true period 45 degrees) the generators of orders 7,
+9 and 10 are 51.43, 40 and 36 degrees, which sit 6.4, 5 and 9 degrees off a true
+symmetry and score 0.0201, 0.0169 and 0.0261, all under the 0.030 threshold,
+while the true non-symmetries those groups also require (102.9, 120 and 72
+degrees) score 0.033 to 0.038, above it. The single-generator rule therefore
+reported the octagon as 10-fold; the whole-group rule reports 8. It is not a
+sampling-density problem and not a raster-staircase harmonic: the defect curve
+is correct, the acceptance predicate was reading one point of it.
 """
 from __future__ import annotations
 
@@ -47,6 +64,7 @@ import numpy as np
 from scipy.ndimage import affine_transform
 
 __all__ = ["SymmetryReport", "analyze", "rotation_mismatch", "mirror_mismatch",
+           "group_mismatch",
            "gauge_reduce", "candidate_span_deg", "candidate_angles",
            "indexing_orders", "SYMMETRY_TOL"]
 
@@ -175,13 +193,44 @@ def _cluster_minima(vals: np.ndarray, angles: np.ndarray,
     return tuple(sorted(out))
 
 
+def group_mismatch(chi: np.ndarray, order: int,
+                   centre: tuple[float, float] | None = None,
+                   cache: dict | None = None) -> float:
+    """The WORST defect over the whole cyclic group C_order, not just its generator.
+
+    `max over k = 1 .. N-1 of mismatch(k * 360 / N)`. This is the quantity an
+    order has to clear: a cyclic group is a symmetry of the part only when every
+    one of its elements is, and testing only the generator is what reported the
+    octagon as 10-fold (see the module docstring).
+    """
+    c = np.asarray(chi, dtype=float)
+    n = int(order)
+    if n <= 1:
+        return 0.0
+    ctr = _centroid_rc(c) if centre is None else centre
+    worst = 0.0
+    for k in range(1, n):
+        ang = round((k * 360.0 / n) % 360.0, 9)
+        if cache is not None and ang in cache:
+            m = cache[ang]
+        else:
+            m = rotation_mismatch(c, ang, ctr)
+            if cache is not None:
+                cache[ang] = m
+        worst = max(worst, m)
+    return float(worst)
+
+
 def analyze(chi: np.ndarray, tol: float = SYMMETRY_TOL,
             max_order: int = MAX_ORDER,
             mirror_step_deg: float = 1.0) -> SymmetryReport:
     """Rotational order, continuity flag and mirror axes of one indicator field."""
     c = np.asarray(chi, dtype=float)
     ctr = _centroid_rc(c)
-    orders = {N: rotation_mismatch(c, 360.0 / N, ctr)
+    gen = {N: rotation_mismatch(c, 360.0 / N, ctr)
+           for N in range(2, int(max_order) + 1)}
+    ang_cache: dict = {}
+    orders = {N: group_mismatch(c, N, ctr, ang_cache)
               for N in range(2, int(max_order) + 1)}
     accepted = [N for N, m in orders.items() if m < tol]
     order = max(accepted) if accepted else 1
@@ -201,6 +250,10 @@ def analyze(chi: np.ndarray, tol: float = SYMMETRY_TOL,
         centroid_rc=ctr,
         diagnostics={
             "tested_orders": {str(k): float(v) for k, v in orders.items()},
+            "tested_orders_generator_only": {str(k): float(v)
+                                             for k, v in gen.items()},
+            "acceptance_rule": "whole cyclic group: max over k = 1 .. N-1 of "
+                               "mismatch(k * 360 / N) < tol",
             "generic_angle_mismatch": {str(k): float(v) for k, v in generic.items()},
             "mirror_min_mismatch": float(mvals.min()),
             "tol": float(tol),

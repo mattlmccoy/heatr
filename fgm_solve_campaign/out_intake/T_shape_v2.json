@@ -1,0 +1,98 @@
+{
+  "shape": "T_shape",
+  "grid": 120,
+  "is_novel": false,
+  "voltage_v": 1718.9755939450517,
+  "n_part_cells": 1104,
+  "symmetry": {
+    "rotational_order": 1,
+    "continuous_rotational": false,
+    "mirror_axes_deg": [
+      90.0
+    ],
+    "point_group": "C1v",
+    "centroid_row_col": [
+      50.93932905324677,
+      59.5
+    ],
+    "diagnostics": {
+      "tested_orders": {
+        "2": 0.5792338021447664,
+        "3": 0.5189515917412164,
+        "4": 0.7387851450167908,
+        "5": 0.7259259525111359,
+        "6": 0.7033182225102027,
+        "7": 0.677331365586966,
+        "8": 0.7387851450167908,
+        "9": 0.7347873058106306,
+        "10": 0.7259259525111359,
+        "11": 0.7152012029379144,
+        "12": 0.7387851450167908
+      },
+      "tested_orders_generator_only": {
+        "2": 0.5792338021447664,
+        "3": 0.5189515917412164,
+        "4": 0.7387851450167906,
+        "5": 0.7259259525111359,
+        "6": 0.7033182225102027,
+        "7": 0.6773313655852756,
+        "8": 0.6494982775869949,
+        "9": 0.6208914651364632,
+        "10": 0.5918435501044454,
+        "11": 0.5627596423501128,
+        "12": 0.5349570801853876
+      },
+      "acceptance_rule": "whole cyclic group: max over k = 1 .. N-1 of mismatch(k * 360 / N) < tol",
+      "generic_angle_mismatch": {
+        "17.0": 0.34623543403843493,
+        "23.0": 0.44835730354503445,
+        "41.0": 0.6273308645768286
+      },
+      "mirror_min_mismatch": 2.0221468468787669e-16,
+      "tol": 0.03
+    }
+  },
+  "modes": [
+    "static",
+    "continuous"
+  ],
+  "residual": {
+    "uniform": {
+      "static": 0.8041175915956722,
+      "continuous": 0.8366141701018698
+    },
+    "prop_inverse": {
+      "static": 1.1245496583668517,
+      "continuous": 1.1722833387437526
+    },
+    "solved": {
+      "static": 0.8070686097435135,
+      "continuous": 0.836798686927713
+    }
+  },
+  "prop_inverse_magnitude": 1.0,
+  "prop_inverse_magnitude_sensitivity": {
+    "0.50": {
+      "static": 0.8409438065449643,
+      "continuous": 0.9385703369593252
+    },
+    "1.00": {
+      "static": 1.1245496583668517,
+      "continuous": 1.1722833387437526
+    },
+    "1.50": {
+      "static": 1.4445222275446061,
+      "continuous": 1.3350501801192718
+    }
+  },
+  "solved_map_provenance": {
+    "path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_lib/T_shape_maps.npz",
+    "key": "A1_cont",
+    "note": "the shape-fidelity campaign's solved static map, solved against the BINARY RASTER target, not the area fill"
+  },
+  "ground_truth": {
+    "outcome": "rotation_fails",
+    "source": "CONTINUOUS_ROTATION_REPORT S1: 522.28 (HORIZON) / 0.5356 -> 467.33 / 0.5516, -10.5 pct J with 42.9 pct of the part still unmelted; the penalty is NOT erased"
+  },
+  "wall_s": 24.750633666990325
+}

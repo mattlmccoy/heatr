@@ -1,0 +1,2691 @@
+{
+  "n_geometries": 20,
+  "bands_v1": {
+    "A_MODE_SUFFICES": 0.5,
+    "A_PHYSICAL_LIMIT": 0.8,
+    "MIN_REDUCTION": 1.15
+  },
+  "bands_v2": {
+    "A2_MODE_SUFFICES": 0.5,
+    "A2_PHYSICAL_LIMIT": 0.8,
+    "MIN_REDUCTION_V2": 1.125,
+    "default_basis": "prop_inverse",
+    "prop_inverse_magnitude": 1.0
+  },
+  "confusion": {
+    "v1": {
+      "true_positive": [
+        "square",
+        "cross",
+        "star",
+        "keyhole"
+      ],
+      "false_positive": [
+        "gear8"
+      ],
+      "true_negative": [
+        "L_shape",
+        "T_shape"
+      ],
+      "false_negative": [],
+      "correct": 6,
+      "n": 7
+    },
+    "v2_prop_inverse": {
+      "true_positive": [
+        "square",
+        "cross",
+        "star",
+        "keyhole"
+      ],
+      "false_positive": [],
+      "true_negative": [
+        "L_shape",
+        "T_shape",
+        "gear8"
+      ],
+      "false_negative": [],
+      "correct": 7,
+      "n": 7
+    },
+    "v2_solved": {
+      "true_positive": [
+        "square",
+        "cross",
+        "star"
+      ],
+      "false_positive": [
+        "L_shape",
+        "gear8"
+      ],
+      "true_negative": [
+        "T_shape"
+      ],
+      "false_negative": [
+        "keyhole"
+      ],
+      "correct": 4,
+      "n": 7
+    }
+  },
+  "spearman_best_residual_vs_static_solve_iou": {
+    "uniform": {
+      "rho": -0.7936016511867906,
+      "p": 8.46599736041262e-05,
+      "n": 18
+    },
+    "prop_inverse": {
+      "rho": -0.8121775025799793,
+      "p": 4.239283893458809e-05,
+      "n": 18
+    },
+    "solved": {
+      "rho": -0.760577915376677,
+      "p": 0.0002479065453786046,
+      "n": 18
+    }
+  },
+  "reduction_separation": {
+    "uniform": {
+      "rotation_wins": [
+        [
+          "keyhole",
+          1.1849147277907632
+        ],
+        [
+          "star",
+          1.5246907034309536
+        ],
+        [
+          "cross",
+          1.9626870971871666
+        ],
+        [
+          "square",
+          2.0367481487604744
+        ]
+      ],
+      "rotation_fails": [
+        [
+          "T_shape",
+          1.0
+        ],
+        [
+          "L_shape",
+          1.1442076924161277
+        ],
+        [
+          "gear8",
+          1.9473328686991924
+        ]
+      ],
+      "min_win": 1.1849147277907632,
+      "max_fail": 1.9473328686991924,
+      "separates": false
+    },
+    "prop_inverse": {
+      "rotation_wins": [
+        [
+          "keyhole",
+          1.1372579718709914
+        ],
+        [
+          "star",
+          1.3283057460992882
+        ],
+        [
+          "square",
+          1.4235844907083293
+        ],
+        [
+          "cross",
+          1.6098639858969477
+        ]
+      ],
+      "rotation_fails": [
+        [
+          "T_shape",
+          1.0
+        ],
+        [
+          "L_shape",
+          1.115214069691162
+        ],
+        [
+          "gear8",
+          1.115373099830059
+        ]
+      ],
+      "min_win": 1.1372579718709914,
+      "max_fail": 1.115373099830059,
+      "separates": true,
+      "margin_pct": 1.9621122334998686
+    },
+    "solved": {
+      "rotation_wins": [
+        [
+          "keyhole",
+          1.1179402758884551
+        ],
+        [
+          "star",
+          1.4332084148730502
+        ],
+        [
+          "cross",
+          1.4965254405206145
+        ],
+        [
+          "square",
+          1.8731050952120478
+        ]
+      ],
+      "rotation_fails": [
+        [
+          "T_shape",
+          1.0
+        ],
+        [
+          "L_shape",
+          1.150883139959183
+        ],
+        [
+          "gear8",
+          1.3648605744689937
+        ]
+      ],
+      "min_win": 1.1179402758884551,
+      "max_fail": 1.3648605744689937,
+      "separates": false
+    }
+  },
+  "per_geometry": {
+    "square": {
+      "order": 4,
+      "point_group": "C4v",
+      "residual": {
+        "uniform": {
+          "static": 0.5633961903657474,
+          "continuous": 0.27661554066398414,
+          "index2": 0.5633961903657475,
+          "index4": 0.45034819423703987
+        },
+        "prop_inverse": {
+          "static": 0.36503565168644314,
+          "continuous": 0.2564200818911797,
+          "index2": 0.365035651686429,
+          "index4": 0.37559810743902633
+        },
+        "solved": {
+          "static": 0.5834365845913487,
+          "continuous": 0.31148096606149045,
+          "index2": 0.5834365845913466,
+          "index4": 0.45766655660417116
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.27661554066398414,
+          "static_residual_anisotropy": 0.5633961903657474,
+          "reduction_factor": 2.0367481487604744,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0
+          ],
+          "spectrum": {
+            "static": 0.5633961903657474,
+            "continuous": 0.27661554066398414,
+            "index2": 0.5633961903657475,
+            "index4": 0.45034819423703987
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.2564200818911797,
+          "static_residual_anisotropy": 0.36503565168644314,
+          "reduction_factor": 1.4235844907083293,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0
+          ],
+          "spectrum": {
+            "static": 0.36503565168644314,
+            "continuous": 0.2564200818911797,
+            "index2": 0.365035651686429,
+            "index4": 0.37559810743902633
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.31148096606149045,
+          "static_residual_anisotropy": 0.5834365845913487,
+          "reduction_factor": 1.8731050952120478,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0
+          ],
+          "spectrum": {
+            "static": 0.5834365845913487,
+            "continuous": 0.31148096606149045,
+            "index2": 0.5834365845913466,
+            "index4": 0.45766655660417116
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.9815950920245399,
+      "ground_truth": {
+        "outcome": "rotation_wins",
+        "source": "CONTINUOUS_ROTATION_REPORT S1: solved static 25.56 / 0.9804 -> rotating 13.93 / 1.0000, -45.5 pct J"
+      },
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.38357256454748795,
+          "continuous": 0.2450126142160304,
+          "index2": 0.38357256454749433,
+          "index4": 0.3591621087037594
+        },
+        "1.00": {
+          "static": 0.36503565168644314,
+          "continuous": 0.2564200818911797,
+          "index2": 0.365035651686429,
+          "index4": 0.37559810743902633
+        },
+        "1.50": {
+          "static": 0.37395883458639817,
+          "continuous": 0.2605209791094228,
+          "index2": 0.37395883458639523,
+          "index4": 0.3843577085283349
+        }
+      }
+    },
+    "circle": {
+      "order": 12,
+      "point_group": "O(2)",
+      "residual": {
+        "uniform": {
+          "static": 0.3167443190379252,
+          "continuous": 0.062103583486803386,
+          "index2": 0.31674431903792527,
+          "index3": 0.12151013937118813,
+          "index4": 0.2024306582558058,
+          "index6": 0.12151013937118714,
+          "index12": 0.07072489506792982
+        },
+        "prop_inverse": {
+          "static": 0.19627339211529685,
+          "continuous": 0.14222093036719263,
+          "index2": 0.19627339211531358,
+          "index3": 0.17029506601192324,
+          "index4": 0.24661908057743556,
+          "index6": 0.1702950660119304,
+          "index12": 0.15635417365869123
+        },
+        "solved": {
+          "static": 0.09505046080723405,
+          "continuous": 0.10195208039819424,
+          "index2": 0.09505046080724346,
+          "index3": 0.13634807583673236,
+          "index4": 0.18642097046639985,
+          "index6": 0.1363480758367266,
+          "index12": 0.11353090723315722
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.062103583486803386,
+          "static_residual_anisotropy": 0.3167443190379252,
+          "reduction_factor": 5.100258330587821,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0
+          ],
+          "spectrum": {
+            "static": 0.3167443190379252,
+            "continuous": 0.062103583486803386,
+            "index2": 0.31674431903792527,
+            "index3": 0.12151013937118813,
+            "index4": 0.2024306582558058,
+            "index6": 0.12151013937118714,
+            "index12": 0.07072489506792982
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.14222093036719263,
+          "static_residual_anisotropy": 0.19627339211529685,
+          "reduction_factor": 1.3800598238849167,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0
+          ],
+          "spectrum": {
+            "static": 0.19627339211529685,
+            "continuous": 0.14222093036719263,
+            "index2": 0.19627339211531358,
+            "index3": 0.17029506601192324,
+            "index4": 0.24661908057743556,
+            "index6": 0.1702950660119304,
+            "index12": 0.15635417365869123
+          }
+        },
+        "v2_solved": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.09505046080723405,
+          "static_residual_anisotropy": 0.09505046080723405,
+          "reduction_factor": 1.0,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0
+          ],
+          "spectrum": {
+            "static": 0.09505046080723405,
+            "continuous": 0.10195208039819424,
+            "index2": 0.09505046080724346,
+            "index3": 0.13634807583673236,
+            "index4": 0.18642097046639985,
+            "index6": 0.1363480758367266,
+            "index12": 0.11353090723315722
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.9903846153846154,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.1867607220290562,
+          "continuous": 0.09565093726550727,
+          "index2": 0.18676072202904223,
+          "index3": 0.11989870763274,
+          "index4": 0.17468475935333924,
+          "index6": 0.11989870763274106,
+          "index12": 0.1057446799518473
+        },
+        "1.00": {
+          "static": 0.19627339211529685,
+          "continuous": 0.14222093036719263,
+          "index2": 0.19627339211531358,
+          "index3": 0.17029506601192324,
+          "index4": 0.24661908057743556,
+          "index6": 0.1702950660119304,
+          "index12": 0.15635417365869123
+        },
+        "1.50": {
+          "static": 0.21869658642755874,
+          "continuous": 0.1512995914108855,
+          "index2": 0.21869658642755604,
+          "index3": 0.17894909253536137,
+          "index4": 0.2606846907356137,
+          "index6": 0.1789490925353582,
+          "index12": 0.16686130500250917
+        }
+      }
+    },
+    "hexagon": {
+      "order": 6,
+      "point_group": "C6v",
+      "residual": {
+        "uniform": {
+          "static": 0.315557112038006,
+          "continuous": 0.15173634820233123,
+          "index2": 0.31555711203800607,
+          "index3": 0.1625170618837582,
+          "index6": 0.1625170618837566
+        },
+        "prop_inverse": {
+          "static": 0.24831282278161768,
+          "continuous": 0.19378703524604088,
+          "index2": 0.24831282278160297,
+          "index3": 0.20656568307754386,
+          "index6": 0.20656568307754206
+        },
+        "solved": {
+          "static": 0.23656437335242442,
+          "continuous": 0.14296453735789136,
+          "index2": 0.2365643733524281,
+          "index3": 0.14980607241065294,
+          "index6": 0.1498060724106637
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.15173634820233123,
+          "static_residual_anisotropy": 0.315557112038006,
+          "reduction_factor": 2.079640875614258,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "spectrum": {
+            "static": 0.315557112038006,
+            "continuous": 0.15173634820233123,
+            "index2": 0.31555711203800607,
+            "index3": 0.1625170618837582,
+            "index6": 0.1625170618837566
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.19378703524604088,
+          "static_residual_anisotropy": 0.24831282278161768,
+          "reduction_factor": 1.281369635829086,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "spectrum": {
+            "static": 0.24831282278161768,
+            "continuous": 0.19378703524604088,
+            "index2": 0.24831282278160297,
+            "index3": 0.20656568307754386,
+            "index6": 0.20656568307754206
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.14296453735789136,
+          "static_residual_anisotropy": 0.23656437335242442,
+          "reduction_factor": 1.654706668690986,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "spectrum": {
+            "static": 0.23656437335242442,
+            "continuous": 0.14296453735789136,
+            "index2": 0.2365643733524281,
+            "index3": 0.14980607241065294,
+            "index6": 0.1498060724106637
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.9766536964980544,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.22346935948291213,
+          "continuous": 0.16172182706074426,
+          "index2": 0.22346935948289331,
+          "index3": 0.17365905175273,
+          "index6": 0.17365905175272264
+        },
+        "1.00": {
+          "static": 0.24831282278161768,
+          "continuous": 0.19378703524604088,
+          "index2": 0.24831282278160297,
+          "index3": 0.20656568307754386,
+          "index6": 0.20656568307754206
+        },
+        "1.50": {
+          "static": 0.2614845693991069,
+          "continuous": 0.20283884285915796,
+          "index2": 0.2614845693990916,
+          "index3": 0.21366619419447092,
+          "index6": 0.21366619419446717
+        }
+      }
+    },
+    "triangle": {
+      "order": 1,
+      "point_group": "C1v",
+      "residual": {
+        "uniform": {
+          "static": 0.6691318557395489,
+          "continuous": 0.6240851964358823
+        },
+        "prop_inverse": {
+          "static": 0.5713129304249238,
+          "continuous": 0.5809727790624177
+        },
+        "solved": {
+          "static": 0.6632797353862684,
+          "continuous": 0.608148218876789
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "static",
+          "actuator_class": "MAP_PLUS_MODE",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.6691318557395489,
+          "static_residual_anisotropy": 0.6691318557395489,
+          "reduction_factor": 1.0721803041650815,
+          "rotation_recommended": false,
+          "advice": "No rotation mode reduces the anisotropy by the 1.15 factor that makes a turntable worth its cost here, so the static arm is kept. The mode helps but leaves real anisotropy, between the winners' band and the failures' band. Solve the map against this mode's averaged kernel and expect the map to be load bearing rather than a finish.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.6691318557395489,
+            "continuous": 0.6240851964358823
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.5713129304249238,
+          "static_residual_anisotropy": 0.5713129304249238,
+          "reduction_factor": 1.0,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.5713129304249238,
+            "continuous": 0.5809727790624177
+          }
+        },
+        "v2_solved": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.6632797353862684,
+          "static_residual_anisotropy": 0.6632797353862684,
+          "reduction_factor": 1.0906547364576744,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.6632797353862684,
+            "continuous": 0.608148218876789
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.8578088578088578,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.5859596767121537,
+          "continuous": 0.5838071154595794
+        },
+        "1.00": {
+          "static": 0.5713129304249238,
+          "continuous": 0.5809727790624177
+        },
+        "1.50": {
+          "static": 0.5856931393363525,
+          "continuous": 0.5900810005233584
+        }
+      }
+    },
+    "equilateral_triangle": {
+      "order": 3,
+      "point_group": "C3v",
+      "residual": {
+        "uniform": {
+          "static": 0.6118400444888321,
+          "continuous": 0.5656092607652997,
+          "index3": 0.5615079605559508
+        },
+        "prop_inverse": {
+          "static": 0.5449386656042625,
+          "continuous": 0.578331137686806,
+          "index3": 0.5790258022923694
+        },
+        "solved": {
+          "static": 0.5328953243985806,
+          "continuous": 0.5125125281783948,
+          "index3": 0.4960886736780729
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "static",
+          "actuator_class": "MAP_PLUS_MODE",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.6118400444888321,
+          "static_residual_anisotropy": 0.6118400444888321,
+          "reduction_factor": 1.089637347052119,
+          "rotation_recommended": false,
+          "advice": "No rotation mode reduces the anisotropy by the 1.15 factor that makes a turntable worth its cost here, so the static arm is kept. The mode helps but leaves real anisotropy, between the winners' band and the failures' band. Solve the map against this mode's averaged kernel and expect the map to be load bearing rather than a finish.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "spectrum": {
+            "static": 0.6118400444888321,
+            "continuous": 0.5656092607652997,
+            "index3": 0.5615079605559508
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.5449386656042625,
+          "static_residual_anisotropy": 0.5449386656042625,
+          "reduction_factor": 1.0,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "spectrum": {
+            "static": 0.5449386656042625,
+            "continuous": 0.578331137686806,
+            "index3": 0.5790258022923694
+          }
+        },
+        "v2_solved": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.5328953243985806,
+          "static_residual_anisotropy": 0.5328953243985806,
+          "reduction_factor": 1.074193692929165,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "spectrum": {
+            "static": 0.5328953243985806,
+            "continuous": 0.5125125281783948,
+            "index3": 0.4960886736780729
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.8128342245989305,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.5515881953887989,
+          "continuous": 0.5572897992820275,
+          "index3": 0.5537095344740235
+        },
+        "1.00": {
+          "static": 0.5449386656042625,
+          "continuous": 0.578331137686806,
+          "index3": 0.5790258022923694
+        },
+        "1.50": {
+          "static": 0.5548720952190274,
+          "continuous": 0.5927567105180995,
+          "index3": 0.5953178306957476
+        }
+      }
+    },
+    "L_shape": {
+      "order": 1,
+      "point_group": "C1",
+      "residual": {
+        "uniform": {
+          "static": 1.2560477944599409,
+          "continuous": 1.0977445814995788
+        },
+        "prop_inverse": {
+          "static": 1.2082608193796434,
+          "continuous": 1.0834339811676235
+        },
+        "solved": {
+          "static": 1.2784655587456917,
+          "continuous": 1.110856102028772
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "static",
+          "actuator_class": "PHYSICAL_LIMIT",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 1.2560477944599409,
+          "static_residual_anisotropy": 1.2560477944599409,
+          "reduction_factor": 1.1442076924161277,
+          "rotation_recommended": false,
+          "advice": "No rotation mode reduces the anisotropy by the 1.15 factor that makes a turntable worth its cost here, so the static arm is kept. The residual anisotropy is in the band of the two shapes rotation did NOT rescue (T_shape 0.837, L_shape 1.098). Expect a physical limit: a radial kernel melts a rounded blob and this part is not close to radially symmetric. The best results on record for that class came from SEQUENTIAL DWELL, an ordered hold that melts one limb and then the other (SEQUENTIAL_DWELL_REPORT: L_shape 396.20 -> 276.39 J, IoU 0.6484 -> 0.7161; T_shape 422.28 -> 343.02 J). Neither reached the SOLVED class, so this is a partial rescue, not a fix.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 1.2560477944599409,
+            "continuous": 1.0977445814995788
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "static",
+          "actuator_class": "PHYSICAL_LIMIT",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 1.2082608193796434,
+          "static_residual_anisotropy": 1.2082608193796434,
+          "reduction_factor": 1.115214069691162,
+          "rotation_recommended": false,
+          "advice": "The residual anisotropy after a map is in the band of the two shapes rotation did NOT rescue (T_shape 1.124, L_shape 1.208 on this measurement). Expect a physical limit: a radial kernel melts a rounded blob and this part is not close to radially symmetric, and a dopant map cannot fix it either. The best results on record for that class came from SEQUENTIAL DWELL, an ordered hold that melts one limb and then the other (SEQUENTIAL_DWELL_REPORT: L_shape 396.20 -> 276.39 J, IoU 0.6484 -> 0.7161; T_shape 422.28 -> 343.02 J). Neither reached the SOLVED class, so this is a partial rescue, not a fix.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 1.2082608193796434,
+            "continuous": 1.0834339811676235
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "PHYSICAL_LIMIT",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 1.110856102028772,
+          "static_residual_anisotropy": 1.2784655587456917,
+          "reduction_factor": 1.150883139959183,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after a map is in the band of the two shapes rotation did NOT rescue (T_shape 1.124, L_shape 1.208 on this measurement). Expect a physical limit: a radial kernel melts a rounded blob and this part is not close to radially symmetric, and a dopant map cannot fix it either. The best results on record for that class came from SEQUENTIAL DWELL, an ordered hold that melts one limb and then the other (SEQUENTIAL_DWELL_REPORT: L_shape 396.20 -> 276.39 J, IoU 0.6484 -> 0.7161; T_shape 422.28 -> 343.02 J). Neither reached the SOLVED class, so this is a partial rescue, not a fix.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 1.2784655587456917,
+            "continuous": 1.110856102028772
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.5209059233449478,
+      "ground_truth": {
+        "outcome": "rotation_fails",
+        "source": "CONTINUOUS_ROTATION_REPORT S1: 376.94 / 0.6693 -> 352.97 / 0.6581, better J and worse IoU, a tie"
+      },
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 1.224000311090155,
+          "continuous": 1.0853402466731228
+        },
+        "1.00": {
+          "static": 1.2082608193796434,
+          "continuous": 1.0834339811676235
+        },
+        "1.50": {
+          "static": 1.2567030112398996,
+          "continuous": 1.1572515245708812
+        }
+      }
+    },
+    "H_shape": {
+      "order": 2,
+      "point_group": "C2v",
+      "residual": {
+        "uniform": {
+          "static": 0.8940876372850567,
+          "continuous": 0.6170480012836373,
+          "index2": 0.8940876372850567
+        },
+        "prop_inverse": {
+          "static": 0.7879470955262287,
+          "continuous": 0.5680624030020687,
+          "index2": 0.7879470955262284
+        },
+        "solved": {
+          "static": 0.8467167831080824,
+          "continuous": 0.6104158979352294,
+          "index2": 0.8467167831080811
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MAP_PLUS_MODE",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.6170480012836373,
+          "static_residual_anisotropy": 0.8940876372850567,
+          "reduction_factor": 1.4489758259083527,
+          "rotation_recommended": true,
+          "advice": "The mode helps but leaves real anisotropy, between the winners' band and the failures' band. Solve the map against this mode's averaged kernel and expect the map to be load bearing rather than a finish.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.8940876372850567,
+            "continuous": 0.6170480012836373,
+            "index2": 0.8940876372850567
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MAP_PLUS_MODE",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.5680624030020687,
+          "static_residual_anisotropy": 0.7879470955262287,
+          "reduction_factor": 1.3870784113895305,
+          "rotation_recommended": true,
+          "advice": "The mode still helps after the map, but it leaves real anisotropy, between the winners' band and the failures' band. Solve the map against this mode's averaged kernel and expect the map to be load bearing rather than a finish.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.7879470955262287,
+            "continuous": 0.5680624030020687,
+            "index2": 0.7879470955262284
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MAP_PLUS_MODE",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.6104158979352294,
+          "static_residual_anisotropy": 0.8467167831080824,
+          "reduction_factor": 1.3871145656136346,
+          "rotation_recommended": true,
+          "advice": "The mode still helps after the map, but it leaves real anisotropy, between the winners' band and the failures' band. Solve the map against this mode's averaged kernel and expect the map to be load bearing rather than a finish.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.8467167831080824,
+            "continuous": 0.6104158979352294,
+            "index2": 0.8467167831080811
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.8422712933753943,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.8134796896052291,
+          "continuous": 0.5810133664797251,
+          "index2": 0.8134796896052362
+        },
+        "1.00": {
+          "static": 0.7879470955262287,
+          "continuous": 0.5680624030020687,
+          "index2": 0.7879470955262284
+        },
+        "1.50": {
+          "static": 0.7810001523445906,
+          "continuous": 0.5681437733799555,
+          "index2": 0.7810001523445951
+        }
+      }
+    },
+    "T_shape": {
+      "order": 1,
+      "point_group": "C1v",
+      "residual": {
+        "uniform": {
+          "static": 0.8041175915956722,
+          "continuous": 0.8366141701018698
+        },
+        "prop_inverse": {
+          "static": 1.1245496583668517,
+          "continuous": 1.1722833387437526
+        },
+        "solved": {
+          "static": 0.8070686097435135,
+          "continuous": 0.836798686927713
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "static",
+          "actuator_class": "PHYSICAL_LIMIT",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.8041175915956722,
+          "static_residual_anisotropy": 0.8041175915956722,
+          "reduction_factor": 1.0,
+          "rotation_recommended": false,
+          "advice": "No rotation mode reduces the anisotropy by the 1.15 factor that makes a turntable worth its cost here, so the static arm is kept. The residual anisotropy is in the band of the two shapes rotation did NOT rescue (T_shape 0.837, L_shape 1.098). Expect a physical limit: a radial kernel melts a rounded blob and this part is not close to radially symmetric. The best results on record for that class came from SEQUENTIAL DWELL, an ordered hold that melts one limb and then the other (SEQUENTIAL_DWELL_REPORT: L_shape 396.20 -> 276.39 J, IoU 0.6484 -> 0.7161; T_shape 422.28 -> 343.02 J). Neither reached the SOLVED class, so this is a partial rescue, not a fix.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.8041175915956722,
+            "continuous": 0.8366141701018698
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "static",
+          "actuator_class": "PHYSICAL_LIMIT",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 1.1245496583668517,
+          "static_residual_anisotropy": 1.1245496583668517,
+          "reduction_factor": 1.0,
+          "rotation_recommended": false,
+          "advice": "The residual anisotropy after a map is in the band of the two shapes rotation did NOT rescue (T_shape 1.124, L_shape 1.208 on this measurement). Expect a physical limit: a radial kernel melts a rounded blob and this part is not close to radially symmetric, and a dopant map cannot fix it either. The best results on record for that class came from SEQUENTIAL DWELL, an ordered hold that melts one limb and then the other (SEQUENTIAL_DWELL_REPORT: L_shape 396.20 -> 276.39 J, IoU 0.6484 -> 0.7161; T_shape 422.28 -> 343.02 J). Neither reached the SOLVED class, so this is a partial rescue, not a fix.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 1.1245496583668517,
+            "continuous": 1.1722833387437526
+          }
+        },
+        "v2_solved": {
+          "mode": "static",
+          "actuator_class": "PHYSICAL_LIMIT",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.8070686097435135,
+          "static_residual_anisotropy": 0.8070686097435135,
+          "reduction_factor": 1.0,
+          "rotation_recommended": false,
+          "advice": "The residual anisotropy after a map is in the band of the two shapes rotation did NOT rescue (T_shape 1.124, L_shape 1.208 on this measurement). Expect a physical limit: a radial kernel melts a rounded blob and this part is not close to radially symmetric, and a dopant map cannot fix it either. The best results on record for that class came from SEQUENTIAL DWELL, an ordered hold that melts one limb and then the other (SEQUENTIAL_DWELL_REPORT: L_shape 396.20 -> 276.39 J, IoU 0.6484 -> 0.7161; T_shape 422.28 -> 343.02 J). Neither reached the SOLVED class, so this is a partial rescue, not a fix.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.8070686097435135,
+            "continuous": 0.836798686927713
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.4444444444444444,
+      "ground_truth": {
+        "outcome": "rotation_fails",
+        "source": "CONTINUOUS_ROTATION_REPORT S1: 522.28 (HORIZON) / 0.5356 -> 467.33 / 0.5516, -10.5 pct J with 42.9 pct of the part still unmelted; the penalty is NOT erased"
+      },
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.8409438065449643,
+          "continuous": 0.9385703369593252
+        },
+        "1.00": {
+          "static": 1.1245496583668517,
+          "continuous": 1.1722833387437526
+        },
+        "1.50": {
+          "static": 1.4445222275446061,
+          "continuous": 1.3350501801192718
+        }
+      }
+    },
+    "cross": {
+      "order": 4,
+      "point_group": "C4v",
+      "residual": {
+        "uniform": {
+          "static": 0.8223093170676167,
+          "continuous": 0.4189711738799897,
+          "index2": 0.8223093170676167,
+          "index4": 0.5251127977389771
+        },
+        "prop_inverse": {
+          "static": 0.6631970866131595,
+          "continuous": 0.4119584588654887,
+          "index2": 0.6631970866131288,
+          "index4": 0.5098609038400124
+        },
+        "solved": {
+          "static": 0.8206692835768311,
+          "continuous": 0.5483831155528736,
+          "index2": 0.8206692835768475,
+          "index4": 0.7048597978443354
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.4189711738799897,
+          "static_residual_anisotropy": 0.8223093170676167,
+          "reduction_factor": 1.9626870971871666,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0
+          ],
+          "spectrum": {
+            "static": 0.8223093170676167,
+            "continuous": 0.4189711738799897,
+            "index2": 0.8223093170676167,
+            "index4": 0.5251127977389771
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.4119584588654887,
+          "static_residual_anisotropy": 0.6631970866131595,
+          "reduction_factor": 1.6098639858969477,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0
+          ],
+          "spectrum": {
+            "static": 0.6631970866131595,
+            "continuous": 0.4119584588654887,
+            "index2": 0.6631970866131288,
+            "index4": 0.5098609038400124
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MAP_PLUS_MODE",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.5483831155528736,
+          "static_residual_anisotropy": 0.8206692835768311,
+          "reduction_factor": 1.4965254405206145,
+          "rotation_recommended": true,
+          "advice": "The mode still helps after the map, but it leaves real anisotropy, between the winners' band and the failures' band. Solve the map against this mode's averaged kernel and expect the map to be load bearing rather than a finish.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0
+          ],
+          "spectrum": {
+            "static": 0.8206692835768311,
+            "continuous": 0.5483831155528736,
+            "index2": 0.8206692835768475,
+            "index4": 0.7048597978443354
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.6754966887417219,
+      "ground_truth": {
+        "outcome": "rotation_wins",
+        "source": "CONTINUOUS_ROTATION_REPORT S1: 147.03 / 0.8514 -> 34.82 / 0.9866, -76.3 pct J"
+      },
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.6921756700218363,
+          "continuous": 0.3977598705521503,
+          "index2": 0.6921756700218089,
+          "index4": 0.4847182908108941
+        },
+        "1.00": {
+          "static": 0.6631970866131595,
+          "continuous": 0.4119584588654887,
+          "index2": 0.6631970866131288,
+          "index4": 0.5098609038400124
+        },
+        "1.50": {
+          "static": 0.6647518204094534,
+          "continuous": 0.4211398032822669,
+          "index2": 0.6647518204094517,
+          "index4": 0.5272365282948337
+        }
+      }
+    },
+    "diamond": {
+      "order": 4,
+      "point_group": "C4v",
+      "residual": {
+        "uniform": {
+          "static": 0.5160606850838455,
+          "continuous": 0.2785492521178949,
+          "index2": 0.5160606850838455,
+          "index4": 0.37561793700630597
+        },
+        "prop_inverse": {
+          "static": 0.3688420729826837,
+          "continuous": 0.27953259147503995,
+          "index2": 0.3688420729826598,
+          "index4": 0.36709103061660064
+        },
+        "solved": {
+          "static": 0.39073357902989964,
+          "continuous": 0.31992878276485176,
+          "index2": 0.3907335790299074,
+          "index4": 0.40557846557109134
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.2785492521178949,
+          "static_residual_anisotropy": 0.5160606850838455,
+          "reduction_factor": 1.852673023388427,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0
+          ],
+          "spectrum": {
+            "static": 0.5160606850838455,
+            "continuous": 0.2785492521178949,
+            "index2": 0.5160606850838455,
+            "index4": 0.37561793700630597
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.27953259147503995,
+          "static_residual_anisotropy": 0.3688420729826837,
+          "reduction_factor": 1.3194957734136643,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0
+          ],
+          "spectrum": {
+            "static": 0.3688420729826837,
+            "continuous": 0.27953259147503995,
+            "index2": 0.3688420729826598,
+            "index4": 0.36709103061660064
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.31992878276485176,
+          "static_residual_anisotropy": 0.39073357902989964,
+          "reduction_factor": 1.2213142426672174,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0
+          ],
+          "spectrum": {
+            "static": 0.39073357902989964,
+            "continuous": 0.31992878276485176,
+            "index2": 0.3907335790299074,
+            "index4": 0.40557846557109134
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.851985559566787,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.3879016671412013,
+          "continuous": 0.25924624374682514,
+          "index2": 0.3879016671412209,
+          "index4": 0.3348123602049522
+        },
+        "1.00": {
+          "static": 0.3688420729826837,
+          "continuous": 0.27953259147503995,
+          "index2": 0.3688420729826598,
+          "index4": 0.36709103061660064
+        },
+        "1.50": {
+          "static": 0.37823437675571125,
+          "continuous": 0.2888242139419894,
+          "index2": 0.3782343767557258,
+          "index4": 0.38260119033734674
+        }
+      }
+    },
+    "ellipse": {
+      "order": 2,
+      "point_group": "C2v",
+      "residual": {
+        "uniform": {
+          "static": 0.7917552986407235,
+          "continuous": 0.3287361474296424,
+          "index2": 0.7917552986407235
+        },
+        "prop_inverse": {
+          "static": 0.47774139116578845,
+          "continuous": 0.3426323567181631,
+          "index2": 0.4777413911657797
+        },
+        "solved": {
+          "static": 0.5364258430931481,
+          "continuous": 0.5152277077567303,
+          "index2": 0.5364258430931501
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.3287361474296424,
+          "static_residual_anisotropy": 0.7917552986407235,
+          "reduction_factor": 2.4084826230135783,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.7917552986407235,
+            "continuous": 0.3287361474296424,
+            "index2": 0.7917552986407235
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.3426323567181631,
+          "static_residual_anisotropy": 0.47774139116578845,
+          "reduction_factor": 1.394326547970369,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.47774139116578845,
+            "continuous": 0.3426323567181631,
+            "index2": 0.4777413911657797
+          }
+        },
+        "v2_solved": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.5364258430931481,
+          "static_residual_anisotropy": 0.5364258430931481,
+          "reduction_factor": 1.041143236315285,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.5364258430931481,
+            "continuous": 0.5152277077567303,
+            "index2": 0.5364258430931501
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.9787234042553191,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.5229231222561596,
+          "continuous": 0.2916311041858883,
+          "index2": 0.5229231222561476
+        },
+        "1.00": {
+          "static": 0.47774139116578845,
+          "continuous": 0.3426323567181631,
+          "index2": 0.4777413911657797
+        },
+        "1.50": {
+          "static": 0.4942192691803794,
+          "continuous": 0.3616429868744664,
+          "index2": 0.4942192691803805
+        }
+      }
+    },
+    "octagon": {
+      "order": 8,
+      "point_group": "C8v",
+      "residual": {
+        "uniform": {
+          "static": 0.10294824239819433,
+          "continuous": 0.06997205874909045,
+          "index2": 0.10294824239819433,
+          "index4": 0.058973183805968235,
+          "index8": 0.04733696281134515
+        },
+        "prop_inverse": {
+          "static": 0.1750416659072504,
+          "continuous": 0.17684374768539143,
+          "index2": 0.17504166590724893,
+          "index4": 0.18349614924213775,
+          "index8": 0.1697673795709145
+        },
+        "solved": {
+          "static": 0.2511313249694411,
+          "continuous": 0.17583133823432753,
+          "index2": 0.25113132496943674,
+          "index4": 0.22284146522412718,
+          "index8": 0.20275030621918
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "index8",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.04733696281134515,
+          "static_residual_anisotropy": 0.10294824239819433,
+          "reduction_factor": 2.1747961061312737,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.10294824239819433,
+            "continuous": 0.06997205874909045,
+            "index2": 0.10294824239819433,
+            "index4": 0.058973183805968235,
+            "index8": 0.04733696281134515
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.1750416659072504,
+          "static_residual_anisotropy": 0.1750416659072504,
+          "reduction_factor": 1.0310677254350429,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.1750416659072504,
+            "continuous": 0.17684374768539143,
+            "index2": 0.17504166590724893,
+            "index4": 0.18349614924213775,
+            "index8": 0.1697673795709145
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.17583133823432753,
+          "static_residual_anisotropy": 0.2511313249694411,
+          "reduction_factor": 1.428251229224921,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.2511313249694411,
+            "continuous": 0.17583133823432753,
+            "index2": 0.25113132496943674,
+            "index4": 0.22284146522412718,
+            "index8": 0.20275030621918
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.9944237918215614,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.0925661796461168,
+          "continuous": 0.10952357902246836,
+          "index2": 0.09256617964612393,
+          "index4": 0.10295783491227829,
+          "index8": 0.09374885084429047
+        },
+        "1.00": {
+          "static": 0.1750416659072504,
+          "continuous": 0.17684374768539143,
+          "index2": 0.17504166590724893,
+          "index4": 0.18349614924213775,
+          "index8": 0.1697673795709145
+        },
+        "1.50": {
+          "static": 0.24057519947574948,
+          "continuous": 0.22599087400462073,
+          "index2": 0.24057519947575373,
+          "index4": 0.24479483426349033,
+          "index8": 0.22697688301458502
+        }
+      }
+    },
+    "pentagon": {
+      "order": 5,
+      "point_group": "C5v",
+      "residual": {
+        "uniform": {
+          "static": 0.44512312554030004,
+          "continuous": 0.19251272574044095,
+          "index5": 0.25874388341219706
+        },
+        "prop_inverse": {
+          "static": 0.248022839848131,
+          "continuous": 0.2112825360159783,
+          "index5": 0.25961710937898075
+        },
+        "solved": {
+          "static": 0.26562461236624335,
+          "continuous": 0.21128610207426252,
+          "index5": 0.2607078289903906
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.19251272574044095,
+          "static_residual_anisotropy": 0.44512312554030004,
+          "reduction_factor": 2.3121750722102705,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.44512312554030004,
+            "continuous": 0.19251272574044095,
+            "index5": 0.25874388341219706
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.2112825360159783,
+          "static_residual_anisotropy": 0.248022839848131,
+          "reduction_factor": 1.1738918157881928,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.248022839848131,
+            "continuous": 0.2112825360159783,
+            "index5": 0.25961710937898075
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.21128610207426252,
+          "static_residual_anisotropy": 0.26562461236624335,
+          "reduction_factor": 1.2571797660069568,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.26562461236624335,
+            "continuous": 0.21128610207426252,
+            "index5": 0.2607078289903906
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.9386892177589852,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.272397450490124,
+          "continuous": 0.1848131728515332,
+          "index5": 0.22772400562692682
+        },
+        "1.00": {
+          "static": 0.248022839848131,
+          "continuous": 0.2112825360159783,
+          "index5": 0.25961710937898075
+        },
+        "1.50": {
+          "static": 0.2654571038794155,
+          "continuous": 0.22617757766050753,
+          "index5": 0.27723006722219445
+        }
+      }
+    },
+    "rectangle": {
+      "order": 2,
+      "point_group": "C2v",
+      "residual": {
+        "uniform": {
+          "static": 1.0168910721141422,
+          "continuous": 0.46644009992408814,
+          "index2": 1.0168910721141422
+        },
+        "prop_inverse": {
+          "static": 0.8111257845911597,
+          "continuous": 0.41228936683501893,
+          "index2": 0.8111257845911508
+        },
+        "solved": {
+          "static": 1.0190724984769983,
+          "continuous": 0.47716218925555015,
+          "index2": 1.0190724984770032
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.46644009992408814,
+          "static_residual_anisotropy": 1.0168910721141422,
+          "reduction_factor": 2.180110741507084,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 1.0168910721141422,
+            "continuous": 0.46644009992408814,
+            "index2": 1.0168910721141422
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.41228936683501893,
+          "static_residual_anisotropy": 0.8111257845911597,
+          "reduction_factor": 1.967370128455771,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.8111257845911597,
+            "continuous": 0.41228936683501893,
+            "index2": 0.8111257845911508
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.47716218925555015,
+          "static_residual_anisotropy": 1.0190724984769983,
+          "reduction_factor": 2.1356941547839647,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 1.0190724984769983,
+            "continuous": 0.47716218925555015,
+            "index2": 1.0190724984770032
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.8424242424242424,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.8242770415065575,
+          "continuous": 0.4130881455887454,
+          "index2": 0.8242770415065428
+        },
+        "1.00": {
+          "static": 0.8111257845911597,
+          "continuous": 0.41228936683501893,
+          "index2": 0.8111257845911508
+        },
+        "1.50": {
+          "static": 0.8197405117305532,
+          "continuous": 0.41050927591852543,
+          "index2": 0.8197405117305451
+        }
+      }
+    },
+    "rounded_rect": {
+      "order": 2,
+      "point_group": "C2v",
+      "residual": {
+        "uniform": {
+          "static": 0.6691815342565183,
+          "continuous": 0.30069602706942083,
+          "index2": 0.6691815342565182
+        },
+        "prop_inverse": {
+          "static": 0.3590050867651515,
+          "continuous": 0.24168056357235293,
+          "index2": 0.3590050867651543
+        },
+        "solved": {
+          "static": 0.41028687305640504,
+          "continuous": 0.24156092928170766,
+          "index2": 0.410286873056409
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.30069602706942083,
+          "static_residual_anisotropy": 0.6691815342565183,
+          "reduction_factor": 2.22544188820302,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.6691815342565183,
+            "continuous": 0.30069602706942083,
+            "index2": 0.6691815342565182
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.24168056357235293,
+          "static_residual_anisotropy": 0.3590050867651515,
+          "reduction_factor": 1.4854528699312415,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.3590050867651515,
+            "continuous": 0.24168056357235293,
+            "index2": 0.3590050867651543
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.24156092928170766,
+          "static_residual_anisotropy": 0.41028687305640504,
+          "reduction_factor": 1.6984819286645882,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.41028687305640504,
+            "continuous": 0.24156092928170766,
+            "index2": 0.410286873056409
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.9973958333333334,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.4268833134947738,
+          "continuous": 0.23371156934113577,
+          "index2": 0.4268833134947633
+        },
+        "1.00": {
+          "static": 0.3590050867651515,
+          "continuous": 0.24168056357235293,
+          "index2": 0.3590050867651543
+        },
+        "1.50": {
+          "static": 0.3386287152333625,
+          "continuous": 0.24431204563210787,
+          "index2": 0.3386287152333686
+        }
+      }
+    },
+    "star": {
+      "order": 5,
+      "point_group": "C5v",
+      "residual": {
+        "uniform": {
+          "static": 0.7041359097264613,
+          "continuous": 0.4618221309685768,
+          "index5": 0.46312404668752893
+        },
+        "prop_inverse": {
+          "static": 0.5817717481308349,
+          "continuous": 0.4379802992189636,
+          "index5": 0.43839625908731467
+        },
+        "solved": {
+          "static": 0.6925289359964362,
+          "continuous": 0.4840297538421623,
+          "index5": 0.48320183499465325
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.4618221309685768,
+          "static_residual_anisotropy": 0.7041359097264613,
+          "reduction_factor": 1.5246907034309536,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.7041359097264613,
+            "continuous": 0.4618221309685768,
+            "index5": 0.46312404668752893
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.4379802992189636,
+          "static_residual_anisotropy": 0.5817717481308349,
+          "reduction_factor": 1.3283057460992882,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.5817717481308349,
+            "continuous": 0.4379802992189636,
+            "index5": 0.43839625908731467
+          }
+        },
+        "v2_solved": {
+          "mode": "index5",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.48320183499465325,
+          "static_residual_anisotropy": 0.6925289359964362,
+          "reduction_factor": 1.4332084148730502,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.6925289359964362,
+            "continuous": 0.4840297538421623,
+            "index5": 0.48320183499465325
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.7031802120141343,
+      "ground_truth": {
+        "outcome": "rotation_wins",
+        "source": "CONTINUOUS_ROTATION_REPORT S1: 106.28 / 0.7870 -> 24.46 / 0.9527, -77.0 pct J"
+      },
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.6051103708714682,
+          "continuous": 0.4361813651109323,
+          "index5": 0.4381919814193033
+        },
+        "1.00": {
+          "static": 0.5817717481308349,
+          "continuous": 0.4379802992189636,
+          "index5": 0.43839625908731467
+        },
+        "1.50": {
+          "static": 0.5850407052528822,
+          "continuous": 0.4397406350873861,
+          "index5": 0.4401404375828989
+        }
+      }
+    },
+    "star6": {
+      "order": 6,
+      "point_group": "C6v",
+      "residual": {
+        "uniform": {
+          "static": 0.5789578405110493,
+          "continuous": 0.3913718816764921,
+          "index2": 0.5789578405110493,
+          "index3": 0.3997423041005557,
+          "index6": 0.3997423041005561
+        },
+        "prop_inverse": {
+          "static": 0.44792879710120503,
+          "continuous": 0.36102072268906404,
+          "index2": 0.4479287971012011,
+          "index3": 0.3612448756635046,
+          "index6": 0.36124487566348934
+        },
+        "solved": {
+          "static": 0.5307120792077722,
+          "continuous": 0.39108733878691493,
+          "index2": 0.530712079207765,
+          "index3": 0.3913978203419154,
+          "index6": 0.391397820341928
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.3913718816764921,
+          "static_residual_anisotropy": 0.5789578405110493,
+          "reduction_factor": 1.4793036179068573,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "spectrum": {
+            "static": 0.5789578405110493,
+            "continuous": 0.3913718816764921,
+            "index2": 0.5789578405110493,
+            "index3": 0.3997423041005557,
+            "index6": 0.3997423041005561
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.36102072268906404,
+          "static_residual_anisotropy": 0.44792879710120503,
+          "reduction_factor": 1.2407287697083034,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "spectrum": {
+            "static": 0.44792879710120503,
+            "continuous": 0.36102072268906404,
+            "index2": 0.4479287971012011,
+            "index3": 0.3612448756635046,
+            "index6": 0.36124487566348934
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.39108733878691493,
+          "static_residual_anisotropy": 0.5307120792077722,
+          "reduction_factor": 1.3570167749586295,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0
+          ],
+          "spectrum": {
+            "static": 0.5307120792077722,
+            "continuous": 0.39108733878691493,
+            "index2": 0.530712079207765,
+            "index3": 0.3913978203419154,
+            "index6": 0.391397820341928
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.8407643312101911,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.46689384967296715,
+          "continuous": 0.3590151944874018,
+          "index2": 0.46689384967296266,
+          "index3": 0.36078963215863286,
+          "index6": 0.3607896321586287
+        },
+        "1.00": {
+          "static": 0.44792879710120503,
+          "continuous": 0.36102072268906404,
+          "index2": 0.4479287971012011,
+          "index3": 0.3612448756635046,
+          "index6": 0.36124487566348934
+        },
+        "1.50": {
+          "static": 0.45002357226589207,
+          "continuous": 0.3606060870358272,
+          "index2": 0.45002357226587997,
+          "index3": 0.3633623245318595,
+          "index6": 0.3633623245318534
+        }
+      }
+    },
+    "trapezoid": {
+      "order": 1,
+      "point_group": "C1v",
+      "residual": {
+        "uniform": {
+          "static": 0.5148670554362702,
+          "continuous": 0.33344621299911004
+        },
+        "prop_inverse": {
+          "static": 0.3730987062761783,
+          "continuous": 0.34265266927743937
+        },
+        "solved": {
+          "static": 0.4521930958687831,
+          "continuous": 0.33037937834177505
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.33344621299911004,
+          "static_residual_anisotropy": 0.5148670554362702,
+          "reduction_factor": 1.54407828118787,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.5148670554362702,
+            "continuous": 0.33344621299911004
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.3730987062761783,
+          "static_residual_anisotropy": 0.3730987062761783,
+          "reduction_factor": 1.0888539320675403,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.3730987062761783,
+            "continuous": 0.34265266927743937
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.33037937834177505,
+          "static_residual_anisotropy": 0.4521930958687831,
+          "reduction_factor": 1.3687085983950023,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.4521930958687831,
+            "continuous": 0.33037937834177505
+          }
+        }
+      },
+      "static_solve_4bpp_iou": 0.9717842323651452,
+      "ground_truth": null,
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.3845062390957573,
+          "continuous": 0.32513272200694143
+        },
+        "1.00": {
+          "static": 0.3730987062761783,
+          "continuous": 0.34265266927743937
+        },
+        "1.50": {
+          "static": 0.3833229636852933,
+          "continuous": 0.3517218332497761
+        }
+      }
+    },
+    "gear8": {
+      "order": 8,
+      "point_group": "C8v",
+      "residual": {
+        "uniform": {
+          "static": 0.4439633728150895,
+          "continuous": 0.22798535368617004,
+          "index2": 0.4439633728150895,
+          "index4": 0.2887885028857996,
+          "index8": 0.24106236272246753
+        },
+        "prop_inverse": {
+          "static": 0.31491400786657325,
+          "continuous": 0.28233961166407395,
+          "index2": 0.31491400786655666,
+          "index4": 0.3241612999498226,
+          "index8": 0.2956052708062551
+        },
+        "solved": {
+          "static": 0.705944218808183,
+          "continuous": 0.5172280832295522,
+          "index2": 0.7059442188081846,
+          "index4": 0.5929323949925652,
+          "index8": 0.5428664475906929
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.22798535368617004,
+          "static_residual_anisotropy": 0.4439633728150895,
+          "reduction_factor": 1.9473328686991924,
+          "rotation_recommended": true,
+          "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.4439633728150895,
+            "continuous": 0.22798535368617004,
+            "index2": 0.4439633728150895,
+            "index4": 0.2887885028857996,
+            "index8": 0.24106236272246753
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.31491400786657325,
+          "static_residual_anisotropy": 0.31491400786657325,
+          "reduction_factor": 1.115373099830059,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.31491400786657325,
+            "continuous": 0.28233961166407395,
+            "index2": 0.31491400786655666,
+            "index4": 0.3241612999498226,
+            "index8": 0.2956052708062551
+          }
+        },
+        "v2_solved": {
+          "mode": "continuous",
+          "actuator_class": "MAP_PLUS_MODE",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.5172280832295522,
+          "static_residual_anisotropy": 0.705944218808183,
+          "reduction_factor": 1.3648605744689937,
+          "rotation_recommended": true,
+          "advice": "The mode still helps after the map, but it leaves real anisotropy, between the winners' band and the failures' band. Solve the map against this mode's averaged kernel and expect the map to be load bearing rather than a finish.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "spectrum": {
+            "static": 0.705944218808183,
+            "continuous": 0.5172280832295522,
+            "index2": 0.7059442188081846,
+            "index4": 0.5929323949925652,
+            "index8": 0.5428664475906929
+          }
+        }
+      },
+      "static_solve_4bpp_iou": null,
+      "ground_truth": {
+        "outcome": "rotation_fails",
+        "source": "GEOMETRY_GENERALIZATION_REPORT S6.2: solved static 4 bpp 132.36 / 0.8458 BEATS solved continuous 4 bpp 138.59 / 0.8273; rotation improved the heating and still lost to the map"
+      },
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.34160885211190933,
+          "continuous": 0.24131447086791882,
+          "index2": 0.34160885211190306,
+          "index4": 0.2764129129709055,
+          "index8": 0.24989980338837697
+        },
+        "1.00": {
+          "static": 0.31491400786657325,
+          "continuous": 0.28233961166407395,
+          "index2": 0.31491400786655666,
+          "index4": 0.3241612999498226,
+          "index8": 0.2956052708062551
+        },
+        "1.50": {
+          "static": 0.31879884169393213,
+          "continuous": 0.3153373704026908,
+          "index2": 0.3187988416939317,
+          "index4": 0.3641106057946663,
+          "index8": 0.33182238479731835
+        }
+      }
+    },
+    "keyhole": {
+      "order": 1,
+      "point_group": "C1v",
+      "residual": {
+        "uniform": {
+          "static": 0.6109954709090119,
+          "continuous": 0.5156450979794925
+        },
+        "prop_inverse": {
+          "static": 0.5411668165978187,
+          "continuous": 0.47585229559437875
+        },
+        "solved": {
+          "static": 0.5891451021505727,
+          "continuous": 0.5269915708890301
+        }
+      },
+      "decisions": {
+        "v1": {
+          "mode": "continuous",
+          "actuator_class": "MAP_PLUS_MODE",
+          "basis": "uniform",
+          "classifier_version": 1,
+          "residual_anisotropy": 0.5156450979794925,
+          "static_residual_anisotropy": 0.6109954709090119,
+          "reduction_factor": 1.1849147277907632,
+          "rotation_recommended": true,
+          "advice": "The mode helps but leaves real anisotropy, between the winners' band and the failures' band. Solve the map against this mode's averaged kernel and expect the map to be load bearing rather than a finish.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.6109954709090119,
+            "continuous": 0.5156450979794925
+          }
+        },
+        "v2_prop_inverse": {
+          "mode": "continuous",
+          "actuator_class": "MODE_SUFFICES",
+          "basis": "prop_inverse",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.47585229559437875,
+          "static_residual_anisotropy": 0.5411668165978187,
+          "reduction_factor": 1.1372579718709914,
+          "rotation_recommended": true,
+          "advice": "The mode still helps AFTER the map has done its work, and the residual it leaves is inside the band the rotation campaign's winners sat in (square 0.256, cross 0.412, star 0.438, keyhole 0.476 on this measurement). Expect the actuator to carry most of the remaining gain; solve the dopant map against that mode's averaged kernel for the rest.",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.5411668165978187,
+            "continuous": 0.47585229559437875
+          }
+        },
+        "v2_solved": {
+          "mode": "static",
+          "actuator_class": "MAP_SUFFICES",
+          "basis": "solved",
+          "classifier_version": 2,
+          "residual_anisotropy": 0.5891451021505727,
+          "static_residual_anisotropy": 0.5891451021505727,
+          "reduction_factor": 1.1179402758884551,
+          "rotation_recommended": false,
+          "advice": "THE MAP SUFFICES: no turntable. After a dopant map has flattened the static heating, no rotation mode reduces the residual anisotropy by the 1.125 factor that would make a turntable worth its cost, and what is left is already inside the band the rotation campaign's winners sat in. Spend the budget on the map, not on the actuator. This is the class version 1 could not express: it compared the actuator against NO actuator, so it recommended a turntable for the eight-tooth gear, whose solved static map then beat every rotating arm (132.36 against 138.59 J).",
+          "candidate_angles_deg": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0,
+            120.0,
+            135.0,
+            150.0,
+            165.0
+          ],
+          "spectrum": {
+            "static": 0.5891451021505727,
+            "continuous": 0.5269915708890301
+          }
+        }
+      },
+      "static_solve_4bpp_iou": null,
+      "ground_truth": {
+        "outcome": "rotation_wins",
+        "source": "GEOMETRY_GENERALIZATION_REPORT S6.1: solved static 4 bpp 168.35 / 0.8163 -> solved continuous 4 bpp 8.08 / 0.9753"
+      },
+      "magnitude_sensitivity": {
+        "0.50": {
+          "static": 0.5439163852994953,
+          "continuous": 0.470994525874672
+        },
+        "1.00": {
+          "static": 0.5411668165978187,
+          "continuous": 0.47585229559437875
+        },
+        "1.50": {
+          "static": 0.5499831767414154,
+          "continuous": 0.48261885610264876
+        }
+      }
+    }
+  }
+}

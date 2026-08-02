@@ -1,0 +1,103 @@
+{
+  "shape": "ellipse",
+  "grid": 120,
+  "is_novel": false,
+  "voltage_v": 4900.0053540907065,
+  "n_part_cells": 744,
+  "symmetry": {
+    "rotational_order": 2,
+    "continuous_rotational": false,
+    "mirror_axes_deg": [
+      0.0,
+      90.0
+    ],
+    "point_group": "C2v",
+    "centroid_row_col": [
+      59.5,
+      59.5
+    ],
+    "diagnostics": {
+      "tested_orders": {
+        "2": 0.0,
+        "3": 0.27521728388392497,
+        "4": 0.311645206836238,
+        "5": 0.29893554529582145,
+        "6": 0.27521728388392497,
+        "7": 0.304619732010345,
+        "8": 0.311645206836238,
+        "9": 0.30725172101839193,
+        "10": 0.29893554529582145,
+        "11": 0.308781378459813,
+        "12": 0.311645206836238
+      },
+      "tested_orders_generator_only": {
+        "2": 0.0,
+        "3": 0.27521728388392497,
+        "4": 0.311645206836238,
+        "5": 0.29893554529582145,
+        "6": 0.27521728388392486,
+        "7": 0.2510098577449995,
+        "8": 0.22903447887666836,
+        "9": 0.21003029193825848,
+        "10": 0.19323906618446807,
+        "11": 0.17836188853272422,
+        "12": 0.16586193000116495
+      },
+      "acceptance_rule": "whole cyclic group: max over k = 1 .. N-1 of mismatch(k * 360 / N) < tol",
+      "generic_angle_mismatch": {
+        "17.0": 0.09870274111578883,
+        "23.0": 0.13067307452241037,
+        "41.0": 0.21386236474890538
+      },
+      "mirror_min_mismatch": 0.0,
+      "tol": 0.03
+    }
+  },
+  "modes": [
+    "static",
+    "continuous",
+    "index2"
+  ],
+  "residual": {
+    "uniform": {
+      "static": 0.7917552986407235,
+      "continuous": 0.3287361474296424,
+      "index2": 0.7917552986407235
+    },
+    "prop_inverse": {
+      "static": 0.47774139116578845,
+      "continuous": 0.3426323567181631,
+      "index2": 0.4777413911657797
+    },
+    "solved": {
+      "static": 0.5364258430931481,
+      "continuous": 0.5152277077567303,
+      "index2": 0.5364258430931501
+    }
+  },
+  "prop_inverse_magnitude": 1.0,
+  "prop_inverse_magnitude_sensitivity": {
+    "0.50": {
+      "static": 0.5229231222561596,
+      "continuous": 0.2916311041858883,
+      "index2": 0.5229231222561476
+    },
+    "1.00": {
+      "static": 0.47774139116578845,
+      "continuous": 0.3426323567181631,
+      "index2": 0.4777413911657797
+    },
+    "1.50": {
+      "static": 0.4942192691803794,
+      "continuous": 0.3616429868744664,
+      "index2": 0.4942192691803805
+    }
+  },
+  "solved_map_provenance": {
+    "path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_lib/ellipse_maps.npz",
+    "key": "A1_cont",
+    "note": "the shape-fidelity campaign's solved static map, solved against the BINARY RASTER target, not the area fill"
+  },
+  "ground_truth": null,
+  "wall_s": 183.22059733304195
+}

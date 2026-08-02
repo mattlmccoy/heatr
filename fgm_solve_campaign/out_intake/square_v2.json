@@ -1,0 +1,115 @@
+{
+  "shape": "square",
+  "grid": 120,
+  "is_novel": false,
+  "voltage_v": 2428.1732217860203,
+  "n_part_cells": 1600,
+  "symmetry": {
+    "rotational_order": 4,
+    "continuous_rotational": false,
+    "mirror_axes_deg": [
+      0.0,
+      45.0,
+      90.0,
+      135.0
+    ],
+    "point_group": "C4v",
+    "centroid_row_col": [
+      59.5,
+      59.5
+    ],
+    "diagnostics": {
+      "tested_orders": {
+        "2": 0.0,
+        "3": 0.15445058703348935,
+        "4": 0.0,
+        "5": 0.16524921792425268,
+        "6": 0.15445058703348938,
+        "7": 0.16834601829841755,
+        "8": 0.17087005665985075,
+        "9": 0.1694169620039763,
+        "10": 0.1652492179242527,
+        "11": 0.16980948767839885,
+        "12": 0.15445058703348938
+      },
+      "tested_orders_generator_only": {
+        "2": 0.0,
+        "3": 0.1544505870334893,
+        "4": 0.0,
+        "5": 0.11492708606250326,
+        "6": 0.15445058703348935,
+        "7": 0.1683460182989215,
+        "8": 0.17087005665985072,
+        "9": 0.1694169620039763,
+        "10": 0.16524921792425268,
+        "11": 0.16006057720413183,
+        "12": 0.15445058703348927
+      },
+      "acceptance_rule": "whole cyclic group: max over k = 1 .. N-1 of mismatch(k * 360 / N) < tol",
+      "generic_angle_mismatch": {
+        "17.0": 0.11036447498982022,
+        "23.0": 0.1344498666516798,
+        "41.0": 0.16988584342261587
+      },
+      "mirror_min_mismatch": 0.0,
+      "tol": 0.03
+    }
+  },
+  "modes": [
+    "static",
+    "continuous",
+    "index2",
+    "index4"
+  ],
+  "residual": {
+    "uniform": {
+      "static": 0.5633961903657474,
+      "continuous": 0.27661554066398414,
+      "index2": 0.5633961903657475,
+      "index4": 0.45034819423703987
+    },
+    "prop_inverse": {
+      "static": 0.36503565168644314,
+      "continuous": 0.2564200818911797,
+      "index2": 0.365035651686429,
+      "index4": 0.37559810743902633
+    },
+    "solved": {
+      "static": 0.5834365845913487,
+      "continuous": 0.31148096606149045,
+      "index2": 0.5834365845913466,
+      "index4": 0.45766655660417116
+    }
+  },
+  "prop_inverse_magnitude": 1.0,
+  "prop_inverse_magnitude_sensitivity": {
+    "0.50": {
+      "static": 0.38357256454748795,
+      "continuous": 0.2450126142160304,
+      "index2": 0.38357256454749433,
+      "index4": 0.3591621087037594
+    },
+    "1.00": {
+      "static": 0.36503565168644314,
+      "continuous": 0.2564200818911797,
+      "index2": 0.365035651686429,
+      "index4": 0.37559810743902633
+    },
+    "1.50": {
+      "static": 0.37395883458639817,
+      "continuous": 0.2605209791094228,
+      "index2": 0.37395883458639523,
+      "index4": 0.3843577085283349
+    }
+  },
+  "solved_map_provenance": {
+    "path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_lib/square_maps.npz",
+    "key": "A1_cont",
+    "note": "the shape-fidelity campaign's solved static map, solved against the BINARY RASTER target, not the area fill"
+  },
+  "ground_truth": {
+    "outcome": "rotation_wins",
+    "source": "CONTINUOUS_ROTATION_REPORT S1: solved static 25.56 / 0.9804 -> rotating 13.93 / 1.0000, -45.5 pct J"
+  },
+  "wall_s": 30.040185833000578
+}

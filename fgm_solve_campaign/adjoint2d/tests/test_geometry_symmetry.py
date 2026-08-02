@@ -59,22 +59,50 @@ def test_zero_rotation_has_zero_mismatch():
     assert gs.rotation_mismatch(chi, 0.0) == pytest.approx(0.0, abs=1e-12)
 
 
-@pytest.mark.parametrize("shape,order", [
-    ("cross", 4),
-    ("square", 4),
-    ("star", 5),
-    ("star6", 6),
-    ("hexagon", 6),
-    ("equilateral_triangle", 3),
-    ("L_shape", 1),
-    ("T_shape", 1),
-])
+# The sixteen library shapes whose rotational order `shapes.py` DEFINES. The
+# circle (continuously symmetric) and the rounded rectangle (whose order depends
+# on whether its configured 22 by 18 mm box is read as a square) are excluded
+# because the definition does not fix a single integer for them.
+LIBRARY_ORDERS = [
+    ("square", 4), ("hexagon", 6), ("triangle", 1),
+    ("equilateral_triangle", 3), ("L_shape", 1), ("H_shape", 2),
+    ("T_shape", 1), ("cross", 4), ("diamond", 4), ("ellipse", 2),
+    ("octagon", 8), ("pentagon", 5), ("rectangle", 2), ("star", 5),
+    ("star6", 6), ("trapezoid", 1),
+]
+
+
+@pytest.mark.parametrize("shape,order", LIBRARY_ORDERS)
 def test_rotational_order_is_recovered_on_the_library_shapes(shape, order):
     chi, x, y = _chi(shape)
     rep = gs.analyze(chi)
     assert rep.rotational_order == order, (
         f"{shape}: expected order {order}, got {rep.rotational_order} "
         f"(mismatch curve minima at {rep.diagnostics['tested_orders']})")
+
+
+def test_an_order_is_accepted_only_when_the_WHOLE_group_is_a_symmetry():
+    """The octagon regression, stated as the mechanism rather than the symptom.
+
+    A near-circular part scores a small autocorrelation defect at almost every
+    trial angle, so testing only the generator 360 / N accepts orders the part
+    does not have whenever 360 / N happens to fall near a multiple of the true
+    period. On the octagon (true period 45 degrees) the generator of order 10 is
+    36 degrees, which is 9 degrees off a true symmetry and scores BELOW the
+    threshold, while the second power of that generator, 72 degrees, is 27
+    degrees off and scores ABOVE it. Order 10 is therefore not a symmetry group
+    of the part even though its generator passes, and the detector must test the
+    whole cyclic group before accepting an order.
+    """
+    chi, x, y = _chi("octagon")
+    tol = gs.SYMMETRY_TOL
+    assert gs.rotation_mismatch(chi, 36.0) < tol, "the generator alone passes"
+    assert gs.rotation_mismatch(chi, 72.0) > tol, "its square does not"
+    rep = gs.analyze(chi)
+    assert rep.rotational_order == 8
+    # and every power of the ACCEPTED order really is a symmetry
+    for k in range(1, rep.rotational_order):
+        assert gs.rotation_mismatch(chi, k * 360.0 / rep.rotational_order) < tol
 
 
 def test_the_circle_is_flagged_as_continuously_symmetric():

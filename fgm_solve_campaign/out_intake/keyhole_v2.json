@@ -1,0 +1,98 @@
+{
+  "shape": "keyhole",
+  "grid": 120,
+  "is_novel": true,
+  "voltage_v": 2630.3288450001655,
+  "n_part_cells": 1030,
+  "symmetry": {
+    "rotational_order": 1,
+    "continuous_rotational": false,
+    "mirror_axes_deg": [
+      90.0
+    ],
+    "point_group": "C1v",
+    "centroid_row_col": [
+      62.18853561253561,
+      59.5
+    ],
+    "diagnostics": {
+      "tested_orders": {
+        "2": 0.22392610025351525,
+        "3": 0.28060125615890236,
+        "4": 0.3220576057677409,
+        "5": 0.32254950819388295,
+        "6": 0.3087143103738942,
+        "7": 0.3075251545209139,
+        "8": 0.3220576057677409,
+        "9": 0.3252184795847305,
+        "10": 0.32254950819388295,
+        "11": 0.3163779877828995,
+        "12": 0.3220576057677409
+      },
+      "tested_orders_generator_only": {
+        "2": 0.22392610025351525,
+        "3": 0.28060125615890236,
+        "4": 0.32205760576774084,
+        "5": 0.32254950819388295,
+        "6": 0.3087143103738942,
+        "7": 0.29010656883314206,
+        "8": 0.2725074567375599,
+        "9": 0.2549343678491172,
+        "10": 0.23784778669698312,
+        "11": 0.22265326234461189,
+        "12": 0.20869423407546978
+      },
+      "acceptance_rule": "whole cyclic group: max over k = 1 .. N-1 of mismatch(k * 360 / N) < tol",
+      "generic_angle_mismatch": {
+        "17.0": 0.1233747035106951,
+        "23.0": 0.1649529600430994,
+        "41.0": 0.25845658864926896
+      },
+      "mirror_min_mismatch": 1.722711875019502e-16,
+      "tol": 0.03
+    }
+  },
+  "modes": [
+    "static",
+    "continuous"
+  ],
+  "residual": {
+    "uniform": {
+      "static": 0.6109954709090119,
+      "continuous": 0.5156450979794925
+    },
+    "prop_inverse": {
+      "static": 0.5411668165978187,
+      "continuous": 0.47585229559437875
+    },
+    "solved": {
+      "static": 0.5891451021505727,
+      "continuous": 0.5269915708890301
+    }
+  },
+  "prop_inverse_magnitude": 1.0,
+  "prop_inverse_magnitude_sensitivity": {
+    "0.50": {
+      "static": 0.5439163852994953,
+      "continuous": 0.470994525874672
+    },
+    "1.00": {
+      "static": 0.5411668165978187,
+      "continuous": 0.47585229559437875
+    },
+    "1.50": {
+      "static": 0.5499831767414154,
+      "continuous": 0.48261885610264876
+    }
+  },
+  "solved_map_provenance": {
+    "path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_intake/keyhole_maps.npz",
+    "key": "static_cont",
+    "note": "solved in the generalization pass against the sub-cell area-fill target"
+  },
+  "ground_truth": {
+    "outcome": "rotation_wins",
+    "source": "GEOMETRY_GENERALIZATION_REPORT S6.1: solved static 4 bpp 168.35 / 0.8163 -> solved continuous 4 bpp 8.08 / 0.9753"
+  },
+  "wall_s": 38.448073792038485
+}
