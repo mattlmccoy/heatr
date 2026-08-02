@@ -1,0 +1,131 @@
+{
+ "what": "Phase C Task 3 solve arms",
+ "arms": {
+  "solve_filter_only_symmetric": {
+   "arm": "solve_filter_only_symmetric",
+   "wall_forward_s": 130.25167291599791,
+   "n_steps": 10000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 9.855033669739705e-08,
+   "argmin_symmetric": 7279,
+   "at_horizon_symmetric": false,
+   "J_asymmetric": 1.1511359005322288e-07,
+   "argmin_asymmetric": 7172,
+   "t_stop_s": 358.6,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 9.591990279284115e-08,
+   "J_out_of_bounds": 2.741955322911677e-08,
+   "J_in_bounds_deficit": 8.769403682410611e-08,
+   "out_of_part_melt_fraction_of_part": 0.0023849820388862296,
+   "in_bounds_below_floor_fraction": 0.08423965346900332,
+   "part_mean_phi": 0.9191950888051185,
+   "sigma_T_diagnostic_c": 21.41672479020251,
+   "in_part_melt_frac_phi08": 0.9327225880332092,
+   "in_part_melt_frac_phi09": 0.9222874320068708,
+   "bed_melt_frac_phi08": 0.0,
+   "bed_melt_frac_phi09": 0.0,
+   "eval_missed": 0,
+   "map_stats": {
+    "mean": 0.9999999999976202,
+    "min": 0.9999999999883527,
+    "max": 1.0000000000000016
+   },
+   "status": "converged:CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+   "objective_optimized": "symmetric",
+   "w_ratio": null,
+   "beta": 0.0,
+   "budget_gradient_evaluations": 12,
+   "gradient_evaluations_used": 2,
+   "forward_equivalents_spent": 6.656,
+   "J_first_eval": 9.855033669884776e-08,
+   "J_best_during_solve": 9.855033669739705e-08,
+   "wall_total_s": 871.921551416046,
+   "trajectory": [
+    {
+     "eval": 1,
+     "J": 9.855033669884776e-08,
+     "argmin_step": 7279,
+     "t_stop_s": 363.95000000000005,
+     "at_horizon": false,
+     "grad_norm": 1.688696607389328e-09,
+     "map_mean": 1.0,
+     "wall_s": 444.71870874997694
+    },
+    {
+     "eval": 2,
+     "J": 9.855033669739705e-08,
+     "argmin_step": 7279,
+     "t_stop_s": 363.95000000000005,
+     "at_horizon": false,
+     "grad_norm": 1.6886966069766013e-09,
+     "map_mean": 0.9999999999976202,
+     "wall_s": 871.763452416053
+    }
+   ],
+   "start": "single full-depth cold start, uniform saturation 1.0"
+  },
+  "solve_filter_only_asymmetric": {
+   "arm": "solve_filter_only_asymmetric",
+   "wall_forward_s": 137.92320558300707,
+   "n_steps": 10000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 9.855033669563119e-08,
+   "argmin_symmetric": 7279,
+   "at_horizon_symmetric": false,
+   "J_asymmetric": 1.1511359004906023e-07,
+   "argmin_asymmetric": 7172,
+   "t_stop_s": 358.6,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 9.591990278915944e-08,
+   "J_out_of_bounds": 2.74195532284297e-08,
+   "J_in_bounds_deficit": 8.769403682063052e-08,
+   "out_of_part_melt_fraction_of_part": 0.0023849820389238306,
+   "in_bounds_below_floor_fraction": 0.08423965346900332,
+   "part_mean_phi": 0.9191950888053944,
+   "sigma_T_diagnostic_c": 21.416724790151534,
+   "in_part_melt_frac_phi08": 0.9327225880332092,
+   "in_part_melt_frac_phi09": 0.9222874320068708,
+   "bed_melt_frac_phi08": 0.0,
+   "bed_melt_frac_phi09": 0.0,
+   "eval_missed": 0,
+   "map_stats": {
+    "mean": 0.9999999999946265,
+    "min": 0.9999999999750384,
+    "max": 1.0000000000000018
+   },
+   "status": "converged:CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+   "objective_optimized": "asymmetric",
+   "w_ratio": null,
+   "beta": 0.0,
+   "budget_gradient_evaluations": 12,
+   "gradient_evaluations_used": 2,
+   "forward_equivalents_spent": 6.656,
+   "J_first_eval": 1.151135900564477e-07,
+   "J_best_during_solve": 1.1511359004906023e-07,
+   "wall_total_s": 913.0981216660002,
+   "trajectory": [
+    {
+     "eval": 1,
+     "J": 1.151135900564477e-07,
+     "argmin_step": 7172,
+     "t_stop_s": 358.6,
+     "at_horizon": false,
+     "grad_norm": 3.75646091110831e-09,
+     "map_mean": 1.0,
+     "wall_s": 436.2154556249734
+    },
+    {
+     "eval": 2,
+     "J": 1.1511359004906023e-07,
+     "argmin_step": 7172,
+     "t_stop_s": 358.6,
+     "at_horizon": false,
+     "grad_norm": 3.756460909260145e-09,
+     "map_mean": 0.9999999999946265,
+     "wall_s": 912.8562149580102
+    }
+   ],
+   "start": "single full-depth cold start, uniform saturation 1.0"
+  }
+ }
+}
