@@ -31,7 +31,7 @@
 
 ### Task 0: Pre-register the gate protocol and the FD case
 
-- [ ] Write `solve3d/results/phase_b_protocol.json` BEFORE any adjoint code: the ported checklist items, the 2-D thresholds verbatim with citations, the chosen small FD case (mesh, drive, horizon, re-solve interval, why it crosses melt and re-solves >= 2 times), and the forward-equivalent accounting rule. Commit.
+- [x] Write `solve3d/results/phase_b_protocol.json` BEFORE any adjoint code: the ported checklist items, the 2-D thresholds verbatim with citations, the chosen small FD case (mesh, drive, horizon, re-solve interval, why it crosses melt and re-solves >= 2 times), and the forward-equivalent accounting rule. Commit.
 
 ### Task 1: Steady EQS adjoint lift + re-gate on Phase A meshes
 
