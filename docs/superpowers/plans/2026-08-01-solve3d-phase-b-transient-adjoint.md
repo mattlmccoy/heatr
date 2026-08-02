@@ -47,18 +47,18 @@
 
 ### Task 3: Design-field composition and cost accounting
 
-- [ ] Failing test: gradient w.r.t. the per-cell design field (the sat/dopant channel feeding sigma, matching the 2-D actuator convention: conductivity only, outside-part saturation 1.0) on the small case; FD gate at protocol thresholds.
-- [ ] Implement; measure gradient cost in forward-equivalents (target <= ~2; 2-D achieved 1.4-1.7). Record in `solve3d/results/phase_b_cost.json`. Commit.
+- [x] Failing test: gradient w.r.t. the per-cell design field (the sat/dopant channel feeding sigma, matching the 2-D actuator convention: conductivity only, outside-part saturation 1.0) on the small case; FD gate at protocol thresholds.
+- [x] Implement; measure gradient cost in forward-equivalents (target <= ~2; 2-D achieved 1.4-1.7). Record in `solve3d/results/phase_b_cost.json`. Commit. **10111 design dofs, all 4 probes at the PREFERRED 1e-6 standard (5.8e-10 to 7.2e-8); store-everything 1.338 forward-equivalents.**
 
 ### Task 4: Envelope stop-time exactness
 
-- [ ] Failing test: the S1-vs-S2 exact-agreement gate from the 2-D lane, ported: J at t_stop = argmin over the stored trajectory, gradient WITHOUT a dt*/ds term must agree exactly (0.0 rel, their verified result) with the fixed-time gradient evaluated at the argmin. Run red, implement the envelope read, green. Commit.
+- [x] Failing test: the S1-vs-S2 exact-agreement gate from the 2-D lane, ported: J at t_stop = argmin over the stored trajectory, gradient WITHOUT a dt*/ds term must agree exactly (0.0 rel, their verified result) with the fixed-time gradient evaluated at the argmin. Run red, implement the envelope read, green. Commit. **Exact agreement 0.0 (both max_abs_diff and rel_diff). Argmin interior (step 314 of 600) and does NOT move under any probe at eps 1e-3. FD gate on J* = min_t J passes all 4 probes at 1e-6, which verifies the envelope theorem numerically rather than assuming it. NOTE: this needed a SECOND case (horizon 100 s -> 300 s) because the pre-registered case's argmin sits AT the horizon; only the horizon changed, no threshold.**
 
 ### Task 5: Checkpointing
 
-- [ ] Failing test: `test_checkpointing.py::test_gradient_identical` - interval-checkpoint/recompute reverse march reproduces the store-everything gradient to rel ~1e-12 on the small case; plus a memory measurement (peak RSS or stored-state bytes) showing the reduction on the Phase A circle mesh horizon.
-- [ ] Implement (interval checkpointing is sufficient; full binomial Griewank only if the interval scheme misses the cost target - justify either way).
-- [ ] Green; re-measure forward-equivalent cost WITH checkpointing (this is the number that must be <= ~2). Commit.
+- [x] Failing test: `test_checkpointing.py::test_gradient_identical` - interval-checkpoint/recompute reverse march reproduces the store-everything gradient to rel ~1e-12 on the small case; plus a memory measurement (peak RSS or stored-state bytes) showing the reduction on the Phase A circle mesh horizon.
+- [x] Implement (interval checkpointing is sufficient; full binomial Griewank only if the interval scheme misses the cost target - justify either way). **Interval scheme meets the target, so binomial Griewank was not built; that is a measurement, not a preference.**
+- [x] Green; re-measure forward-equivalent cost WITH checkpointing (this is the number that must be <= ~2). Commit. **Checkpointed (interval 10): 1.774 forward-equivalents, gradient BIT-IDENTICAL to store-everything (max_rel_diff exactly 0.0), stored state 741840 B vs 4945600 B = 6.67x reduction.**
 
 ### Task 6: Gate report
 

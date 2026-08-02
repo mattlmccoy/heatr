@@ -1,0 +1,66 @@
+{
+ "checkpointing": {
+  "what": "interval checkpointing vs store-everything",
+  "scheme": "INTERVAL checkpointing (uniform anchors + forward recompute of one segment at a time). Full binomial Griewank was NOT needed: the interval scheme already meets the <= ~2 forward-equivalent target, so the extra machinery would buy nothing measurable here. That justification is a measurement, not a preference.",
+  "wall_forward_s": 1.3906838330440223,
+  "n_steps": 200,
+  "store_everything": {
+   "wall_gradient_s": 1.8928094169823453,
+   "forward_equivalents": 1.3610637961032714,
+   "stored_state_bytes": 4945600,
+   "recomputed_steps": 0
+  },
+  "intervals": {
+   "10": {
+    "interval": 10,
+    "max_rel_diff": 0.0,
+    "wall_gradient_s": 2.466506000026129,
+    "forward_equivalents": 1.77359220077167,
+    "recomputed_steps": 180,
+    "stored_state_bytes": 741840,
+    "recompute_overhead_vs_store_everything": 1.3030926293458602
+   },
+   "20": {
+    "interval": 20,
+    "max_rel_diff": 0.0,
+    "wall_gradient_s": 2.3839003330795094,
+    "forward_equivalents": 1.7141928858563547,
+    "recomputed_steps": 190,
+    "stored_state_bytes": 741840,
+    "recompute_overhead_vs_store_everything": 1.2594507992675232
+   },
+   "50": {
+    "interval": 50,
+    "max_rel_diff": 0.0,
+    "wall_gradient_s": 2.494874457945116,
+    "forward_equivalents": 1.7939911277203582,
+    "recomputed_steps": 196,
+    "stored_state_bytes": 1335312,
+    "recompute_overhead_vs_store_everything": 1.3180801170794187
+   }
+  },
+  "chosen": {
+   "interval": 10,
+   "max_rel_diff": 0.0,
+   "wall_gradient_s": 2.466506000026129,
+   "forward_equivalents": 1.77359220077167,
+   "recomputed_steps": 180,
+   "stored_state_bytes": 741840,
+   "recompute_overhead_vs_store_everything": 1.3030926293458602
+  }
+ },
+ "what": "gradient cost in forward-equivalents",
+ "accounting_rule": "wall time of ONE gradient evaluation (reverse march + all adjoint solves, EXCLUDING the forward that produced the trajectory) divided by the wall time of one forward on the same case and machine",
+ "target": "<= ~2 forward-equivalents CHECKPOINTED",
+ "reference_2d": "1.4-1.7 store-everything under 2-D memory conditions; 3-D must checkpoint",
+ "repeats": 3,
+ "store_everything": {
+  "wall_forward_s": 2.480026458040811,
+  "wall_gradient_s": 3.318969583022408,
+  "forward_equivalents": 1.3382799091765945,
+  "forward_plus_gradient_over_forward": 2.3382799091765945,
+  "stored_state_bytes": 4945600,
+  "n_steps": 200,
+  "n_events": 4
+ }
+}

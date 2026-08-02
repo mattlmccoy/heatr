@@ -747,19 +747,26 @@ class TransientCase:
     # ---- reverse march ------------------------------------------------- #
     def gradient(self, sigma_base_part: np.ndarray, tr: Trajectory | None = None,
                  mutate: str | None = None,
-                 checkpoint_interval: int | None = None):
-        """dJ/d(sigma_base) on the part cells; store-everything by default."""
+                 checkpoint_interval: int | None = None,
+                 read_step: int | None = None):
+        """dJ/d(sigma_base) on the part cells; store-everything by default.
+
+        `read_step` = the number of march steps completed at the read state
+        (None = the horizon). The envelope layer (B4) passes the trajectory
+        argmin here; nothing else about the sweep changes, which is exactly the
+        statement that no dt*/ds term exists."""
         p, eqs = self.p, self.eqs
         tr = tr or self.forward(sigma_base_part)
         base_all = self.sigma_all_from_part(sigma_base_part)
-        gT = self.seed_T(tr.T_final)
+        n_read = tr.n_steps if read_step is None else int(read_step)
+        gT = self.seed_T(self.state_at(tr, n_read))
         g_base = np.zeros(self.ncells, dtype=float)
         n_ev = len(tr.events)
         gQ = [np.zeros(self.ncells) for _ in range(n_ev)]
         recompute_steps = 0
 
         T_of_step = self._checkpoint_reader(tr, checkpoint_interval)
-        for j in range(tr.n_steps - 1, -1, -1):
+        for j in range(n_read - 1, -1, -1):
             k = int(tr.step_event[j])
             T_in, extra = T_of_step(j)
             recompute_steps += extra
@@ -784,9 +791,10 @@ class TransientCase:
                                * dens * active)
                     gT += self.cell_avg_T(g_cells)
         self.n_reverse += 1
-        info = {"n_events": n_ev, "n_steps": tr.n_steps,
+        info = {"n_events": n_ev, "n_steps": tr.n_steps, "read_step": n_read,
                 "recomputed_steps": recompute_steps,
-                "checkpoint_interval": checkpoint_interval}
+                "checkpoint_interval": checkpoint_interval,
+                "stored_state_bytes": self.stored_state_bytes(tr, checkpoint_interval)}
         return g_base[eqs.part], info
 
     def _F_of_event(self, ev: _Event) -> np.ndarray:
@@ -826,3 +834,70 @@ class TransientCase:
                     n += 1
             return cache.pop(j), n
         return read
+
+
+    # ---- state / trajectory readers ------------------------------------ #
+    def state_at(self, tr: Trajectory, k: int) -> np.ndarray:
+        """The march state after `k` steps (k = n_steps is the horizon)."""
+        k = int(k)
+        if k >= tr.n_steps:
+            return tr.T_final
+        return tr.T_steps[k]
+
+    def J_trajectory(self, tr: Trajectory) -> np.ndarray:
+        """J at every stored read state, index j = after j steps."""
+        return np.array([self.J_of_T(self.state_at(tr, j))
+                         for j in range(tr.n_steps + 1)], dtype=float)
+
+    def envelope_read(self, tr: Trajectory) -> dict:
+        """t_stop = argmin over the arm's OWN stored trajectory (the frozen 2-D
+        stop rule, FROZEN_CONVENTIONS_2D.md section 6). `at_horizon` is flagged
+        whenever the minimum sits on the last stored step, which makes that
+        arm's J an UPPER BOUND rather than a converged read."""
+        Js = self.J_trajectory(tr)
+        k = int(np.argmin(Js))
+        return {"argmin_step": k, "J": float(Js[k]), "n_steps": tr.n_steps,
+                "at_horizon": bool(k >= tr.n_steps), "J_trajectory": Js}
+
+    def J_envelope(self, sigma_base_part: np.ndarray) -> float:
+        return float(np.min(self.J_trajectory(self.forward(sigma_base_part))))
+
+    def stored_state_bytes(self, tr: Trajectory, interval: int | None) -> int:
+        """Bytes of march state the reverse sweep must hold."""
+        per = int(tr.T_steps[0].nbytes) if tr.T_steps else 0
+        if interval is None:
+            return per * tr.n_steps
+        n_anchor = len(range(0, tr.n_steps, int(interval)))
+        return per * (n_anchor + int(interval))     # anchors + one live segment
+
+    # ---- design map (FROZEN_CONVENTIONS_2D sections 4 and 7) ------------- #
+    def design_to_sigma(self, v: np.ndarray) -> np.ndarray:
+        """sigma = sigma_v + sat * fill * (sigma_d0 - sigma_v), conductivity ONLY.
+
+        On a conforming mesh `fill` is exactly 1 on part cells and 0 elsewhere
+        (no partial cells -- asserted in the test, not assumed), so the 2-D
+        sub-pixel fill factor collapses to the part indicator. The section-4
+        rule "outside the part the saturation is held at 1.0" is therefore
+        inert here: with fill = 0 the outside conductivity is sigma_virgin
+        whatever the saturation is. It is honoured rather than dropped, and the
+        reason it cannot bite is recorded."""
+        p = self.p
+        return p.sigma_virgin + np.asarray(v, float) * (p.sigma_doped - p.sigma_virgin)
+
+    def design_jvp(self, dv: np.ndarray) -> np.ndarray:
+        p = self.p
+        return np.asarray(dv, float) * (p.sigma_doped - p.sigma_virgin)
+
+    def design_vjp(self, g_sigma: np.ndarray) -> np.ndarray:
+        p = self.p
+        return np.asarray(g_sigma, float) * (p.sigma_doped - p.sigma_virgin)
+
+    def J_of_design(self, v: np.ndarray) -> float:
+        return self.J(self.design_to_sigma(v))
+
+    def J_envelope_of_design(self, v: np.ndarray) -> float:
+        return self.J_envelope(self.design_to_sigma(v))
+
+    def gradient_design(self, v: np.ndarray, **kw):
+        g_sigma, info = self.gradient(self.design_to_sigma(v), **kw)
+        return self.design_vjp(g_sigma), info
