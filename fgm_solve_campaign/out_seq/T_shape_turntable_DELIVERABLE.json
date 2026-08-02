@@ -1,0 +1,38 @@
+{
+  "actuator": "indexed turntable, SEQUENTIAL holds, constant radio-frequency power",
+  "schedule_kind": "sequential",
+  "control_step_s": 0.5,
+  "horizon_s": 750.0,
+  "positions_deg": [
+    90.0,
+    0.0
+  ],
+  "durations_s": [
+    519.0,
+    231.0
+  ],
+  "n_moves": 2,
+  "moves": [
+    {
+      "position_deg": 90.0,
+      "dwell_s": 519.0,
+      "move_at_s": 0.0
+    },
+    {
+      "position_deg": 0.0,
+      "dwell_s": 231.0,
+      "move_at_s": 519.0
+    }
+  ],
+  "shape": "T_shape",
+  "arm": "S_seq_cosolved_4bpp_interior_switch",
+  "grid": 120,
+  "recommended_stop_s": 634.5,
+  "J_phi_at_stop": 343.0158932616771,
+  "IoU_at_stop": 0.6661417322834645,
+  "peak_temperature_up_to_stop_c": 230.2511667647751,
+  "dopant_map": "T_shape_seq_maps.npz::sat_S_seq_cosolved_4bpp_interior_switch",
+  "radio_frequency_program": "constant, calibrated drive voltage",
+  "switch_time_chosen_by": "a 5 s scan, NOT the switch-time gradient; see out_seq/<shape>_kink.json",
+  "caveat": "grid 120 only; not verified on the production engine, which cannot express an unequal or sequential dwell"
+}
