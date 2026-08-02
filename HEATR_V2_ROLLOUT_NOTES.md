@@ -190,3 +190,29 @@ not edited.
 - The smoke run and the cancelled launch-check job are labeled and cheap;
   move to ~/.Trash after review if unwanted.
 - Planning file: heatr_v2_rollout_plan.md (throwaway, delete after review).
+
+## Addendum (2026-08-01, launch-fix + legacy-marking pass)
+
+Appended by the follow-up session; the sections above are unchanged. Full
+detail in GUI_LAUNCH_FIX_NOTES.md at the repo root.
+
+1. "Launch Run queues nothing" root-caused as stale-server skew, not a
+   code defect: a server process predating the solve-mode integration was
+   serving old python routes underneath the new static files, so promoted
+   launches posted to routes the old process lacked. Fresh server: all
+   launch modes queue. Guard added: integer API_GENERATION handshake
+   (rfam_gui_server.py constant, served in /api/meta and
+   /api/engine-version; EXPECTED_API_GENERATION pin plus a red
+   stale-server banner in app.js). Tests: test_api_generation.py
+   (3 tests, red first).
+2. Legacy-marking pass over the Operation-tab dropdowns per Matt's
+   directive (promote the newer standards, delete nothing): run mode,
+   FGM method chooser card order, proxy field, correction mode, drive
+   mode (enforce_generator_power), turntable dwell-program select, and
+   import bits per pixel now list v2-standard options first with
+   optgroup labels "v2 standard" / "legacy" and " (legacy)" suffixes on
+   superseded options. All values, handlers, and the per-shape standards
+   JSON hints untouched; defaults unchanged except fgm_import bpp which
+   now defaults to the 4 bpp standard. Tests:
+   test_gui_legacy_marking.py (6 tests, red first). Combined suite after
+   both passes: 59 passed; zero console errors live.

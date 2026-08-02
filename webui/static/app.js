@@ -1722,9 +1722,39 @@ function renderLiveArtifacts(jobs) {
   });
 }
 
+// Server/page API-generation handshake. Must match API_GENERATION in
+// rfam_gui_server.py (pinned by test_api_generation.py). A long-running
+// server process serving stale python routes underneath new static files is
+// the project's known failure mode (launches post to routes the stale
+// process does not have and nothing queues); on mismatch or absence a loud
+// banner tells the user to restart the server process and reload.
+const EXPECTED_API_GENERATION = 20260801;
+
+function _checkApiGeneration(meta) {
+  const got = meta?.api_generation;
+  if (got === EXPECTED_API_GENERATION) {
+    byId("staleServerBanner")?.remove();
+    return;
+  }
+  if (byId("staleServerBanner")) return;
+  const div = document.createElement("div");
+  div.id = "staleServerBanner";
+  div.setAttribute("role", "alert");
+  div.style.cssText =
+    "position:sticky;top:0;z-index:9999;background:#7a1f1f;color:#fff;" +
+    "padding:10px 16px;font-weight:600;text-align:center;";
+  div.textContent =
+    `Stale server process: the running rfam_gui_server.py predates this page ` +
+    `(server API generation ${got ?? "none"}, page expects ${EXPECTED_API_GENERATION}). ` +
+    `Launch Run and other actions may fail silently. ` +
+    `Restart rfam_gui_server.py, then reload this page.`;
+  document.body.prepend(div);
+}
+
 async function loadMeta() {
   const meta = await fetchJson("/api/meta");
   state.meta = meta;
+  _checkApiGeneration(meta);
   renderMeta(meta);
   renderModelInfo(meta);
   const defaultFamily = meta?.default_model_family || "experimental_pa12_hybrid";
@@ -2224,7 +2254,7 @@ async function init() {
     const sourceRun = (byId("fgmImportSourceRun")?.value || "").trim();
     const fileInput = byId("fgmImportFile");
     const file = fileInput?.files?.[0];
-    const bpp = parseInt(byId("fgmImportBpp")?.value || "2", 10);
+    const bpp = parseInt(byId("fgmImportBpp")?.value || "4", 10);
     const outputName = (byId("fgmImportOutputName")?.value || "").trim();
     const invertVis = (byId("fgmImportInvertVis")?.value || "true") === "true";
     const magnitude = parseFloat(byId("fgmImportMagnitude")?.value || "1.0") || 1.0;
@@ -3044,12 +3074,19 @@ async function _loadTurntablePrograms() {
   if (!sel) return;
   try {
     const resp = await fetchJson("/api/turntable-programs");
-    (resp.programs || []).forEach((p) => {
+    const programs = resp.programs || [];
+    if (!programs.length) return;
+    // v2-standard dwell programs listed first; the fixed-step (legacy)
+    // "none" option stays the default selection.
+    const group = document.createElement("optgroup");
+    group.label = "v2 standard (dwell programs)";
+    programs.forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p;
       opt.textContent = p.split("/").pop();
-      sel.appendChild(opt);
+      group.appendChild(opt);
     });
+    sel.insertBefore(group, sel.firstElementChild);
   } catch (e) { /* leave the fixed-step default */ }
 }
 

@@ -119,17 +119,23 @@
 
         <label>Mode
           <select id="mode" name="mode">
-            <option value="single">◎ │ Single Exposure</option>
-            <option value="sweep">≋ │ Exposure Sweep</option>
-            <option value="optimizer">◈ │ Exposure Optimizer</option>
-            <option value="turntable">↻ │ Turntable Run</option>
-            <option value="orientation_optimizer">⤾ │ Orientation Optimizer</option>
-            <option value="placement_optimizer">◫ │ Placement Optimizer</option>
-            <option value="shell_sweep">◌ │ Shell Thickness Sweep</option>
-            <option value="fgm_solve">◈ │ FGM Solve (shape fidelity)</option>
-            <option value="fgm_iterate">⟳ │ FGM Iterative Optimize</option>
-            <option value="fgm_import">📥 │ Import FGM PNG</option>
-            <option value="prewarp">⬡ │ Geometry Pre-Warp (ILT)</option>
+            <optgroup label="v2 standard">
+              <option value="fgm_solve">◈ │ FGM Solve (shape fidelity, deliverable map)</option>
+              <option value="single" selected>◎ │ Single Exposure</option>
+              <option value="turntable">↻ │ Turntable Run (dwell program capable)</option>
+            </optgroup>
+            <optgroup label="studies and tools">
+              <option value="sweep">≋ │ Exposure Sweep</option>
+              <option value="optimizer">◈ │ Exposure Optimizer</option>
+              <option value="orientation_optimizer">⤾ │ Orientation Optimizer</option>
+              <option value="placement_optimizer">◫ │ Placement Optimizer</option>
+              <option value="shell_sweep">◌ │ Shell Thickness Sweep</option>
+              <option value="fgm_import">📥 │ Import FGM PNG</option>
+              <option value="prewarp">⬡ │ Geometry Pre-Warp (ILT)</option>
+            </optgroup>
+            <optgroup label="legacy">
+              <option value="fgm_iterate">⟳ │ FGM Iterative Optimize (legacy)</option>
+            </optgroup>
           </select>
         </label>
 
@@ -223,8 +229,12 @@
               disables the fixed-step fields above.</p>
             <label>Program JSON (from the dwell campaign deliverables)
               <select id="turntableProgramSelect">
-                <option value="" selected>none (fixed-step mode)</option>
+                <option value="" selected>none - fixed-step rotation (legacy)</option>
               </select>
+              <span class="field-help">v2 standard for asymmetric parts is a dwell
+                program from the list (populated from
+                fgm_solve_campaign/out_dwell); fixed-step stepping remains fully
+                supported.</span>
             </label>
             <label>or program JSON path (repo-relative)
               <input id="turntableProgramJson" type="text"
@@ -628,8 +638,8 @@
             <label>enforce_generator_power (power scaling on/off)
               <select id="advEnforceGen">
                 <option value="">Use base config</option>
-                <option value="true">true</option>
-                <option value="false">false</option>
+                <option value="false">false - voltage drive with per-shape V_cal (v2 standard)</option>
+                <option value="true">true - generator power scaling (legacy)</option>
               </select>
             </label>
             <label>generator_transfer_efficiency <input id="advEff" type="number" min="0" max="1" step="0.001" placeholder="0.02" /></label>
@@ -734,13 +744,6 @@
               was removed, the research options live inside each mode below.</p>
           </div>
           <div id="fgmMethodChooser" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-            <button type="button" class="fgm-method-card" id="fgmMethodQuick"
-                    style="flex:1 1 180px;text-align:left;padding:8px;border-radius:6px;border:1px solid #35506a;background:#0d1c2a;color:#cfe3f5;cursor:pointer;"
-                    title="Proportional inverse from an existing run's stored fields, with the per-shape calibrated gain (FGM_WINDOW_RESELECTION.md). Instant; good for previews and printer tests, not the deliverable.">
-              <strong>Quick look</strong><br>
-              <span style="font-size:11px;">seconds, 0 extra solves; per-shape calibrated
-              gain; run it from the Results tab (Generate FGM on a finished run)</span>
-            </button>
             <button type="button" class="fgm-method-card" id="fgmMethodSolve" data-target-mode="fgm_solve"
                     style="flex:1 1 180px;text-align:left;padding:8px;border-radius:6px;border:2px solid #3fa34d;background:#0f2412;color:#d9f0dc;cursor:pointer;box-shadow:0 0 6px rgba(63,163,77,0.35);"
                     title="Gradient-solved 4 bpp printable map, re-verified through the forward model. Best known method on 13 of 18 library shapes (SHAPE_LIBRARY_SOLVE_REPORT).">
@@ -748,6 +751,13 @@
               <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:#1d4023;border:1px solid #3fa34d;color:#8fe09a;margin-left:4px;">RECOMMENDED</span><br>
               <span style="font-size:11px;">about 40 forward solves (tens of minutes);
               the printing deliverable</span>
+            </button>
+            <button type="button" class="fgm-method-card" id="fgmMethodQuick"
+                    style="flex:1 1 180px;text-align:left;padding:8px;border-radius:6px;border:1px solid #35506a;background:#0d1c2a;color:#cfe3f5;cursor:pointer;"
+                    title="Proportional inverse from an existing run's stored fields, with the per-shape calibrated gain (FGM_WINDOW_RESELECTION.md). Instant; good for previews and printer tests, not the deliverable.">
+              <strong>Quick look</strong><br>
+              <span style="font-size:11px;">seconds, 0 extra solves; per-shape calibrated
+              gain; run it from the Results tab (Generate FGM on a finished run)</span>
             </button>
             <button type="button" class="fgm-method-card" id="fgmMethodIterate" data-target-mode="fgm_iterate"
                     style="flex:1 1 180px;text-align:left;padding:8px;border-radius:6px;border:1px solid #35506a;background:#0d1c2a;color:#cfe3f5;cursor:pointer;"
@@ -862,12 +872,18 @@
 
           <label>Proxy Field
             <select id="fgmIterProxy" onchange="updateFgmProxyHelp()">
-              <option value="T_phi90" selected>T_phi90 — T snapshot at φ=0.90 sintering completion (recommended)</option>
-              <option value="T">T — final temperature (more diffused, less contrast)</option>
-              <option value="Qrf">Qrf — instantaneous RF power deposition</option>
-              <option value="rho_rel">rho_rel — relative density (integrated sintering history)</option>
-              <option value="__thorough__">⟳ Thorough — T_phi90 → Qrf → rho_rel (auto-switch on stagnation)</option>
-              <option value="__regime_adaptive__">⚡ Regime-adaptive — Qrf during active sintering, T_phi90 near-final</option>
+              <optgroup label="v2 standard">
+                <option value="T_phi90" selected>T_phi90 — T snapshot at φ=0.90 sintering completion (recommended)</option>
+              </optgroup>
+              <optgroup label="research alternates">
+                <option value="T">T — final temperature (more diffused, less contrast)</option>
+                <option value="rho_rel">rho_rel — relative density (integrated sintering history)</option>
+                <option value="__thorough__">⟳ Thorough — T_phi90 → Qrf → rho_rel (auto-switch on stagnation)</option>
+                <option value="__regime_adaptive__">⚡ Regime-adaptive — Qrf during active sintering, T_phi90 near-final</option>
+              </optgroup>
+              <optgroup label="legacy">
+                <option value="Qrf">Qrf - instantaneous RF power deposition (legacy)</option>
+              </optgroup>
             </select>
             <span class="field-help" id="fgmProxyHelp">
               <strong>T_phi90 (recommended)</strong> — temperature captured when mean sintering fraction
@@ -975,9 +991,15 @@
 
           <label>Correction Mode
             <select id="fgmIterCorrMode" onchange="updateFgmIterCorrModeHelp()">
-              <option value="integral" selected>Integral — accumulate corrections, fixed iter-0 reference (recommended)</option>
-              <option value="proportional">Proportional — full remap each iteration (single iter-1 only)</option>
-              <option value="hybrid">Hybrid — proportional iter-1, OC-TO phase-2 refinement</option>
+              <optgroup label="v2 standard">
+                <option value="proportional">Proportional - full remap, single iter-1 with the per-shape calibrated magnitude (v2 quick-look class)</option>
+              </optgroup>
+              <optgroup label="research alternates">
+                <option value="hybrid">Hybrid — proportional iter-1, OC-TO phase-2 refinement</option>
+              </optgroup>
+              <optgroup label="legacy">
+                <option value="integral" selected>Integral - accumulate corrections, fixed iter-0 reference (legacy) - this mode's historical default</option>
+              </optgroup>
             </select>
             <small id="fgmIterCorrModeHelp" style="color:#aaa;display:block;margin-top:3px;line-height:1.35;"></small>
           </label>
@@ -1100,8 +1122,8 @@
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <label style="flex:0 0 auto;">bits-per-pixel
               <select id="fgmImportBpp">
-                <option value="2" selected>2 bpp (4 levels)</option>
-                <option value="4">4 bpp (16 levels)</option>
+                <option value="4" selected>4 bpp (16 levels, v2 standard)</option>
+                <option value="2">2 bpp (4 levels, printer-constrained)</option>
               </select>
             </label>
             <label style="flex:1;min-width:120px;">Output Run Name

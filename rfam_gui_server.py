@@ -5207,10 +5207,18 @@ def _result_detail(name: str) -> dict[str, Any]:
     }
 
 
-_ENGINE_VERSION_CACHE: dict[str, str] | None = None
+# Server/page API-generation handshake. Bump this integer whenever a route
+# or launch-payload shape changes. The front end (webui/static/app.js,
+# EXPECTED_API_GENERATION) pins the generation it was written against and
+# shows a loud stale-server banner on mismatch or absence, because the
+# project's known failure mode is a long-running server process serving
+# stale python routes underneath new static files (test_api_generation.py).
+API_GENERATION = 20260801
+
+_ENGINE_VERSION_CACHE: dict[str, str | int] | None = None
 
 
-def _engine_version_info() -> dict[str, str]:
+def _engine_version_info() -> dict[str, str | int]:
     """Engine version, read once from rfam_eqs_coupled (single source of
     truth; no hardcoded duplicate in the GUI)."""
     global _ENGINE_VERSION_CACHE
@@ -5220,11 +5228,13 @@ def _engine_version_info() -> dict[str, str]:
             _ENGINE_VERSION_CACHE = {
                 "engine_version": str(ENGINE_VERSION),
                 "engine_version_name": str(ENGINE_VERSION_NAME),
+                "api_generation": API_GENERATION,
             }
         except Exception:
             _ENGINE_VERSION_CACHE = {
                 "engine_version": "unknown",
                 "engine_version_name": "unknown",
+                "api_generation": API_GENERATION,
             }
     return _ENGINE_VERSION_CACHE
 
