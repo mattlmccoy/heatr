@@ -627,20 +627,49 @@ class TransientCase:
                           n_steps=n_steps, out=out)
 
     # ---- objective ----------------------------------------------------- #
+    # Phase C selector. The DEFAULT is "symmetric", which is bit-identically
+    # the Phase B functional sum_i vol_i (phi_i - chi_i)^2, so every Phase B
+    # gate still measures what it measured.
+    objective_name: str = "symmetric"
+    objective_w_ratio: float | None = None
+
+    def set_objective(self, name: str, w_ratio: float | None = None) -> None:
+        from solve3d import objective as _obj
+        if name not in _obj.OBJECTIVES:
+            raise ValueError(f"unknown objective {name!r}")
+        self.objective_name = name
+        self.objective_w_ratio = w_ratio
+
     def J_of_T(self, T: np.ndarray) -> float:
+        from solve3d import objective as _obj
         phi = fwd.phase_fraction(T, self.p)[0]
-        return float(np.sum(self.vol_nodal * (phi - self.m_nodal) ** 2))
+        fn = _obj.OBJECTIVES[self.objective_name][0]
+        if self.objective_name == "asymmetric":
+            return fn(phi, self.m_nodal, self.vol_nodal,
+                      w_ratio=self.objective_w_ratio)
+        return fn(phi, self.m_nodal, self.vol_nodal)
 
     def J(self, sigma_base_part: np.ndarray) -> float:
         return self.J_of_T(self.forward(sigma_base_part).T_final)
 
     def seed_T(self, T: np.ndarray) -> np.ndarray:
-        """dJ/dT at the read state (clip subgradient: zero outside the window)."""
+        """dJ/dT at the read state.
+
+        Two subgradients compose here and both take the forward's own side:
+        the melt-fraction clip (dphi/dT is zero outside the melt window) and,
+        for the asymmetric objective, its two hinges."""
+        from solve3d import objective as _obj
         p = self.p
         u = (T - p.t_pc_c) / p.dt_pc_c + 0.5
         phi = np.clip(u, 0.0, 1.0)
         dphi = np.where((u > 0.0) & (u < 1.0), 1.0 / p.dt_pc_c, 0.0)
-        return 2.0 * self.vol_nodal * (phi - self.m_nodal) * dphi
+        dfn = _obj.OBJECTIVES[self.objective_name][1]
+        if self.objective_name == "asymmetric":
+            dJ_dphi = dfn(phi, self.m_nodal, self.vol_nodal,
+                          w_ratio=self.objective_w_ratio)
+        else:
+            dJ_dphi = dfn(phi, self.m_nodal, self.vol_nodal)
+        return dJ_dphi * dphi
 
     # ---- one march step, forward cache + VJP --------------------------- #
     def _step_cache(self, T_in: np.ndarray, F: np.ndarray) -> dict:

@@ -34,8 +34,8 @@
 
 ### Task 1: Objective (asymmetric, per Matt's recorded refinement)
 
-- [ ] Failing tests: closed-form J on synthetic phi/chi fields for BOTH weightings: (a) SYMMETRIC control J = integral (phi - chi)^2 (cross-lane comparability), (b) ASYMMETRIC J per the spec's objective refinement - out-of-bounds melt penalized hard, in-bounds under-density soft below a floor (hinge at phi_floor = 0.85, the middle of Matt's 80-90% band; the out/in weight ratio is a PRE-REGISTERED choice justified in Task 0, with ONE alternative ratio run as a sensitivity arm, not tuned).
-- [ ] Implement both + the envelope stop-time read (Phase B B4 machinery). Green. Commit.
+- [x] Failing tests: closed-form J on synthetic phi/chi fields for BOTH weightings: (a) SYMMETRIC control J = integral (phi - chi)^2 (cross-lane comparability), (b) ASYMMETRIC J per the spec's objective refinement - out-of-bounds melt penalized hard, in-bounds under-density soft below a floor (hinge at phi_floor = 0.85, the middle of Matt's 80-90% band; the out/in weight ratio is a PRE-REGISTERED choice justified in Task 0, with ONE alternative ratio run as a sensitivity arm, not tuned).
+- [x] Implement both + the envelope stop-time read (Phase B B4 machinery). Green. Commit. **9 passed; the default selector is bit-identical to the Phase B functional (J and seed both exactly 0.0 difference).**
 
 ### Task 2: Design chain (filter + projection) + gradient re-gate
 
