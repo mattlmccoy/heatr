@@ -62,7 +62,7 @@
 
 ### Task 6: Gate report
 
-- [ ] `solve3d/PHASE_B_REPORT.md`: protocol table with every gate number quoted from JSONs, mutation-test outcomes, cost table (store-everything vs checkpointed), honest deviations, not-covered list (no optimizer loop, no regularization chain, no eps channel, no rho-densification adjoint - the Phase A forward holds rho fixed, so the adjoint matches; the rho-coupled VJP layer arrives when densify ports into solve3d). Commit.
+- [x] `solve3d/PHASE_B_REPORT.md`: protocol table with every gate number quoted from JSONs, mutation-test outcomes, cost table (store-everything vs checkpointed), honest deviations, not-covered list (no optimizer loop, no regularization chain, no eps channel, no rho-densification adjoint - the Phase A forward holds rho fixed, so the adjoint matches; the rho-coupled VJP layer arrives when densify ports into solve3d). Commit.
 
 ## Out of scope
 
