@@ -39,8 +39,8 @@
 
 ### Task 2: Design chain (filter + projection) + gradient re-gate
 
-- [ ] Failing tests: filter transpose vs adjoint exact (1e-13 class); projection chain rule vs FD at beta 1 and 16; area/volume-fill chi analytic circle test; composed dJ/d(raw design) FD gate (Phase B protocol, all four probes) through filter (+ projection at beta=1) on the small Phase B case.
-- [ ] Implement `design_chain.py` (1.0 mm physical radius on the mesh; document the discrete kernel). Green. Commit.
+- [x] **chi PORTION DONE.** Failing tests then green: the cross-lane fill contract (`fgm_solve_campaign/adjoint2d/tests/fill_contract.py`, their d881455) imported unmodified and run against `solve3d/fill.py` -- circle area, rotated rectangle, winding invariance, grid independence, and `assert_extrusion_slice_reduction` (exact to 1e-12), plus my own prism-volume and partial-z-slice checks. 8 passed. chi on the conforming mesh reproduces the doped indicator to max diff 0.0 with 0 partial cells (`phase_c_chi.json`), so the one recorded deviation (barycentric tet lattice, since the contract's rectangular n_sub grid has no tetrahedral analogue) is MEASURED inert.
+- [ ] **NOT DONE (out of session budget):** filter transpose vs adjoint (1e-13 class); projection chain rule vs FD at beta 1 and 16; composed dJ/d(raw design) FD gate through filter (+ projection) on the small Phase B case; `design_chain.py` itself.
 
 ### Task 3: The solves
 
