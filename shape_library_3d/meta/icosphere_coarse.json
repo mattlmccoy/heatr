@@ -1,0 +1,32 @@
+{
+  "name": "icosphere_coarse",
+  "tier": 2,
+  "role": "stressor",
+  "rf_characteristic": "same sphere as the control, coarser uniform mesh (isolates resolution sensitivity)",
+  "numerical_characteristic": "uniform coarse icosphere",
+  "target_volume_mm3": 4188.790204786391,
+  "actual_volume_mm3": 4188.79020478639,
+  "volume_err_frac": 2.1712586625457608e-16,
+  "is_watertight": true,
+  "is_winding_consistent": true,
+  "euler_number": 2,
+  "genus": 0,
+  "n_vertices": 642,
+  "n_faces": 1280,
+  "facet_area_mm2": {
+    "min": 0.9135329798879022,
+    "max": 1.180624105245433,
+    "mean": 0.9827161363889179,
+    "std": 0.08452027661383552
+  },
+  "bbox_mm": [
+    20.057705783804188,
+    20.057705783804188,
+    20.057705783804188
+  ],
+  "realized_chamber_gap_mm": 19.971147108097906,
+  "scale_factor": 10.028852891902094,
+  "stl_path": "stl/icosphere_coarse.stl",
+  "sha256": "be5cde2e862cc4a55d35db5bf247a4bd6d7d8c2b1225efb924baa5687a085e9c",
+  "rejection_error": null
+}

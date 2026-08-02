@@ -1,0 +1,32 @@
+{
+  "name": "pipe",
+  "tier": 1,
+  "role": "stressor",
+  "rf_characteristic": "open-ended hollow wall: wall-thickness vs interior-field, the thin-wall heating question",
+  "numerical_characteristic": "genus-1 thin annular wall with flat caps",
+  "target_volume_mm3": 4188.790204786391,
+  "actual_volume_mm3": 4188.790204786393,
+  "volume_err_frac": 4.3425173250915216e-16,
+  "is_watertight": true,
+  "is_winding_consistent": true,
+  "euler_number": 0,
+  "genus": 1,
+  "n_vertices": 512,
+  "n_faces": 1024,
+  "facet_area_mm2": {
+    "min": 0.6919136104313277,
+    "max": 5.88989484549905,
+    "mean": 2.9604185227221578,
+    "std": 2.2152248248894013
+  },
+  "bbox_mm": [
+    24.0,
+    24.0,
+    20.0
+  ],
+  "realized_chamber_gap_mm": 18.0,
+  "scale_factor": 0.9999999999999999,
+  "stl_path": "stl/pipe.stl",
+  "sha256": "a8b9bb8a9410dab446393eb379498c084e6a0b14f917e993961e93ff8ca6b3fb",
+  "rejection_error": null
+}

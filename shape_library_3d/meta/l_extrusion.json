@@ -1,0 +1,32 @@
+{
+  "name": "l_extrusion",
+  "tier": 1,
+  "role": "stressor",
+  "rf_characteristic": "reentrant corner in 3-D; continuity with the 2-D L-shape outlier",
+  "numerical_characteristic": "reentrant concave corner",
+  "target_volume_mm3": 4188.790204786391,
+  "actual_volume_mm3": 4188.79020478639,
+  "volume_err_frac": 2.1712586625457608e-16,
+  "is_watertight": true,
+  "is_winding_consistent": true,
+  "euler_number": 2,
+  "genus": 0,
+  "n_vertices": 14,
+  "n_faces": 24,
+  "facet_area_mm2": {
+    "min": 39.34850564444949,
+    "max": 157.39402257779795,
+    "mean": 72.13892701482406,
+    "std": 31.45146729414989
+  },
+  "bbox_mm": [
+    17.742267193219583,
+    17.742267193219583,
+    17.742267193219583
+  ],
+  "realized_chamber_gap_mm": 21.12886640339021,
+  "scale_factor": 17.742267193219583,
+  "stl_path": "stl/l_extrusion.stl",
+  "sha256": "2357d8c62faed04b2208e671dd6ba5350527b3edbb6cda6dfc3595474c712269",
+  "rejection_error": null
+}

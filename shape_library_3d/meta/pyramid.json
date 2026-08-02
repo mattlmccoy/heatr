@@ -1,0 +1,32 @@
+{
+  "name": "pyramid",
+  "tier": 1,
+  "role": "stressor",
+  "rf_characteristic": "apex singularity PLUS sharp edges and flat facets (separates apex from edge effects vs the cone)",
+  "numerical_characteristic": "apex vertex + sharp edges, few flat facets",
+  "target_volume_mm3": 4188.790204786391,
+  "actual_volume_mm3": 4188.790204786389,
+  "volume_err_frac": 4.3425173250915216e-16,
+  "is_watertight": true,
+  "is_winding_consistent": true,
+  "euler_number": 2,
+  "genus": 0,
+  "n_vertices": 5,
+  "n_faces": 6,
+  "facet_area_mm2": {
+    "min": 270.2567690063489,
+    "max": 302.15625343882726,
+    "mean": 291.5230919613345,
+    "std": 15.037561172373431
+  },
+  "bbox_mm": [
+    23.248947030192525,
+    23.248947030192525,
+    23.248947030192525
+  ],
+  "realized_chamber_gap_mm": 18.375526484903737,
+  "scale_factor": 23.248947030192525,
+  "stl_path": "stl/pyramid.stl",
+  "sha256": "3ab127b0c419bf55c4a2abfb3e55f91f3eb5569edae90be9a8d9d705b5feccd0",
+  "rejection_error": null
+}
