@@ -147,6 +147,19 @@ option.
   ONE implementation/convention, not two parallel ones. Caveat: layer
   aggregation is a heuristic (z-coupling is real); heatr3d verification of
   the chosen program stays mandatory before printing.
+  DELIVERED 2026-08-02 (their d881455, GEOMETRY_GENERALIZATION_REPORT.md):
+  geometry_intake + the shared fill contract at
+  fgm_solve_campaign/adjoint2d/tests/fill_contract.py (Phase C chi must
+  import and pass assert_extrusion_slice_reduction + the parameterized
+  circle test). Classifier calibration honesty: novel-shape acceptance 1
+  of 2 (keyhole delivered IoU 0.9753; gear8 prediction did NOT hold -
+  co-solve cold start was a constrained stationary point); anisotropy
+  metric out-of-sample Spearman -0.79 (p 9e-5, n 18). The recommendation
+  feature ships as ADVISORY, consistent with mandatory full-3-D
+  verification. STL slice path mirrors their intake refusals:
+  self-intersecting outlines REFUSED (even-odd silently notched a part in
+  2-D - discarded, named), holes REFUSED rather than silently filled
+  until hole-aware fill is built and tested.
 
 ## 6. Out of scope
 
