@@ -123,3 +123,43 @@ Verification performed: extracted 6 evenly spaced frames per GIF and reviewed
 them visually (composition, Space Mono rendering, no clipped labels, colorbar
 sanity), plus the numeric gates above (GIF 1 J-curve match to the stored
 campaign curve; GIF 2 invert re-run reproducing the stored stop and J).
+
+## fig_solve_loop_schematic.png (static, 2026-08-01)
+
+One-slide conceptual schematic of the filter-only adjoint solve loop, five
+stages plus two exits. Rendered by `src/r4_loop_schematic.py` from STORED
+artifacts only; no new forward solves were run for this figure. The Heaviside
+projection stage is deliberately absent: it is retired from the production
+recipe (MMA_RETEST_REPORT.md Section 1 verdict; CHANGELOG_ENGINE.md v2.0.0,
+"no Heaviside projection").
+
+Thumbnail sources, all on the square:
+
+- Stage 1 nominal outline, stage 2 mid-march temperature, stage 3
+  melt-minus-nominal residual, stage 5 filtered map, and the J sparkline:
+  `cache/c2_square.npz` (the solve-arm capture documented under
+  gif_solve_vs_inversion.gif above: filtered adjoint solve, 1.0 mm physical
+  filter radius, conductivity-only channel, 15 gradient evaluations; its J
+  values are from that fresh run, stored in the cache). Stage 2 shows
+  `T_solve` at the middle snapshot; stage 3 is the melt fraction computed
+  from the last `T_solve` snapshot (phi = clip((T - t_pc_c)/dt_pc_c + 0.5))
+  minus the part mask, drawn in the red/blue melt-minus-target style of
+  `fgm_solve_campaign/figs_topopt/fig_topopt_maps.png` row 3.
+- Exit thumbnail "4 bpp production raster": key `TO_4bpp` in
+  `fgm_solve_campaign/out_topopt/square_control_filteronly_maps.npz`, the
+  stored production filter-only deliverable map.
+- Stage 4 adjoint backward sweep is a labeled arrow, NOT a field: no stored
+  dJ/ds field exists anywhere on disk (gate JSONs store scalar
+  finite-difference probes only), so none is drawn.
+- The numbers printed on the figure are the frozen conventions 1.0 mm
+  (`adjoint2d/topopt.py` `FILTER_RADIUS_M`) and 4 bpp (the deliverable
+  quantization convention), plus the qualitative cost remark "about one
+  forward run," whose measured basis is 0.44 to 2.16 forward-solve
+  equivalents per gradient (ADJOINT_PROTOTYPE_REPORT.md summary, line 527);
+  the schematic defers the real magnitude to that report. No fidelity
+  numbers are printed. (Concept-figure review 2026-08-01: PASS with this
+  sources correction.)
+
+Verification: rendered PNG viewed directly over three iterations
+(composition, Space Mono rendering, no clipped or overlapping text, colormap
+sanity, no em dashes).

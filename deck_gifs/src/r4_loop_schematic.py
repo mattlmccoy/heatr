@@ -119,12 +119,11 @@ ax4.set_ylim(0, 1)
 arr = FancyArrowPatch((0.88, 0.55), (0.12, 0.55), transform=ax4.transAxes,
                       arrowstyle="-|>", mutation_scale=22, color=WARM, lw=2.2)
 ax4.add_artist(arr)
-for xt, lab in ((0.88, "t*"), (0.50, ""), (0.12, "0")):
+for xt, lab in ((0.88, "t*"), (0.12, "0")):
     ax4.plot([xt, xt], [0.51, 0.59], color=DIM, lw=0.9,
              transform=ax4.transAxes)
-    if lab:
-        ax4.text(xt, 0.64, lab, color=FG, fontsize=10, ha="center",
-                 transform=ax4.transAxes)
+    ax4.text(xt, 0.64, lab, color=FG, fontsize=10, ha="center",
+             transform=ax4.transAxes)
 ax4.text(0.5, 0.40, "residual seeds the sweep at t*", color=DIM,
          fontsize=8.0, ha="center", transform=ax4.transAxes)
 ax4.text(0.5, 0.31, "cost: about one forward run", color=DIM,
@@ -151,11 +150,8 @@ arrow((X1 + TW + 0.006, MIDT), (X2 - 0.006, MIDT))
 arrow((X2 + TW + 0.006, MIDT), (X3 - 0.006, MIDT))
 arrow((X3 + TW / 2.0, TOP_Y - 0.040), (X3 + TW / 2.0, BOT_Y + TH + 0.048))
 arrow((X3 - 0.006, MIDB), (X2 + TW + 0.006, MIDB))
-# loop back 5 -> 2, around the left edge of the bottom-row panel
-arrow((X2 - 0.006, MIDB), (X2 - 0.060, (MIDB + MIDT) / 2.0), rad=-0.30,
-      color=ACCENT)
-arrow((X2 - 0.060, (MIDB + MIDT) / 2.0), (X2 - 0.006, MIDT), rad=-0.30,
-      color=ACCENT)
+# loop back 5 -> 2, one clean bulge around the left edge of the bottom panel
+arrow((X2 - 0.006, MIDB), (X2 - 0.006, MIDT), rad=-0.42, color=ACCENT)
 
 
 def arrow_label(x, y, s, color=DIM, ha="center", fs=8.2):
@@ -169,9 +165,10 @@ arrow_label((X2 + TW + X3) / 2.0, MIDT + 0.038,
             "read at its own\noptimal stop t*")
 arrow_label(X3 + TW / 2.0 + 0.012, (TOP_Y + BOT_Y + TH) / 2.0,
             "backpropagate\nthe residual", ha="left")
-arrow_label((X2 + TW + X3) / 2.0, MIDB + 0.040,
-            "gradient through the\n1.0 mm physical filter", color=FG)
-arrow_label(X2 - 0.068, (MIDT + MIDB) / 2.0, "next\nevaluation",
+arrow_label((X2 + TW + X3) / 2.0, MIDB + 0.062,
+            "gradient through\nthe 1.0 mm\nphysical filter", color=FG,
+            fs=7.8)
+arrow_label(X2 - 0.082, (MIDT + MIDB) / 2.0, "next\nevaluation",
             color=ACCENT, ha="right")
 
 # ---------------------------------------------------------------- exits -----
