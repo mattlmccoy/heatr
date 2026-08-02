@@ -37,7 +37,7 @@
 
 - [x] Failing test: `test_adjoint_steady.py::test_dj_dsigma_fd_gate` - dJ/dsigma (J = a simple quadratic of Q_rf) on the Phase A circle mesh, central-difference at max-sensitivity dof + random dof + random direction, thresholds from the protocol JSON. Run: fails (module missing).
 - [x] Lift from `adjoint_core.py` (complex-symmetric A^H = conj(A) reuse; THROUGH the fixed-power renormalization).
-- [ ] Green + the two mutation tests (frozen-renorm, dropped-term) failing the gate as required. Commit.
+- [x] Green + the two mutation tests (frozen-renorm, dropped-term) failing the gate as required. Commit. **5 passed.** 105191 design dofs; assembly consistency 3.15e-12; Qbar identity 2.22e-16; all 4 probes pass the frozen 1e-5 standard, 3 of 4 pass the preferred 1e-6 (the miss is the smallest-derivative probe at 1.42e-6 and is a MEASURED floor artifact, pinned by its own test). Mutants: renorm_frozen 5.34e-3 (14037x worst per-dof deviation), adjoint_dropped 2.37e-1 (129969x).
 
 ### Task 2: Transient adjoint, store-everything, small case
 
