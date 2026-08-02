@@ -71,6 +71,29 @@ def _log(shape, name, m):
           f"P {m['P_abs_W_per_m']:6.1f}  {m['wall_s']:.0f} s", flush=True)
 
 
+def resolve_stem(shape: str, arm: str) -> str:
+    """The result-file stem of an arm. Pure, so it cannot be shadowed.
+
+    Same reason as `topopt_solve.output_tag`: the first version of that
+    function held its stem in a local that a later loop rebound and five of six
+    results were silently overwritten.
+    """
+    return f"{shape}_{arm}" if arm else shape
+
+
+def resolve_source(indir, shape: str, arm: str, stem: str = "") -> Path:
+    """Which solve result these gates read.
+
+    `indir` defaults to `out_topopt`, the directory of the original pass, and
+    `stem` defaults to the original convention, so the default call is exactly
+    the previous behaviour. The MMA retest passes both explicitly because its
+    four arms live in `out_mma` under stems that carry the optimizer and the
+    budget.
+    """
+    base = OUT_TOPOPT if indir is None else Path(indir)
+    return Path(base) / f"{stem or resolve_stem(shape, arm)}.json"
+
+
 def resample_design(v: np.ndarray, part_mask_hi: np.ndarray, ny: int, nx: int
                     ) -> np.ndarray:
     """Bilinear transfer of the design variable, then the box, then the mask."""
@@ -82,21 +105,22 @@ def resample_design(v: np.ndarray, part_mask_hi: np.ndarray, ny: int, nx: int
     return np.where(part_mask_hi, np.clip(a, topopt.BOX[0], topopt.BOX[1]), 1.0)
 
 
-def main(shape: str, outdir: str, arm: str = "") -> dict:
+def main(shape: str, outdir: str, arm: str = "", indir=None,
+         stem: str = "") -> dict:
     """`arm='control_filteronly'` gates the beta = 0 control instead.
 
     Running BOTH arms through the same two gates is what attributes the result:
     the control changes the radius and the target but not the projection, so if
     it passes as well, the projection is not what bought the transfer.
     """
-    if arm not in ("", "control_filteronly"):
-        raise ValueError(f"unknown arm {arm!r}")
-    stem = f"{shape}_{arm}" if arm else shape
+    src_path = resolve_source(indir, shape, arm, stem)
+    stem = src_path.stem
+    src_dir = src_path.parent
     out = Path(outdir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
-    src = json.loads((OUT_TOPOPT / f"{stem}.json").read_text())
-    with np.load(OUT_TOPOPT / f"{stem}_maps.npz") as d:
+    src = json.loads(src_path.read_text())
+    with np.load(src_dir / f"{stem}_maps.npz") as d:
         s_cont_120 = np.asarray(d["TO_cont"], dtype=float)
         v_120 = np.asarray(d["TO_v"], dtype=float)
 
@@ -109,7 +133,10 @@ def main(shape: str, outdir: str, arm: str = "") -> dict:
 
     res: dict = {"shape": shape, "arm": arm or "topopt_continuation",
                  "config": str(cfg_path),
-                 "source": str(OUT_TOPOPT / f"{stem}.json"),
+                 "source": str(src_path),
+                 "optimizer": src.get("optimizer", "lbfgsb"),
+                 "budget_forward_equivalents_total": src.get(
+                     "budget_forward_equivalents_total"),
                  "filter_radius_m": topopt.FILTER_RADIUS_M,
                  "sigma_cells_at_120": src["sigma_cells"],
                  "beta_final": beta_final,
@@ -304,4 +331,6 @@ def main(shape: str, outdir: str, arm: str = "") -> dict:
 
 if __name__ == "__main__":
     main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else str(OUT_TOPOPT),
-         sys.argv[3] if len(sys.argv) > 3 else "")
+         sys.argv[3] if len(sys.argv) > 3 else "",
+         sys.argv[4] if len(sys.argv) > 4 else None,
+         sys.argv[5] if len(sys.argv) > 5 else "")

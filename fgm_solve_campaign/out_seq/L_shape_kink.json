@@ -1,0 +1,202 @@
+{
+  "shape": "L_shape",
+  "segments_deg": [
+    90.0,
+    0.0
+  ],
+  "probes": {
+    "on_step_edge": {
+      "switch_s": 449.99374758385557,
+      "distance_to_step_edge_s": 0.006252416144434392,
+      "J": 293.0487051103137,
+      "stop_index": 1159,
+      "analytic_dJ_dswitch": 3.893801475734132,
+      "forward_difference": -0.2879326014772232,
+      "backward_difference": -0.17787504662919673,
+      "central_difference": -0.23290382405320997,
+      "rel_err_vs_forward": 1.0739464000082173,
+      "rel_err_vs_central": 1.05981399552716
+    },
+    "interior": {
+      "switch_s": 450.24374758385557,
+      "distance_to_step_edge_s": 0.2437475838555656,
+      "J": 293.01803034367146,
+      "stop_index": 1159,
+      "analytic_dJ_dswitch": 3.97746969305785,
+      "forward_difference": -0.33497990407340694,
+      "backward_difference": -0.03883361686689568,
+      "central_difference": -0.1869067604701513,
+      "rel_err_vs_forward": 1.0842193479583442,
+      "rel_err_vs_central": 1.0469913726297835
+    }
+  },
+  "refine_from_interior": [
+    {
+      "switch_s": 465.25,
+      "J": 291.897217821233,
+      "grad": 4.433758278371465,
+      "stop_index": 1182
+    },
+    {
+      "switch_s": 460.81624172162856,
+      "J": 291.96231528466774,
+      "grad": 4.342764739604823,
+      "stop_index": 1175
+    },
+    {
+      "switch_s": 464.3096844315997,
+      "J": 291.89613497476535,
+      "grad": 4.2890315627424584,
+      "stop_index": 1181
+    },
+    {
+      "switch_s": 465.0489037044924,
+      "J": 291.9050419467573,
+      "grad": 4.349304013272493,
+      "stop_index": 1182
+    },
+    {
+      "switch_s": 465.20769235690886,
+      "J": 291.8911720417017,
+      "grad": 4.414160236771874,
+      "stop_index": 1182
+    },
+    {
+      "switch_s": 465.102891846314,
+      "J": 291.8876286098174,
+      "grad": 4.370203029788376,
+      "stop_index": 1182
+    }
+  ],
+  "best_switch_s": 465.102891846314,
+  "best_J": 291.8876286098174,
+  "previous_refined_switch_s": 449.99374758385557,
+  "previous_refined_J": 293.0487051103137,
+  "fine_scan_min_J": 291.88867693507495,
+  "fine_scan_min_switch_s": 465.0,
+  "arms": {
+    "S_seq_uniform_two_refined_interior": {
+      "t_stop_index": 1182,
+      "t_stop_s": 591.5,
+      "t_stop_at_horizon": false,
+      "J": 291.8876286098174,
+      "J_per_part_cell": 0.2705168013065963,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 15.176369027650527,
+      "phi_bar_part_at_stop": 0.7991194514529363,
+      "IoU": 0.7075163398692811,
+      "bed_melt_pct_of_part": 13.438368860055608,
+      "part_under_melt_pct": 19.74050046339203,
+      "melted_cells": 1011,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7991194514529363,
+      "mean_phi_bed": 0.010845653733817474,
+      "under_pct": 8.804448563484709,
+      "in_window_pct": 24.65245597775718,
+      "over_pct": 66.5430954587581,
+      "p95_overshoot_c": 34.15238110737482,
+      "max_overshoot_c": 38.8587599058834,
+      "mean_T_part_c": 192.59034355725518,
+      "P_abs_W_per_m": 352.6160050139955,
+      "mean_rho_rel_part_at_stop": 0.7261373601810237,
+      "mean_rho_rel_part_at_end": 0.9280886313662355,
+      "max_T_at_stop_c": 223.8587599058834,
+      "max_T_part_at_stop_c": 223.8587599058834,
+      "max_T_upto_stop_c": 223.8587599058834,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 1.0,
+      "energy_gate": {
+        "rel_residual": 0.009690425178388943,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.009690425178388943,
+        "rel_residual_max_upto_index": 0.009690425178388943,
+        "rel_residual_max_whole_march": 0.03548431387769423,
+        "index": 1182,
+        "energy_in_J_per_m_at_index": 185024.97690905194,
+        "energy_residual_J_per_m_at_index": 1792.9706948703097,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 82.5,
+      "narrow_melted_pct": 78.17531305903398,
+      "note": "UNIFORM map, switch time refined from an INTERIOR start, 6 gradient evaluations",
+      "schedule": "sequential",
+      "segments_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        465.102891846314,
+        284.897108153686
+      ],
+      "arm": "S_seq_uniform_two_refined_interior"
+    },
+    "S_seq_cosolved_4bpp_interior_switch": {
+      "t_stop_index": 1188,
+      "t_stop_s": 594.5,
+      "t_stop_at_horizon": false,
+      "J": 276.3892630706839,
+      "J_per_part_cell": 0.25615316317950315,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 15.48059085484977,
+      "phi_bar_part_at_stop": 0.7974166056253456,
+      "IoU": 0.7160596026490066,
+      "bed_melt_pct_of_part": 11.955514365152919,
+      "part_under_melt_pct": 19.833178869323447,
+      "melted_cells": 994,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7974166056253456,
+      "mean_phi_bed": 0.009647636505662315,
+      "under_pct": 8.897126969416126,
+      "in_window_pct": 26.50602409638554,
+      "over_pct": 64.59684893419833,
+      "p95_overshoot_c": 34.68783520866586,
+      "max_overshoot_c": 39.52361960286066,
+      "mean_T_part_c": 192.2156215986092,
+      "P_abs_W_per_m": 347.95900102111847,
+      "mean_rho_rel_part_at_stop": 0.7245622996166053,
+      "mean_rho_rel_part_at_end": 0.9225612583281245,
+      "max_T_at_stop_c": 224.52361960286066,
+      "max_T_part_at_stop_c": 224.52361960286066,
+      "max_T_upto_stop_c": 224.52361960286066,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 0.9753475454916437,
+      "energy_gate": {
+        "rel_residual": 0.008690839966374115,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.008690839966374115,
+        "rel_residual_max_upto_index": 0.008690839966374115,
+        "rel_residual_max_whole_march": 0.03404271938151789,
+        "index": 1188,
+        "energy_in_J_per_m_at_index": 184288.5847256055,
+        "energy_residual_J_per_m_at_index": 1601.6225974798144,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 81.15384615384616,
+      "narrow_melted_pct": 79.24865831842575,
+      "note": "the co-solved 4 bits-per-pixel map, run at the interior-refined switch time. The map was solved at the OLD switch time and is NOT re-solved here",
+      "schedule": "sequential",
+      "segments_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        465.102891846314,
+        284.897108153686
+      ],
+      "arm": "S_seq_cosolved_4bpp_interior_switch"
+    }
+  },
+  "wall_s": 190.6125006659422
+}

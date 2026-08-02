@@ -39,39 +39,59 @@ Run:
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 import time
 from pathlib import Path
 
 import numpy as np
-from scipy.optimize import minimize
 
 from . import adjoint, chi_area, control as ctl, energy_gate as eg
 from . import forward as fwd, gradops
 from . import library_solve as lib
 from . import ms_solve as msv
 from . import printability as pq
+from . import mma as mma_mod
 from . import topopt
 from . import topopt_objective as tobj
+from . import topopt_stage as tstage
 from .pins import build_case, load_cfg
 
 BUDGET_FORWARD_EQUIVALENTS = 40.0
+DEFAULT_OPTIMIZER = "lbfgsb"
+# Frozen BEFORE any solve of the retest and not tuned on any result. Svanberg's
+# published defaults throughout except the move limit, which is the standard
+# topology-optimization density move limit. See `mma.py`.
+MMA_CFG = mma_mod.MMAConfig()
 BOX = topopt.BOX
 OUT_LIB = Path(__file__).resolve().parents[1] / "out_lib"
 
 
-def output_tag(shape: str, control: str = "") -> str:
+def output_tag(shape: str, control: str = "",
+               optimizer: str = DEFAULT_OPTIMIZER,
+               budget: float = BUDGET_FORWARD_EQUIVALENTS) -> str:
     """The stem of this run's result files.
 
     A pure function, and it is called AGAIN at write time rather than reusing a
     local. MEASURED reason: the first version held the stem in a local named
     `tag` which a later reference loop rebound, and all six shapes wrote to the
     same file. Recomputing from the arguments cannot be shadowed.
+
+    The optimizer and the budget enter the stem only when they differ from the
+    production recipe, so every stem written before this pass is unchanged and
+    the four arms of the retest cannot overwrite one another.
     """
     if control not in ("", "filteronly"):
         raise ValueError(f"unknown control mode {control!r}")
-    return f"{shape}_control_{control}" if control else shape
+    if optimizer not in tstage.OPTIMIZERS:
+        raise ValueError(f"unknown optimizer {optimizer!r}")
+    parts = [f"{shape}_control_{control}" if control else shape]
+    if optimizer != DEFAULT_OPTIMIZER:
+        parts.append(optimizer)
+    if float(budget) != BUDGET_FORWARD_EQUIVALENTS:
+        parts.append(f"b{float(budget):g}")
+    return "_".join(parts)
 
 
 def run_forward(case, s):
@@ -111,39 +131,57 @@ def score(case, s: np.ndarray, chi: np.ndarray) -> dict:
 
 
 class Solver:
-    """The continuation solve. Rows, design points, and the stage bookkeeping."""
+    """The continuation solve. Rows, design points, and the stage bookkeeping.
 
-    def __init__(self, case, chi, ops, log):
+    The optimizer is a parameter (`topopt_stage.OPTIMIZERS`) and it is the ONLY
+    thing that differs between the arms of `MMA_RETEST_REPORT.md`. Every
+    optimizer receives the identical `evaluate` closure below, so the objective,
+    the gradient, the stop rule and the budget accounting cannot drift between
+    arms.
+    """
+
+    def __init__(self, case, chi, ops, log, optimizer: str = DEFAULT_OPTIMIZER):
+        if optimizer not in tstage.OPTIMIZERS:
+            raise ValueError(f"unknown optimizer {optimizer!r}")
         self.case = case
         self.chi = chi
         self.ops = ops
         self.log = log
+        self.optimizer = optimizer
         self.rows: list[dict] = []
         self.store: dict[int, np.ndarray] = {}
         self.stages: list[dict] = []
+        self.idx = np.flatnonzero(np.asarray(case.part_mask).ravel())
+        self.mma_state = None
+        self.beta_final_override = None
 
     def to_map(self, v, beta):
         return topopt.design_to_map(v, self.case.part_mask, dx=self.case.dx,
                                     radius_m=topopt.FILTER_RADIUS_M, beta=beta)
 
-    def stage(self, v_start: np.ndarray, beta: float, n_new: int) -> np.ndarray:
-        """One beta stage of L-BFGS-B. Returns the stage's best design point."""
+    def unpack(self, vec):
+        v = np.ones(self.case.part_mask.shape)
+        v.ravel()[self.idx] = vec
+        return v
+
+    def pack(self, v):
+        return np.clip(np.asarray(v, dtype=float).ravel()[self.idx], BOX[0], BOX[1])
+
+    # -- the one evaluation every optimizer sees -----------------------------
+
+    def make_evaluate(self, beta_of_eval):
+        """`beta_of_eval(n_done)` gives the beta the next evaluation runs at.
+
+        It is a function of the global evaluation count, not a constant, so the
+        carried-history L-BFGS-B arm can switch beta at a stage boundary
+        WITHOUT ending the scipy call, which is the only way scipy's curvature
+        memory can be carried across a continuation stage.
+        """
         case, pm = self.case, self.case.part_mask
-        idx = np.flatnonzero(pm.ravel())
-        t0 = time.perf_counter()
-        n_before = len(self.rows)
-        info = {"beta": float(beta), "n_new_allowed": int(n_new),
-                "stopped_reason": "budget"}
 
-        def unpack(vec):
-            v = np.ones(pm.shape)
-            v.ravel()[idx] = vec
-            return v
-
-        def fun(vec):
-            if len(self.rows) - n_before >= int(n_new):
-                raise StopIteration
-            v = unpack(vec)
+        def evaluate(vec):
+            beta = float(beta_of_eval(len(self.rows)))
+            v = self.unpack(vec)
             s = self.to_map(v, beta)
             tr = run_forward(case, s)
             st = tobj.optimal_stop(tr, case, self.chi)
@@ -158,47 +196,125 @@ class Solver:
                    "grad_norm": float(np.linalg.norm(g[pm])),
                    "grad_max_abs": float(np.max(np.abs(g[pm]))),
                    "non_discreteness": non_discreteness(s, pm),
-                   "IoU": float(tobj.metrics(tr.T_at_end(st.index), case, self.chi)["IoU"])}
+                   "IoU": float(tobj.metrics(tr.T_at_end(st.index), case,
+                                             self.chi)["IoU"])}
             self.rows.append(row)
             self.store[row["eval_index"]] = v.copy()
             del tr
-            return float(J), g.ravel()[idx].astype(float)
+            return float(J), g.ravel()[self.idx].astype(float)
 
-        v0 = np.clip(np.asarray(v_start, dtype=float).ravel()[idx], BOX[0], BOX[1])
-        if int(n_new) > 0:
-            try:
-                minimize(fun, v0, jac=True, method="L-BFGS-B",
-                         bounds=[BOX] * len(idx),
-                         options={"maxiter": 10_000, "maxfun": 10_000,
-                                  "ftol": 1e-16, "gtol": 1e-16})
-                info["stopped_reason"] = "L-BFGS-B converged"
-            except StopIteration:
-                pass
+        return evaluate
+
+    def _best_of(self, rows, fallback):
+        if not rows:
+            return np.asarray(fallback, dtype=float), None
+        b = min(rows, key=lambda r: r["J"])
+        return self.store[b["eval_index"]], b
+
+    @staticmethod
+    def _num(info, key, spec):
+        """Format a stage number, tolerating the None a starved stage writes.
+
+        A stage can legitimately record None: the carried-history arm's scipy
+        call can declare convergence before a later beta is reached. That is a
+        result to be reported, not a crash, and the first version of this code
+        crashed on it (`logs_mma/triangle_lbfgsb_carry_b80.log`, first attempt).
+        """
+        v = info.get(key)
+        return "none" if v is None else format(float(v), spec)
+
+    def _log_stage(self, info):
+        self.log(f"  beta {info['beta']:5.1f}: {info['n_new_used']} evals, J "
+                 f"{self._num(info, 'first_J', '.2f')} -> "
+                 f"{self._num(info, 'best_J', '.2f')}, IoU "
+                 f"{self._num(info, 'best_IoU', '.4f')}, M_nd "
+                 f"{self._num(info, 'best_non_discreteness', '.3f')}, "
+                 f"{info['wall_s']:.0f} s")
+
+    # -- one stage, for the per-stage optimizers -----------------------------
+
+    def stage(self, v_start: np.ndarray, beta: float, n_new: int) -> np.ndarray:
+        """One beta stage. Returns the stage's best design point."""
+        n_before = len(self.rows)
+        if self.optimizer == "mma" and self.mma_state is None:
+            self.mma_state = mma_mod.MMA(self.pack(v_start), lower=BOX[0],
+                                         upper=BOX[1], cfg=MMA_CFG)
+        runner = tstage.StageRunner(self.make_evaluate(lambda _n: beta), BOX,
+                                    optimizer=self.optimizer,
+                                    mma_state=self.mma_state)
+        _v, rinfo = runner.run(self.pack(v_start), int(n_new))
         stage_rows = self.rows[n_before:]
-        info["n_new_used"] = len(stage_rows)
-        info["wall_s"] = time.perf_counter() - t0
-        if stage_rows:
-            b = min(stage_rows, key=lambda r: r["J"])
+        info = {"beta": float(beta), "n_new_allowed": int(n_new),
+                "optimizer": self.optimizer,
+                "n_new_used": len(stage_rows), "wall_s": rinfo["wall_s"],
+                "n_optimizer_restarts": rinfo.get("n_optimizer_restarts", 0),
+                "mma_state": rinfo.get("mma_state")}
+        out, b = self._best_of(stage_rows, v_start)
+        if b is not None:
             info.update({"best_J": b["J"], "best_eval_index": b["eval_index"],
                          "first_J": stage_rows[0]["J"], "best_IoU": b["IoU"],
                          "best_non_discreteness": b["non_discreteness"]})
-            out = self.store[b["eval_index"]]
         else:
             info.update({"best_J": None, "best_eval_index": None})
-            out = np.asarray(v_start, dtype=float)
         self.stages.append(info)
-        self.log(f"  beta {beta:5.1f}: {info['n_new_used']} evals, J "
-                 f"{info.get('first_J', float('nan')):.2f} -> "
-                 f"{info.get('best_J', float('nan')):.2f}, IoU "
-                 f"{info.get('best_IoU', float('nan')):.4f}, M_nd "
-                 f"{info.get('best_non_discreteness', float('nan')):.3f}, "
-                 f"{info['wall_s']:.0f} s")
+        self._log_stage(info)
+        return out
+
+    # -- the whole continuation, for the carried-history arm ------------------
+
+    def run_carried(self, v_start, schedule, split):
+        """ONE L-BFGS-B call across every stage, beta switched inside it.
+
+        scipy exposes no way to seed the curvature memory of a fresh
+        `minimize` call, so the only way to carry it across a beta jump is
+        never to end the call. The objective therefore changes underneath the
+        optimizer at each stage boundary. That is a real and named property of
+        this arm: the line search may be evaluating a different function from
+        the one that produced its current direction.
+        """
+        bounds = np.cumsum([int(n) for n in split])
+        total = int(bounds[-1]) if len(bounds) else 0
+
+        def beta_of(n_done):
+            for beta, cum in zip(schedule, bounds):
+                if n_done < cum:
+                    return float(beta)
+            return float(schedule[-1])
+
+        runner = tstage.StageRunner(self.make_evaluate(beta_of), BOX,
+                                    optimizer="lbfgsb_carry")
+        _v, rinfo = runner.run(self.pack(v_start), total)
+        for beta, n_new in zip(schedule, split):
+            rows = [r for r in self.rows if r["beta"] == float(beta)]
+            info = {"beta": float(beta), "n_new_allowed": int(n_new),
+                    "optimizer": self.optimizer, "n_new_used": len(rows),
+                    "n_optimizer_restarts": (rinfo["n_optimizer_restarts"]
+                                             if beta == schedule[0] else 0),
+                    "wall_s": (rinfo["wall_s"] if beta == schedule[0] else 0.0)}
+            _o, b = self._best_of(rows, v_start)
+            if b is not None:
+                info.update({"best_J": b["J"], "best_eval_index": b["eval_index"],
+                             "first_J": rows[0]["J"], "best_IoU": b["IoU"],
+                             "best_non_discreteness": b["non_discreteness"]})
+            else:
+                info.update({"best_J": None, "best_eval_index": None})
+            self.stages.append(info)
+            self._log_stage(info)
+        # The deliverable beta is the HIGHEST beta actually evaluated, which is
+        # not necessarily the last scheduled one: see the docstring.
+        betas_seen = sorted({r["beta"] for r in self.rows})
+        if not betas_seen:
+            raise RuntimeError("the carried-history arm produced no evaluation")
+        self.beta_final_override = float(betas_seen[-1])
+        rows_f = [r for r in self.rows if r["beta"] == self.beta_final_override]
+        out, _b = self._best_of(rows_f, v_start)
         return out
 
 
 def main(shape: str, outdir: str,
          budget: float = BUDGET_FORWARD_EQUIVALENTS,
-         control: str = "") -> dict:
+         control: str = "",
+         optimizer: str = DEFAULT_OPTIMIZER) -> dict:
     """`control='filteronly'` spends the WHOLE pool at beta = 0.
 
     That control changes exactly one thing against the continuation arm, the
@@ -211,10 +327,12 @@ def main(shape: str, outdir: str,
         raise ValueError(f"{shape!r} is not in the standardized library")
     if control not in ("", "filteronly"):
         raise ValueError(f"unknown control mode {control!r}")
+    if optimizer not in tstage.OPTIMIZERS:
+        raise ValueError(f"unknown optimizer {optimizer!r}")
     out = Path(outdir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     t_start = time.perf_counter()
-    tag = output_tag(shape, control)
+    tag = output_tag(shape, control, optimizer, budget)
 
     def log(msg):
         print(f"[{tag}] {msg}", flush=True)
@@ -230,6 +348,9 @@ def main(shape: str, outdir: str,
     res: dict = {
         "shape": shape, "config": str(cfg_path),
         "mode": control or "topopt_continuation",
+        "optimizer": optimizer,
+        "mma_config": (dataclasses.asdict(MMA_CFG)
+                       if optimizer == "mma" else None),
         "voltage_v": float(cfg["electric"]["voltage_v"]),
         "enforce_generator_power": bool(
             cfg["electric"].get("enforce_generator_power", False)),
@@ -286,18 +407,23 @@ def main(shape: str, outdir: str,
         f"P {m_u['P_abs_W_per_m']:.1f}")
 
     # --- the continuation ----------------------------------------------------
-    solver = Solver(case, chi, ops, log)
+    solver = Solver(case, chi, ops, log, optimizer=optimizer)
     v = np.ones(pm.shape)
-    for beta, n_new in zip(schedule, split):
-        if int(n_new) <= 0:
-            solver.stages.append({"beta": float(beta), "n_new_allowed": 0,
-                                  "stopped_reason": "no budget left for this stage",
-                                  "n_new_used": 0, "wall_s": 0.0, "best_J": None})
-            log(f"  beta {beta:5.1f}: SKIPPED, no budget")
-            continue
-        v = solver.stage(v, float(beta), int(n_new))
+    if optimizer == "lbfgsb_carry":
+        v = solver.run_carried(v, schedule, split)
+    else:
+        for beta, n_new in zip(schedule, split):
+            if int(n_new) <= 0:
+                solver.stages.append({"beta": float(beta), "n_new_allowed": 0,
+                                      "stopped_reason": "no budget left for this stage",
+                                      "n_new_used": 0, "wall_s": 0.0, "best_J": None})
+                log(f"  beta {beta:5.1f}: SKIPPED, no budget")
+                continue
+            v = solver.stage(v, float(beta), int(n_new))
 
     res["stages"] = solver.stages
+    res["n_optimizer_restarts"] = sum(
+        int(s.get("n_optimizer_restarts") or 0) for s in solver.stages)
     res["rows"] = solver.rows
     res["n_evals_used_total"] = len(solver.rows)
     res["spent_forward_equivalents"] = ctl.forward_equivalents(
@@ -306,6 +432,16 @@ def main(shape: str, outdir: str,
         raise RuntimeError(f"{shape}: the continuation produced no evaluation")
 
     beta_final = float(schedule[max(i for i, n in enumerate(split) if n > 0)])
+    if solver.beta_final_override is not None:
+        if solver.beta_final_override != beta_final:
+            log(f"NOTE: the scheduled final beta was {beta_final:g} but the "
+                f"highest beta actually evaluated was "
+                f"{solver.beta_final_override:g}; the deliverable is built at "
+                f"the beta it was optimized at, and this is reported")
+        beta_final = solver.beta_final_override
+    res["beta_final_scheduled"] = float(schedule[max(
+        i for i, n in enumerate(split) if n > 0)])
+    res["beta_final_delivered"] = float(beta_final)
     s_cont = solver.to_map(v, beta_final)
     m_c = score(case, s_cont, chi)
     m_c.update({"arm": "TO_cont", "beta": beta_final})
@@ -356,7 +492,7 @@ def main(shape: str, outdir: str,
     res["stop_at_horizon_arms"] = [a for a, m in res["arms"].items()
                                    if m["t_stop_at_horizon"]]
     res["wall_s"] = time.perf_counter() - t_start
-    stem = output_tag(shape, control)
+    stem = output_tag(shape, control, optimizer, budget)
     np.savez_compressed(out / f"{stem}_maps.npz", x=case.x, y=case.y, **maps)
     (out / f"{stem}.json").write_text(json.dumps(res, indent=2, default=float))
     log(f"done: {len(solver.rows)} evaluations, "
@@ -369,4 +505,5 @@ def main(shape: str, outdir: str,
 if __name__ == "__main__":
     main(sys.argv[1], sys.argv[2],
          float(sys.argv[3]) if len(sys.argv) > 3 else BUDGET_FORWARD_EQUIVALENTS,
-         sys.argv[4] if len(sys.argv) > 4 else "")
+         sys.argv[4] if len(sys.argv) > 4 else "",
+         sys.argv[5] if len(sys.argv) > 5 else DEFAULT_OPTIMIZER)
