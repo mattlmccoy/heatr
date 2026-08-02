@@ -497,7 +497,7 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
                    max_time_s: float = 1500.0, phi_target: float = 0.90,
                    T0_fn=None, L: float = L_DOMAIN,
                    sample_dt_s: float | None = None,
-                   resolve_hook=None) -> dict:
+                   resolve_hook=None, record: dict | None = None) -> dict:
     """Mass-lumped explicit enthalpy march on the FEM mesh.
 
     DISCRETIZATION (the FEM analogue of heatr3d's explicit cell-centred FV
@@ -526,7 +526,23 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
     CLAMPS: heatr3d's per-step dT cap and temp_min/temp_max clamp are ported
     verbatim, including the latching diagnostic -- a bound clamp means a
     numerical limiter altered the physics and the result is suspect.
+
+    `record` (Phase B hook; default None == the Phase A path, bit-identical):
+    when a dict is supplied it is filled with the state the reverse march needs
+    and NOTHING else changes. Two lists:
+      record["T_steps"][j]  -- the nodal T at the TOP of substep j, i.e. the
+                              input state of that step. Every other per-step
+                              quantity is a pure function of it and of that
+                              step's drive, so this is the complete checkpoint.
+      record["q_events"]    -- (substep_index, q_cells) for the pre-loop drive
+                              and for every drive change a re-solve produced.
+    The only cost when `record is None` is one `is not None` test per substep,
+    and the flag-off bit identity is pinned by
+    test_adjoint_transient.py::test_recording_flag_off_is_bit_identical.
     """
+    if record is not None:
+        record.setdefault("T_steps", [])
+        record.setdefault("q_events", [])
     if not (q_uniform is None) ^ (q_dg0 is None):
         raise ValueError("march_enthalpy: pass exactly one of q_uniform / q_dg0")
     tdim = msh.topology.dim
@@ -634,6 +650,9 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
     for it_sub in range(nsteps * n_sub):
         it, isub = divmod(it_sub, n_sub)
         t_now = it * p.dt_s + isub * dt_sub
+        if record is not None and it_sub == 0:
+            record["q_events"].append(
+                (0, np.real(qf.x.array).astype(float).copy()))
         if resolve_hook is not None and isub == 0:
             new_q = resolve_hook(t_now,
                                  cell_average_p1(cell_dofs, T),
@@ -641,6 +660,11 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
             if new_q is not None:
                 qf.x.array[:] = np.asarray(new_q).astype(st)
                 F = _assemble_real(fem.form(ufl.inner(qf, v) * ufl.dx))
+                if record is not None:
+                    record["q_events"].append(
+                        (it_sub, np.real(qf.x.array).astype(float).copy()))
+        if record is not None:
+            record["T_steps"].append(T.copy())
         phi, _ = phase_fraction(T, p)
         rho, cp, rho_L = nodal_props(phi)
         k_cells = cell_k(phi)
@@ -718,6 +742,7 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
         "dt_stable_s": float(dt_stable), "n_k_assemblies": int(n_k_assemblies),
         "curve_t_s": curve_t, "curve_part_mean_T_c": curve_T,
         "curve_part_mean_phi": curve_phi,
+        "n_steps_taken": int(it_sub + 1) if nsteps * n_sub > 0 else 0,
     }
 
 

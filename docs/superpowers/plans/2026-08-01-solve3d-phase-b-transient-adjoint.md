@@ -35,15 +35,15 @@
 
 ### Task 1: Steady EQS adjoint lift + re-gate on Phase A meshes
 
-- [ ] Failing test: `test_adjoint_steady.py::test_dj_dsigma_fd_gate` - dJ/dsigma (J = a simple quadratic of Q_rf) on the Phase A circle mesh, central-difference at max-sensitivity dof + random dof + random direction, thresholds from the protocol JSON. Run: fails (module missing).
-- [ ] Lift from `adjoint_core.py` (complex-symmetric A^H = conj(A) reuse; THROUGH the fixed-power renormalization).
+- [x] Failing test: `test_adjoint_steady.py::test_dj_dsigma_fd_gate` - dJ/dsigma (J = a simple quadratic of Q_rf) on the Phase A circle mesh, central-difference at max-sensitivity dof + random dof + random direction, thresholds from the protocol JSON. Run: fails (module missing).
+- [x] Lift from `adjoint_core.py` (complex-symmetric A^H = conj(A) reuse; THROUGH the fixed-power renormalization).
 - [ ] Green + the two mutation tests (frozen-renorm, dropped-term) failing the gate as required. Commit.
 
 ### Task 2: Transient adjoint, store-everything, small case
 
-- [ ] Failing test: `test_adjoint_transient.py::test_reverse_march_fd_gate` - dJ/dsigma through the FULL small-case coupled march (enthalpy VJPs incl. melt-window clips, sigma-coupling VJP at each re-solve event, renorm VJP), J = the melt-state functional sum((phi - chi)^2) at FIXED read time (envelope handling is Task 4). Central-difference + subgradient labeling per protocol; report the measured evaluation floor.
-- [ ] Implement the reverse march storing all states.
-- [ ] Green + flag-off bit-identity of any forward.py hooks. Commit.
+- [x] Failing test: `test_adjoint_transient.py::test_reverse_march_fd_gate` - dJ/dsigma through the FULL small-case coupled march (enthalpy VJPs incl. melt-window clips, sigma-coupling VJP at each re-solve event, renorm VJP), J = the melt-state functional sum((phi - chi)^2) at FIXED read time (envelope handling is Task 4). Central-difference + subgradient labeling per protocol; report the measured evaluation floor.
+- [x] Implement the reverse march storing all states.
+- [x] Green + flag-off bit-identity of any forward.py hooks. Commit. **5 passed**: flag-off bit identity exact (0.0), cell-average transpose 1e-10 gate, assembly consistency 5.07e-13, FD gate all four probes at the PREFERRED 1e-6 standard, both mutants fail.
 
 ### Task 3: Design-field composition and cost accounting
 
