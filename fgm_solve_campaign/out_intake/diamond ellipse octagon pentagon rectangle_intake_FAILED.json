@@ -1,0 +1,4 @@
+{
+  "shape": "diamond ellipse octagon pentagon rectangle",
+  "error": "FileNotFoundError: no calibrated config for 'diamond ellipse octagon pentagon rectangle'"
+}

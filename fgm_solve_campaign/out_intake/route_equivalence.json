@@ -1,0 +1,10 @@
+{
+  "polygon_area_m2": 0.00029592421527434374,
+  "mask_area_m2": 0.00029564715592119074,
+  "png_area_m2": 0.00029564715592119074,
+  "mask_vs_polygon_rel": -0.0009362510360841899,
+  "png_vs_mask_max_cell_delta": 0.0,
+  "mask_vs_polygon_max_cell_delta": 0.1201171875,
+  "mask_pixels": 13072,
+  "mask_pitch_m": 0.00015037593984962294
+}

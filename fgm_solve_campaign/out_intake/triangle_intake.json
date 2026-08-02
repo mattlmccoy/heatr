@@ -1,0 +1,109 @@
+{
+  "shape": "triangle",
+  "intake": {
+    "name": "triangle",
+    "source": "polygon",
+    "grid": 120,
+    "chamber_m": 0.06,
+    "dx_m": 0.0005042016806722678,
+    "n_sub": 32,
+    "n_vertices": 3,
+    "area_chi_m2": 0.00020021013920273905,
+    "area_raster_m2": 0.00020337546783419163,
+    "n_part_cells": 800,
+    "voltage_v": 3005.544909894248,
+    "voltage_is_calibrated": true,
+    "closed_ring_trimmed": true,
+    "calibration": {
+      "voltage_v": 3005.544909894248,
+      "start_voltage_v": 2428.1732217858744,
+      "p_at_start_w_per_m": 326.34945484703064,
+      "p_target_w_per_m": 500.0,
+      "p_verified_w_per_m": 500.0000000000001,
+      "n_electro_quasi_static_solves": 2,
+      "electrical_state": "B",
+      "convention": "uniform dopant arm absorbs the target power, state B, summed over the doped mask (FROZEN_CONVENTIONS_2D section 3)"
+    }
+  },
+  "raster_vs_area": {
+    "area_raster_m2": 0.00020337546783419163,
+    "area_chi_m2": 0.00020021013920273905,
+    "area_rel_delta": 0.01581003162006329,
+    "n_cells_differing_gt_0p01": 118,
+    "max_abs_cell_delta": 0.4658203125,
+    "sum_abs_cell_delta": 26.669921875
+  },
+  "part_mask_matches_stored_config": true,
+  "n_cells_differing": 0,
+  "voltage_stored_v": 3005.544909894063,
+  "voltage_calibrated_v": 3005.544909894248,
+  "voltage_rel_error": 6.158023831269735e-14,
+  "symmetry": {
+    "rotational_order": 1,
+    "continuous_rotational": false,
+    "mirror_axes_deg": [
+      90.0
+    ],
+    "point_group": "C1v",
+    "centroid_row_col": [
+      52.88628929257859,
+      59.5
+    ],
+    "diagnostics": {
+      "tested_orders": {
+        "2": 0.33253751569074225,
+        "3": 0.1041746972291186,
+        "4": 0.2736316460318704,
+        "5": 0.32713053253352725,
+        "6": 0.3363143253369089,
+        "7": 0.3303890637689254,
+        "8": 0.3203954776190917,
+        "9": 0.30766822155614054,
+        "10": 0.2946967874633829,
+        "11": 0.2822287960384145,
+        "12": 0.26985633170920964
+      },
+      "generic_angle_mismatch": {
+        "17.0": 0.18983295460824126,
+        "23.0": 0.23159995796408428,
+        "41.0": 0.3106090066633472
+      },
+      "mirror_min_mismatch": 1.8136923821218505e-16,
+      "tol": 0.03
+    }
+  },
+  "expected_order": 1,
+  "anisotropy": {
+    "static": 0.6691318557395489,
+    "continuous": 0.6240851964358823
+  },
+  "recommendation": {
+    "mode": "static",
+    "actuator_class": "MAP_PLUS_MODE",
+    "residual_anisotropy": 0.6691318557395489,
+    "static_residual_anisotropy": 0.6691318557395489,
+    "reduction_factor": 1.0721803041650815,
+    "rotation_recommended": false,
+    "advice": "No rotation mode reduces the anisotropy by the 1.15 factor that makes a turntable worth its cost here, so the static arm is kept. The mode helps but leaves real anisotropy, between the winners' band and the failures' band. Solve the map against this mode's averaged kernel and expect the map to be load bearing rather than a finish.",
+    "candidate_angles_deg": [
+      0.0,
+      15.0,
+      30.0,
+      45.0,
+      60.0,
+      75.0,
+      90.0,
+      105.0,
+      120.0,
+      135.0,
+      150.0,
+      165.0
+    ],
+    "spectrum": {
+      "static": 0.6691318557395489,
+      "continuous": 0.6240851964358823
+    }
+  },
+  "known_rotation_outcome": null,
+  "wall_s": 3.0683892919914797
+}

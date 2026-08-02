@@ -1,0 +1,106 @@
+{
+  "shape": "star",
+  "intake": {
+    "name": "star",
+    "source": "polygon",
+    "grid": 120,
+    "chamber_m": 0.06,
+    "dx_m": 0.0005042016806722678,
+    "n_sub": 32,
+    "n_vertices": 10,
+    "area_chi_m2": 0.00013590754316432398,
+    "area_raster_m2": 0.00013778687945766483,
+    "n_part_cells": 542,
+    "voltage_v": 3223.453630524662,
+    "voltage_is_calibrated": true,
+    "closed_ring_trimmed": true,
+    "calibration": {
+      "voltage_v": 3223.453630524662,
+      "start_voltage_v": 2428.1732217858744,
+      "p_at_start_w_per_m": 283.71773266545136,
+      "p_target_w_per_m": 500.0,
+      "p_verified_w_per_m": 499.99999999999926,
+      "n_electro_quasi_static_solves": 2,
+      "electrical_state": "B",
+      "convention": "uniform dopant arm absorbs the target power, state B, summed over the doped mask (FROZEN_CONVENTIONS_2D section 3)"
+    }
+  },
+  "raster_vs_area": {
+    "area_raster_m2": 0.00013778687945766483,
+    "area_chi_m2": 0.00013590754316432398,
+    "area_rel_delta": 0.0138280499344217,
+    "n_cells_differing_gt_0p01": 172,
+    "max_abs_cell_delta": 0.4990234375,
+    "sum_abs_cell_delta": 37.904296875
+  },
+  "part_mask_matches_stored_config": true,
+  "n_cells_differing": 0,
+  "voltage_stored_v": 3223.45363052456,
+  "voltage_calibrated_v": 3223.453630524662,
+  "voltage_rel_error": 3.1600704794997005e-14,
+  "symmetry": {
+    "rotational_order": 5,
+    "continuous_rotational": false,
+    "mirror_axes_deg": [
+      18.0,
+      54.0,
+      90.0,
+      126.0,
+      162.0
+    ],
+    "point_group": "C5v",
+    "centroid_row_col": [
+      59.50372827607875,
+      59.5
+    ],
+    "diagnostics": {
+      "tested_orders": {
+        "2": 0.4450599893876072,
+        "3": 0.4050015638461838,
+        "4": 0.35407303219680974,
+        "5": 0.024063172928563834,
+        "6": 0.27519793846270574,
+        "7": 0.37771487944615745,
+        "8": 0.42298237442121744,
+        "9": 0.43824821364450955,
+        "10": 0.44283008344076885,
+        "11": 0.43980360936564994,
+        "12": 0.43384030832781384
+      },
+      "generic_angle_mismatch": {
+        "17.0": 0.34203327688269436,
+        "23.0": 0.398205976058936,
+        "41.0": 0.43585753768149343
+      },
+      "mirror_min_mismatch": 3.3067666619708665e-16,
+      "tol": 0.03
+    }
+  },
+  "expected_order": 5,
+  "anisotropy": {
+    "static": 0.7041359097264613,
+    "continuous": 0.4618221309685768,
+    "index5": 0.46312404668752893
+  },
+  "recommendation": {
+    "mode": "continuous",
+    "actuator_class": "MODE_SUFFICES",
+    "residual_anisotropy": 0.4618221309685768,
+    "static_residual_anisotropy": 0.7041359097264613,
+    "reduction_factor": 1.5246907034309536,
+    "rotation_recommended": true,
+    "advice": "The residual anisotropy after this mode is inside the band where the rotation campaign's three winners sat (square 0.277, cross 0.419, star 0.462), so the ACTUATOR alone is expected to carry most of the gain. Solve the dopant map against this mode's averaged kernel for the remainder; on the star that map was measurably inert, so quote the win as an orientation result unless the map earns it.",
+    "candidate_angles_deg": [
+      0.0,
+      15.0,
+      30.0
+    ],
+    "spectrum": {
+      "static": 0.7041359097264613,
+      "continuous": 0.4618221309685768,
+      "index5": 0.46312404668752893
+    }
+  },
+  "known_rotation_outcome": "rotation_wins",
+  "wall_s": 4.700431792065501
+}

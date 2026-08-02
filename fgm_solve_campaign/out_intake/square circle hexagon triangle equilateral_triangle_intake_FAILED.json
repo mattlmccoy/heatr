@@ -1,0 +1,4 @@
+{
+  "shape": "square circle hexagon triangle equilateral_triangle",
+  "error": "FileNotFoundError: no calibrated config for 'square circle hexagon triangle equilateral_triangle'"
+}
