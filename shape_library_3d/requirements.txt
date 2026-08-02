@@ -3,4 +3,5 @@
 # (added 2026-08-01; trimesh.boolean.union is a no-op without it).
 numpy
 trimesh>=4.12
-manifold3d
+manifold3d   # watertight boolean-union backend for make_lattice
+rtree        # spatial index for trimesh.contains() in voxelize.stl_to_mask
