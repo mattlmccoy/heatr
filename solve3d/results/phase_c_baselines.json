@@ -1,0 +1,62 @@
+{
+ "what": "Phase C Task 3 baselines on the solve mesh",
+ "mesh": {
+  "target_nodes_in_part": 23040,
+  "lc0": 0.0009375,
+  "label": "phase_a_coarse",
+  "n_cells": 143892,
+  "n_design_cells": 105191
+ },
+ "case": {
+  "max_time_s": 500.0,
+  "dt_s": 0.05,
+  "coupling": "off"
+ },
+ "arms": {
+  "uniform_baseline": {
+   "arm": "uniform_baseline",
+   "wall_forward_s": 135.4911753749475,
+   "n_steps": 10000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 9.855033669884453e-08,
+   "argmin_symmetric": 7279,
+   "at_horizon_symmetric": false,
+   "J_asymmetric": 1.1511359005643762e-07,
+   "argmin_asymmetric": 7172,
+   "t_stop_s": 358.6,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 9.591990279568858e-08,
+   "J_out_of_bounds": 2.7419553229641498e-08,
+   "J_in_bounds_deficit": 8.769403682679613e-08,
+   "out_of_part_melt_fraction_of_part": 0.00238498203886267,
+   "in_bounds_below_floor_fraction": 0.08423965346900332,
+   "part_mean_phi": 0.9191950888049109,
+   "sigma_T_diagnostic_c": 21.41672479024056,
+   "in_part_melt_frac_phi08": 0.9327225880332092,
+   "in_part_melt_frac_phi09": 0.9222874320068708,
+   "bed_melt_frac_phi08": 0.0,
+   "bed_melt_frac_phi09": 0.0,
+   "eval_missed": 0,
+   "map_stats": {
+    "mean": 1.0,
+    "min": 1.0,
+    "max": 1.0
+   }
+  },
+  "inversion_map": {
+   "arm": "inversion_map",
+   "status": "DROPPED",
+   "reason": "transfer moved total in-part dopant beyond the pre-registered 2 % drop condition",
+   "transfer": {
+    "mean_sat_voxel": 0.40740740740740744,
+    "mean_sat_fem": 0.3814165240865037,
+    "total_dopant_voxel_m3": 7.734375e-06,
+    "total_dopant_fem_m3": 7.181664540875459e-06,
+    "total_dopant_rel_move": 0.07146155431105172,
+    "drop_condition_rel": 0.02,
+    "dropped": true,
+    "method": "trilinear_then_clip"
+   }
+  }
+ }
+}

@@ -1,0 +1,17 @@
+{
+ "what": "Phase C inversion arm: regeneration of the corrected-design (masked-physics) cylinder FGM map",
+ "source_report": "heatr3d_eqs02_rerank/FGM_BENEFIT_RERUN.md (commit ea4fe01), arm D, cylinder, n=64",
+ "method": "heatr3d.make_fgm(magnitude=1.0, baseline=0.5, bpp=2) on the masked-baseline T_phi90 stored in solve3d/results/anchor_heatr3d_circle_n64.npz",
+ "mean_sat_regenerated": 0.40740740740740733,
+ "mean_sat_recorded": 0.4074,
+ "rel_diff": 1.8182148766187808e-05,
+ "tolerance_rel": 0.001,
+ "reproduces": true,
+ "levels_present": [
+  0.0,
+  0.333333,
+  0.666667,
+  1.0
+ ],
+ "n_voxels_in_part": 23040
+}
