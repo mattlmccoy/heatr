@@ -18,12 +18,18 @@ through the production quantizer.
 ./.venv312/bin/python scripts/solve_fgm.py \
     --config outputs_eqs/fgm_calibrated_control/configs/<shape>_m*.yaml \
     --output-dir outputs_eqs/runs/<shape>/fgm_solve/<run_name> \
-    [--budget 40]
+    [--budget 40] [--skip-verify]
 ```
 
 Use a per-shape calibrated configuration (the calibrated voltage drive is part
 of the frozen drive convention). The budget is in forward-equivalents; 40 is
 the campaign standard. Below 20 the run labels itself a smoke-test class run.
+
+By default the run ends with a production verification pass: the real engine
+(rfam_eqs_coupled.py, the v2.0.0 production march) re-simulates the delivered
+4 bpp map at the solve's optimal stop and emits the entire standard per-run
+figure suite into `production_verify/`. `--skip-verify` turns that pass off
+for fast iterations only; a run without it has no standard figure suite.
 
 Optional `fgm_solve` block in the configuration yaml (all keys optional):
 
@@ -58,8 +64,30 @@ this mode is an addition, not a replacement.
   IoU against the binary part mask, growth (`bed_melt_pct_of_part`), under
   melt (`part_under_melt_pct`), stop time with the horizon flag, energy-gate
   reading, solves spent, the warm-start provenance, and the recipe block.
-* `solve_map_melt.png`: delivered map and melted region at the stop.
+* `fgm_<run>_solve_4bpp_preview.png` and `fgm_<run>_solve_4bpp_meteor_import.png`:
+  the standard FGM map figure pair every other FGM creation mode ships
+  (the `fgm_generator.py` convention). Preview: white = max ink, physical top
+  at the image top. Meteor import: the exact pixel inversion, black = max
+  ink, importable directly into the Meteor raster image processor.
+* `solve_map_melt.png`: delivered map and melted region at the stop (the
+  solve's own quick check figure).
 * `solve_maps.npz`: continuous and quantized maps plus part mask and target.
+* `production_verify_config.yaml` and `production_verify.log`: the generated
+  engine configuration for the verification pass and its full log.
+* `production_verify/`: a REAL `rfam_eqs_coupled.py` run (engine v2.0.0) of
+  the delivered map at the solve's optimal stop, injected through
+  `fgm_feedback.sat_map_npz_direct`. It contains the entire standard per-run
+  figure suite, exactly what the Results tab renders: `electric_fields.png`,
+  `thermal_fields_final.png`, `rf_summary_v5.png`, `paper_style_report.png`,
+  `validation_report.png`, `time_series.png`, `time_series.json`,
+  `density_evolution.gif`, `electric_field_evolution.gif`,
+  `thermal_evolution.gif`, `fields.npz`, `summary.json`, `used_config.yaml`
+  and `report_manifest.json`. The pass also scores the production run's final
+  temperature field with the solve's own objective and writes the deltas into
+  `results.json` under `production_verify` (`dJ_rel`, `dIoU`,
+  `agrees_within_1_percent`); disagreement beyond 1 percent is flagged loudly
+  in the log. Absent only when `--skip-verify` was passed, in which case
+  `results.json` records the skip.
 
 ## Grid qualifier (applies to every number the solve reports)
 

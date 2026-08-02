@@ -144,3 +144,73 @@ port 8085 (started by this pass; quit it from the interface header or kill the
 * gt_logo is not solvable (its geometry rasterizer needs cv2, absent from
   .venv312; `library_solve.GT_LOGO_SKIP_REASON`); the interface will return
   the missing-calibrated-config or build error for it.
+
+## Addendum (2026-08-01): production verification pass closes the reporting gap
+
+**The gap.** Every other run mode emits the full standard per-run figure suite
+(electric_fields.png, thermal_fields_final.png, rf_summary_v5.png,
+paper_style_report.png, validation_report.png, time_series.png, the three
+evolution gifs, fields.npz, summary.json), which is exactly what the Results
+tab renders. A solve run emitted only the single map+melt check figure, so
+Matt's ellipse run through engine v2.0.0 produced one figure instead of the
+expected suite, and no standard FGM map figure artifacts.
+
+**The fix (scripts/solve_fgm.py only).** After the 4 bits per pixel
+deliverable map is written, the entry point now:
+
+1. Emits the standard FGM (functionally graded material) map figure pair the
+   other creation modes ship: `<stem>_preview.png` (white = max ink) and
+   `<stem>_meteor_import.png` (pixel inversion for the Meteor raster image
+   processor), reproducing the fgm_generator.py:702-744 convention including
+   the vertical flip (`emit_map_pngs`).
+2. Runs a PRODUCTION VERIFICATION PASS by default: it builds an engine config
+   from the solve's own config following the showcase precedent
+   (`outputs_eqs/fgm_solve_showcase/triangle_solved_A1_4bpp_stop270.yaml`):
+   `fgm_feedback.sat_map_npz_direct` pointing at the deliverable npz (whose
+   `sat_map` key is the quantized map at simulation resolution, exactly what
+   the direct loader reads, rfam_eqs_coupled.py:390-418), `thermal.n_steps`
+   set to the solve's optimal stop (round(t_stop_s / dt_s); the showcase ran
+   540 = 270 s / 0.5 s), and the `fgm_solve` block stripped
+   (`build_production_verify_config`). It then invokes rfam_eqs_coupled.py as
+   a subprocess into `<output-dir>/production_verify/`, asserts the complete
+   standard suite exists (`PRODUCTION_SUITE_FILES`, captured from the
+   showcase run), scores the production run's final temperature field with
+   the solve's own objective functions, and records the deltas in
+   results.json under `production_verify` (dJ_rel, dIoU,
+   agrees_within_1_percent); disagreement beyond 1 percent is flagged loudly
+   in the log (`run_production_verify`).
+3. Adds `--skip-verify` for fast iterations. Default is the full pass, so a
+   default solve run now lands with the entire standard figure suite from the
+   REAL v2.0.0 engine, and the pass doubles as the end-to-end integration
+   check on every run.
+
+Files changed in this pass: `scripts/solve_fgm.py` (the three functions above
+plus wiring and the flag), `test_solve_fgm.py` (9 new tests), and
+`SOLVE_MODE_USAGE.md` (output inventory and the flag). rfam_gui_server.py and
+webui/static/ were NOT touched (another agent owns them right now); the
+graphical user interface picks the new artifacts up automatically because
+they land under the run directory the Results tab already browses.
+
+**Verification.**
+
+1. Red-green test-driven development: the 9 new tests (config builder, map
+   figure pair, suite inventory constant) were written first and failed with
+   ImportError on the three new names; after implementation
+   `./.venv312/bin/python -m pytest test_solve_fgm.py -q` gives 23 passed.
+2. End-to-end smoke on Matt's exact case, the ellipse
+   (`outputs_eqs/fgm_calibrated_control/configs/ellipse_m0p0500.yaml`,
+   budget 4, smoke class and self-labelled as such):
+   `outputs_eqs/runs/ellipse/fgm_solve/ellipse_verify_smoke_20260801/`. The
+   run directory contains the deliverable npz, both map figure PNGs,
+   solve_map_melt.png, solve_maps.npz, results.json,
+   production_verify_config.yaml, production_verify.log, and
+   `production_verify/` with all 14 standard-suite files, stamped
+   engine_version 2.0.0 in used_config.yaml. Solve deliverable:
+   SOLVE_4bpp J 31.48, IoU 0.9223 at grid 120, stop 427.5 s.
+3. Solve versus production deltas (results.json `production_verify`):
+   J 31.4755324 (production) vs 31.4755336 (solve), relative difference
+   3.87e-08; IoU 0.9222798 vs 0.9222798, delta 0.0. In the 1e-9 to 1e-4
+   class the prior gates established; agrees_within_1_percent true.
+4. Figures viewed personally: solve_map_melt.png, the map preview PNG, the
+   production thermal_fields_final.png and rf_summary_v5.png all show the
+   same ellipse melt region and consistent stop time (428 s).

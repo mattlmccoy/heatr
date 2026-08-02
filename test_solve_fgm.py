@@ -16,6 +16,7 @@ quantizer.
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 
@@ -170,3 +171,119 @@ class TestEmitProductionNpz:
         from scipy.ndimage import binary_erosion
         core = binary_erosion(part_mask, iterations=3)
         assert float(np.max(np.abs(fb.sat_map[core] - s_q[core]))) <= 1.0 / 15.0
+
+
+# ---------------------------------------------------------------------------
+# 3. production verification pass: config builder (pure logic)
+# ---------------------------------------------------------------------------
+
+def _base_cfg() -> dict:
+    """A minimal calibrated-config skeleton with the keys the builder touches."""
+    return {
+        "geometry": {"part": {"shape": "ellipse"}, "grid_nx": 120},
+        "electric": {"voltage_v": 3005.5},
+        "thermal": {"dt_s": 0.5, "n_steps": 1500, "ambient_c": 23.0},
+        "fgm_solve": {"budget_forward_equivalents": 8.0},
+    }
+
+
+class TestBuildProductionVerifyConfig:
+    def test_n_steps_set_from_stop_time(self):
+        from scripts.solve_fgm import build_production_verify_config
+        out = build_production_verify_config(_base_cfg(), "/tmp/m.npz", 270.0)
+        # The showcase precedent: stop 270 s at dt 0.5 s ran n_steps 540
+        # (outputs_eqs/fgm_solve_showcase/triangle_solved_A1_4bpp_stop270.yaml).
+        assert out["thermal"]["n_steps"] == 540
+
+    def test_n_steps_rounds_and_floors_at_one(self):
+        from scripts.solve_fgm import build_production_verify_config
+        out = build_production_verify_config(_base_cfg(), "/tmp/m.npz", 0.1)
+        assert out["thermal"]["n_steps"] == 1
+
+    def test_fgm_feedback_direct_block(self):
+        from scripts.solve_fgm import build_production_verify_config
+        out = build_production_verify_config(_base_cfg(), "/tmp/m.npz", 270.0)
+        fb = out["fgm_feedback"]
+        assert fb["enabled"] is True
+        assert fb["sat_map_npz_direct"] == "/tmp/m.npz"
+        assert fb["sat_max"] == 1.0
+        assert fb["iterate"] is False
+
+    def test_fgm_solve_block_is_stripped(self):
+        from scripts.solve_fgm import build_production_verify_config
+        out = build_production_verify_config(_base_cfg(), "/tmp/m.npz", 270.0)
+        assert "fgm_solve" not in out
+
+    def test_input_config_is_not_mutated(self):
+        from scripts.solve_fgm import build_production_verify_config
+        cfg = _base_cfg()
+        import copy
+        before = copy.deepcopy(cfg)
+        build_production_verify_config(cfg, "/tmp/m.npz", 270.0)
+        assert cfg == before
+
+    def test_missing_dt_raises(self):
+        from scripts.solve_fgm import build_production_verify_config
+        cfg = _base_cfg()
+        del cfg["thermal"]["dt_s"]
+        with pytest.raises(ValueError, match="dt_s"):
+            build_production_verify_config(cfg, "/tmp/m.npz", 270.0)
+
+    def test_other_sections_carried_verbatim(self):
+        from scripts.solve_fgm import build_production_verify_config
+        cfg = _base_cfg()
+        out = build_production_verify_config(cfg, "/tmp/m.npz", 270.0)
+        assert out["electric"] == cfg["electric"]
+        assert out["geometry"] == cfg["geometry"]
+
+
+# ---------------------------------------------------------------------------
+# 4. FGM map figure artifacts (the fgm_generator preview convention)
+# ---------------------------------------------------------------------------
+
+class TestEmitMapPngs:
+    def test_preview_and_meteor_pngs(self, tmp_path, synthetic_case):
+        """Match the fgm_generator.py PNG convention (lines 702-744):
+
+        preview: white = max ink, flipped so physical top is image top;
+        meteor import: exact pixel inversion of the preview.
+        """
+        import numpy as np
+        from PIL import Image
+        from scripts.solve_fgm import emit_map_pngs, emit_production_npz
+
+        x, y, part_mask, sat = synthetic_case
+        p = emit_production_npz(sat, x, y, tmp_path / "m.npz", bpp=4,
+                                run_name="unit")
+        paths = emit_map_pngs(p)
+        prev = Path(paths["png_path"])
+        met = Path(paths["meteor_png_path"])
+        assert prev.name == "m_preview.png" and prev.exists()
+        assert met.name == "m_meteor_import.png" and met.exists()
+
+        with np.load(p) as d:
+            lm = d["level_map"]
+        a_prev = np.asarray(Image.open(prev))
+        a_met = np.asarray(Image.open(met))
+        assert a_prev.shape == lm.shape
+        expected = np.flipud(lm.astype(np.float32) * (255.0 / 15.0)).astype(np.uint8)
+        assert np.array_equal(a_prev, expected)
+        assert np.array_equal(a_met, 255 - a_prev)
+
+
+# ---------------------------------------------------------------------------
+# 5. the standard-suite inventory constant (used by the post-run check)
+# ---------------------------------------------------------------------------
+
+def test_production_suite_files_match_showcase_inventory():
+    """The file set the verification pass asserts is the showcase set
+    (outputs_eqs/fgm_solve_showcase/triangle_A1_4bpp_stop270/, a real
+    v2.0.0 engine run of a solved map)."""
+    from scripts.solve_fgm import PRODUCTION_SUITE_FILES
+    assert PRODUCTION_SUITE_FILES == {
+        "electric_fields.png", "thermal_fields_final.png", "rf_summary_v5.png",
+        "paper_style_report.png", "validation_report.png", "time_series.png",
+        "time_series.json", "fields.npz", "summary.json", "used_config.yaml",
+        "density_evolution.gif", "electric_field_evolution.gif",
+        "thermal_evolution.gif", "report_manifest.json",
+    }

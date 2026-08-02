@@ -201,6 +201,191 @@ def emit_production_npz(sat, x, y, out_path: str | Path, bpp: int = 4,
     return out_path
 
 
+def emit_map_pngs(npz_path: str | Path) -> dict[str, str]:
+    """Emit the standard FGM map figure pair next to the production npz.
+
+    Reproduces the fgm_generator.py PNG convention (fgm_generator.py:702-744),
+    the same artifacts the other FGM (functionally graded material) creation
+    modes ship with every map:
+      * ``<stem>_preview.png``: white = max ink, black = no ink, flipped
+        vertically so the physical top of the part appears at the image top
+        (fields row 0 is the physical bottom; PNG row 0 is the image top);
+      * ``<stem>_meteor_import.png``: the exact pixel inversion, black = max
+        ink, the file Meteor RIP (raster image processor) imports directly.
+    """
+    import numpy as np
+    from PIL import Image
+
+    npz_path = Path(npz_path)
+    with np.load(npz_path, allow_pickle=True) as d:
+        level_map = d["level_map"]
+        bpp = int(d["bpp"])
+    max_val = (1 << bpp) - 1
+    scale = 255.0 / max(max_val, 1)
+    vis_preview = np.flipud(level_map.astype(np.float32) * scale).astype(np.uint8)
+    png_path = npz_path.with_name(f"{npz_path.stem}_preview.png")
+    Image.fromarray(vis_preview, "L").save(str(png_path))
+    meteor_png_path = npz_path.with_name(f"{npz_path.stem}_meteor_import.png")
+    Image.fromarray((255 - vis_preview), "L").save(str(meteor_png_path))
+    return {"png_path": str(png_path), "meteor_png_path": str(meteor_png_path)}
+
+
+# ---------------------------------------------------------------------------
+# production verification pass (the full standard figure suite)
+# ---------------------------------------------------------------------------
+
+# The standard per-run file set a production rfam_eqs_coupled.py run emits;
+# captured from a REAL v2.0.0 engine run of a solved 4 bits per pixel map
+# (outputs_eqs/fgm_solve_showcase/triangle_A1_4bpp_stop270/). This is exactly
+# what the Results tab renders.
+PRODUCTION_SUITE_FILES = {
+    "electric_fields.png", "thermal_fields_final.png", "rf_summary_v5.png",
+    "paper_style_report.png", "validation_report.png", "time_series.png",
+    "time_series.json", "fields.npz", "summary.json", "used_config.yaml",
+    "density_evolution.gif", "electric_field_evolution.gif",
+    "thermal_evolution.gif", "report_manifest.json",
+}
+
+
+def build_production_verify_config(cfg: dict[str, Any], npz_path: str | Path,
+                                   t_stop_s: float) -> dict[str, Any]:
+    """Build the engine config for the production verification run.
+
+    Follows the showcase precedent
+    (outputs_eqs/fgm_solve_showcase/triangle_solved_A1_4bpp_stop270.yaml): the
+    shape's calibrated config unchanged, except
+      * ``fgm_feedback`` injects the deliverable map through the direct hook
+        ``sat_map_npz_direct`` (the loader reads the npz ``sat_map`` key at
+        simulation resolution, rfam_eqs_coupled.py:390-418; ``sat_max`` 1.0
+        keeps the printable clamp, ``iterate`` false keeps the map frozen);
+      * ``thermal.n_steps`` is set to the solve's optimal stop
+        (round(t_stop_s / dt_s); the showcase ran 540 = 270 s / 0.5 s);
+      * the ``fgm_solve`` block is stripped (the engine does not read it).
+
+    Args:
+        cfg: the solve's own loaded config dict (not mutated).
+        npz_path: path to the deliverable production map npz.
+        t_stop_s: the solve's optimal stop time in seconds.
+
+    Returns:
+        A new config dict ready to be written as yaml for rfam_eqs_coupled.py.
+
+    Raises:
+        ValueError: if the config carries no positive thermal.dt_s.
+    """
+    import copy
+
+    out = copy.deepcopy(cfg)
+    out.pop("fgm_solve", None)
+    dt_s = float(out.get("thermal", {}).get("dt_s", 0.0) or 0.0)
+    if dt_s <= 0.0:
+        raise ValueError("production verify needs a positive thermal.dt_s "
+                         "in the config to convert the stop time to n_steps")
+    out.setdefault("thermal", {})["n_steps"] = max(int(round(float(t_stop_s) / dt_s)), 1)
+    out["fgm_feedback"] = {
+        "enabled": True,
+        "sat_map_npz_direct": str(npz_path),
+        "sat_max": 1.0,
+        "iterate": False,
+    }
+    return out
+
+
+def run_production_verify(out: Path, cfg: dict[str, Any], npz_path: Path,
+                          m_q: dict, case, chi, log) -> dict:
+    """Run the REAL engine on the deliverable map and compare at the stop.
+
+    Invokes rfam_eqs_coupled.py as a subprocess into ``<out>/production_verify/``
+    so the run emits the entire standard per-run figure suite (the set the
+    Results tab renders, PRODUCTION_SUITE_FILES), stamped with the engine
+    version. Then compares the production run's final temperature field,
+    scored with the SAME objective functions the solve used, against the
+    solve's own deliverable numbers. Prior gates (adjoint2d gate L0) proved
+    the two marches bit-identical, so the deltas here double as the
+    end-to-end integration check; anything above 1 percent is flagged loudly.
+    """
+    import subprocess
+
+    import numpy as np
+    import yaml
+
+    from adjoint2d import topopt_objective as tobj
+
+    verify_dir = out / "production_verify"
+    verify_dir.mkdir(parents=True, exist_ok=True)
+    vcfg = build_production_verify_config(cfg, npz_path, float(m_q["t_stop_s"]))
+    cfg_yaml = out / "production_verify_config.yaml"
+    cfg_yaml.write_text(yaml.safe_dump(vcfg, sort_keys=True))
+    log(f"production verify: engine run of the deliverable map, "
+        f"n_steps {vcfg['thermal']['n_steps']} "
+        f"(stop {float(m_q['t_stop_s']):.1f} s) -> {verify_dir.name}/")
+
+    log_path = out / "production_verify.log"
+    with log_path.open("w") as fh:
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "rfam_eqs_coupled.py"),
+             "--config", str(cfg_yaml), "--output-dir", str(verify_dir)],
+            cwd=str(ROOT), stdout=fh, stderr=subprocess.STDOUT)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"production verify engine run FAILED (exit {proc.returncode}); "
+            f"see {log_path}")
+
+    missing = sorted(f for f in PRODUCTION_SUITE_FILES
+                     if not (verify_dir / f).exists())
+    if missing:
+        raise RuntimeError(
+            f"production verify run completed but the standard suite is "
+            f"incomplete; missing: {missing} (see {log_path})")
+
+    # Score the production run's final T with the solve's own objective
+    # functions (fields.npz T is the engine state at the stop; gate L0 proved
+    # the marches bit-identical, gate_l0.py field_max_abs_diff).
+    with np.load(verify_dir / "fields.npz") as d:
+        T_prod = np.asarray(d["T"], dtype=float)
+    J_prod, _seed = tobj.J_and_seed(T_prod, case, chi)
+    iou_prod = float(tobj.metrics(T_prod, case, chi)["IoU"])
+
+    engine_version = "unknown"
+    try:
+        used = yaml.safe_load((verify_dir / "used_config.yaml").read_text())
+        engine_version = str(used.get("engine_version", "unknown"))
+    except Exception:  # noqa: BLE001 - version stamp is informational
+        pass
+
+    dJ = float(J_prod) - float(m_q["J"])
+    dJ_rel = abs(dJ) / max(abs(float(m_q["J"])), 1e-30)
+    dIoU = iou_prod - float(m_q["IoU"])
+    agree = (dJ_rel <= 0.01) and (abs(dIoU) <= 0.01)
+    if agree:
+        log(f"production verify AGREES with the solve: "
+            f"J {J_prod:.4f} vs {m_q['J']:.4f} (rel {dJ_rel:.2e}), "
+            f"IoU {iou_prod:.4f} vs {m_q['IoU']:.4f} (d {dIoU:+.2e}), "
+            f"engine v{engine_version}")
+    else:
+        log(f"WARNING: production verify DISAGREES with the solve beyond "
+            f"1 percent: J {J_prod:.4f} vs {m_q['J']:.4f} "
+            f"(rel {dJ_rel:.3e}), IoU {iou_prod:.4f} vs {m_q['IoU']:.4f} "
+            f"(d {dIoU:+.3e}). Prior gates matched to the 1e-9 to 1e-4 "
+            f"class; investigate before trusting either number.")
+
+    return {
+        "dir": str(verify_dir),
+        "engine_version": engine_version,
+        "n_steps": int(vcfg["thermal"]["n_steps"]),
+        "t_stop_s": float(m_q["t_stop_s"]),
+        "suite_files_present": sorted(PRODUCTION_SUITE_FILES),
+        "J_production": float(J_prod),
+        "J_solve": float(m_q["J"]),
+        "dJ": dJ,
+        "dJ_rel": dJ_rel,
+        "IoU_production": iou_prod,
+        "IoU_solve": float(m_q["IoU"]),
+        "dIoU": dIoU,
+        "agrees_within_1_percent": agree,
+    }
+
+
 # ---------------------------------------------------------------------------
 # warm start resolution
 # ---------------------------------------------------------------------------
@@ -258,7 +443,8 @@ def _resolve_warm_start(sc: FgmSolveConfig, case, cfg: dict, shape: str, log):
 # ---------------------------------------------------------------------------
 
 def run_solve(config_path: str | Path, output_dir: str | Path,
-              budget_override: float | None = None) -> dict:
+              budget_override: float | None = None,
+              skip_verify: bool = False) -> dict:
     """Run the production-recipe shape-fidelity solve on one shape config."""
     _ensure_import_paths()
     import numpy as np
@@ -435,6 +621,9 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
         s_q, case.x, case.y, out / f"fgm_{run_name}_solve_{sc.bpp}bpp.npz",
         bpp=sc.bpp, run_name=run_name)
     log(f"production map npz -> {npz_path.name}")
+    map_pngs = emit_map_pngs(npz_path)
+    log(f"map figures -> {Path(map_pngs['png_path']).name} + "
+        f"{Path(map_pngs['meteor_png_path']).name}")
 
     # Campaign convention: budget counts gradient evaluations only; the cost
     # model and the two deliverable scoring forwards are reported separately.
@@ -481,6 +670,8 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
                        "dIoU": m_q["IoU"] - m_u["IoU"]},
         "rows": rows,
         "map_npz": str(npz_path),
+        "map_pngs": map_pngs,
+        "production_verify": None,
         "wall_s": time.perf_counter() - t_start,
     }
     (out / "results.json").write_text(json.dumps(res, indent=2, default=float))
@@ -493,6 +684,20 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
                         **{f"SOLVE_{sc.bpp}bpp": s_q.astype(np.float32)},
                         x=case.x, y=case.y)
     log(f"results.json + solve_map_melt.png + solve_maps.npz -> {out}")
+
+    # --- production verification pass: the full standard figure suite --------
+    if skip_verify:
+        res["production_verify"] = {"skipped": True,
+                                    "reason": "--skip-verify was passed"}
+        log("production verify SKIPPED (--skip-verify): no standard figure "
+            "suite for this run; re-run without the flag for the deliverable "
+            "report set")
+    else:
+        res["production_verify"] = run_production_verify(
+            out, cfg, npz_path, m_q, case, chi, log)
+
+    res["wall_s"] = time.perf_counter() - t_start
+    (out / "results.json").write_text(json.dumps(res, indent=2, default=float))
     log(f"done in {res['wall_s']:.0f} s")
     return res
 
@@ -546,8 +751,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--budget", type=float, default=None,
                     help="forward-equivalents budget override "
                          "(campaign standard 40)")
+    ap.add_argument("--skip-verify", action="store_true",
+                    help="skip the production verification pass (the real-"
+                         "engine run of the deliverable map that emits the "
+                         "full standard figure suite into production_verify/ "
+                         "and checks the solve numbers). Default is ON; use "
+                         "this flag only for fast iterations.")
     args = ap.parse_args(argv)
-    run_solve(args.config, args.output_dir, budget_override=args.budget)
+    run_solve(args.config, args.output_dir, budget_override=args.budget,
+              skip_verify=args.skip_verify)
     return 0
 
 
