@@ -1,10 +1,11 @@
-"""Figure 4: One 3-D solve, read layer by layer.
+"""Figure 4: One 3-D simulation, read layer by layer.
 
 Exploded z-stack of the melt-fraction field phi on the five exported z planes
 of the square arm (dolfinx engine, shared 0.15 mm evaluation grid), each
 plane with its phi = 0.9 melt front and the nominal 20 mm outline. The
-visual bridge from the 3-D solve to layerwise printing: every layer the
-printer will rasterize is a slice of one solved field.
+visual bridge from the 3-D simulation to layerwise printing: every layer
+the printer will rasterize is a slice of one simulated field. Forward
+field only; the 3-D dopant solve is in progress (Phase C).
 
 Data: solve3d/results/eval_dolfinx_square_off.npz (T: 5 z planes at
 z = -20, -10, 0, +10, +20 mm, 200x200, 0.15 mm pixels; committed Phase A
@@ -84,7 +85,7 @@ def main() -> None:
     ax.set_box_aspect((1, 1, 1.35))
     ax.view_init(elev=33, azim=-60)
 
-    st.title_block(fig, "ONE 3-D SOLVE, READ LAYER BY LAYER",
+    st.title_block(fig, "ONE 3-D SIMULATION, READ LAYER BY LAYER",
                    "melt fraction phi on the five exported z planes of the "
                    "40 mm square arm, FEM engine, shared 0.15 mm grid")
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
@@ -96,9 +97,12 @@ def main() -> None:
     cb.set_label("melt fraction phi", fontsize=9, color=st.DIM)
     fig.text(0.86, 0.76, "dash  phi=0.9 front", fontsize=9.5, color=st.FG)
     fig.text(0.86, 0.73, "cyan  nominal 20 mm", fontsize=9.5, color=st.ACCENT)
+    fig.text(0.975, 0.048,
+             "z spacing exploded for display (real planes 10 mm apart)",
+             fontsize=8.5, color=st.DIM, ha="right")
     fig.text(0.975, 0.022,
-             "z spacing exploded for display (real planes 10 mm apart)  |  "
-             "every printed layer is a slice of one solved field",
+             "forward field, the 3-D dopant solve is in progress  |  "
+             "every printed layer is a slice of one simulated field",
              fontsize=8.5, color=st.DIM, ha="right")
 
     out = st.OUT / "fig4_layer_stack.png"
