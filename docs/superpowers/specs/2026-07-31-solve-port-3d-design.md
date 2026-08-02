@@ -128,6 +128,25 @@ option.
   carried: part+sat co-rotation from the first commit (regression-tested),
   theta/theta+180 gauge redundancy halves candidate sets, power scheduling
   p(t) is NOT a primary actuator (retired in 2-D).
+  GENERALITY REQUIREMENT (Matt, 2026-08-01, via the 2-D lane): every
+  solve-stack feature works with ANY imported geometry - no hand-coded
+  shape knowledge anywhere, including grade-and-print on heatr3d. The 2-D
+  lane's geometry_intake module (chi via grid-independent area fill,
+  autocorrelation symmetry detection, per-mode anisotropy spectrum ->
+  candidate angles + calibrated actuator recommendation, auto drive
+  calibration; acceptance = a NOVEL shape with zero hand-coded knowledge)
+  is the reference implementation.
+  CROSS-LANE CONTRACT (agreed 2026-08-01): the dwell/turntable schedule is
+  a PER-BUILD decision (build-axis rotation moves every layer
+  identically); the layer-wise tool aggregates per-layer anisotropy
+  spectra (dose-weighted default; worst-layer reported as a flag) and
+  emits ONE turntable program per print alongside the per-layer 4-bpp
+  maps, consuming the intake API (per-layer chi -> spectrum, candidate
+  angles, recommendation). Convention unification: the intake's sub-cell
+  area-fill chi and solve3d's Phase C sub-cell volume-fill chi must share
+  ONE implementation/convention, not two parallel ones. Caveat: layer
+  aggregation is a heuristic (z-coupling is real); heatr3d verification of
+  the chosen program stays mandatory before printing.
 
 ## 6. Out of scope
 
