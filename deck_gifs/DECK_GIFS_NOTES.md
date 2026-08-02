@@ -77,19 +77,44 @@ pattern is restored.
 - Display uses a gamma 0.4 power scale (stated on the colorbar) so the bulk
   pattern reads; the edge singularities saturate deliberately.
 
-## gif_sequential_L.gif: SKIPPED
+## gif_sequential_L.gif (2.5 MB, 13.8 s)
 
-The sequential-dwell agent's outputs do not exist yet: no
-`fgm_solve_campaign/out_seq*` directory and no `SEQUENTIAL_DWELL_REPORT.md`
-anywhere in the tree at production time. Re-run `src/` stages against those
-outputs when they land.
+The path-dependence story, added after the sequential-dwell campaign landed.
+The L_shape marches in the part frame under its DELIVERABLE sequential
+program: hold 90 degrees for 465 s (phase 1, the horizontal foot melts while
+the vertical upright stays cold), a quarter-turn to 0 degrees flashed on the
+turntable dial, then phase 2 grows the upright while the melted foot holds.
+Same layout language as gif_dwell_cross (temperature left, relative density
+right, dial, two-band program timeline). The loop ends at the recommended
+594.5 s stop.
+
+- Program: `fgm_solve_campaign/out_seq/L_shape_turntable_DELIVERABLE.json`
+  (arm `S_seq_cosolved_4bpp_interior_switch`). The march uses the arm's
+  interior-refined switch time 465.103 s from `out_seq/L_shape_arms.json`
+  plus `L_shape_kink.json`, which is what the stored curve was scored at; the
+  machine-facing DELIVERABLE program snaps it to 465.0 s.
+- Dopant map: key `sat_S_seq_cosolved_4bpp_interior_switch` in
+  `out_seq/L_shape_seq_maps.npz`.
+- Caption numbers J_phi 276.4 and IoU 0.7161 at the stop: the stored arm in
+  the merged arms/kink JSONs, quoted with the campaign's honest framing (best
+  on record for the L at grid 120, NOT solved; the prior best on record was
+  J 396.2, IoU 0.648).
+- Limb story checked against the stored snapshots: at the switch the wide
+  (foot) limb is 60.6 percent melted and the narrow (upright) limb 0.7
+  percent; at the stop 81.2 against 79.2 percent.
+- VERIFICATION: the re-run (campaign's own `seq_dwell_march.sequential_forward`,
+  read-only import) matches the stored curve
+  `J_curve_S_seq_cosolved_4bpp_interior_switch` with max abs difference
+  6.1e-5, and J at the stop 276.3893 equals the stored arm J 276.3893.
+  Printed by `src/c4_seq_L.py`, saved in `cache/c4_seq_L.npz`.
 
 ## Reproduction
 
 Compute stages (cache npz, resumable): `src/c1_dwell_march.py`,
-`src/c2_solve_vs_invert.py`, `src/c3_kernels.py`.
+`src/c2_solve_vs_invert.py`, `src/c3_kernels.py`, `src/c4_seq_L.py`.
 Render stages: `src/r1_dwell_cross.py`, `src/r2_solve_vs_inversion.py`,
-`src/r3_rotation_kernels.py`. Shared style: `src/style.py`.
+`src/r3_rotation_kernels.py`, `src/r4_sequential_L.py`.
+Shared style: `src/style.py`.
 Frame extraction for review: `src/extract_frames.py` (writes `frames/`).
 Interpreter: `./.venv312/bin/python` from the repo root. Nothing in
 `fgm_solve_campaign/adjoint2d` was modified.
