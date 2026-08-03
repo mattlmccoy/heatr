@@ -44,18 +44,18 @@
 
 ### Task 3: The solves
 
-- [ ] Run the pre-registered arms on the extruded circle at the Phase A mid mesh. Log per-iteration J, budget spent, envelope t_stop. Emit `solve3d/results/phase_c_solves.json` with every arm's trajectory and final map artifact (npz).
-- [ ] Score ALL arms on the shared Phase A read grid: J (both weightings), IoU at phi>=0.8/0.9, front SSD, out-of-part melt fraction, and sigma_T as a reported diagnostic. Commit.
+- [x] Run the pre-registered arms on the extruded circle at the Phase A **coarse** mesh (pre-registered deviation: mid was priced at ~4.5 h/arm; coarse->mid is then the hold-out pair with a measured band). Log per-iteration J, budget spent, envelope t_stop. Emit `solve3d/results/phase_c_solves.json` with every arm's trajectory and final map artifact (npz).
+- [x] Score ALL arms on the shared Phase A read grid. Commit. **Uniform scored; inversion DROPPED (7.15 % transfer loss vs a 2 % condition) after its provenance was PROVEN (mean sat 0.4074, rel 1.8e-05); both pre-registered solve arms stalled on the box rail (diagnosed, not the null); the recorded-deviation scaled arm gives J_asym -10.67 %.** Two arms NOT_RUN.
 
 ### Task 4: Acceptance gates
 
-- [ ] Mesh hold-out: re-run the FORWARD (not the solve) for the winning solved map on the fine mesh; score there; pass iff within the pre-registered band.
-- [ ] Smoothing robustness: perturb the solved map below the filter radius; J change within band.
-- [ ] Apply the SOLVED label rule from Task 0. Emit `solve3d/results/phase_c_gate.json`. Commit.
+- [x] Mesh hold-out: PASS on every banded metric. Map transfer moved dopant 0.065 %; J moved 22.4 % against a 42.2 % band (uniform's own move 28.1 %); the solved map still beats uniform at the finer mesh by 3.51 %.
+- [x] Smoothing robustness: PASS. J changed 0.217 % under a 0.5 mm blur against a 10 % tolerance.
+- [x] Apply the SOLVED label rule. `solved_label = true`. `solve3d/results/phase_c_gate.json` emitted. Commit.
 
 ### Task 5: The decisive comparison + report
 
-- [ ] `solve3d/PHASE_C_REPORT.md`: the cylinder-null answer (solve vs uniform vs inversion, with the 2-D lane's +0.3% inversion null as context), both objective weightings, both regularization arms, acceptance gate table, cost table, honest deviations and not-covered (one shape; no eps channel; no drive reconciliation; no densification in the forward; the t90 offset still S3's). If the solve FINDS NOTHING beyond uniform, report that as the finding - on an already-uniform corrected field that is a physically meaningful null, not a failure of the port. Commit.
+- [x] `solve3d/PHASE_C_REPORT.md`: the cylinder-null answer (solve vs uniform vs inversion, with the 2-D lane's +0.3% inversion null as context), both objective weightings, both regularization arms, acceptance gate table, cost table, honest deviations and not-covered (one shape; no eps channel; no drive reconciliation; no densification in the forward; the t90 offset still S3's). If the solve FINDS NOTHING beyond uniform, report that as the finding - on an already-uniform corrected field that is a physically meaningful null, not a failure of the port. Commit.
 
 ## Out of scope
 

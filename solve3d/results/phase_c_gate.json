@@ -1,0 +1,174 @@
+{
+ "arms": {
+  "solve_filter_only_asymmetric_scaled": {
+   "arm": "solve_filter_only_asymmetric_scaled",
+   "objective": "asymmetric",
+   "beta": 0.0,
+   "mesh_holdout": {
+    "solve_mesh": "phase_a_coarse",
+    "score_mesh": "phase_a_mid",
+    "transfer": {
+     "radius_m": 0.001,
+     "method": "normalized-convolution re-evaluation (same kernel as the design filter)",
+     "total_dopant_src_m3": 1.7575694158986324e-05,
+     "total_dopant_dst_m3": 1.758705752563609e-05,
+     "total_dopant_rel_move": 0.0006465387111868232
+    },
+    "checks": {
+     "J_rel": {
+      "measured": 0.22371504427265723,
+      "band": 0.42194553862546325,
+      "pass": true,
+      "band_rule": "1.5 * |J_mid - J_coarse| / |J_coarse| measured on the UNIFORM arm, i.e. the forward's own mesh move with no design involved",
+      "uniform_own_move": 0.2812970257503088
+     },
+     "in_part_absdiff_phi0p8": {
+      "measured": 0.0020469510449472317,
+      "band": 0.08266533066132262,
+      "pass": true,
+      "uniform_own_move": 0.0026481534497566628
+     },
+     "in_part_absdiff_phi0p9": {
+      "measured": 0.001846550243343792,
+      "band": 0.08438305181792158,
+      "pass": true,
+      "uniform_own_move": 0.0022187231606068947
+     },
+     "bed_melt_absdiff_phi0p8": {
+      "measured": 0.0,
+      "band": 0.0,
+      "pass": true,
+      "uniform_own_move": 0.0
+     },
+     "bed_melt_absdiff_phi0p9": {
+      "measured": 0.0,
+      "band": 0.0,
+      "pass": true,
+      "uniform_own_move": 0.0
+     }
+    },
+    "pass": true,
+    "solved_at_solve_mesh": 1.0283280687027586e-07,
+    "solved_at_score_mesh": 7.982756092861049e-08,
+    "uniform_at_solve_mesh": 1.1511359005643762e-07,
+    "uniform_at_score_mesh": 8.27324795501214e-08,
+    "scores": {
+     "uniform_at_score_mesh": {
+      "arm": "uniform_at_score_mesh",
+      "wall_forward_s": 844.9376290829387,
+      "n_steps": 10000,
+      "n_eqs_solves": 1,
+      "J_symmetric": 6.652594080223178e-08,
+      "argmin_symmetric": 7205,
+      "at_horizon_symmetric": false,
+      "J_asymmetric": 8.27324795501214e-08,
+      "argmin_asymmetric": 7108,
+      "t_stop_s": 355.40000000000003,
+      "at_horizon_asymmetric": false,
+      "J_asym_w3_at_same_read": 6.798405238592719e-08,
+      "J_out_of_bounds": 2.106918166313459e-08,
+      "J_in_bounds_deficit": 6.166329788698681e-08,
+      "out_of_part_melt_fraction_of_part": 0.0016569999927628961,
+      "in_bounds_below_floor_fraction": 0.05328517419233054,
+      "part_mean_phi": 0.9489179079354196,
+      "sigma_T_diagnostic_c": 21.05353546934396,
+      "in_part_melt_frac_phi08": 0.9353707414829658,
+      "in_part_melt_frac_phi09": 0.9245061551674777,
+      "bed_melt_frac_phi08": 0.0,
+      "bed_melt_frac_phi09": 0.0,
+      "eval_missed": 0,
+      "map_stats": {
+       "mean": 1.0,
+       "min": 1.0,
+       "max": 1.0
+      }
+     },
+     "solved_at_score_mesh": {
+      "arm": "solve_filter_only_asymmetric_scaled_at_score_mesh",
+      "wall_forward_s": 857.5609097089618,
+      "n_steps": 10000,
+      "n_eqs_solves": 1,
+      "J_symmetric": 6.511879792414871e-08,
+      "argmin_symmetric": 7198,
+      "at_horizon_symmetric": false,
+      "J_asymmetric": 7.982756092861049e-08,
+      "argmin_asymmetric": 7102,
+      "t_stop_s": 355.1,
+      "at_horizon_asymmetric": false,
+      "J_asym_w3_at_same_read": 6.569574871822942e-08,
+      "J_out_of_bounds": 2.0188303157687236e-08,
+      "J_in_bounds_deficit": 5.963925777092325e-08,
+      "out_of_part_melt_fraction_of_part": 0.0016157551936141644,
+      "in_bounds_below_floor_fraction": 0.05319663599471786,
+      "part_mean_phi": 0.9490486208023993,
+      "sigma_T_diagnostic_c": 20.86749856113976,
+      "in_part_melt_frac_phi08": 0.9349269968508447,
+      "in_part_melt_frac_phi09": 0.9243916404237046,
+      "bed_melt_frac_phi08": 0.0,
+      "bed_melt_frac_phi09": 0.0,
+      "eval_missed": 0,
+      "map_stats": {
+       "mean": 0.9334153635144036,
+       "min": 0.7746295432803738,
+       "max": 0.9976991799923249
+      }
+     }
+    }
+   },
+   "smoothing_robustness": {
+    "perturbation_radius_m": 0.0005,
+    "filter_radius_m": 0.001,
+    "J_unblurred": 1.0283280687027586e-07,
+    "J_blurred": 1.0305643673414576e-07,
+    "rel_change": 0.0021746937643353577,
+    "tolerance": 0.1,
+    "pass": true,
+    "scores": {
+     "blurred": {
+      "arm": "solve_filter_only_asymmetric_scaled_blurred_0.5mm",
+      "wall_forward_s": 137.48190458398312,
+      "n_steps": 10000,
+      "n_eqs_solves": 1,
+      "J_symmetric": 9.490660415792369e-08,
+      "argmin_symmetric": 7273,
+      "at_horizon_symmetric": false,
+      "J_asymmetric": 1.0305643673414576e-07,
+      "argmin_asymmetric": 7170,
+      "t_stop_s": 358.5,
+      "at_horizon_asymmetric": false,
+      "J_asym_w3_at_same_read": 8.79648631886574e-08,
+      "J_out_of_bounds": 2.1559390779269087e-08,
+      "J_in_bounds_deficit": 8.149704595487668e-08,
+      "out_of_part_melt_fraction_of_part": 0.0022790406338781227,
+      "in_bounds_below_floor_fraction": 0.08205991744485948,
+      "part_mean_phi": 0.9197718630842943,
+      "sigma_T_diagnostic_c": 21.23307583756672,
+      "in_part_melt_frac_phi08": 0.932865731462926,
+      "in_part_melt_frac_phi09": 0.9225880332092757,
+      "bed_melt_frac_phi08": 0.0,
+      "bed_melt_frac_phi09": 0.0,
+      "eval_missed": 0,
+      "map_stats": {
+       "mean": 0.9334220189938044,
+       "min": 0.7164839787781735,
+       "max": 0.9995983160715632
+      }
+     }
+    }
+   },
+   "beats_uniform_in_grid": true,
+   "in_grid_margin_rel": 0.1066840429539272,
+   "solved_label": true,
+   "solved_label_rule": {
+    "all_of": [
+     "beats the uniform baseline on the PRIMARY objective (asymmetric, 10x) by more than the in-grid noise band",
+     "passes the mesh hold-out on every banded metric",
+     "passes the smoothing-robustness tolerance"
+    ],
+    "citation": "FROZEN_CONVENTIONS_2D.md section 8 -- a map does not get a SOLVED label unless Gate A and Gate B both pass. On their own pass NO 2-D map earned it.",
+    "null_result_is_a_valid_finding": true,
+    "null_statement": "If no solve arm beats uniform beyond the noise band, that is the RESULT, not a failure of the port. The corrected cylinder field is already nearly uniform (D1: interior coefficient of variation 0.0119 and falling under refinement), and the inversion heuristic's own answer on this shape is +0.3 %, i.e. nothing. A solve that also finds nothing would be evidence that there is nothing to find on this shape, which is a physically meaningful statement about the cylinder null and NOT evidence about the method on shapes that do have structure."
+   }
+  }
+ }
+}
