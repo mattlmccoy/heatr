@@ -126,6 +126,172 @@
     }
    ],
    "start": "single full-depth cold start, uniform saturation 1.0"
+  },
+  "solve_filter_only_asymmetric_scaled": {
+   "arm": "solve_filter_only_asymmetric_scaled",
+   "wall_forward_s": 131.16007833299227,
+   "n_steps": 10000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 9.491814369786978e-08,
+   "argmin_symmetric": 7273,
+   "at_horizon_symmetric": false,
+   "J_asymmetric": 1.0283280687027586e-07,
+   "argmin_asymmetric": 7170,
+   "t_stop_s": 358.5,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 8.79470139269614e-08,
+   "J_out_of_bounds": 2.1265418490449242e-08,
+   "J_in_bounds_deficit": 8.156738837982663e-08,
+   "out_of_part_melt_fraction_of_part": 0.0022676046529119453,
+   "in_bounds_below_floor_fraction": 0.08206148388886499,
+   "part_mean_phi": 0.9197733582201735,
+   "sigma_T_diagnostic_c": 21.230714791387136,
+   "in_part_melt_frac_phi08": 0.9328800458058975,
+   "in_part_melt_frac_phi09": 0.9225450901803608,
+   "bed_melt_frac_phi08": 0.0,
+   "bed_melt_frac_phi09": 0.0,
+   "eval_missed": 0,
+   "map_stats": {
+    "mean": 0.933441006102861,
+    "min": 0.6833835718234699,
+    "max": 0.9999837652694947
+   },
+   "status": "budget_exhausted",
+   "objective_optimized": "asymmetric",
+   "w_ratio": null,
+   "beta": 0.0,
+   "budget_gradient_evaluations": 12,
+   "gradient_evaluations_used": 12,
+   "forward_equivalents_spent": 39.936,
+   "J_first_eval": 1.151135900564477e-07,
+   "J_best_during_solve": 1.0283280687027586e-07,
+   "wall_total_s": 5267.03752020793,
+   "trajectory": [
+    {
+     "eval": 1,
+     "J": 1.151135900564477e-07,
+     "argmin_step": 7172,
+     "t_stop_s": 358.6,
+     "at_horizon": false,
+     "grad_norm": 3.75646091110831e-09,
+     "map_mean": 1.0,
+     "wall_s": 465.9678822909482
+    },
+    {
+     "eval": 2,
+     "J": 1.1327919891855508e-07,
+     "argmin_step": 7172,
+     "t_stop_s": 358.6,
+     "at_horizon": false,
+     "grad_norm": 3.2726310348293058e-09,
+     "map_mean": 0.9985695102145788,
+     "wall_s": 912.7700767079368
+    },
+    {
+     "eval": 3,
+     "J": 1.0765863160774848e-07,
+     "argmin_step": 7166,
+     "t_stop_s": 358.3,
+     "at_horizon": false,
+     "grad_norm": 1.062111815870677e-09,
+     "map_mean": 0.9891900557393776,
+     "wall_s": 1348.1326772079337
+    },
+    {
+     "eval": 4,
+     "J": 1.0712506126267239e-07,
+     "argmin_step": 7166,
+     "t_stop_s": 358.3,
+     "at_horizon": false,
+     "grad_norm": 7.708802705035177e-10,
+     "map_mean": 0.9873939140494286,
+     "wall_s": 1784.5855639160145
+    },
+    {
+     "eval": 5,
+     "J": 1.063837983086363e-07,
+     "argmin_step": 7167,
+     "t_stop_s": 358.35,
+     "at_horizon": false,
+     "grad_norm": 8.749980397885989e-10,
+     "map_mean": 0.9831466816356917,
+     "wall_s": 2219.538236082997
+    },
+    {
+     "eval": 6,
+     "J": 1.0549954854924422e-07,
+     "argmin_step": 7168,
+     "t_stop_s": 358.40000000000003,
+     "at_horizon": false,
+     "grad_norm": 1.0913470153017507e-09,
+     "map_mean": 0.9759400643746609,
+     "wall_s": 2653.6111872498877
+    },
+    {
+     "eval": 7,
+     "J": 1.0492329962076859e-07,
+     "argmin_step": 7170,
+     "t_stop_s": 358.5,
+     "at_horizon": false,
+     "grad_norm": 1.6905954819252321e-09,
+     "map_mean": 0.9654548459810979,
+     "wall_s": 3087.9855725408997
+    },
+    {
+     "eval": 8,
+     "J": 1.0422351925500967e-07,
+     "argmin_step": 7170,
+     "t_stop_s": 358.5,
+     "at_horizon": false,
+     "grad_norm": 6.938332177326176e-10,
+     "map_mean": 0.9629299382878533,
+     "wall_s": 3521.9462322909385
+    },
+    {
+     "eval": 9,
+     "J": 1.0390987834185277e-07,
+     "argmin_step": 7170,
+     "t_stop_s": 358.5,
+     "at_horizon": false,
+     "grad_norm": 6.047979017053157e-10,
+     "map_mean": 0.9608250822176043,
+     "wall_s": 3960.365160249872
+    },
+    {
+     "eval": 10,
+     "J": 1.0359388812415053e-07,
+     "argmin_step": 7170,
+     "t_stop_s": 358.5,
+     "at_horizon": false,
+     "grad_norm": 7.176668959712909e-10,
+     "map_mean": 0.9577449784785652,
+     "wall_s": 4393.637964249821
+    },
+    {
+     "eval": 11,
+     "J": 1.0297993916671718e-07,
+     "argmin_step": 7170,
+     "t_stop_s": 358.5,
+     "at_horizon": false,
+     "grad_norm": 9.18450502860215e-10,
+     "map_mean": 0.9495486045531635,
+     "wall_s": 4827.68520266586
+    },
+    {
+     "eval": 12,
+     "J": 1.0283280687027586e-07,
+     "argmin_step": 7170,
+     "t_stop_s": 358.5,
+     "at_horizon": false,
+     "grad_norm": 2.186095091513688e-09,
+     "map_mean": 0.933441006102861,
+     "wall_s": 5266.8601284998
+    }
+   ],
+   "start": "single full-depth cold start, uniform saturation 1.0",
+   "scale_first_step": true,
+   "objective_scale_applied": 266208014.31551674,
+   "deviation_note": "objective rescaled by 1/|g0| (a constant) so L-BFGS-B's first step is O(1); pure reparameterization, minimizer unchanged. RECORDED DEVIATION, run as an ADDITIONAL arm without displacing the pre-registered one."
   }
  }
 }
