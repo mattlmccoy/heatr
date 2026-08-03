@@ -66,3 +66,19 @@
 ## Out of scope
 
 COMSOL 3-D anchor, 2.5-D extrusion anchor, densification-law literature consistency (all S3); any default flip without sign-off; Studio badge changes; dissertation edits; solve3d changes.
+
+---
+
+## HANDOFF STATE (Phase E is tracked here until it gets its own plan file)
+
+Updated at every commit so a resume needs zero re-derivation.
+
+- **2026-08-03, checkpoint added.** Pyramid: mesh + uniform_baseline +
+  heuristic_grading_law COMPLETE on disk (`solve3d/phase_e/results/phase_e_pyramid.json`);
+  filter-only solve RUNNING (restarted from scratch after a shutdown killed the
+  first attempt at eval 5/12; now checkpointed per evaluation to
+  `results/ckpt_pyramid_solve_filter_only.npz`). Cube: cheap stages RUNNING.
+  Cube solve DEFERRED -- machine at ~11.4/12 cores from six other lanes, so the
+  two solves are staggered rather than run concurrently.
+  Resume with: `--shape <s> --stage cheap|solve` (arms already recorded are
+  skipped; the solve resumes from its checkpoint).

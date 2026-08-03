@@ -285,7 +285,21 @@ def _merge(shape: str, key: str, rec) -> None:
         p.write_text(json.dumps(doc, indent=1, default=float))
 
 
-def run_shape(shape: str, budget_evals: int = 12) -> dict:
+def _have(shape: str, key: str) -> bool:
+    p = RESULTS / f"phase_e_{shape}.json"
+    if not p.exists():
+        return False
+    return key in json.loads(p.read_text()).get("arms", {})
+
+
+def run_shape(shape: str, budget_evals: int = 12, stage: str = "all") -> dict:
+    """Arms are SKIPPED if already recorded, so a resume costs nothing.
+
+    `stage` = "cheap" runs only mesh + uniform + heuristic (the ~150 s
+    forwards), "solve" only the filter-only solve, "all" everything. Splitting
+    them lets an expensive solve be staggered against machine load without
+    re-running the cheap arms.
+    """
     print(f"[phase-e] {shape}: building case", flush=True)
     tc = build_case(shape)
     chain = dc.DesignChain(
@@ -293,33 +307,37 @@ def run_shape(shape: str, budget_evals: int = 12) -> dict:
             tc.msh, tc.msh.topology.dim,
             np.arange(tc.ncells, dtype=np.int32)))[tc.eqs.part],
         tc.eqs.vol[tc.eqs.part], 1.0e-3, [0.0])
-    _merge(shape, "_mesh", {"n_cells": int(tc.ncells),
-                            "n_nodes": int(tc.vol_nodal.size),
-                            "n_design_cells": int(chain.n_design),
-                            "lc_part_m": LC_PART_M,
-                            "part_volume_rel_err_vs_library":
-                                float(tc.info.part_volume_rel_err_vs_library),
-                            "kernel": chain.kernel_report()})
+    if stage in ("cheap", "all") and not _have(shape, "_mesh"):
+        _merge(shape, "_mesh", {"n_cells": int(tc.ncells),
+                                "n_nodes": int(tc.vol_nodal.size),
+                                "n_design_cells": int(chain.n_design),
+                                "lc_part_m": LC_PART_M,
+                                "part_volume_rel_err_vs_library":
+                                    float(tc.info.part_volume_rel_err_vs_library),
+                                "kernel": chain.kernel_report()})
     n = chain.n_design
-    print(f"[phase-e] {shape}: uniform baseline", flush=True)
-    _merge(shape, "uniform_baseline", score_arm(tc, np.ones(n), shape,
-                                                "uniform_baseline"))
-    print(f"[phase-e] {shape}: heuristic arm", flush=True)
-    hm = heuristic_map(tc, shape)
-    smap = hm.pop("map")
-    if hm["dropped"]:
-        _merge(shape, "heuristic_grading_law",
-               {"arm": "heuristic_grading_law", "status": "DROPPED",
-                "reason": "transfer moved total in-part dopant beyond the "
-                          "pre-registered 2 % condition", "transfer": hm})
-    else:
-        _merge(shape, "heuristic_grading_law",
-               score_arm(tc, smap, shape, "heuristic_grading_law",
-                         extra={"transfer": hm}))
-    print(f"[phase-e] {shape}: filter-only solve", flush=True)
-    _merge(shape, "solve_filter_only",
-           run_solve_arm(tc, chain, shape, "solve_filter_only", "asymmetric",
-                         budget_evals=budget_evals))
+    if stage in ("cheap", "all") and not _have(shape, "uniform_baseline"):
+        print(f"[phase-e] {shape}: uniform baseline", flush=True)
+        _merge(shape, "uniform_baseline",
+               score_arm(tc, np.ones(n), shape, "uniform_baseline"))
+    if stage in ("cheap", "all") and not _have(shape, "heuristic_grading_law"):
+        print(f"[phase-e] {shape}: heuristic arm", flush=True)
+        hm = heuristic_map(tc, shape)
+        smap = hm.pop("map")
+        if hm["dropped"]:
+            _merge(shape, "heuristic_grading_law",
+                   {"arm": "heuristic_grading_law", "status": "DROPPED",
+                    "reason": "transfer moved total in-part dopant beyond the "
+                              "pre-registered 2 % condition", "transfer": hm})
+        else:
+            _merge(shape, "heuristic_grading_law",
+                   score_arm(tc, smap, shape, "heuristic_grading_law",
+                             extra={"transfer": hm}))
+    if stage in ("solve", "all") and not _have(shape, "solve_filter_only"):
+        print(f"[phase-e] {shape}: filter-only solve", flush=True)
+        _merge(shape, "solve_filter_only",
+               run_solve_arm(tc, chain, shape, "solve_filter_only",
+                             "asymmetric", budget_evals=budget_evals))
     return json.loads((RESULTS / f"phase_e_{shape}.json").read_text())
 
 
@@ -327,9 +345,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--shape", default=None)
     ap.add_argument("--budget", type=int, default=12)
+    ap.add_argument("--stage", default="all", choices=["cheap", "solve", "all"])
     a = ap.parse_args()
     if a.shape:
-        run_shape(a.shape, budget_evals=a.budget)
+        run_shape(a.shape, budget_evals=a.budget, stage=a.stage)
     return 0
 
 
