@@ -200,6 +200,26 @@ front, plus the numbers block. Honesty line on the figure: "solved by 3-D
 adjoint (filter-only arm), budget-limited, still descending; simulation-only".
 No title block (the deck adds its own).
 
+`results/fig_deck_pyramid_cutaway3d.png`, rendered by
+`render_deck_cutaway3d.py` in the `fig1_dense_inside_bounds` quarter-cutaway
+style: the nominal pyramid solid with the x>0, y>0 wedge removed, uniform vs
+the filter-only solve arm at the same camera, inside the cyan nominal
+wireframe, with the phi = 0.9 front contoured on the two cut faces.
+
+**What colours that figure, for the caption: MELT FRACTION phi -- a real full
+3-D field, not the dopant map.** The data contract was checked before the
+figure was designed: `field_<shape>_<arm>.npz` stores `T_read`, the complete
+nodal temperature at that arm's own envelope read state, and
+`forward.phase_fraction` is pointwise in T, so T_read determines a genuine
+melt-fraction volume. `sample_volume.py` evaluates it on a 96^3 grid (zero
+missed points in-part). Cross-check: in-part mean phi off that grid is 0.3763
+and 0.6671, against 0.3933 and 0.6752 from the FEM volume-weighted scorer --
+the small gap is grid vs FEM weighting, not a different quantity.
+
+Caption constraint: the arm may be called "solve (filter-only arm)" but NOT
+described as validated or SOLVED, because the pre-registered label was not
+earned (section 3b).
+
 ---
 
 ## Reproduce
