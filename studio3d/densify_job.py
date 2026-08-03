@@ -52,8 +52,15 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=64)
     ap.add_argument("--max-time-s", type=float, default=1500.0)
     args = ap.parse_args()
-    res = run_job(args.mesh, args.grade_dir, arm=args.arm, n=args.n,
-                  max_time_s=args.max_time_s)
+    try:
+        res = run_job(args.mesh, args.grade_dir, arm=args.arm, n=args.n,
+                      max_time_s=args.max_time_s)
+    except Exception as e:
+        # one clean line for the UI; the traceback stays in the log
+        import traceback
+        traceback.print_exc()
+        print(f"STUDIO3D_ERROR {e}", flush=True)
+        return 1
     print("RESULTS " + json.dumps(res, default=float))
     return 0
 

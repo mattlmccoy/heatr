@@ -110,11 +110,15 @@ imperfect meshes the way Meteor's slicer does today).
     self-intersects (N intersecting face pairs)." (The 2-D lane's intake
     discarded even-odd fills for exactly this failure; we refuse rather than
     guess.)
-  - through-holes in slices (interior loops): REFUSED until hole-aware fill
-    exists, matching the port spec's rule: "holes REFUSED rather than
-    silently filled until hole-aware fill is built and tested." This
-    replaces today's display-only "largest loop modeled" behavior FOR THE
-    GRADE PATH; the Slicer tab is untouched.
+  - part must fit the 60 mm chamber (import-time refusal with the bbox in
+    the message; added 2026-08-03 after a 100 mm part failed mid-Express
+    with a raw traceback instead of at import).
+  - through-holes: SUPERSEDED 2026-08-03 by Matt ("fails to do any geometry
+    with holes which is problematic"). Holed parts RUN. The 3-D densify
+    arms are hole-true (voxel containment respects bores,
+    regression-tested on a tube). The 2.5-D per-slice engine still models
+    the largest exterior loop, so holed slices carry a loud label instead
+    of a silent fill; hole-aware 2.5-D fill is future work.
 - The verdict is stored in grade state; every downstream Grade endpoint
   refuses to run on a mesh whose intake verdict is not "accepted" (no
   bypass flag).

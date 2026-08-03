@@ -77,3 +77,22 @@ def test_sphere_has_no_false_positive_pairs():
     v = intake_verdict(trimesh.creation.icosphere(subdivisions=2))
     assert v["accepted"] is True
     assert v["checks"]["self_intersection"]["n_intersecting_pairs"] == 0
+
+
+def test_oversize_part_is_refused_at_intake(tmp_path):
+    """Chamber fit is an import-time fact (found live: a 100 mm calibration
+    part sailed through intake and failed minutes later inside the Express
+    densify stage with a raw traceback)."""
+    import trimesh as tm
+    p = tmp_path / "big.stl"
+    tm.creation.box(extents=(100.0, 100.0, 50.0)).export(p)
+    v = intake_verdict(tm.load_mesh(p))
+    assert v["accepted"] is False
+    assert v["checks"]["chamber_fit"]["ok"] is False
+    assert "REFUSED" in v["error"] and "60 mm" in v["error"]
+    assert "100" in v["error"]
+
+
+def test_in_chamber_part_passes_the_fit_check():
+    v = intake_verdict(_box())   # 1 mm box, far inside the chamber
+    assert v["checks"]["chamber_fit"]["ok"] is True

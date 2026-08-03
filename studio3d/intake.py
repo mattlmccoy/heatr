@@ -114,11 +114,31 @@ def count_self_intersections(mesh: trimesh.Trimesh,
     return int(hits.sum())
 
 
+CHAMBER_MM = 60.0
+
+
 def intake_verdict(mesh: trimesh.Trimesh) -> Dict[str, Any]:
     """Run the refusal rules; return the JSON-serializable verdict record."""
+    # chamber fit first: an import-time fact, refused at import time
+    size_mm = (mesh.bounds[1] - mesh.bounds[0]).tolist()
+    fit_ok = bool(all(s < CHAMBER_MM for s in size_mm))
+    fit_check = {"ok": fit_ok,
+                 "bbox_mm": [round(float(s), 2) for s in size_mm],
+                 "chamber_mm": CHAMBER_MM}
+    if not fit_ok:
+        return {
+            "accepted": False,
+            "error": (f"REFUSED: part bbox "
+                      f"{[round(float(s), 1) for s in size_mm]} mm does not "
+                      f"fit the 60 mm RFAM chamber. Grading and the 3-D "
+                      "simulation are chamber-limited; scale the part down "
+                      "or import a chamber-sized piece of it."),
+            "checks": {"chamber_fit": fit_check},
+        }
     watertight_ok = bool(mesh.is_watertight)
     n_open = 0 if watertight_ok else _open_edge_count(mesh)
     checks: Dict[str, Any] = {
+        "chamber_fit": fit_check,
         "watertight": {"ok": watertight_ok, "n_open_edges": n_open},
     }
     if not watertight_ok:

@@ -82,3 +82,21 @@ def test_run_densify_writes_the_artifact_set(box20_stl, tmp_path):
     json.dumps(on_disk, allow_nan=False)
     assert on_disk["t_phi90_s"] is None
     json.dumps(res, allow_nan=False)
+
+
+def test_voxelize_preserves_through_holes(tmp_path):
+    """A tube's bore must stay empty: hole-true 3-D geometry (Matt
+    2026-08-03: 'fails to do any geometry with holes')."""
+    p = tmp_path / "tube.stl"
+    outer = trimesh.creation.cylinder(radius=12.0, height=20.0, sections=64)
+    inner = trimesh.creation.cylinder(radius=5.0, height=22.0, sections=64)
+    tube = outer.difference(inner)
+    assert tube.is_watertight
+    tube.export(p)
+    part = voxelize_stl(str(p), n=32)
+    zc = np.where(part.any(axis=(0, 1)))[0]
+    mid = zc[len(zc) // 2]
+    c = 32 // 2
+    assert part[:, :, mid].sum() > 0
+    assert not part[c, c, mid], "bore center must be empty"
+    assert not part[c - 1, c - 1, mid], "bore interior must be empty"
