@@ -63,6 +63,27 @@ def test_engine_version_string():
     assert len(v) > len("heatr3d-")
 
 
+def test_snapshot_march_reproduces_single_march_and_covers_time():
+    """The adaptive snapshot driver (segment chaining with qrf_override after
+    the first EQS solve, dyadic thinning) must reproduce the single march's
+    final T field and produce multiple increasing-time snapshots that span the
+    march, even when melt onset lands early in the exposure."""
+    import heatr3d as H
+    grid = H.Grid(n=16)
+    part = H.make_geometry(grid, "sphere", diam=0.028, zspan=0.028)
+    p = H.Params(phase_update="enthalpy")
+    single = H.run(grid, part, p, max_time_s=20.0, verbose=False)
+
+    r, snaps = WJ.run_snapshot_march(grid, part, p, None, expo=20.0,
+                                     densify=False)
+    assert 4 <= len(snaps) <= WJ.SNAPSHOT_MAX
+    ts = [s[0] for s in snaps]
+    assert ts == sorted(ts) and ts[-1] >= 0.5 * 20.0
+    dT = np.abs(r.T_final - single.T_final)
+    assert float(dT.max()) < 1e-6, f"snapshot-march vs single max |dT| = {dT.max()}"
+    assert r.n_eqs_solves == 1          # EQS solved once; later segments override
+
+
 def test_chained_segments_reproduce_single_march_final_T():
     """Tier 2 gate: K chained run() segments (T0_override + t_start_s) must
     reproduce the single march's final T field. n=16, short horizon."""

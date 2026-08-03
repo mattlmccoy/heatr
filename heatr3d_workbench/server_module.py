@@ -324,7 +324,9 @@ def solved_cards() -> List[Dict[str, Any]]:
 
     def _card(arm: str, rec: Dict[str, Any], kind: str) -> Dict[str, Any]:
         g = gate.get("arms", {}).get(arm, {})
-        status = str(rec.get("status", rec.get("note", "scored")))
+        raw_status = str(rec.get("status", rec.get("note", "scored")))
+        status = raw_status.split(":", 1)[0]     # optimizer message -> detail
+        detail = raw_status.split(":", 1)[1].strip() if ":" in raw_status else None
         c: Dict[str, Any] = {
             "arm": arm, "kind": kind, "shape": "cylinder (extruded circle)",
             "campaign": "phase_c", "status": status,
@@ -332,6 +334,8 @@ def solved_cards() -> List[Dict[str, Any]]:
             "deviation": "scaled" in arm,
             "badge": badge,
         }
+        if detail:
+            c["status_detail"] = detail
         for k in ("J_asymmetric", "J_symmetric", "J_out_of_bounds",
                   "J_in_bounds_deficit", "sigma_T_c", "in_part_melt_frac_phi09",
                   "bed_melt_frac_phi09", "gradient_evaluations_used",

@@ -53,6 +53,19 @@ def test_dead_pid_without_results_is_stale_failed(q):
     assert q.get(jid)["state"] == "stale_failed"
 
 
+def test_zombie_child_without_results_is_stale_failed(q):
+    """A crashed child the server has not reaped is a ZOMBIE: os.kill(pid, 0)
+    still succeeds, so naive liveness reports it running forever (found live
+    2026-08-02: the rtree-crash run stayed 'running'). refresh() must reap."""
+    import subprocess, time
+    proc = subprocess.Popen(["true"])          # exits immediately, NOT waited
+    time.sleep(0.3)                            # let it die into zombie state
+    jid = q.enqueue({"shape": "s"})
+    q.mark_running(jid, pid=proc.pid)
+    q.refresh()
+    assert q.get(jid)["state"] == "stale_failed"
+
+
 def test_cancel_marks_cancelled_distinct_from_failed(q):
     jid = q.enqueue({"shape": "s"})
     q.cancel(jid)

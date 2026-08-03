@@ -56,7 +56,9 @@ from heatr3d_workbench import vox_metrics                # noqa: E402
 logger = logging.getLogger(__name__)
 
 GRID_CEILING_FULL = 96
-SNAPSHOT_SEGMENTS = 10
+SNAPSHOT_SEGMENTS = 10        # legacy equal-split plan (kept for the gate test)
+SNAPSHOT_MAX = 24             # dyadic thinning cap for the adaptive driver
+SNAPSHOT_MIN_SEGS = 40        # target time resolution: expo / this per segment
 
 
 # --------------------------------------------------------------------------- #
@@ -94,6 +96,58 @@ def run_segment(grid, part, p, t0: float, t1: float, T_prev):
     """One chained segment: duration t1-t0 starting at absolute t0."""
     return H.run(grid, part, p, max_time_s=(t1 - t0), t_start_s=t0,
                  T0_override=T_prev, verbose=False)
+
+
+def run_snapshot_march(grid, part, p, sat, expo: float, densify: bool = False):
+    """Tier 2 time-snapshot march (densify=False only): chained run() segments.
+
+    The FIRST segment performs the one real EQS solve; every later segment
+    passes its Qrf back as qrf_override (used verbatim - identical to the
+    frozen-Q legacy march, so the chain is exact; pinned by test). Segment
+    duration is expo/SNAPSHOT_MIN_SEGS; the march breaks at the phi_target
+    crossing; snapshots are dyadically thinned to at most SNAPSHOT_MAX so an
+    early melt still yields a well-covered sequence.
+
+    Returns (last_result, snaps) with snaps = [(t_abs_s, T, phi), ...].
+    """
+    if densify:
+        raise SystemExit("snapshot march is melt-onset only (spec 4.2 Tier 3)")
+    seg = max(float(expo) / SNAPSHOT_MIN_SEGS, 2.0 * p.dt_s)
+    T_prev = None
+    qrf = None
+    snaps: List[Tuple[float, np.ndarray, np.ndarray]] = []
+    stride = 1
+    i = 0
+    r = None
+    t0 = 0.0
+    n_eqs_total = 0
+    while t0 < expo - 1e-9:
+        t1 = min(t0 + seg, expo)
+        r = H.run(grid, part, p, sat=sat, max_time_s=(t1 - t0), t_start_s=t0,
+                  T0_override=T_prev, qrf_override=qrf, verbose=False)
+        n_eqs_total += int(r.n_eqs_solves)
+        if qrf is None:
+            qrf = r.Qrf
+        T_prev = r.T_final
+        # run() reports t90 LOCAL to the call (heatr3d.py:1224); make absolute.
+        if r.reached:
+            r.t_phi90_s = t0 + float(r.t_phi90_s)
+        t_now = r.t_phi90_s if r.reached else t1
+        if i % stride == 0:
+            snaps.append((min(t_now, t1), r.T_final.copy(), r.phi_final.copy()))
+            if len(snaps) > SNAPSHOT_MAX:
+                snaps = snaps[::2]         # dyadic thinning: halve, keep coverage
+                stride *= 2
+        i += 1
+        phi_bar = float(r.phi_final[part].mean()) if part.any() else float("nan")
+        print(f"  t={min(t_now, t1):6.1f}s  Tmax={r.T_max_c:6.1f}  "
+              f"phi={phi_bar:.3f}  rho={float(p.rho_rel):.3f}", flush=True)
+        if r.reached:
+            break
+        t0 = t1
+    if r is not None:
+        r.n_eqs_solves = n_eqs_total       # total for the chain, not last segment
+    return r, snaps
 
 
 def engine_version() -> str:
@@ -295,20 +349,7 @@ def main(argv: List[str]) -> None:
     t0 = time.time()
     snaps: List[Tuple[float, np.ndarray, np.ndarray]] = []
     if want_snaps:
-        T_prev = None
-        r = None
-        for (s0, s1) in segment_plan(expo, SNAPSHOT_SEGMENTS):
-            r = H.run(grid, part, p, sat=sat, max_time_s=(s1 - s0), t_start_s=s0,
-                      T0_override=T_prev, verbose=True)
-            T_prev = r.T_final
-            t_now = s0 + (r.t_phi90_s if r.reached else (s1 - s0))
-            snaps.append((min(t_now, s1), r.T_final.copy(), r.phi_final.copy()))
-            phi_bar = float(r.phi_final[part].mean()) if part.any() else float("nan")
-            rho_bar = float(p.rho_rel)
-            print(f"  t={min(t_now, s1):6.1f}s  Tmax={r.T_max_c:6.1f}  "
-                  f"phi={phi_bar:.3f}  rho={rho_bar:.3f}", flush=True)
-            if r.reached:
-                break
+        r, snaps = run_snapshot_march(grid, part, p, sat, expo, densify=False)
         assert r is not None
     else:
         r = H.run(grid, part, p, sat=sat, max_time_s=expo, densify=densify,
@@ -367,6 +408,12 @@ def main(argv: List[str]) -> None:
     meta = LJ._field_meta(fields_for_view, grid.h)
     meta["axes"] = {"x": int(part.shape[0]), "y": int(part.shape[1]),
                     "z": int(part.shape[2])}
+    # Promote a display shape so the run pickers group library/STL runs
+    # correctly (the legacy writer only reads cfg["shape"]).
+    if not cfg.get("shape"):
+        cfg["shape"] = (cfg.get("library_shape")
+                        or (Path(cfg["stl"]).stem if cfg.get("stl") else None)
+                        or "unknown")
     LJ._write_summary(out, results, cfg)
     _render_slices_all(out, fields_for_view, meta)   # x/y/z, locked colormaps
     (out / "fieldmeta.json").write_text(json.dumps(meta, indent=2))  # with axes

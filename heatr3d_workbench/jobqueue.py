@@ -112,8 +112,19 @@ class Queue:
     def _pid_alive(pid: Optional[int]) -> bool:
         if not pid:
             return False
+        pid = int(pid)
+        # Reap first: a crashed child of THIS process is a zombie until waited,
+        # and os.kill(pid, 0) reports zombies as alive (live finding 2026-08-02).
         try:
-            os.kill(int(pid), 0)
+            done, _ = os.waitpid(pid, os.WNOHANG)
+            if done == pid:
+                return False
+        except ChildProcessError:
+            pass          # not our child; fall through to the signal probe
+        except OSError:
+            pass
+        try:
+            os.kill(pid, 0)
             return True
         except ProcessLookupError:
             return False

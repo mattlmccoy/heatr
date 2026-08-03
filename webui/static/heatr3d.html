@@ -3,97 +3,168 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HEATR-3D: Volumetric Sintering &amp; 3-D FGM</title>
+  <title>HEATR-3D Workbench</title>
   <link rel="stylesheet" href="/static/styles.css" />
   <link rel="stylesheet" href="/static/design-b.css" />
   <link rel="stylesheet" href="/static/hub-theme.css" />
   <style>
-    .h3d-grid { display:grid; grid-template-columns: 360px 1fr; gap:16px; align-items:start; }
-    @media (max-width:980px){ .h3d-grid{ grid-template-columns:1fr; } }
-
-    /* This page has a single top-level child, but the shared `.grid` class
-       (styles.css) is a 3-column Operation-page layout, which left two empty
-       columns and squeezed the content into ~35% of the width. Keep .grid's
-       padding, drop its column template. */
     main.grid { display:block; }
+    /* Visual consistency with the app's sans design language: hub-theme sets
+       Instrument Serif !important on card headings; the workbench headings
+       use the hub sans (Space Grotesk) at a consistent scale instead. */
+    .ids-inspired .wb-layout .card h2,
+    .ids-inspired .wb-layout .card h3,
+    .ids-inspired .wb-layout .card h4 {
+      font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif !important;
+      font-style: normal !important; font-weight: 600 !important;
+      letter-spacing: .01em !important; }
+    .ids-inspired .wb-layout .card h2 { font-size: 1.02rem !important; margin: 0 0 12px; }
+    .wb-sub { display:block; font-size:.72rem; opacity:.6; font-weight:400; margin-top:2px; }
+    .wb-layout { display:grid; grid-template-columns: 230px 1fr; gap:14px; align-items:start; }
+    @media (max-width:1050px){ .wb-layout{ grid-template-columns:1fr; } }
 
-    /* Global `label { display:grid }` (styles.css) turns this label into a grid
-       container, stretching the checkbox to full width above its own text. */
-    .h3d-check { display:flex; align-items:center; gap:8px; font-size:.78rem; opacity:.85; }
-    .h3d-check input[type=checkbox] { width:auto; flex:none; margin:0; }
-    .h3d-field { display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
-    .h3d-field label { font-size:.78rem; opacity:.85; }
-    .h3d-field input, .h3d-field select { padding:6px 8px; border-radius:6px;
-      border:1px solid rgba(128,140,160,.35); background:rgba(128,140,160,.08);
-      color:inherit; font:inherit; }
-    .h3d-row { display:flex; gap:10px; }
-    .h3d-row .h3d-field { flex:1; }
-    #h3dViewport { width:100%; height:520px; border-radius:10px; background:#0b0e14;
+    /* left rail */
+    .wb-rail { position:sticky; top:10px; display:flex; flex-direction:column; gap:12px; }
+    .wb-nav { display:flex; flex-direction:column; gap:4px; }
+    .wb-nav button { text-align:left; padding:9px 12px; border-radius:8px; border:1px solid transparent;
+      background:transparent; color:inherit; font:inherit; font-size:.85rem; cursor:pointer; }
+    .wb-nav button:hover { background:rgba(128,140,160,.12); }
+    .wb-nav button.active { background:rgba(128,140,160,.16); border-color:rgba(128,140,160,.35); font-weight:600; }
+    .wb-queue { max-height:46vh; overflow:auto; display:flex; flex-direction:column; gap:6px; }
+    .wb-qitem { padding:7px 9px; border-radius:8px; border:1px solid rgba(128,140,160,.22);
+      font-size:.72rem; cursor:pointer; display:flex; flex-direction:column; gap:3px; }
+    .wb-qitem:hover { background:rgba(128,140,160,.10); }
+    .wb-qitem .top { display:flex; justify-content:space-between; gap:6px; align-items:center; }
+    .wb-qitem .name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .wb-state { font-size:.62rem; padding:1px 7px; border-radius:99px; white-space:nowrap; }
+    .st-running { background:#2b5a8f; color:#cfe6ff; }
+    .st-queued { background:rgba(128,140,160,.25); }
+    .st-done { background:#1f5c37; color:#b8eccb; }
+    .st-failed, .st-stale_failed { background:#7a2727; color:#ffc9c9; }
+    .st-cancelled { background:#5c5320; color:#efe3a1; }
+    .wb-qprog { height:4px; border-radius:3px; background:rgba(128,140,160,.18); overflow:hidden; }
+    .wb-qprog > div { height:100%; background:linear-gradient(90deg,var(--accent-main,#F5A962),#34d399); }
+
+    /* generic */
+    .wb-screen { display:none; }
+    .wb-screen.active { display:block; }
+    .wb-cardgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:10px; }
+    .wb-shape { border:1px solid rgba(128,140,160,.25); border-radius:10px; padding:10px 12px; cursor:pointer;
+      display:flex; flex-direction:column; gap:4px; }
+    .wb-shape:hover { background:rgba(128,140,160,.08); }
+    .wb-shape.selected { border-color:var(--accent-main,#F5A962); background:rgba(245,169,98,.08); }
+    .wb-shape.rejected { opacity:.55; cursor:not-allowed; }
+    .wb-shape .nm { font-weight:600; font-size:.85rem; display:flex; gap:6px; align-items:center; }
+    .wb-shape .rf { font-size:.68rem; opacity:.75; line-height:1.35; }
+    .tier-chip { font-size:.6rem; padding:1px 6px; border-radius:99px; background:rgba(128,140,160,.2); }
+    .tier-3 { background:#7a2727; color:#ffc9c9; }
+    .wb-field { display:flex; flex-direction:column; gap:4px; margin-bottom:11px; }
+    .wb-field label { font-size:.74rem; opacity:.85; line-height:1.3; }
+    .wb-field input, .wb-field select { padding:6px 8px; border-radius:6px;
+      border:1px solid rgba(128,140,160,.35); background:rgba(128,140,160,.08); color:inherit; font:inherit; }
+    .wb-row { display:flex; gap:10px; flex-wrap:wrap; }
+    .wb-row .wb-field { flex:1; min-width:120px; }
+    /* checkbox rows: the row IS a label (the global `label { display:grid }`
+       rule otherwise stretches the box above its own text) */
+    label.wb-check { display:flex; align-items:center; gap:8px; font-size:.76rem;
+      opacity:.9; margin:0 0 10px; cursor:pointer; }
+    label.wb-check input[type=checkbox] { width:auto; flex:none; margin:0; }
+    .wb-check { display:flex; align-items:center; gap:8px; font-size:.76rem; opacity:.9; flex-direction:row; }
+    .wb-check input[type=checkbox] { width:auto; flex:none; margin:0; }
+    .wb-2col { display:grid; grid-template-columns: 330px 1fr; gap:14px; align-items:start; }
+    @media (max-width:1200px){ .wb-2col{ grid-template-columns:1fr; } }
+    .wb-note { font-size:.72rem; opacity:.65; line-height:1.4; }
+    .wb-error { border:1px solid #a33; background:rgba(170,40,40,.14); color:#ffb9b9;
+      border-radius:8px; padding:9px 12px; font-size:.78rem; margin:8px 0; white-space:pre-wrap; }
+    .wb-ok { border:1px solid #2c7; background:rgba(40,150,90,.12); color:#b8eccb;
+      border-radius:8px; padding:9px 12px; font-size:.78rem; margin:8px 0; }
+    details.wb-adv summary { font-size:.75rem; opacity:.7; cursor:pointer; margin:6px 0; }
+
+    /* badges + flags */
+    .wb-badge { display:inline-block; font-size:.6rem; padding:1px 7px; border-radius:99px;
+      background:rgba(200,150,60,.2); border:1px solid rgba(200,150,60,.5); color:#e8c98c;
+      vertical-align:middle; margin-left:6px; cursor:help; }
+    .wb-badge.simonly { background:rgba(110,110,200,.18); border-color:rgba(120,120,220,.5); color:#c3c3f0; }
+    .wb-banner { border-radius:8px; padding:8px 12px; font-size:.76rem; margin-bottom:10px; }
+    .wb-banner.fail { background:rgba(170,40,40,.16); border:1px solid #a33; color:#ffb9b9; }
+    .wb-banner.warn { background:rgba(180,140,40,.14); border:1px solid #a83; color:#eeda9e; }
+    .wb-banner.ok { background:rgba(40,150,90,.10); border:1px solid #2c7; color:#b8eccb; }
+    .wb-flags { display:flex; flex-wrap:wrap; gap:6px; margin-top:5px; }
+    .wb-flag { font-size:.64rem; padding:1px 8px; border-radius:99px; cursor:help; }
+    .fl-pass { background:rgba(60,170,110,.18); color:#9fe0bd; }
+    .fl-warn, .fl-not_recorded { background:rgba(190,150,50,.2); color:#eeda9e; }
+    .fl-fail { background:rgba(190,60,60,.24); color:#ffb9b9; }
+
+    /* metrics */
+    .wb-metric-title { font-size:.66rem; text-transform:uppercase; letter-spacing:.05em; opacity:.55; margin:10px 0 5px; }
+    .wb-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
+    .wb-stat { border:1px solid rgba(128,140,160,.22); border-radius:8px; padding:7px 9px; }
+    .wb-stat .v { font-size:1.02rem; font-weight:700; font-variant-numeric:tabular-nums; }
+    .wb-stat .l { font-size:.66rem; opacity:.7; margin-top:2px; line-height:1.3; }
+    .wb-stat .d { font-size:.68rem; margin-top:2px; font-variant-numeric:tabular-nums; }
+    .d-good { color:#4fd08a; } .d-bad { color:#f08a8a; } .d-neutral { opacity:.6; }
+    .wb-kv { display:flex; justify-content:space-between; font-size:.75rem; margin:3px 0; gap:10px; }
+    .wb-kv .k { opacity:.7; } .wb-kv .v { font-variant-numeric:tabular-nums; text-align:right; }
+
+    /* viewer */
+    #wbViewport { width:100%; height:430px; border-radius:10px; background:#0b0e14;
       border:1px solid rgba(128,140,160,.22); position:relative; overflow:hidden; }
-    #h3dViewport canvas { display:block; }
-    .h3d-vp-hint { position:absolute; left:10px; bottom:8px; font-size:.72rem; opacity:.5; pointer-events:none; }
-    .h3d-progress { height:8px; border-radius:5px; background:rgba(128,140,160,.18); overflow:hidden; margin:10px 0; }
-    .h3d-progress > div { height:100%; width:0%;
-      background:linear-gradient(90deg, var(--accent-main, #F5A962), #34d399); transition:width .3s; }
-    .h3d-results { display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:.82rem; }
-    .h3d-results .k { opacity:.7; } .h3d-results .v { text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
-    .h3d-legend { display:flex; align-items:center; gap:8px; font-size:.72rem; opacity:.8; margin-top:6px; }
-    .h3d-legend .bar { height:10px; width:120px; border-radius:3px;
-      background:linear-gradient(90deg,#440154,#21918c,#fde725); }
-    .h3d-status { font-size:.78rem; opacity:.85; min-height:1.1em; }
-    .h3d-actions { display:flex; gap:8px; margin-top:6px; }
-    .h3d-pastrun { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-    .h3d-pastrun label { font-size:.78rem; opacity:.85; white-space:nowrap; }
-    .h3d-pastrun select { flex:1; min-width:0; }
-    .h3d-warp-toggle { display:flex; align-items:center; gap:6px; font-size:.78rem; opacity:.9; cursor:pointer; }
-    .h3d-warp-toggle input { width:auto; }
-    .h3d-warp-max { opacity:.6; font-size:.72rem; font-variant-numeric:tabular-nums; }
-    .h3d-metrics { display:block; }
-    .h3d-metric-group { margin:0 0 12px; }
-    .h3d-metric-title { font-size:.66rem; text-transform:uppercase; letter-spacing:.05em; opacity:.55; margin:8px 0 5px; }
-    .h3d-metrics .gauge-row { grid-template-columns:5.4rem 1fr 4.8rem; margin:4px 0; }
-    .h3d-metrics .gauge-label { text-align:left; font-size:.74rem; }
-    .h3d-metrics .gauge-val { font-size:.74rem; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
-    .h3d-metrics .metric-txt { display:flex; justify-content:space-between; font-size:.74rem; margin:4px 0; }
-    .h3d-metrics .metric-txt .lbl { opacity:.7; }
-    .h3d-metrics .metric-txt .val { font-variant-numeric:tabular-nums; white-space:nowrap; }
-    .h3d-slice-ctrls { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
-    .h3d-slice-ctrls select { flex:0 0 auto; }
-    .h3d-slice-ctrls input[type=range] { flex:1; min-width:120px; }
-    .h3d-navbtn { background:rgba(128,140,160,.12); border:1px solid rgba(128,140,160,.3);
-      color:inherit; border-radius:6px; width:30px; height:28px; cursor:pointer; font-size:.85rem; line-height:1; }
-    .h3d-navbtn:hover { background:rgba(128,140,160,.24); }
-    .h3d-slice-label { font-size:.73rem; opacity:.8; white-space:nowrap; font-variant-numeric:tabular-nums;
-      flex-basis:100%; }
-    .h3d-slice-stage { display:flex; gap:12px; align-items:stretch; }
-    .h3d-slice-view { flex:1; display:flex; justify-content:center; align-items:center; background:#0b0e14;
-      border:1px solid rgba(128,140,160,.22); border-radius:10px; padding:8px; min-height:300px; }
-    .h3d-slice-view img { width:300px; height:300px; max-width:100%; image-rendering:pixelated; }
-    .h3d-colorbar { display:flex; flex-direction:column; align-items:center; gap:4px; width:64px;
-      font-size:.7rem; opacity:.9; font-variant-numeric:tabular-nums; }
-    .h3d-colorbar .cbar { flex:1; width:14px; border-radius:3px; border:1px solid rgba(128,140,160,.3);
-      background:linear-gradient(to top,#440154,#414487,#2a788e,#22a884,#7ad151,#fde725); }
-    .h3d-colorbar .cb-units { opacity:.7; text-align:center; line-height:1.15; }
-    .h3d-plots { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
-    .h3d-plots img { width:100%; border:1px solid rgba(128,140,160,.22); border-radius:8px; background:#fff; }
-    .h3d-cmp-hint { font-size:.74rem; opacity:.65; margin-bottom:8px; }
-    .h3d-cmp-list { display:flex; flex-wrap:wrap; gap:6px 14px; margin-bottom:10px; max-height:120px; overflow:auto; }
-    .h3d-cmp-list label { display:flex; align-items:center; gap:5px; font-size:.74rem; opacity:.9; cursor:pointer; }
-    .h3d-cmp-list input { width:auto; }
-    .h3d-cmp-headline { font-size:.82rem; font-weight:600; margin:2px 0 8px; min-height:1.1em; }
-    .h3d-cmp-bars { display:flex; flex-direction:column; gap:7px; }
-    .h3d-cmp-bar { display:grid; grid-template-columns:8.5rem 1fr 4rem; align-items:center; gap:8px; }
-    .h3d-cmp-bar .lbl { font-size:.72rem; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .h3d-cmp-bar .track { height:14px; border-radius:4px; background:rgba(128,140,160,.14); overflow:hidden; }
-    .h3d-cmp-bar .fill { height:100%; border-radius:4px; }
-    .h3d-cmp-bar .val { font-size:.72rem; text-align:right; font-variant-numeric:tabular-nums; }
+    #wbViewport canvas { display:block; }
+    .wb-vp-hint { position:absolute; left:10px; bottom:8px; font-size:.7rem; opacity:.5; pointer-events:none; }
+    .wb-slice-ctrls { display:flex; align-items:center; gap:8px; margin:8px 0; flex-wrap:wrap; }
+    .wb-slice-ctrls input[type=range] { flex:1; min-width:110px; }
+    .wb-navbtn { background:rgba(128,140,160,.12); border:1px solid rgba(128,140,160,.3); color:inherit;
+      border-radius:6px; width:30px; height:28px; cursor:pointer; font-size:.85rem; }
+    .wb-slice-stage { display:flex; gap:12px; }
+    .wb-slice-view { flex:1; display:flex; justify-content:center; align-items:center; background:#0b0e14;
+      border:1px solid rgba(128,140,160,.22); border-radius:10px; padding:8px; min-height:280px; }
+    .wb-slice-view img { width:300px; height:300px; max-width:100%; image-rendering:pixelated; }
+    .wb-colorbar { display:flex; flex-direction:column; align-items:center; gap:4px; width:64px;
+      font-size:.68rem; font-variant-numeric:tabular-nums; }
+    .wb-colorbar .cbar { flex:1; width:14px; border-radius:3px; border:1px solid rgba(128,140,160,.3); }
+    .cb-viridis { background:linear-gradient(to top,#440154,#414487,#2a788e,#22a884,#7ad151,#fde725); }
+    .cb-inferno { background:linear-gradient(to top,#000004,#420a68,#932667,#dd513a,#fca50a,#fcffa4); }
+    .cb-density { background:linear-gradient(to top,#8f8f8f,#6b3fa0,#d4a017); }
+    .wb-time { margin-top:10px; }
+    #wbTimeChart { width:100%; height:120px; border:1px solid rgba(128,140,160,.22); border-radius:8px;
+      background:#0b0e14; }
+    .wb-plots { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; margin-top:10px; }
+    .wb-plots img { width:100%; border:1px solid rgba(128,140,160,.22); border-radius:8px; background:#fff; }
+    .wb-snapimg { width:150px; height:150px; image-rendering:pixelated; border-radius:6px;
+      border:1px solid rgba(128,140,160,.3); }
+
+    /* compare */
+    .wb-cmp-pick { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+    .wb-cmp-pick select { flex:1; min-width:230px; padding:6px 8px; border-radius:6px;
+      border:1px solid rgba(128,140,160,.35); background:rgba(128,140,160,.08); color:inherit; font:inherit; }
+    .wb-cmp-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .wb-cmp-bar { display:grid; grid-template-columns:9rem 1fr 4.4rem; align-items:center; gap:8px; margin:4px 0; }
+    .wb-cmp-bar .lbl { font-size:.72rem; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .wb-cmp-bar .track { height:13px; border-radius:4px; background:rgba(128,140,160,.14); overflow:hidden; }
+    .wb-cmp-bar .fill { height:100%; border-radius:4px; }
+    .wb-cmp-bar .val { font-size:.72rem; text-align:right; font-variant-numeric:tabular-nums; }
+
+    /* solved maps */
+    .wb-solved-card { border:1px solid rgba(128,140,160,.25); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+    .wb-solved-card h4 { margin:0 0 4px; font-size:.9rem; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .chip { font-size:.62rem; padding:1px 8px; border-radius:99px; }
+    .chip-solved { background:rgba(60,170,110,.2); color:#9fe0bd; border:1px solid #2c7; }
+    .chip-dropped { background:rgba(190,60,60,.2); color:#ffb9b9; }
+    .chip-notrun { background:rgba(128,140,160,.22); }
+    .chip-dev { background:rgba(190,150,50,.2); color:#eeda9e; }
+    .chip-pass { background:rgba(60,170,110,.18); color:#9fe0bd; }
+    .chip-fail { background:rgba(190,60,60,.24); color:#ffb9b9; }
+    table.wb-table { border-collapse:collapse; font-size:.74rem; width:100%; }
+    table.wb-table th, table.wb-table td { padding:4px 8px; text-align:right; border-bottom:1px solid rgba(128,140,160,.15); }
+    table.wb-table th:first-child, table.wb-table td:first-child { text-align:left; }
+    table.wb-table td { font-variant-numeric:tabular-nums; }
   </style>
 </head>
 <body class="layout-b ids-inspired">
   <header class="topbar topbar-ids">
     <div>
-      <h1>HEATR-3D: Volumetric Sintering &amp; 3-D FGM</h1>
-      <p>Genuine 3-D coupled EQS → RF heating → thermal → melt → densification</p>
+      <h1>HEATR-3D Workbench</h1>
+      <p>3-D library runs, densification studies, FGM solved maps, run comparison</p>
     </div>
     <div class="header-tools">
       <div class="status-pill" id="serverStatus">HEATR-3D ready</div>
@@ -128,140 +199,165 @@
   </nav>
 
   <main class="grid">
-    <div class="h3d-grid">
-      <!-- ── controls ── -->
-      <section class="card form-card">
-        <h2 style="margin-top:0;">Geometry &amp; Run</h2>
-
-        <div class="h3d-field">
-          <label>Geometry source</label>
-          <select id="srcSel">
-            <option value="parametric">Parametric primitive</option>
-            <option value="stl">Import STL</option>
-          </select>
-        </div>
-
-        <div id="paramBlock">
-          <div class="h3d-field">
-            <label>Shape</label>
-            <select id="shapeSel">
-              <option value="sphere">Sphere</option>
-              <option value="cone">Cone (tapered)</option>
-              <option value="cylinder">Cylinder (extruded)</option>
-              <option value="dumbbell">Dumbbell (lobes + neck)</option>
-            </select>
+    <div class="wb-layout">
+      <!-- rail -->
+      <aside class="wb-rail">
+        <section class="card" style="padding:10px;">
+          <div class="wb-nav">
+            <button data-screen="library" class="active">Library and Launch</button>
+            <button data-screen="study">Study</button>
+            <button data-screen="solved">Solved Maps</button>
+            <button data-screen="compare">Compare</button>
           </div>
-          <div class="h3d-row">
-            <div class="h3d-field"><label>Diameter (mm)</label>
-              <input id="diam" type="number" value="28" min="4" max="50" step="1"></div>
-            <div class="h3d-field"><label>Z span (mm)</label>
-              <input id="zspan" type="number" value="30" min="4" max="55" step="1"></div>
+        </section>
+        <section class="card" style="padding:10px;">
+          <div class="wb-metric-title" style="margin-top:0;">Run rail</div>
+          <div id="wbQueue" class="wb-queue"><span class="wb-note">loading queue...</span></div>
+        </section>
+      </aside>
+
+      <!-- screens -->
+      <div>
+        <!-- LIBRARY -->
+        <section class="wb-screen active" id="screen-library">
+          <div class="wb-2col">
+            <section class="card form-card">
+              <h2 style="margin-top:0;">Launch a run</h2>
+              <div class="wb-field">
+                <label>Geometry source</label>
+                <select id="srcSel">
+                  <option value="library">Shape library (14 curated)</option>
+                  <option value="parametric">Parametric primitive</option>
+                  <option value="stl">Import STL</option>
+                </select>
+              </div>
+              <div id="libPickNote" class="wb-note" style="margin-bottom:8px;">Pick a shape from the gallery.</div>
+              <div id="paramBlock" style="display:none;">
+                <div class="wb-field">
+                  <label>Shape</label>
+                  <select id="shapeSel">
+                    <option value="sphere">Sphere</option>
+                    <option value="cone">Cone (tapered)</option>
+                    <option value="cylinder">Cylinder (extruded)</option>
+                    <option value="dumbbell">Dumbbell (lobes + neck)</option>
+                  </select>
+                </div>
+                <div class="wb-row">
+                  <div class="wb-field"><label>Diameter (mm)</label>
+                    <input id="diam" type="number" value="28" min="4" max="50" step="1"></div>
+                  <div class="wb-field"><label>Z span (mm)</label>
+                    <input id="zspan" type="number" value="30" min="4" max="55" step="1"></div>
+                </div>
+              </div>
+              <div id="stlBlock" style="display:none;">
+                <div class="wb-field">
+                  <label>STL file (mm units)</label>
+                  <input id="stlFile" type="file" accept=".stl">
+                </div>
+                <button id="intakeBtn" type="button" class="primary compact">Validate STL</button>
+                <div id="intakeVerdict"></div>
+              </div>
+
+              <div class="wb-row">
+                <div class="wb-field"><label>Grid n</label>
+                  <select id="gridN">
+                    <option>32</option><option>48</option><option selected>64</option>
+                    <option>96</option>
+                  </select></div>
+                <div class="wb-field"><label>FGM mode</label>
+                  <select id="fgmMode">
+                    <option value="none">None (baseline)</option>
+                    <option value="melt">Melt-onset 3-D FGM</option>
+                    <option value="density">Density-targeted FGM</option>
+                    <option value="solved" disabled>Solved map (Phase D/E gated)</option>
+                  </select></div>
+              </div>
+              <div class="wb-note" style="margin:-4px 0 8px;">n = 96 is the full-physics ceiling (EQS-01). The n = 128 EQS-only diagnostic mode is not built yet.</div>
+              <label class="wb-check"><input type="checkbox" id="densify">
+                Model densification and shrinkage (full-exposure march, slower)</label>
+              <label class="wb-check"><input type="checkbox" id="snapshots">
+                Capture time snapshots (melt-onset runs only)</label>
+              <div class="wb-row">
+                <div class="wb-field"><label>Exposure (s)</label>
+                  <input id="exposure" type="number" value="1200" min="60" max="3000" step="60"></div>
+                <div class="wb-field"><label>Stop mean density</label>
+                  <input id="stopRho" type="number" value="0.85" min="0.6" max="1.0" step="0.05"></div>
+              </div>
+              <details class="wb-adv">
+                <summary>Advanced (standard set is the default)</summary>
+                <div class="wb-row">
+                  <div class="wb-field"><label>Phase update</label>
+                    <select id="phaseUpdate">
+                      <option value="enthalpy" selected>enthalpy (standard)</option>
+                      <option value="apparent_cp">apparent_cp (legacy reproduction)</option>
+                    </select></div>
+                  <div class="wb-field"><label>FGM magnitude</label>
+                    <input id="magnitude" type="number" value="1.0" min="0.1" max="2.0" step="0.1"></div>
+                </div>
+                <div class="wb-row">
+                  <div class="wb-field"><label>EQS re-solve interval (s, 0 = frozen Q)</label>
+                    <input id="eqsInterval" type="number" value="0" min="0" step="10"></div>
+                  <div class="wb-field"><label>sigma(T) coeff per K</label>
+                    <input id="sigmaTemp" type="number" value="0" step="0.001"></div>
+                </div>
+                <div class="wb-note">Drive is a fixed absorbed power density (10 W into the V* reference volume). There is no voltage calibration in 3-D.</div>
+              </details>
+              <div id="costEstimate" class="wb-note" style="margin:8px 0;"></div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button id="launchBtn" type="button" class="primary">Queue run</button>
+                <button id="campaignBtn" type="button" class="primary compact" title="Queue all 12 loadable library shapes with these parameters">Queue whole library</button>
+              </div>
+              <div id="launchMsg"></div>
+            </section>
+            <section class="card">
+              <h2 style="margin-top:0;">Shape library
+                <span class="wb-sub">14 curated primitives, equal volume V* = 4188.79 mm^3 (the 20 mm sphere)</span></h2>
+              <div id="libGallery" class="wb-cardgrid"><span class="wb-note">loading library...</span></div>
+            </section>
           </div>
-        </div>
+        </section>
 
-        <div id="stlBlock" style="display:none;">
-          <div class="h3d-field">
-            <label>STL file (mm units)</label>
-            <input id="stlFile" type="file" accept=".stl">
-          </div>
-          <p style="font-size:.74rem;opacity:.65;">STL is voxelized onto the sim grid. Large meshes use coarser grids.</p>
-        </div>
-
-        <div class="h3d-row">
-          <div class="h3d-field"><label>Grid n (per axis)</label>
-            <select id="gridN"><option>32</option><option selected>40</option><option>48</option><option>64</option></select></div>
-          <div class="h3d-field"><label>FGM mode</label>
-            <select id="fgmMode">
-              <option value="none">None (baseline)</option>
-              <option value="melt">Melt-onset 3-D FGM</option>
-              <option value="density">Density-targeted FGM</option>
-            </select></div>
-        </div>
-
-        <div class="h3d-field">
-          <label class="h3d-check"><input type="checkbox" id="densify"> Model densification &amp; shrinkage (slower)</label>
-        </div>
-        <div class="h3d-row">
-          <div class="h3d-field"><label>Exposure (s)</label>
-            <input id="exposure" type="number" value="1200" min="60" max="3000" step="60"></div>
-          <div class="h3d-field"><label>Stop mean density</label>
-            <input id="stopRho" type="number" value="0.85" min="0.6" max="1.0" step="0.05"></div>
-        </div>
-
-        <div class="h3d-actions">
-          <button id="previewBtn" type="button" class="primary compact">Preview geometry</button>
-          <button id="runBtn" type="button" class="primary">Run simulation</button>
-        </div>
-        <div class="h3d-progress"><div id="progBar"></div></div>
-        <div class="h3d-status" id="statusLine">Configure a geometry and preview it.</div>
-      </section>
-
-      <!-- ── viewport + results ── -->
-      <section class="card">
-        <div class="h3d-pastrun">
-          <label for="pastRun">View a past run</label>
-          <select id="pastRun"><option value="">— recent HEATR-3D runs —</option></select>
-        </div>
-        <div id="h3dViewport"><div class="h3d-vp-hint">drag to orbit · scroll to zoom</div></div>
-        <div class="h3d-row" style="align-items:flex-end; margin-top:8px;">
-          <div class="h3d-field" style="max-width:200px;">
-            <label>Color surface by</label>
-            <select id="colorBy">
-              <option value="geom">Geometry (uniform)</option>
-              <option value="sat">FGM saturation</option>
-            </select>
-          </div>
-          <div class="h3d-legend"><span>low</span><span class="bar"></span><span>high</span></div>
-          <label class="h3d-warp-toggle" id="warpRow" style="display:none;" title="Show the post-sinter deformed geometry, colored by displacement">
-            <input type="checkbox" id="warpToggle" disabled /> Post-sinter warp
-            <span id="warpMax" class="h3d-warp-max"></span>
-          </label>
-        </div>
-        <h3 style="margin:14px 0 6px;">Results</h3>
-        <div class="h3d-results" id="resultsGrid">
-          <span class="k">—</span><span class="v">run a simulation</span>
-        </div>
-
-        <div id="h3dViews" style="display:none; margin-top:16px;">
-          <h3 style="margin:14px 0 6px;">Layer slices</h3>
-          <div class="h3d-slice-ctrls">
-            <select id="sliceField"></select>
-            <button class="h3d-navbtn" id="slicePrev" title="previous layer (←)">◀</button>
-            <input type="range" id="sliceZ" min="0" max="0" value="0" />
-            <button class="h3d-navbtn" id="sliceNext" title="next layer (→)">▶</button>
-            <button class="h3d-navbtn" id="slicePlay" title="play / pause">▶</button>
-            <span id="sliceLabel" class="h3d-slice-label">—</span>
-          </div>
-          <div class="h3d-slice-stage">
-            <div class="h3d-slice-view"><img id="sliceImg" alt="layer slice" /></div>
-            <div class="h3d-colorbar">
-              <span id="cbMax">—</span>
-              <div class="cbar"></div>
-              <span id="cbMin">—</span>
-              <span id="cbUnits" class="cb-units"></span>
+        <!-- STUDY -->
+        <section class="wb-screen" id="screen-study">
+          <section class="card">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <h2 style="margin:0;">Study</h2>
+              <select id="studyRunSel" style="flex:1; min-width:250px;"><option value="">pick a run...</option></select>
             </div>
-          </div>
-          <h3 style="margin:16px 0 6px;">Summary plots</h3>
-          <div id="plotsGallery" class="h3d-plots"></div>
-        </div>
+            <div id="studyBody" style="margin-top:10px;">
+              <p class="wb-note">Pick a run from the selector or the run rail.</p>
+            </div>
+          </section>
+        </section>
 
-        <div id="h3dCompare" class="h3d-compare" style="display:none;">
-          <h3 style="margin:16px 0 4px;">Compare σ_T across runs</h3>
-          <div class="h3d-cmp-hint">Tick runs (e.g. a baseline vs an FGM run) to compare temperature uniformity — lower σ_T is better.</div>
-          <div id="cmpList" class="h3d-cmp-list"></div>
-          <div id="cmpHeadline" class="h3d-cmp-headline"></div>
-          <div id="cmpBars" class="h3d-cmp-bars"></div>
-        </div>
-      </section>
+        <!-- SOLVED -->
+        <section class="wb-screen" id="screen-solved">
+          <section class="card">
+            <h2 style="margin-top:0;">FGM solved maps
+              <span class="wb-badge simonly" title="Design method certified on the dolfinx forward; no S-gate earned (solve3d/PHASE_C_REPORT.md)">sim-only</span></h2>
+            <p class="wb-note">Read surface over solve3d/results. Every number is printed from the campaign JSON, never transcribed. Pushing a solved map through the heatr3d forward is deferred (staircase-support transfer hazard, Phase D/E gated).</p>
+            <div id="solvedBody"><span class="wb-note">loading...</span></div>
+          </section>
+        </section>
+
+        <!-- COMPARE -->
+        <section class="wb-screen" id="screen-compare">
+          <section class="card">
+            <h2 style="margin-top:0;">Compare two runs</h2>
+            <div class="wb-cmp-pick">
+              <select id="cmpA"><option value="">run A...</option></select>
+              <select id="cmpB"><option value="">run B...</option></select>
+            </div>
+            <div id="cmpBody"><p class="wb-note">Pick two runs (same shape for a fair comparison; a shape mismatch is flagged).</p></div>
+          </section>
+        </section>
+      </div>
     </div>
   </main>
 
   <script src="/static/settings.js"></script>
   <script src="/static/heatr-logo.js"></script>
   <script src="/static/nav-badge.js"></script>
-  <script>
-    // Apply the user's saved theme (Mode/Accent/Background/Layout) like the other pages.
-  </script>
   <script type="importmap">
   { "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
