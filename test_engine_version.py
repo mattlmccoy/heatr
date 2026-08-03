@@ -48,7 +48,7 @@ def _load_reference_extractor():
 def test_engine_version_constants_exist_and_are_semver():
     v = rfam_eqs_coupled.ENGINE_VERSION
     assert re.fullmatch(r"\d+\.\d+\.\d+", v), v
-    assert v == "2.0.0"
+    assert v == "2.0.1"
     name = rfam_eqs_coupled.ENGINE_VERSION_NAME
     assert "2.0" in name
 

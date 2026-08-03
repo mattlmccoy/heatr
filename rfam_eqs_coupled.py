@@ -71,11 +71,19 @@ R_GAS = 8.31446261815324
 #     conventions (5 percent of integrated dose)
 #   * dual read-state sigma_T (heating-peak and melt-onset) stamped into
 #     every summary.json
+# v2.0.1 (2026-08-02) - PATCH: solve-mode production-verify suite (every
+#   fgm_solve run ends with a real engine re-run of the delivered map,
+#   emitting the full standard figure set; reporting only, no simulated
+#   field changed). GUI-layer changes (API-generation handshake, legacy
+#   dropdown marking) ride the server, not this constant.
+# PLANNED v2.1.0 (adopted, NOT yet wired - see CHANGELOG "Planned"):
+#   J_asym stop rule as the default read state, MMA for constrained
+#   objectives, 1/|g0| objective rescale at solve start.
 # v1.x = the pre-solve era (everything before the fgm_solve integration).
 # Versioning policy: bump MINOR for new modes/actuators, PATCH for fixes,
 # MAJOR for physics or convention changes. See CHANGELOG_ENGINE.md.
 # ---------------------------------------------------------------------------
-ENGINE_VERSION = "2.0.0"
+ENGINE_VERSION = "2.0.1"
 ENGINE_VERSION_NAME = "HEATR 2D v2.0"
 
 # sigma_T dual read-state constants (mirrors the campaign extractor

@@ -19,6 +19,32 @@ saturation map). EQS = electro-quasi-static. GUI = graphical user interface.
 bpp = bits per pixel. IoU = intersection over union.
 MMA = method of moving asymptotes.
 
+## v2.0.1 (2026-08-02) - solve-mode production-verify suite
+
+PATCH per policy: reporting additions, no simulated field changed.
+
+- Every default `fgm_solve` run now ends with a production verification
+  pass: a real `rfam_eqs_coupled.py` re-run of the delivered 4 bpp map at
+  the solve's optimal stop, emitting the complete standard per-run figure
+  set into `production_verify/` and recording solve-vs-production deltas in
+  `results.json` (`--skip-verify` opts out, recorded). Landed after the
+  2.0.0 stamp; this entry corrects the version record.
+- Not engine-versioned (GUI layer, tracked by `API_GENERATION`): the
+  stale-server handshake banner and the legacy-marking dropdown pass.
+
+## Planned v2.1.0 (adopted by verdict, NOT yet wired into production paths)
+
+These carry recorded adoption decisions and land together as a MINOR bump
+when wired; until then no production run uses them:
+
+- J_asym read state (argmin of the dense-iff-in-bounds objective at the
+  chosen out-of-bounds weight, floor 0.85) as the default stop rule
+  (DENSE_IFF_INBOUNDS_REPORT.md).
+- MMA (method of moving asymptotes) as the optimizer for constrained
+  objectives (it beat L-BFGS-B 4 of 5 there; MMA_RETEST_REPORT.md).
+- 1/|g0| objective rescale at solve start (upper-rail stall class fix,
+  confirmed independently in the 3-D port lane's Phase C).
+
 ## v2.0.0 (2026-08-01) - the standardized solve-era engine
 
 v1.x is the pre-solve era: everything before the shape-fidelity solve
