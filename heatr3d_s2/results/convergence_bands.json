@@ -21,7 +21,8 @@
    "grids": [
     48,
     64,
-    80
+    80,
+    96
    ],
    "reads": {
     "melt_onset": {
@@ -29,12 +30,14 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
        0.8771829373031779,
        0.8539937016890924,
-       0.8505582593758947
+       0.8505582593758947,
+       0.8628685943315201
       ],
       "relative": false,
       "changes": [
@@ -55,30 +58,41 @@
         "signed_change": -0.0034354423131977008,
         "change": 0.0034354423131977008,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 0.8505582593758947,
+        "q_hi": 0.8628685943315201,
+        "signed_change": 0.01231033495562539,
+        "change": 0.01231033495562539,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
-      "status": "monotone_convergent",
-      "value_trend": "monotone",
-      "finest_change": 0.0034354423131977008,
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.01231033495562539,
       "safety": 1.5,
-      "band": 0.005153163469796551,
+      "band": null,
       "observed_order": 4.0,
-      "r2": 0.9925554413191976,
-      "richardson_limit_diagnostic": 0.8499607911475126,
+      "r2": 0.668853021567436,
+      "richardson_limit_diagnostic": null,
       "ceiling": null,
-      "pass": null,
-      "reason": "no ceiling supplied (diagnostic quantity)"
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
      },
      "iou_vs_nominal_phi0p8": {
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
        0.8902089894073862,
        0.8651588892069852,
-       0.8627254509018037
+       0.8627254509018037,
+       0.8746063555682794
       ],
       "relative": false,
       "changes": [
@@ -99,30 +113,41 @@
         "signed_change": -0.002433438305181501,
         "change": 0.002433438305181501,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 0.8627254509018037,
+        "q_hi": 0.8746063555682794,
+        "signed_change": 0.011880904666475622,
+        "change": 0.011880904666475622,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
-      "status": "monotone_convergent",
-      "value_trend": "monotone",
-      "finest_change": 0.002433438305181501,
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.011880904666475622,
       "safety": 1.5,
-      "band": 0.0036501574577722518,
+      "band": null,
       "observed_order": 4.0,
-      "r2": 0.9844022364015598,
-      "richardson_limit_diagnostic": 0.8624636252613729,
+      "r2": 0.6813556733177385,
+      "richardson_limit_diagnostic": null,
       "ceiling": null,
-      "pass": null,
-      "reason": "no ceiling supplied (diagnostic quantity)"
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
      },
      "in_part_melt_fraction_phi0p9": {
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
        0.8771829373031779,
        0.8539937016890924,
-       0.8505582593758947
+       0.8505582593758947,
+       0.8628685943315201
       ],
       "relative": false,
       "changes": [
@@ -143,27 +168,38 @@
         "signed_change": -0.0034354423131977008,
         "change": 0.0034354423131977008,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 0.8505582593758947,
+        "q_hi": 0.8628685943315201,
+        "signed_change": 0.01231033495562539,
+        "change": 0.01231033495562539,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
-      "status": "monotone_convergent",
-      "value_trend": "monotone",
-      "finest_change": 0.0034354423131977008,
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.01231033495562539,
       "safety": 1.5,
-      "band": 0.005153163469796551,
+      "band": null,
       "observed_order": 4.0,
-      "r2": 0.9925554413191976,
-      "richardson_limit_diagnostic": 0.8499607911475126,
+      "r2": 0.668853021567436,
+      "richardson_limit_diagnostic": null,
       "ceiling": 0.02,
-      "pass": true,
-      "reason": ""
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
      },
      "out_of_part_melt_fraction_phi0p9": {
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
+       0.0,
        0.0,
        0.0,
        0.0
@@ -187,6 +223,15 @@
         "signed_change": 0.0,
         "change": 0.0,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 0.0,
+        "q_hi": 0.0,
+        "signed_change": 0.0,
+        "change": 0.0,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "bounded_oscillatory",
@@ -205,12 +250,14 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
        20.11684029021101,
        20.103141496882763,
-       19.851359854901997
+       19.851359854901997,
+       19.951950253198568
       ],
       "relative": true,
       "changes": [
@@ -231,16 +278,25 @@
         "signed_change": -0.012683344809680273,
         "change": 0.012683344809680273,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 19.851359854901997,
+        "q_hi": 19.951950253198568,
+        "signed_change": 0.005041632372777455,
+        "change": 0.005041632372777455,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "diverging",
-      "value_trend": "monotone",
-      "finest_change": 0.012683344809680273,
+      "value_trend": "oscillatory",
+      "finest_change": 0.005041632372777455,
       "safety": 1.5,
       "band": null,
-      "observed_order": 0.25,
-      "r2": 0.710125236540202,
-      "richardson_limit_diagnostic": null,
+      "observed_order": 0.645,
+      "r2": 0.6031819149380779,
+      "richardson_limit_diagnostic": 20.01887495057455,
       "ceiling": null,
       "pass": false,
       "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
@@ -249,12 +305,14 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
        323.35,
        323.35,
-       325.25
+       325.25,
+       322.75
       ],
       "relative": true,
       "changes": [
@@ -275,15 +333,24 @@
         "signed_change": 0.005841660261337363,
         "change": 0.005841660261337363,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 325.25,
+        "q_hi": 322.75,
+        "signed_change": -0.0077459333849728895,
+        "change": 0.0077459333849728895,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "diverging",
       "value_trend": "oscillatory",
-      "finest_change": 0.005841660261337363,
+      "finest_change": 0.0077459333849728895,
       "safety": 1.5,
       "band": null,
-      "observed_order": 0.25,
-      "r2": 0.6677070899114261,
+      "observed_order": 4.0,
+      "r2": 0.040479569119139636,
       "richardson_limit_diagnostic": null,
       "ceiling": 0.01,
       "pass": false,
@@ -293,11 +360,13 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "pair_values": [
        0.042408546455163454,
-       0.03303600925008254
+       0.03303600925008254,
+       0.016898608349900646
       ],
       "pairwise": true,
       "changes": [
@@ -314,14 +383,21 @@
         "change": 0.03303600925008254,
         "signed_change": 0.03303600925008254,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "change": 0.016898608349900646,
+        "signed_change": 0.016898608349900646,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "monotone_convergent",
-      "finest_change": 0.03303600925008254,
+      "finest_change": 0.016898608349900646,
       "safety": 1.5,
-      "band": 0.049554013875123815,
-      "observed_order": 0.9778356515279654,
-      "r2": 1.0,
+      "band": 0.02534791252485097,
+      "observed_order": 1.9645082967329537,
+      "r2": 0.898446522415064,
       "ceiling": 0.05,
       "pass": true,
       "reason": ""
@@ -330,11 +406,13 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "pair_values": [
        0.04511398055157023,
-       0.03371884671770642
+       0.03371884671770642,
+       0.0171540597941513
       ],
       "pairwise": true,
       "changes": [
@@ -351,14 +429,21 @@
         "change": 0.03371884671770642,
         "signed_change": 0.03371884671770642,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "change": 0.0171540597941513,
+        "signed_change": 0.0171540597941513,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "monotone_convergent",
-      "finest_change": 0.03371884671770642,
+      "finest_change": 0.0171540597941513,
       "safety": 1.5,
-      "band": 0.05057827007655963,
-      "observed_order": 1.1398616050709047,
-      "r2": 1.0,
+      "band": 0.02573108969122695,
+      "observed_order": 2.069287705013437,
+      "r2": 0.9170975030519317,
       "ceiling": 0.05,
       "pass": true,
       "reason": ""
@@ -367,11 +452,13 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "pair_values": [
        0.19838751587832618,
-       0.16712288565049377
+       0.16712288565049377,
+       0.08742604617445957
       ],
       "pairwise": true,
       "changes": [
@@ -388,14 +475,21 @@
         "change": 0.16712288565049377,
         "signed_change": 0.16712288565049377,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "change": 0.08742604617445957,
+        "signed_change": 0.08742604617445957,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "monotone_convergent",
-      "finest_change": 0.16712288565049377,
+      "finest_change": 0.08742604617445957,
       "safety": 1.5,
-      "band": 0.2506843284757406,
-      "observed_order": 0.6714341523049012,
-      "r2": 1.0,
+      "band": 0.13113906926168933,
+      "observed_order": 1.7410459769203903,
+      "r2": 0.8553438862934186,
       "ceiling": 0.25,
       "pass": true,
       "reason": ""
@@ -406,12 +500,14 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
        0.8708846263956485,
        0.8462639564843973,
-       0.8398225021471515
+       0.8398225021471515,
+       0.8545662754079588
       ],
       "relative": false,
       "changes": [
@@ -432,30 +528,41 @@
         "signed_change": -0.0064414543372458555,
         "change": 0.0064414543372458555,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 0.8398225021471515,
+        "q_hi": 0.8545662754079588,
+        "signed_change": 0.014743773260807336,
+        "change": 0.014743773260807336,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
-      "status": "monotone_convergent",
-      "value_trend": "monotone",
-      "finest_change": 0.0064414543372458555,
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.014743773260807336,
       "safety": 1.5,
-      "band": 0.009662181505868783,
+      "band": null,
       "observed_order": 4.0,
-      "r2": 0.9999432928978678,
-      "richardson_limit_diagnostic": 0.837540097067025,
+      "r2": 0.6862145707798133,
+      "richardson_limit_diagnostic": null,
       "ceiling": null,
-      "pass": null,
-      "reason": "no ceiling supplied (diagnostic quantity)"
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
      },
      "iou_vs_nominal_phi0p8": {
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
        0.8829086744918409,
        0.8590037217291726,
-       0.850128829086745
+       0.850128829086745,
+       0.8674491840824506
       ],
       "relative": false,
       "changes": [
@@ -476,30 +583,41 @@
         "signed_change": -0.008874892642427579,
         "change": 0.008874892642427579,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 0.850128829086745,
+        "q_hi": 0.8674491840824506,
+        "signed_change": 0.01732035499570561,
+        "change": 0.01732035499570561,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
-      "status": "monotone_convergent",
-      "value_trend": "monotone",
-      "finest_change": 0.008874892642427579,
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.01732035499570561,
       "safety": 1.5,
-      "band": 0.013312338963641368,
-      "observed_order": 2.8425000000000002,
-      "r2": 0.9999999983040609,
-      "richardson_limit_diagnostic": 0.8448884162883593,
+      "band": null,
+      "observed_order": 4.0,
+      "r2": 0.6462267747011944,
+      "richardson_limit_diagnostic": null,
       "ceiling": null,
-      "pass": null,
-      "reason": "no ceiling supplied (diagnostic quantity)"
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
      },
      "in_part_melt_fraction_phi0p9": {
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
        0.8708846263956485,
        0.8462639564843973,
-       0.8398225021471515
+       0.8398225021471515,
+       0.8545662754079588
       ],
       "relative": false,
       "changes": [
@@ -520,27 +638,38 @@
         "signed_change": -0.0064414543372458555,
         "change": 0.0064414543372458555,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 0.8398225021471515,
+        "q_hi": 0.8545662754079588,
+        "signed_change": 0.014743773260807336,
+        "change": 0.014743773260807336,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
-      "status": "monotone_convergent",
-      "value_trend": "monotone",
-      "finest_change": 0.0064414543372458555,
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.014743773260807336,
       "safety": 1.5,
-      "band": 0.009662181505868783,
+      "band": null,
       "observed_order": 4.0,
-      "r2": 0.9999432928978678,
-      "richardson_limit_diagnostic": 0.837540097067025,
+      "r2": 0.6862145707798133,
+      "richardson_limit_diagnostic": null,
       "ceiling": 0.02,
-      "pass": true,
-      "reason": ""
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
      },
      "out_of_part_melt_fraction_phi0p9": {
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
+       0.0,
        0.0,
        0.0,
        0.0
@@ -564,6 +693,15 @@
         "signed_change": 0.0,
         "change": 0.0,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 0.0,
+        "q_hi": 0.0,
+        "signed_change": 0.0,
+        "change": 0.0,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "bounded_oscillatory",
@@ -582,12 +720,14 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "values": [
        19.975441490294973,
        19.99914420956822,
-       19.69701920818734
+       19.69701920818734,
+       19.879024588749946
       ],
       "relative": true,
       "changes": [
@@ -608,16 +748,25 @@
         "signed_change": -0.015338615360404418,
         "change": 0.015338615360404418,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "q_lo": 19.69701920818734,
+        "q_hi": 19.879024588749946,
+        "signed_change": 0.009155649451010234,
+        "change": 0.009155649451010234,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "diverging",
       "value_trend": "oscillatory",
-      "finest_change": 0.015338615360404418,
+      "finest_change": 0.009155649451010234,
       "safety": 1.5,
       "band": null,
-      "observed_order": 0.25,
-      "r2": 0.5997495680516765,
-      "richardson_limit_diagnostic": null,
+      "observed_order": 1.1825,
+      "r2": 0.34639605319629274,
+      "richardson_limit_diagnostic": 20.154799340019387,
       "ceiling": null,
       "pass": false,
       "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
@@ -626,11 +775,13 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "pair_values": [
        0.04561746497230368,
-       0.03486820153486825
+       0.03486820153486825,
+       0.019575037644303128
       ],
       "pairwise": true,
       "changes": [
@@ -647,14 +798,21 @@
         "change": 0.03486820153486825,
         "signed_change": 0.03486820153486825,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "change": 0.019575037644303128,
+        "signed_change": 0.019575037644303128,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "monotone_convergent",
-      "finest_change": 0.03486820153486825,
+      "finest_change": 0.019575037644303128,
       "safety": 1.5,
-      "band": 0.05230230230230237,
-      "observed_order": 1.0520825557664795,
-      "r2": 1.0,
+      "band": 0.029362556466454692,
+      "observed_order": 1.812845259048087,
+      "r2": 0.9268599584138596,
       "ceiling": 0.05,
       "pass": true,
       "reason": ""
@@ -663,11 +821,13 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "pair_values": [
        0.042310167310167346,
-       0.03230059327620305
+       0.03230059327620305,
+       0.022251524641503262
       ],
       "pairwise": true,
       "changes": [
@@ -684,14 +844,21 @@
         "change": 0.03230059327620305,
         "signed_change": 0.03230059327620305,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "change": 0.022251524641503262,
+        "signed_change": 0.022251524641503262,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "monotone_convergent",
-      "finest_change": 0.03230059327620305,
+      "finest_change": 0.022251524641503262,
       "safety": 1.5,
-      "band": 0.048450889914304573,
-      "observed_order": 1.0568844192978395,
-      "r2": 1.0,
+      "band": 0.03337728696225489,
+      "observed_order": 1.3879367605155628,
+      "r2": 0.975140896213924,
       "ceiling": 0.05,
       "pass": true,
       "reason": ""
@@ -700,11 +867,13 @@
       "grids": [
        48,
        64,
-       80
+       80,
+       96
       ],
       "pair_values": [
        0.21380301490290793,
-       0.17568017059587981
+       0.17568017059587981,
+       0.09904967448092428
       ],
       "pairwise": true,
       "changes": [
@@ -721,14 +890,21 @@
         "change": 0.17568017059587981,
         "signed_change": 0.17568017059587981,
         "h_pair_m": 0.0008385254915624211
+       },
+       {
+        "n_lo": 80,
+        "n_hi": 96,
+        "change": 0.09904967448092428,
+        "signed_change": 0.09904967448092428,
+        "h_pair_m": 0.0006846531968814577
        }
       ],
       "status": "monotone_convergent",
-      "finest_change": 0.17568017059587981,
+      "finest_change": 0.09904967448092428,
       "safety": 1.5,
-      "band": 0.2635202558938197,
-      "observed_order": 0.7689119788978438,
-      "r2": 1.0,
+      "band": 0.14857451172138642,
+      "observed_order": 1.6407109767883488,
+      "r2": 0.887695603266464,
       "ceiling": 0.25,
       "pass": true,
       "reason": ""
@@ -782,7 +958,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.33618541096643495,
+      "r2": 0.3361854109664364,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -826,7 +1002,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.3197693719723472,
+      "r2": 0.31976937197234634,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -870,7 +1046,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.21291229461915506,
+      "r2": 0.2129122946191565,
       "richardson_limit_diagnostic": null,
       "ceiling": 0.02,
       "pass": false,
@@ -914,7 +1090,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.11509517159870597,
+      "r2": 0.11509517159870575,
       "richardson_limit_diagnostic": null,
       "ceiling": 0.02,
       "pass": false,
@@ -958,7 +1134,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.16833539345573856,
+      "r2": 0.16833539345574489,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -1039,7 +1215,7 @@
       "finest_change": 0.11573592322811888,
       "safety": 1.5,
       "band": null,
-      "observed_order": -2.6943229830253523,
+      "observed_order": -2.694322983025339,
       "r2": 1.0,
       "ceiling": 0.05,
       "pass": false,
@@ -1076,7 +1252,7 @@
       "finest_change": 0.11622857142857146,
       "safety": 1.5,
       "band": null,
-      "observed_order": -2.7876686962093933,
+      "observed_order": -2.7876686962093804,
       "r2": 1.0,
       "ceiling": 0.05,
       "pass": false,
@@ -1113,7 +1289,7 @@
       "finest_change": 0.6121918471540797,
       "safety": 1.5,
       "band": null,
-      "observed_order": -2.8076654524525635,
+      "observed_order": -2.8076654524525506,
       "r2": 1.0,
       "ceiling": 0.25,
       "pass": false,
@@ -1159,7 +1335,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.25297180221987703,
+      "r2": 0.25297180221987625,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -1203,7 +1379,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.3008389894925294,
+      "r2": 0.3008389894925303,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -1247,7 +1423,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.1443601902524151,
+      "r2": 0.14436019025241575,
       "richardson_limit_diagnostic": null,
       "ceiling": 0.02,
       "pass": false,
@@ -1335,7 +1511,7 @@
       "safety": 1.5,
       "band": 0.025583577198429998,
       "observed_order": 4.0,
-      "r2": 0.341049565573024,
+      "r2": 0.3410495655730268,
       "richardson_limit_diagnostic": 18.74193229551152,
       "ceiling": null,
       "pass": null,
@@ -1372,7 +1548,7 @@
       "finest_change": 0.13457076566125292,
       "safety": 1.5,
       "band": null,
-      "observed_order": -2.1083672632476516,
+      "observed_order": -2.1083672632476422,
       "r2": 1.0,
       "ceiling": 0.05,
       "pass": false,
@@ -1409,7 +1585,7 @@
       "finest_change": 0.1277816012846983,
       "safety": 1.5,
       "band": null,
-      "observed_order": -2.157777884101368,
+      "observed_order": -2.1577778841013577,
       "r2": 1.0,
       "ceiling": 0.05,
       "pass": false,
@@ -1446,7 +1622,7 @@
       "finest_change": 0.7178812638830381,
       "safety": 1.5,
       "band": null,
-      "observed_order": -2.210294807425666,
+      "observed_order": -2.2102948074256563,
       "r2": 1.0,
       "ceiling": 0.25,
       "pass": false,
@@ -1501,7 +1677,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 4.0,
-      "r2": 0.054299177594327785,
+      "r2": 0.054299177594326564,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -1545,7 +1721,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 4.0,
-      "r2": 0.05244464303843388,
+      "r2": 0.052444643038435323,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -1589,7 +1765,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.15470643188687094,
+      "r2": 0.1547064318868573,
       "richardson_limit_diagnostic": null,
       "ceiling": 0.02,
       "pass": false,
@@ -1677,7 +1853,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 4.0,
-      "r2": 0.08582615023202722,
+      "r2": 0.08582615023202622,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -1721,7 +1897,7 @@
       "safety": 1.5,
       "band": 0.03736735154662467,
       "observed_order": 4.0,
-      "r2": 0.7268516322252487,
+      "r2": 0.7268516322252514,
       "richardson_limit_diagnostic": 655.6958925750395,
       "ceiling": 0.01,
       "pass": false,
@@ -1758,7 +1934,7 @@
       "finest_change": 0.10172474480816618,
       "safety": 1.5,
       "band": null,
-      "observed_order": -0.8307121259086786,
+      "observed_order": -0.8307121259086752,
       "r2": 1.0,
       "ceiling": 0.05,
       "pass": false,
@@ -1795,7 +1971,7 @@
       "finest_change": 0.1010281432430078,
       "safety": 1.5,
       "band": null,
-      "observed_order": -0.7864224423187289,
+      "observed_order": -0.7864224423187238,
       "r2": 1.0,
       "ceiling": 0.05,
       "pass": false,
@@ -1832,7 +2008,7 @@
       "finest_change": 0.7973699207947442,
       "safety": 1.5,
       "band": null,
-      "observed_order": -0.8555277263992264,
+      "observed_order": -0.8555277263992228,
       "r2": 1.0,
       "ceiling": 0.25,
       "pass": false,
@@ -1878,7 +2054,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.20037535583288868,
+      "r2": 0.20037535583289157,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -1922,7 +2098,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.2101066795876465,
+      "r2": 0.21010667958764706,
       "richardson_limit_diagnostic": null,
       "ceiling": null,
       "pass": false,
@@ -2010,7 +2186,7 @@
       "safety": 1.5,
       "band": null,
       "observed_order": 0.25,
-      "r2": 0.5132939131871079,
+      "r2": 0.5132939131871065,
       "richardson_limit_diagnostic": null,
       "ceiling": 0.02,
       "pass": false,
@@ -2091,7 +2267,7 @@
       "finest_change": 0.07635588326744547,
       "safety": 1.5,
       "band": null,
-      "observed_order": -2.2385664248181087,
+      "observed_order": -2.2385664248180968,
       "r2": 1.0,
       "ceiling": 0.05,
       "pass": false,
@@ -2128,7 +2304,7 @@
       "finest_change": 0.07566093344477187,
       "safety": 1.5,
       "band": null,
-      "observed_order": -2.299869994596759,
+      "observed_order": -2.299869994596748,
       "r2": 1.0,
       "ceiling": 0.05,
       "pass": false,
@@ -2165,7 +2341,7 @@
       "finest_change": 0.5890028885266957,
       "safety": 1.5,
       "band": null,
-      "observed_order": -2.1931562508165987,
+      "observed_order": -2.19315625081659,
       "r2": 1.0,
       "ceiling": 0.25,
       "pass": false,
@@ -2184,29 +2360,29 @@
       "jaccard_dist_phi0p9_grid_to_grid": true,
       "jaccard_dist_phi0p8_grid_to_grid": true,
       "front_ssd_mm_grid_to_grid": true,
-      "in_part_melt_fraction_phi0p9": true,
+      "in_part_melt_fraction_phi0p9": false,
       "out_of_part_melt_fraction_phi0p9": true
      },
      "t90": false,
      "sigma_T_diagnostic_band": null,
      "sigma_T_status": "diverging",
-     "all_verdict_quantities_pass": true
+     "all_verdict_quantities_pass": false
     },
     "heating_fixed_time": {
      "verdict_quantities": {
       "jaccard_dist_phi0p9_grid_to_grid": true,
       "jaccard_dist_phi0p8_grid_to_grid": true,
       "front_ssd_mm_grid_to_grid": true,
-      "in_part_melt_fraction_phi0p9": true,
+      "in_part_melt_fraction_phi0p9": false,
       "out_of_part_melt_fraction_phi0p9": true
      },
      "t90": null,
      "sigma_T_diagnostic_band": null,
      "sigma_T_status": "diverging",
-     "all_verdict_quantities_pass": true
+     "all_verdict_quantities_pass": false
     }
    },
-   "verdict": "PASS"
+   "verdict": "FAIL"
   },
   "square": {
    "per_read": {

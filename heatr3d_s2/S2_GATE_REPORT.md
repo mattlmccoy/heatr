@@ -17,30 +17,52 @@ isolation pattern of `heatr3d_s4_flir/`.
 
 ## S2 VERDICT: **FAIL**
 
-Against the pre-registered criteria, on the completed grid ladder:
+Against the pre-registered criteria, on the completed grid ladder
+(circle 48/64/80/96; square and lshape 48/64/80, their n=96 NOT_RUN):
 
 | shape | verdict | why |
 |---|---|---|
-| **circle** | **PASS** | all five verdict-carrying quantities monotone convergent on BOTH read states |
-| **square** | **FAIL** | every verdict-carrying quantity DIVERGES |
-| **lshape** | **FAIL** | every verdict-carrying quantity DIVERGES, worst on bed melt |
+| **circle** | **FAIL** | melt-region GEOMETRY converges cleanly and roughly halves per refinement, but the in-part melt FRACTION oscillates (0.0232 -> 0.0034 -> 0.0123) and fails the non-increase criterion |
+| **square** | **FAIL** | every verdict-carrying quantity DIVERGES over 48->80 |
+| **lshape** | **FAIL** | every verdict-carrying quantity DIVERGES over 48->80, worst on bed melt |
 
 The verdict is not negotiated after the fact and the failure is not a problem
 to be fixed: it is the answer to the question S2 was created to ask.
 
-**The finding in one sentence.** heatr3d's melt-region geometry converges
-cleanly on the one test shape WITHOUT corners and diverges on both shapes WITH
-corners, because the EQS-02 stencil correction removed a discretization
-artifact and thereby EXPOSED a genuine corner field singularity that the shape
-metrics and std(T) both read directly.
+**THE FOURTH GRID CHANGED THE ANSWER, and it changed it for the worse.** At
+three grids (48/64/80) the circle PASSED every verdict-carrying quantity and
+this report would have said so. Adding n=96 flipped it to FAIL, because
+`in_part_melt_fraction` fell from 0.0232 to 0.0034 and then rose again to
+0.0123. That is recorded prominently rather than buried: a 3-grid convergence
+claim on this engine is not safe, the pre-registered 3-grid minimum turns out
+to be the bare minimum and not a sufficient one, and any future campaign here
+should treat three grids as provisional.
+
+**The finding, in two parts.** They are different and the distinction is the
+useful part:
+
+1. **Melt-region GEOMETRY converges for the corner-free shape and diverges for
+   cornered shapes.** The circle's Jaccard distance and front position fall
+   monotonically and roughly halve per refinement step (0.0424 -> 0.0330 ->
+   0.0169; front 0.198 -> 0.167 -> 0.0874 mm), and both yield bands. The square
+   and the L-shape instead DOUBLE their change from 48->64 to 64->80 on every
+   verdict-carrying quantity. The mechanism is that the EQS-02 stencil
+   correction removed a discretization artifact and thereby EXPOSED a genuine
+   corner field singularity that the shape metrics and std(T) both read
+   directly.
+2. **Melt AMOUNT does not converge monotonically even for the circle.** The
+   in-part melt fraction oscillates at the ~1 % level across the ladder. So the
+   failure is not purely a corner story: WHERE the front sits converges for
+   smooth geometry, HOW MUCH is melted does not settle on this range for any
+   shape tested.
 
 **Consequence, stated plainly.** The deliverable S2 was supposed to produce -- a
 working grid chosen from the study, with published bands every downstream
-number quotes -- CAN be produced for cornered-free geometry and CANNOT be
-produced for cornered geometry on this grid range. That escalates to S3: only
-the COMSOL anchor can decide whether the corner singularity resolves against an
-independent engine, or whether the metric itself is the wrong instrument for
-cornered geometry.
+number quotes -- can be produced for the GEOMETRIC metrics on corner-free
+geometry and cannot be produced for cornered geometry, nor for the melt-amount
+metric on any shape tested. That escalates to S3: only the COMSOL anchor can
+decide whether the corner singularity resolves against an independent engine,
+or whether the metric itself is the wrong instrument for cornered geometry.
 
 ---
 
@@ -77,19 +99,19 @@ verdict exists at all.
 
 | shape | read | quantity | successive changes | finest | ceiling | status | band | PASS |
 |---|---|---|---|---|---|---|---|---|
-| circle | melt_onset | jaccard_dist_phi0p9_grid_to_grid | 0.042409, 0.033036 | 0.033036 | 0.05 | monotone_convergent | 0.049554 | PASS |
-| circle | melt_onset | jaccard_dist_phi0p8_grid_to_grid | 0.045114, 0.033719 | 0.033719 | 0.05 | monotone_convergent | 0.050578 | PASS |
-| circle | melt_onset | front_ssd_mm_grid_to_grid | 0.19839, 0.16712 | 0.16712 | 0.25 | monotone_convergent | 0.25068 | PASS |
-| circle | melt_onset | in_part_melt_fraction_phi0p9 | 0.023189, 0.0034354 | 0.0034354 | 0.02 | monotone_convergent | 0.0051532 | PASS |
-| circle | melt_onset | out_of_part_melt_fraction_phi0p9 | 0, 0 | 0 | 0.02 | bounded_oscillatory | 0 | PASS |
-| circle | melt_onset | t90 | 0, 0.0058417 | 0.0058417 | 0.01 | diverging | - | FAIL |
-| circle | melt_onset | sigma_T | 0.00068143, 0.012683 | 0.012683 | - | diverging | - | FAIL |
-| circle | heating_fixed_time | jaccard_dist_phi0p9_grid_to_grid | 0.045617, 0.034868 | 0.034868 | 0.05 | monotone_convergent | 0.052302 | PASS |
-| circle | heating_fixed_time | jaccard_dist_phi0p8_grid_to_grid | 0.04231, 0.032301 | 0.032301 | 0.05 | monotone_convergent | 0.048451 | PASS |
-| circle | heating_fixed_time | front_ssd_mm_grid_to_grid | 0.2138, 0.17568 | 0.17568 | 0.25 | monotone_convergent | 0.26352 | PASS |
-| circle | heating_fixed_time | in_part_melt_fraction_phi0p9 | 0.024621, 0.0064415 | 0.0064415 | 0.02 | monotone_convergent | 0.0096622 | PASS |
-| circle | heating_fixed_time | out_of_part_melt_fraction_phi0p9 | 0, 0 | 0 | 0.02 | bounded_oscillatory | 0 | PASS |
-| circle | heating_fixed_time | sigma_T | 0.0011852, 0.015339 | 0.015339 | - | diverging | - | FAIL |
+| circle | melt_onset | jaccard_dist_phi0p9_grid_to_grid | 0.042409, 0.033036, 0.016899 | 0.016899 | 0.05 | monotone_convergent | 0.025348 | PASS |
+| circle | melt_onset | jaccard_dist_phi0p8_grid_to_grid | 0.045114, 0.033719, 0.017154 | 0.017154 | 0.05 | monotone_convergent | 0.025731 | PASS |
+| circle | melt_onset | front_ssd_mm_grid_to_grid | 0.19839, 0.16712, 0.087426 | 0.087426 | 0.25 | monotone_convergent | 0.13114 | PASS |
+| circle | melt_onset | in_part_melt_fraction_phi0p9 | 0.023189, 0.0034354, 0.01231 | 0.01231 | 0.02 | diverging | - | FAIL |
+| circle | melt_onset | out_of_part_melt_fraction_phi0p9 | 0, 0, 0 | 0 | 0.02 | bounded_oscillatory | 0 | PASS |
+| circle | melt_onset | t90 | 0, 0.0058417, 0.0077459 | 0.0077459 | 0.01 | diverging | - | FAIL |
+| circle | melt_onset | sigma_T | 0.00068143, 0.012683, 0.0050416 | 0.0050416 | - | diverging | - | FAIL |
+| circle | heating_fixed_time | jaccard_dist_phi0p9_grid_to_grid | 0.045617, 0.034868, 0.019575 | 0.019575 | 0.05 | monotone_convergent | 0.029363 | PASS |
+| circle | heating_fixed_time | jaccard_dist_phi0p8_grid_to_grid | 0.04231, 0.032301, 0.022252 | 0.022252 | 0.05 | monotone_convergent | 0.033377 | PASS |
+| circle | heating_fixed_time | front_ssd_mm_grid_to_grid | 0.2138, 0.17568, 0.09905 | 0.09905 | 0.25 | monotone_convergent | 0.14857 | PASS |
+| circle | heating_fixed_time | in_part_melt_fraction_phi0p9 | 0.024621, 0.0064415, 0.014744 | 0.014744 | 0.02 | diverging | - | FAIL |
+| circle | heating_fixed_time | out_of_part_melt_fraction_phi0p9 | 0, 0, 0 | 0 | 0.02 | bounded_oscillatory | 0 | PASS |
+| circle | heating_fixed_time | sigma_T | 0.0011852, 0.015339, 0.0091556 | 0.0091556 | - | diverging | - | FAIL |
 | square | melt_onset | jaccard_dist_phi0p9_grid_to_grid | 0.058157, 0.11574 | 0.11574 | 0.05 | diverging | - | FAIL |
 | square | melt_onset | jaccard_dist_phi0p8_grid_to_grid | 0.057029, 0.11623 | 0.11623 | 0.05 | diverging | - | FAIL |
 | square | melt_onset | front_ssd_mm_grid_to_grid | 0.29885, 0.61219 | 0.61219 | 0.25 | diverging | - | FAIL |
@@ -117,7 +139,7 @@ verdict exists at all.
 | lshape | heating_fixed_time | out_of_part_melt_fraction_phi0p9 | 0.022995, 0.13671 | 0.13671 | 0.02 | diverging | - | FAIL |
 | lshape | heating_fixed_time | sigma_T | 0.068146, 0.096032 | 0.096032 | - | diverging | - | FAIL |
 
-Per shape: **circle** PASS, **square** FAIL, **lshape** FAIL
+Per shape: **circle** FAIL, **square** FAIL, **lshape** FAIL
 
 `s2_task3_verdict` = **FAIL** (scored ['circle', 'square', 'lshape'], insufficient [])
 
@@ -200,9 +222,11 @@ Resume with `./.venv312/bin/python -m heatr3d_s2.densify`.
 
 ## 3. Reading the failure
 
-**The pattern is corners, not shapes.** The circle has no corners and passes on
-every verdict-carrying quantity, on both read states, with successive changes
-that fall monotonically. The square (four convex 90-degree corners) and the
+**The pattern is corners, for the GEOMETRIC metrics.** The circle has no
+corners, and its melt-region geometry -- Jaccard distance and front position --
+falls monotonically on both read states, roughly halving per refinement step,
+and yields bands. (Its in-part melt FRACTION does not; see the verdict section.
+The corner story below is about where the front sits, not how much melts.) The square (four convex 90-degree corners) and the
 L-shape (three convex corners plus one REENTRANT corner) both fail, and they
 fail the same way: the 64->80 change is roughly DOUBLE the 48->64 change. That
 is divergence, not slow convergence, and the pre-registration forbids
@@ -294,8 +318,13 @@ beside it. Nothing was widened.
   shows the shape metrics converge for corner-free geometry and diverge for
   cornered geometry, so no candidate replacement can be selected on this
   evidence -- the choice depends on the S3 adjudication above.
-* **The working grid is NOT chosen.** For the circle the bands support a working
-  grid; for cornered shapes no grid in the tested range is defensible.
+* **The working grid is NOT chosen.** For the circle's GEOMETRIC metrics the
+  bands support a working grid; for cornered shapes, and for the melt-amount
+  metric on any shape, no grid in the tested range is defensible.
+* **square and lshape at n=96 are NOT_RUN**, so the key follow-up question --
+  does their divergence PERSIST at 80->96 or turn over -- is unanswered. Given
+  that the circle's own verdict flipped when its fourth grid landed, that
+  question must be answered before the corner finding is treated as settled.
 * **sigma_T was never verdict-carrying**, by pre-registration. It is reported
   with its band throughout and gating on it would have re-enshrined the very
   metric S2 exists to replace.
