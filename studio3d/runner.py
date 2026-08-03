@@ -1,0 +1,185 @@
+"""Native heatr3d densification runs for RFAM Print Studio (spec section 5).
+
+Orchestrates heatr3d WITHOUT modifying it (frozen during the S2 campaign):
+voxelize the accepted mesh onto the Grid lattice, run densify=True with the
+enthalpy standard, and write the heatr3d_job-standard artifact set by calling
+heatr3d_job's render helpers directly (never heatr3d_job.main, which
+hardcodes apparent_cp Params).
+
+Every result carries its engine label and trust badge (spec section 3).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import time
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import numpy as np
+import trimesh
+
+import heatr3d as H
+import heatr3d_job as J
+
+logger = logging.getLogger(__name__)
+
+ENGINE_LABEL = "heatr3d_native"
+TRUST_BADGE = ("heatr3d native | S1 passed within validity domain | "
+               "S4 not passed | sim-only")
+N_MAX = 96                     # full-physics ceiling (EQS-01 guard)
+CHAMBER_M = 0.060
+_MM_TO_M = 1e-3
+
+
+def voxelize_stl(mesh_path: str, n: int, chamber_m: float = CHAMBER_M
+                 ) -> np.ndarray:
+    """Part mask on the heatr3d Grid lattice from an STL in millimetres.
+
+    Mesh-driven (containment test at the Grid cell centers), centered on the
+    chamber center. Refuses parts that do not fit the chamber; never scales.
+    """
+    if not 2 <= n <= N_MAX:
+        raise ValueError(f"grid n={n} outside [2, {N_MAX}] (full-physics "
+                         "ceiling)")
+    mesh = trimesh.load_mesh(mesh_path)
+    mesh = mesh.copy()
+    mesh.apply_scale(_MM_TO_M)
+    lo, hi = mesh.bounds
+    size = hi - lo
+    if np.any(size >= chamber_m):
+        raise ValueError(
+            f"part bbox {np.round(size / _MM_TO_M, 1).tolist()} mm does not "
+            f"fit the {chamber_m / _MM_TO_M:.0f} mm chamber")
+    mesh.apply_translation(-(lo + hi) / 2.0)      # center on chamber center
+    grid = H.Grid(n=n)
+    xs, ys, zs = np.meshgrid(grid.x, grid.y, grid.z, indexing="ij")
+    pts = np.column_stack([xs.ravel(), ys.ravel(), zs.ravel()])
+    inside = mesh.contains(pts)
+    part = inside.reshape((n, n, n))
+    if not part.any():
+        raise ValueError("voxelization produced an empty part (mesh thinner "
+                         f"than the n={n} cell size?)")
+    return part
+
+
+def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
+                sat_path: Optional[str] = None, arm: str = "uncorrected",
+                max_time_s: float = 1500.0,
+                power_density_w_per_m3: Optional[float] = None,
+                correction_engine: Optional[str] = None) -> Dict[str, Any]:
+    """One densify=True heatr3d march + the standard artifact set.
+
+    sat_path: optional npz with a (n, n, n) ``sat`` array (the corrected
+    arm's dopant volume, already on this grid). correction_engine labels
+    which engine produced that map; required when sat_path is given.
+    """
+    if n > N_MAX:
+        raise ValueError(f"grid n={n} exceeds the enforced ceiling {N_MAX}")
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    part = voxelize_stl(mesh_path, n)
+    grid = H.Grid(n=n)
+    p = H.Params(phase_update="enthalpy")
+    if power_density_w_per_m3 is not None:
+        p.power_density_w_per_m3 = float(power_density_w_per_m3)
+
+    sat = None
+    if sat_path is not None:
+        if not correction_engine:
+            raise ValueError("a corrected arm must name its "
+                             "correction_engine; never blend engines "
+                             "silently")
+        with np.load(sat_path) as d:
+            sat = np.asarray(d["sat"], dtype=float)
+        if sat.shape != part.shape:
+            raise ValueError(f"sat volume {sat.shape} does not match the "
+                             f"grid {part.shape}")
+
+    t0 = time.time()
+    r = H.run(grid, part, p, sat=sat, max_time_s=float(max_time_s),
+              densify=True)
+    wall_s = time.time() - t0
+
+    gates = {
+        "reached_phi90": bool(r.reached),
+        "MELT_ONSET_FALLBACK": (not bool(r.reached)),
+        "energy_residual_frac": float(r.energy_residual_frac),
+        "energy_residual_ok": bool(abs(r.energy_residual_frac) < 1e-2),
+        "clamp_bound": bool(r.clamp_bound),
+        "T_max_C": float(round(r.T_max_c, 1)),
+        "T_ceiling_C": 250.0,
+        "T_ceiling_ok": bool(r.T_max_c <= 250.0),
+    }
+    results: Dict[str, Any] = {
+        "engine": ENGINE_LABEL,
+        "trust_badge": TRUST_BADGE,
+        "arm": str(arm),
+        "correction_engine": correction_engine,
+        "grid_n": n,
+        "sigma_T": float(round(r.sigma_T, 3)),
+        "t_phi90_s": float(round(r.t_phi90_s, 1)),
+        "max_time_s": float(max_time_s),
+        "solve_wall_s": float(round(wall_s, 1)),
+        "phi_hist_len": len(r.phi_hist),
+        "dt_s": float(getattr(p, "dt_s", 0.05)),
+        "gates": gates,
+    }
+    results.update({k: v for k, v in H.sinter_metrics(r).items()})
+    if r.rho_final is not None:
+        sh = H.shrinkage_analysis(r, p, grid.h)
+        results.update({k: v for k, v in sh.items()
+                        if not k.startswith("_")})
+
+    np.savez_compressed(
+        out / "fields.npz", part=part,
+        T_phi90=r.T_phi90.astype(np.float32),
+        phi_final=r.phi_final.astype(np.float32),
+        Qrf=r.Qrf.astype(np.float32),
+        rho_final=(r.rho_final.astype(np.float32) if r.rho_final is not None
+                   else np.zeros((1,), np.float32)),
+        sat=(np.asarray(sat, np.float32) if sat is not None
+             else np.zeros((1,), np.float32)),
+        h=grid.h)
+    np.save(out / "phi_hist.npy", np.asarray(r.phi_hist, np.float32))
+    (out / "results.json").write_text(json.dumps(results, indent=2,
+                                                 default=float))
+
+    fields_for_view = {
+        "part": part, "T_phi90": r.T_phi90, "phi_final": r.phi_final,
+        "Qrf": r.Qrf,
+        "rho_final": (r.rho_final if r.rho_final is not None
+                      else np.zeros((1,), np.float32)),
+        "sat": (sat if sat is not None else np.zeros((1,), np.float32)),
+    }
+    meta = J._field_meta(fields_for_view, grid.h)
+    (out / "fieldmeta.json").write_text(json.dumps(meta, indent=2))
+    J._render_slices(out, fields_for_view, meta)
+    J._render_summary_plots(out, r.phi_hist, results["dt_s"],
+                            fields_for_view, meta)
+    logger.info("densify %s arm done in %.1f s (n=%d)", arm, wall_s, n)
+    return results
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Studio densify run")
+    ap.add_argument("mesh")
+    ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--n", type=int, default=64)
+    ap.add_argument("--arm", default="uncorrected")
+    ap.add_argument("--sat", default=None)
+    ap.add_argument("--correction-engine", default=None)
+    ap.add_argument("--max-time-s", type=float, default=1500.0)
+    args = ap.parse_args()
+    res = run_densify(args.mesh, args.out_dir, n=args.n, arm=args.arm,
+                      sat_path=args.sat,
+                      correction_engine=args.correction_engine,
+                      max_time_s=args.max_time_s)
+    print("RESULTS " + json.dumps(res, default=float))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
