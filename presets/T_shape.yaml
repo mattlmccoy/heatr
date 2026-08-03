@@ -1,0 +1,25 @@
+engine_version_floor: 2.0.0
+generated_from: webui/static/fgm_shape_standards.json
+preset_version: 1
+shape: T_shape
+shape_standard:
+  actuator_note: 'Geometry-limited: best known IoU 0.644 via an unequal dwell program
+    (DWELL_SCHEDULE_REPORT); honest partial, no full rescue.'
+  quick_look_gain: 0.111
+  quick_look_verdict: HARMFUL
+  solve_class: IMPROVED
+  solve_iou_4bpp: 0.4444444444444444
+  v_cal_v: 1718.975593945065
+sources:
+- v_cal
+- quick_look
+- solve_census
+- upgrades
+standard_parameters:
+  bpp: 4
+  enforce_generator_power: false
+  grid_nx: 120
+  grid_ny: 120
+  note: 'HEATR_STANDARD_PARAMETERS.md section 4: voltage drive for FGM comparisons,
+    grid 120, T_phi90 proxy, 4 bpp.'
+  proxy_field: T_phi90

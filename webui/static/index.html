@@ -123,6 +123,7 @@
               <option value="fgm_solve">◈ │ FGM Solve (shape fidelity, deliverable map)</option>
               <option value="single" selected>◎ │ Single Exposure</option>
               <option value="turntable">↻ │ Turntable Run (dwell program capable)</option>
+              <option value="schedule_cosolve">⟲ │ Schedule co-solve (map + turntable program)</option>
             </optgroup>
             <optgroup label="studies and tools">
               <option value="sweep">≋ │ Exposure Sweep</option>
@@ -211,6 +212,12 @@
         </div>
 
         <div class="mode-section hidden" data-mode="turntable">
+          <div class="preset-row" style="align-items:center;">
+            <button id="ttNearContChip" type="button"
+                    title="One click: 15 degrees per step, 48 rotation events (two full turns), interval auto-spaced across the run. The stored near-continuous schedule class (configs/diamond_tt_15deg_48rot_nearcont.yaml). Note: 15-degree stepping at high event counts carries the rotation-remap energy loss documented in CONTINUOUS_ROTATION_REPORT.md section 6.1; 90-degree indexing is the exact-permutation path.">
+              ↻ Near-continuous preset (15° × 48)</button>
+            <span id="ttNearContInfo" class="field-help" style="margin:0;"></span>
+          </div>
           <label>Rotation per step (deg)
             <input id="turntableRotationDeg" name="turntable_rotation_deg" type="number" step="0.1" value="90" />
           </label>
@@ -254,6 +261,52 @@
               </select>
             </label>
           </details>
+        </div>
+
+        <div class="mode-section hidden" data-mode="schedule_cosolve">
+          <p class="field-help" style="margin-bottom:8px;">
+            <strong>Schedule co-solve: dopant map + turntable program from one job.</strong>
+            Solves the dopant saturation map jointly with a turntable schedule and emits
+            the machine-readable turntable program (deliverable plus equal-dwell control),
+            the objective trace, the map-and-melt figure and a stamped summary. Drives the
+            campaign drivers read-only (DWELL_SCHEDULE_REPORT.md,
+            CONTINUOUS_ROTATION_REPORT.md); outputs land under
+            runs/&lt;shape&gt;/schedule_cosolve/ and appear in the Results tab.
+            <br>
+            <strong>Honest label:</strong> the schedule executes on the part-frame march at
+            solve time; the engine turntable program mode is the execution path for
+            verification (use the Results tab's verify-on-engine follow-up on the emitted
+            program).
+          </p>
+          <label>Schedule mode
+            <select id="schedCosolveMode">
+              <option value="indexed" selected>Indexed N positions, equal dwell (best on four-fold shapes)</option>
+              <option value="asym_dwell">Asymmetric dwell (joint map + dwell fractions; cross/square/T/L)</option>
+              <option value="sequential">Sequential segments (time-varying; L_shape and T_shape only)</option>
+            </select>
+            <span class="field-help">Indexed 90-degree stepping is the campaign's best
+              actuator on the four-fold shapes (CONTINUOUS_ROTATION_REPORT.md section 7);
+              asymmetric dwell is the joint solve of DWELL_SCHEDULE_REPORT.md.</span>
+          </label>
+          <label>Indexed positions (indexed mode only)
+            <select id="schedCosolvePositions">
+              <option value="2">2 (180°)</option>
+              <option value="3">3 (120°)</option>
+              <option value="4" selected>4 (90°, exact-permutation stepping)</option>
+              <option value="6">6 (60°)</option>
+              <option value="8">8 (45°)</option>
+              <option value="12">12 (30°)</option>
+              <option value="24">24 (15°, near-continuous)</option>
+            </select>
+          </label>
+          <label>Budget (forward-equivalents per solve stage)
+            <input id="schedCosolveBudget" type="number" value="40" min="1" step="1" />
+            <span class="field-help">Campaign standard is 40 (16 gradient evaluations).
+              Below 20 the run labels itself smoke class, not a quality solve.</span>
+          </label>
+          <label>Label (optional)
+            <input id="schedCosolveLabel" type="text" placeholder="e.g. smoke" />
+          </label>
         </div>
 
         <div class="mode-section hidden" data-mode="orientation_optimizer">

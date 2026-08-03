@@ -1,0 +1,24 @@
+engine_version_floor: 2.0.0
+generated_from: webui/static/fgm_shape_standards.json
+preset_version: 1
+shape: ellipse
+shape_standard:
+  actuator_note: null
+  quick_look_gain: 0.6713
+  quick_look_verdict: BETTER
+  solve_class: SOLVED
+  solve_iou_4bpp: 0.9787234042553191
+  v_cal_v: 4900.005354090797
+sources:
+- v_cal
+- quick_look
+- solve_census
+- upgrades
+standard_parameters:
+  bpp: 4
+  enforce_generator_power: false
+  grid_nx: 120
+  grid_ny: 120
+  note: 'HEATR_STANDARD_PARAMETERS.md section 4: voltage drive for FGM comparisons,
+    grid 120, T_phi90 proxy, 4 bpp.'
+  proxy_field: T_phi90

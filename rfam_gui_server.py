@@ -2083,6 +2083,82 @@ def _launch_fgm_resimulate_mode(payload: dict[str, Any], job: dict[str, Any]) ->
     _set_job_progress(job_id, completed_runs=1, progress_pct=100.0, progress_label="Re-simulation complete")
 
 
+# ── solve-progress dashboard plumbing (deferred item (a), v2 rollout) ──────
+# The solve entry points stream machine-readable progress lines
+# (SOLVE_PROGRESS from scripts/solve_fgm.py, SCHEDULE_PROGRESS from
+# scripts/solve_schedule.py). These helpers parse them into STRUCTURED fields
+# stored on the job (job["solve_progress"]), which /api/jobs serializes and
+# the front end renders as a live dashboard panel instead of a raw log line.
+
+SOLVE_TRACE_CAP = 400   # points kept for the dashboard sparkline
+
+
+def _parse_kv_line(line: str, prefix: str,
+                   fields: dict[str, type]) -> dict[str, Any] | None:
+    """Parse 'PREFIX k=v k=v ...' into typed fields; None on any miss."""
+    if not line.startswith(prefix):
+        return None
+    kv: dict[str, str] = {}
+    for tok in line.split()[1:]:
+        k, _, v = tok.partition("=")
+        kv[k] = v
+    out: dict[str, Any] = {}
+    try:
+        for name, typ in fields.items():
+            if name in kv:
+                out[name] = typ(kv[name])
+    except (KeyError, ValueError):
+        return None
+    return out or None
+
+
+def _solve_progress_fields(line: str) -> dict[str, Any] | None:
+    """Structured fields from a scripts/solve_fgm.py SOLVE_PROGRESS line."""
+    out = _parse_kv_line(line, "SOLVE_PROGRESS", {
+        "eval": int, "pool": int, "fe_spent": float, "fe_budget": float,
+        "J": float, "IoU": float})
+    if out is None or len(out) != 6:
+        return None
+    return out
+
+
+def _schedule_progress_fields(line: str) -> dict[str, Any] | None:
+    """Structured fields from a scripts/solve_schedule.py SCHEDULE_PROGRESS
+    line (evals_total/fe_budget/IoU are optional there)."""
+    out = _parse_kv_line(line, "SCHEDULE_PROGRESS", {
+        "evals_done": int, "evals_total": int, "fe_spent": float,
+        "fe_budget": float, "J": float, "IoU": float})
+    if out is None or "evals_done" not in out:
+        return None
+    return out
+
+
+def _record_solve_progress(job_id: str, fields: dict[str, Any]) -> None:
+    """Merge one progress point into job["solve_progress"] (latest fields,
+    running best J / best intersection over union, capped trace)."""
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if job is None:
+            return
+        sp = job.setdefault("solve_progress", {"trace": []})
+        sp.update({k: v for k, v in fields.items() if v is not None})
+        j_val = fields.get("J")
+        if j_val is not None:
+            prev = sp.get("best_J")
+            sp["best_J"] = j_val if prev is None else min(prev, j_val)
+        iou = fields.get("IoU")
+        if iou is not None:
+            prev = sp.get("best_IoU")
+            sp["best_IoU"] = iou if prev is None else max(prev, iou)
+        point = {k: fields.get(k) for k in ("fe_spent", "J", "IoU")
+                 if fields.get(k) is not None}
+        if point:
+            sp["trace"].append(point)
+            if len(sp["trace"]) > SOLVE_TRACE_CAP:
+                # thin by dropping every other retained point, keeping ends
+                sp["trace"] = sp["trace"][::2] + sp["trace"][-1:]
+
+
 def _launch_fgm_solve_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
     """Shape-fidelity SOLVE: gradient-solved 4 bits per pixel dopant map.
 
@@ -2153,18 +2229,13 @@ def _launch_fgm_solve_mode(payload: dict[str, Any], job: dict[str, Any]) -> None
                                      f"{budget:g} forward-equivalents{smoke}")
 
     def _solve_progress(line: str) -> None:
-        if not line.startswith("SOLVE_PROGRESS"):
+        fields = _solve_progress_fields(line)
+        if fields is None:
             return
-        kv: dict[str, str] = {}
-        for tok in line.split()[1:]:
-            k, _, v = tok.partition("=")
-            kv[k] = v
-        try:
-            ev = int(kv["eval"]); pool = max(int(kv["pool"]), 1)
-            fe = float(kv["fe_spent"]); fe_b = float(kv["fe_budget"])
-            j_val = float(kv["J"]); iou = float(kv["IoU"])
-        except (KeyError, ValueError):
-            return
+        ev = fields["eval"]; pool = max(fields["pool"], 1)
+        fe = fields["fe_spent"]; fe_b = fields["fe_budget"]
+        j_val = fields["J"]; iou = fields["IoU"]
+        _record_solve_progress(job_id, fields)
         pct = min(95.0, 5.0 + 90.0 * ev / pool)
         _set_job_progress(
             job_id, progress_pct=pct,
@@ -2182,6 +2253,156 @@ def _launch_fgm_solve_mode(payload: dict[str, Any], job: dict[str, Any]) -> None
     _set_job_progress(job_id, completed_runs=1, progress_pct=100.0,
                       progress_label="Shape-fidelity solve complete "
                                      "(map + results.json in the run folder)")
+
+
+# ── schedule co-solve (map + turntable program) ─────────────────────────────
+# Shapes each campaign driver supports; mirrored from run_dwell_solve.SHAPES,
+# run_rot_avg_solve.SHAPES and run_seq_arms.CFG (the wrapper re-validates).
+SCHEDULE_MODES = ("indexed", "asym_dwell", "sequential")
+SCHEDULE_SHAPES = {
+    "indexed": ("T_shape", "L_shape", "cross", "star", "square"),
+    "asym_dwell": ("cross", "square", "T_shape", "L_shape"),
+    "sequential": ("L_shape", "T_shape"),
+}
+SCHEDULE_POSITIONS = (2, 3, 4, 6, 8, 12, 24)
+
+
+def _schedule_cosolve_cmd(payload: dict[str, Any], out_dir: Path) -> list[str]:
+    """Validated argv for the scripts/solve_schedule.py wrapper."""
+    mode = str(payload.get("schedule_mode", "")).strip()
+    if mode not in SCHEDULE_MODES:
+        raise ValueError(f"schedule_mode must be one of {SCHEDULE_MODES}")
+    shape = str(payload.get("shape", "")).strip()
+    if shape not in SCHEDULE_SHAPES[mode]:
+        raise ValueError(
+            f"shape {shape!r} is not supported by schedule mode {mode!r} "
+            f"(supported: {SCHEDULE_SHAPES[mode]})")
+    budget = float(payload.get("budget", 40.0))
+    if budget <= 0:
+        raise ValueError("budget must be > 0")
+    cmd = [sys.executable, str(ROOT / "scripts" / "solve_schedule.py"),
+           "--shape", shape, "--mode", mode,
+           "--budget", f"{budget:g}", "--output-dir", str(out_dir)]
+    if mode == "indexed":
+        positions = int(payload.get("schedule_positions", 4))
+        if positions not in SCHEDULE_POSITIONS:
+            raise ValueError(
+                f"schedule_positions must be one of {SCHEDULE_POSITIONS}")
+        cmd += ["--positions", str(positions)]
+    label = str(payload.get("label", "")).strip()
+    if label:
+        cmd += ["--label", label]
+    return cmd
+
+
+def _launch_schedule_cosolve_mode(payload: dict[str, Any],
+                                  job: dict[str, Any]) -> None:
+    """Schedule co-solve: dopant map + turntable program from one job.
+
+    Shells the NEW wrapper scripts/solve_schedule.py, which drives the
+    existing campaign drivers read-only and lands the deliverables under
+    outputs_eqs/runs/<shape>/schedule_cosolve/<output_name>/. Honest label:
+    schedules execute on the part-frame march at solve time; the engine
+    turntable program mode is the execution path for verification (the
+    Results tab offers a verify-on-engine follow-up on the emitted program).
+    """
+    job_id = str(job["id"])
+    output_name = str(payload.get("output_name", "")).strip()
+    if not _is_valid_output_name(output_name):
+        raise ValueError("output_name must use only letters, numbers, '_' or '-'")
+    shape = str(payload.get("shape", "")).strip()
+    out_dir = OUTPUTS_DIR / "runs" / shape / "schedule_cosolve" / output_name
+    cmd = _schedule_cosolve_cmd(payload, out_dir)   # validates payload
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _register_job_output(job, out_dir)
+
+    budget = float(payload.get("budget", 40.0))
+    smoke = (" (reduced budget: smoke class, not a quality solve)"
+             if budget < 20 else "")
+    _set_job_progress(job_id, total_runs=1, completed_runs=0, progress_pct=3.0,
+                      progress_label=(f"Schedule co-solve starting "
+                                      f"({payload.get('schedule_mode')}), budget "
+                                      f"{budget:g} forward-equivalents{smoke}"))
+
+    def _sched_progress(line: str) -> None:
+        fields = _schedule_progress_fields(line)
+        if fields is None:
+            return
+        _record_solve_progress(job_id, fields)
+        done = int(fields.get("evals_done", 0))
+        total = fields.get("evals_total")
+        pct = (min(95.0, 5.0 + 90.0 * done / max(int(total), 1))
+               if total else min(95.0, 5.0 + 2.0 * done))
+        bits = [f"Co-solve {done}"
+                + (f"/{int(total)}" if total else "") + " gradient evals"]
+        if fields.get("fe_spent") is not None:
+            fb = fields.get("fe_budget")
+            bits.append(f"{fields['fe_spent']:.1f}"
+                        + (f"/{fb:g}" if fb else "") + " forward-equivalents")
+        if fields.get("J") is not None:
+            bits.append(f"J={fields['J']:.1f}")
+        if fields.get("IoU") is not None:
+            bits.append(f"best IoU={fields['IoU']:.4f}")
+        _set_job_progress(job_id, progress_pct=pct,
+                          progress_label=" • ".join(bits))
+
+    rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id,
+                      line_cb=_sched_progress)
+    if rc != 0:
+        _set_job_progress(job_id, progress_label="Schedule co-solve failed")
+        raise RuntimeError(f"schedule co-solve exited with code {rc}")
+    _set_job_progress(job_id, completed_runs=1, progress_pct=100.0,
+                      progress_label=("Schedule co-solve complete (map + "
+                                      "turntable program in the run folder)"))
+
+
+def _launch_sigma_backfill_mode(payload: dict[str, Any],
+                                job: dict[str, Any]) -> None:
+    """One-shot maintenance: pre-v2 dual read-state sigma_T backfill.
+
+    Shells scripts/backfill_sigma_t.py. Never overwrites existing fields;
+    skips and counts unrecoverable runs; --dry-run reports counts only.
+    """
+    job_id = str(job["id"])
+    cmd = [sys.executable, str(ROOT / "scripts" / "backfill_sigma_t.py")]
+    if bool(payload.get("dry_run", True)):
+        cmd.append("--dry-run")
+    subset = str(payload.get("subset", "")).strip()
+    if subset:
+        if ".." in subset or subset.startswith("/"):
+            raise ValueError("subset must be a relative path inside outputs_eqs")
+        cmd += ["--subset", subset]
+    limit = payload.get("limit")
+    if limit is not None:
+        cmd += ["--limit", str(int(limit))]
+    _set_job_progress(job_id, total_runs=1, completed_runs=0, progress_pct=5.0,
+                      progress_label="sigma_T backfill walking run directories")
+
+    def _line(line: str) -> None:
+        if not line.startswith("SIGMA_T_BACKFILL "):
+            return
+        try:
+            counts = json.loads(line[len("SIGMA_T_BACKFILL "):])
+        except ValueError:
+            return
+        with JOBS_LOCK:
+            if job_id in JOBS:
+                JOBS[job_id]["backfill_counts"] = counts
+        _set_job_progress(
+            job_id, progress_pct=95.0,
+            progress_label=(f"backfill {'DRY RUN ' if counts.get('dry_run') else ''}"
+                            f"scanned={counts.get('scanned')} "
+                            f"backfillable={counts.get('backfillable')} "
+                            f"written={counts.get('written')} "
+                            f"already={counts.get('already_present')} "
+                            f"no_series={counts.get('no_time_series')} "
+                            f"unrecoverable={counts.get('unrecoverable')}"))
+
+    rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id, line_cb=_line)
+    if rc != 0:
+        _set_job_progress(job_id, progress_label="sigma_T backfill failed")
+        raise RuntimeError(f"sigma_T backfill exited with code {rc}")
+    _set_job_progress(job_id, completed_runs=1, progress_pct=100.0)
 
 
 def _fgm_iter_extract_optimal_time(log_path: Path, fallback_s: float, target_phi: float = 0.90) -> tuple[float, str, str]:
@@ -4349,6 +4570,10 @@ def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
             _launch_fgm_iterate_mode(payload, job)
         elif mode == "fgm_solve":
             _launch_fgm_solve_mode(payload, job)
+        elif mode == "schedule_cosolve":
+            _launch_schedule_cosolve_mode(payload, job)
+        elif mode == "sigma_backfill":
+            _launch_sigma_backfill_mode(payload, job)
         elif mode == "fgm_gradient_descent":
             _launch_fgm_gradient_descent(payload, job)
         elif mode == "prewarp":
@@ -4482,6 +4707,12 @@ def _is_orientation_run_dir(path: Path) -> bool:
 def _detect_run_type_from_summary(summary: dict[str, Any]) -> str:
     if not isinstance(summary, dict):
         return "unknown"
+    # v2+: an explicit run_type stamped into summary.json wins (the schedule
+    # co-solve stamps "schedule_cosolve"); pre-v2 summaries lack the key, so
+    # every historical classification below is unchanged.
+    explicit = str(summary.get("run_type", "")).strip()
+    if explicit:
+        return explicit
     if isinstance(summary.get("orientation_optimizer", None), dict):
         return "orientation_optimizer"
     if isinstance(summary.get("placement_optimizer", None), dict):
@@ -5213,9 +5444,52 @@ def _result_detail(name: str) -> dict[str, Any]:
 # shows a loud stale-server banner on mismatch or absence, because the
 # project's known failure mode is a long-running server process serving
 # stale python routes underneath new static files (test_api_generation.py).
-API_GENERATION = 20260801
+API_GENERATION = 20260803
 
 _ENGINE_VERSION_CACHE: dict[str, str | int] | None = None
+
+# Server-side per-shape preset YAML files (deferred item (b), v2 rollout).
+# Regenerated from webui/static/fgm_shape_standards.json by
+# scripts/build_shape_presets.py; served at GET /api/presets. The front end
+# falls back to the static JSON when this directory is absent (pre-preset
+# checkout), so nothing is removed.
+PRESETS_DIR = ROOT / "presets"
+
+
+def _load_shape_presets(presets_dir: Path) -> dict[str, Any] | None:
+    """Load presets/*.yaml into the structure the front end already consumes.
+
+    Returns {"source": "presets_yaml", "standard_parameters": ..., "shapes":
+    {...}} or None when the directory is missing, empty, or unreadable (the
+    caller then falls back to the static standards JSON).
+    """
+    presets_dir = Path(presets_dir)
+    if not presets_dir.is_dir():
+        return None
+    shapes: dict[str, Any] = {}
+    shared: dict[str, Any] = {}
+    meta: dict[str, Any] = {}
+    for p in sorted(presets_dir.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        shape = str(data.get("shape") or p.stem)
+        shapes[shape] = dict(data.get("shape_standard", {}) or {})
+        if not shared and isinstance(data.get("standard_parameters"), dict):
+            shared = dict(data["standard_parameters"])
+        if not meta:
+            meta = {
+                "engine_version_floor": data.get("engine_version_floor"),
+                "sources": data.get("sources", []),
+                "generated_from": data.get("generated_from"),
+            }
+    if not shapes:
+        return None
+    out: dict[str, Any] = {"source": "presets_yaml",
+                           "standard_parameters": shared, "shapes": shapes}
+    out.update(meta)
+    return out
 
 
 def _engine_version_info() -> dict[str, str | int]:
@@ -5766,6 +6040,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "ts": time.time()})
         if path == "/api/engine-version":
             return self._json(_engine_version_info())
+        if path == "/api/presets":
+            # Per-shape one-click standards from the server-side preset YAML
+            # files (presets/, regenerated by scripts/build_shape_presets.py).
+            # 404 with a hint when the directory is absent so the front end
+            # falls back to the static standards JSON.
+            loaded = _load_shape_presets(PRESETS_DIR)
+            if loaded is None:
+                return self._json(
+                    {"error": "no presets directory; run "
+                              "scripts/build_shape_presets.py"}, status=404)
+            return self._json(loaded)
         if path == "/api/turntable-programs":
             # Machine-readable dwell programs emitted by the dwell campaign
             # (fgm_solve_campaign/out_dwell/*_turntable_*.json). Gate-result
@@ -6228,6 +6513,8 @@ class Handler(BaseHTTPRequestHandler):
             "/api/tools/fgm-to-rip",
             "/api/tools/fgm-iterate",
             "/api/tools/fgm-solve",
+            "/api/tools/schedule-cosolve",
+            "/api/tools/backfill-sigma-t",
             "/api/tools/fgm-continue",
             "/api/tools/fgm-gradient-descent",
             "/api/tools/prewarp",
@@ -6729,6 +7016,55 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True, "job_id": job["id"], "status": status,
                 "queue_position": qpos, "output_name": output_name,
             }, status=202)
+
+        if path == "/api/tools/schedule-cosolve":
+            # Schedule co-solve (map + turntable program). Payload keys:
+            #   shape, output_name, schedule_mode (indexed|asym_dwell|
+            #   sequential), schedule_positions (indexed only), budget, label
+            shape       = str(payload.get("shape", "")).strip()
+            output_name = str(payload.get("output_name", "")).strip()
+            if not output_name:
+                output_name = f"{shape}_schedule"
+            if not _is_valid_output_name(output_name):
+                return self._json({"error": "output_name contains invalid characters"}, status=400)
+            try:
+                # Validate now so a bad payload 400s instead of queueing a
+                # job that fails on start (same argv builder the job uses).
+                _schedule_cosolve_cmd(payload, Path("/tmp/_validate"))
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, status=400)
+            job_payload = dict(payload)
+            job_payload["mode"]        = "schedule_cosolve"
+            job_payload["output_name"] = output_name
+            job = _make_job(mode="schedule_cosolve", output_name=output_name)
+            with JOBS_LOCK:
+                JOBS[job["id"]]["_payload"] = job_payload
+            _enqueue_job(job["id"])
+            _maybe_start_next_job()
+            with JOBS_LOCK:
+                status = str(JOBS[job["id"]]["status"])
+                qpos   = JOBS[job["id"]].get("queue_position", None)
+            return self._json({
+                "ok": True, "job_id": job["id"], "status": status,
+                "queue_position": qpos, "output_name": output_name,
+            }, status=202)
+
+        if path == "/api/tools/backfill-sigma-t":
+            # One-shot maintenance: pre-v2 dual read-state sigma_T backfill
+            # (scripts/backfill_sigma_t.py). Payload keys: dry_run (default
+            # true), subset (relative to outputs_eqs), limit.
+            job_payload = dict(payload)
+            job_payload["mode"] = "sigma_backfill"
+            job = _make_job(mode="sigma_backfill", output_name="sigma_backfill")
+            with JOBS_LOCK:
+                JOBS[job["id"]]["_payload"] = job_payload
+            _enqueue_job(job["id"])
+            _maybe_start_next_job()
+            with JOBS_LOCK:
+                status = str(JOBS[job["id"]]["status"])
+                qpos   = JOBS[job["id"]].get("queue_position", None)
+            return self._json({"ok": True, "job_id": job["id"], "status": status,
+                               "queue_position": qpos}, status=202)
 
         if path == "/api/tools/fgm-solve":
             # Shape-fidelity SOLVE: gradient-solved 4 bits per pixel dopant map

@@ -1,0 +1,26 @@
+engine_version_floor: 2.0.0
+generated_from: webui/static/fgm_shape_standards.json
+preset_version: 1
+shape: rectangle
+shape_standard:
+  actuator_note: Solve stall is actuator-limited in the deployable conductivity channel;
+    the permittivity channel fixes it but is model-only pending the material measurement
+    (EPS_CHANNEL_REPORT).
+  quick_look_gain: 0.85
+  quick_look_verdict: BETTER
+  solve_class: NOT-RESCUED
+  solve_iou_4bpp: 0.8424242424242424
+  v_cal_v: 3316.222846710766
+sources:
+- v_cal
+- quick_look
+- solve_census
+- upgrades
+standard_parameters:
+  bpp: 4
+  enforce_generator_power: false
+  grid_nx: 120
+  grid_ny: 120
+  note: 'HEATR_STANDARD_PARAMETERS.md section 4: voltage drive for FGM comparisons,
+    grid 120, T_phi90 proxy, 4 bpp.'
+  proxy_field: T_phi90

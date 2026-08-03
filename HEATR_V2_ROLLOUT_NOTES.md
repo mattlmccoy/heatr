@@ -433,3 +433,178 @@ read state rather than as a running maximum over time, although bed fusing is
 irreversible; that remains the one known modelling error in the objective.
 (4) Everything here is the two-dimensional engine at grid 120, and no number
 transfers to another grid without the hold-out gate.
+
+## Addendum (2026-08-03, deferred-list closure + schedule co-solve commissioning)
+
+Appended by the follow-up session; the sections above are unchanged. This
+pass CLEARS the deferred list of the 2026-08-01 rollout and makes schedule
+co-solves commissionable from the graphical user interface (GUI).
+Test-driven development red-first on every pure-logic change (each new test
+file observed failing with ModuleNotFoundError before its module existed);
+front-end changes verified live in the browser with screenshots viewed
+personally. Promote never remove: no control, route, or option was deleted.
+
+### Deferred item (a): solve-progress dashboard
+
+- rfam_gui_server.py: `_solve_progress_fields` / `_schedule_progress_fields`
+  parse the machine-readable progress lines (SOLVE_PROGRESS from
+  scripts/solve_fgm.py, SCHEDULE_PROGRESS from the new wrapper);
+  `_record_solve_progress` stores structured fields on the job
+  (`job["solve_progress"]`: latest forward-equivalents spent/budget, current
+  J, running best J, running best intersection over union (IoU), capped
+  trace, `SOLVE_TRACE_CAP` 400), serialized by /api/jobs.
+- webui/static/app.js: `_buildSolveProgressPanel` renders the panel on
+  fgm_solve and schedule_cosolve job cards: labeled numbers (FE spent/budget
+  with a fill bar, J now, J best, IoU best) plus a log-scale J sparkline
+  once the trace has two points.
+- Verified live: a labeled tiny-budget square fgm_solve
+  (square_dashboard_smoke_20260803, budget 5, smoke class) rendered
+  "FE 2.8 / 5, J now 168.11, J best 168.11, IoU best 0.8287" on its job
+  card (screenshot viewed personally).
+
+### Deferred item (b): server-side preset YAML files
+
+- scripts/build_shape_presets.py regenerates presets/<shape>.yaml (19 files)
+  from webui/static/fgm_shape_standards.json (single source; never edit the
+  YAML by hand). `rfam_gui_server._load_shape_presets` reads the directory;
+  GET /api/presets serves it in the exact structure the front end already
+  consumed. app.js `_loadShapeStandards` now fetches /api/presets FIRST and
+  falls back to the static JSON on a pre-preset server.
+- Tests: test_presets_yaml.py (6, red first), including a drift pin that
+  fails when presets/ and the standards JSON disagree.
+- Verified live: /api/presets 200 with source "presets_yaml"; the square
+  standard-parameter hint (V_cal 2428.2 V) rendered from the YAML-backed
+  payload; the page's network log shows it loading /api/presets.
+
+### Deferred item (c): pre-v2 sigma_T backfill
+
+- scripts/backfill_sigma_t.py walks run directories, computes the dual
+  read-state sigma_T from stored time_series.json via the engine's own
+  `dual_read_state_from_hist` (data contract probed first: time_series.json
+  carries ui_rms_part / mean_T_part_c / mean_phi_part), and stamps
+  summary.json with `sigma_T_backfilled: true`. Never overwrites an existing
+  sigma field (byte-identical skip), skips and counts unrecoverable runs,
+  prunes _archive, honors --dry-run / --subset / --limit.
+- POST /api/tools/backfill-sigma-t queues it as a job (payload dry_run
+  defaults TRUE); the counts land on the job card and in
+  `job["backfill_counts"]`.
+- Tests: test_backfill_sigma_t.py (6, red first).
+- Real runs: full dry-run census scanned=1396, backfillable=1376,
+  already_present=3, no_time_series=17, unrecoverable=0, read_errors=0.
+  Real subset run on runs/square/single/baseline: written=3,
+  already_present=1; the stamped no_rotation summary now carries
+  sigma_T_heating_peak_c 11.047 with melt-onset null and
+  sigma_T_melt_reached false (the loud fallback), and the Results card
+  excerpt renders it. The full-tree real pass (1376 writes on the
+  Dropbox-backed tree) is deliberately left for Matt to trigger:
+  `./.venv312/bin/python scripts/backfill_sigma_t.py` or the endpoint with
+  {"dry_run": false}.
+
+### Deferred item (d): near-continuous turntable preset chip
+
+- webui/static/index.html + app.js: a chip in the Turntable section fills
+  the fixed-step fields with the stored near-continuous class (15 degrees
+  per step, 48 events = two full turns, interval auto-spaced; source
+  configs/diamond_tt_15deg_48rot_nearcont.yaml). The tooltip names the
+  15-degree rotation-remap energy caveat (CONTINUOUS_ROTATION_REPORT.md
+  section 6.1). The dwell-program select is untouched. Verified live:
+  clicking set 15 / 48 and the info line appeared.
+
+### Schedule co-solve commissioning
+
+- New GUI mode "Schedule co-solve (map + turntable program)" in the
+  v2-standard optgroup: schedule mode (indexed N positions / asymmetric
+  dwell / sequential), indexed position count (2 to 24), budget in
+  forward-equivalents, optional label. POST /api/tools/schedule-cosolve
+  validates the payload with the same argv builder the job uses (400 on a
+  bad shape/mode/budget), then queues mode schedule_cosolve.
+- NEW wrapper scripts/solve_schedule.py shells the existing campaign
+  drivers read-only: indexed -> run_rot_avg_solve (matched N-position
+  averaged kernel), asym_dwell -> run_dwell_solve, sequential ->
+  run_seq_arms (L_shape/T_shape only; its screen inputs are copied into the
+  run folder so the campaign originals are never touched). Each driver's
+  output-directory constant is redirected into the run's campaign_raw/;
+  no campaign artifact is overwritten and no driver file was edited.
+- Outputs land in outputs_eqs/runs/<shape>/schedule_cosolve/<id>/:
+  summary.json (engine version stamped, run_type schedule_cosolve, smoke
+  class label under budget 20), schedule_maps.npz (the co-solved 4 bits per
+  pixel map), turntable_program_deliverable.json plus
+  turntable_program_equal_dwell_control.json (dwell campaign format),
+  j_trace.json, fig_schedule_cosolve.png (map + melt-versus-nominal +
+  objective trace). The Results tab picks the folder up;
+  `_detect_run_type_from_summary` now honors an explicit run_type key
+  (pre-v2 classification unchanged, pinned by the existing suites).
+- Honest labeling, stamped into every summary: schedules execute on the
+  part-frame march at solve time; the engine turntable program mode
+  (rfam_eqs_coupled tt_program_mode) is the execution path for
+  verification. The Results tab shows a "Verify on engine" button on
+  schedule_cosolve cards that runs the emitted deliverable program through
+  POST /api/run mode=turntable with both co-rotation flags on.
+- Tests: test_solve_schedule.py (12, red first): wrapper argument building
+  and cross-field validation, the budget-to-evaluations convention
+  (40 forward-equivalents = 16 evaluations), the driver-log progress watch,
+  the SCHEDULE_PROGRESS round trip, and the server-side builder rejections.
+  The wrapper module imports without the heavy solver stack.
+- API_GENERATION bumped 20260801 -> 20260803 together with the app.js pin
+  (route additions; test_api_generation.py green).
+
+### Verification evidence
+
+1. Suites owned by this pass: 97 passed
+   (test_presets_yaml.py, test_backfill_sigma_t.py, test_solve_schedule.py,
+   test_api_generation.py, test_gui_server_v2.py, test_gui_legacy_marking.py,
+   test_engine_version.py, test_fgm_shape_standards.py,
+   test_min_T_part_history.py, test_solve_fgm.py), every new behavior
+   observed red first; `node --check` clean on app.js and results.js.
+2. Fresh server (heatr-gui-workbench, port 8090): /api/engine-version
+   carries api_generation 20260803; no stale banner; zero console errors on
+   the Operation AND Results pages after all changes.
+3. End-to-end schedule co-solve commissioned from the GUI: cross, indexed 4
+   positions, budget 5 forward-equivalents, labeled smoke
+   (outputs_eqs/runs/cross/schedule_cosolve/cross_sched_cosolve_smoke_20260803,
+   job 20260803-114117-dd42a1). Result: J 94.34 against uniform 128.71,
+   IoU 0.8935 against uniform 0.8768, warm start won, recommended stop
+   370.5 s, wall about 34 minutes. SMOKE CLASS: budget 5 is not a quality
+   solve and the summary labels itself; the quality run is 40
+   forward-equivalents. The live dashboard showed evals 4/4, FE 10/10
+   (2 evaluations per solve stage at this budget), J and best-IoU running
+   values during the run.
+4. Program validity: the emitted deliverable program compiles through the
+   engine's own `parse_turntable_program` (151 events, strictly increasing
+   sentinels, correct incremental deltas); moves carry
+   {position_deg, dwell_s, move_at_s} exactly as the dwell campaign format.
+5. Engine-verify follow-up exercised through the REAL button (prompt
+   stubbed to 0.5 minutes): job 20260803-114452-86ac57 completed; its
+   used_config.yaml shows turntable.program_json pointing at the co-solve's
+   emitted program with corotate_dopant and corotate_eps_geometry true, and
+   the run landed in
+   runs/cross/turntable/baseline/cross_sched_cosolve_smoke_20260803_engineverify.
+6. Legacy modes untouched: a single-mode launch
+   (square_legacy_launch_smoke_20260803, 0.2 min) queued through /api/run,
+   ran to completion, and created its run directory. No legacy route,
+   handler, or dropdown changed in this pass.
+7. Viewed personally: the solve dashboard panel screenshot and
+   fig_schedule_cosolve.png for both the standalone wrapper smoke and the
+   GUI-commissioned smoke.
+
+### Known conditions
+
+- rfam_eqs_coupled.py is mid-edit by the parallel engine lane (v2.1.0 in
+  the working tree). Its bit-identity guard
+  (test_turntable_program.py::test_fixed_step_turntable_run_is_bit_identical...)
+  fails at 1.6e-12 temperature drift against the stored pre-edit baseline.
+  That file is outside this pass's ownership and was not touched here.
+- The /api/heatr3d/* routes and webui/static/heatr3d.html were not touched
+  (owned by the 3-D tab rebuild lane).
+
+### Cleanup
+
+- The workbench verification server on port 8090 is left running for
+  review; the hub-managed instance on 8080 was never touched and needs a
+  restart (or hub relaunch) to pick up the new routes before the page stops
+  showing the stale-server banner there.
+- Labeled smoke artifacts kept as evidence, cheap to trash after review:
+  runs/square/single/baseline/square_legacy_launch_smoke_20260803,
+  runs/square/fgm_solve/square_dashboard_smoke_20260803,
+  runs/cross/schedule_cosolve/cross_sched_cosolve_smoke_20260803, and
+  runs/cross/turntable/baseline/cross_sched_cosolve_smoke_20260803_engineverify.

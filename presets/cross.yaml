@@ -1,0 +1,26 @@
+engine_version_floor: 2.0.0
+generated_from: webui/static/fgm_shape_standards.json
+preset_version: 1
+shape: cross
+shape_standard:
+  actuator_note: 'Turntable dwell upgrade: solved map + dwell program reaches IoU
+    0.9829 at grid 120, engine-verified (program JSON fgm_solve_campaign/out_dwell/cross_turntable_deliverable.json,
+    commits 2cc1548 + 2408329).'
+  quick_look_gain: 1.1855
+  quick_look_verdict: BETTER
+  solve_class: NOT-RESCUED
+  solve_iou_4bpp: 0.6754966887417219
+  v_cal_v: 2815.3798396110424
+sources:
+- v_cal
+- quick_look
+- solve_census
+- upgrades
+standard_parameters:
+  bpp: 4
+  enforce_generator_power: false
+  grid_nx: 120
+  grid_ny: 120
+  note: 'HEATR_STANDARD_PARAMETERS.md section 4: voltage drive for FGM comparisons,
+    grid 120, T_phi90 proxy, 4 bpp.'
+  proxy_field: T_phi90

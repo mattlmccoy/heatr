@@ -2130,6 +2130,17 @@ function renderRunCards() {
     const fieldsBtn = `<button type="button" class="run-fields-btn"
         title="Interactive field viewer: T, Qrf, rho_rel, T_phi90 with colormap and crosshair">
         🔬 Fields</button>`;
+    // Schedule co-solve runs get a verify-on-engine follow-up: the co-solve
+    // scores its schedule on the part-frame march; this button runs the
+    // emitted turntable program through the production engine's program mode
+    // (rfam_eqs_coupled tt_program_mode), which is the execution path.
+    const isScheduleCosolve = String(run.run_type) === 'schedule_cosolve'
+      || run.name.includes('/schedule_cosolve/');
+    const verifyEngineBtn = isScheduleCosolve
+      ? `<button type="button" class="run-verify-engine-btn"
+           title="Run this co-solve's emitted turntable program through the production engine's program mode (the execution path for verification)">
+           ⚙ Verify on engine</button>`
+      : '';
     const isCompSel = COMPARE_SELECTED.has(run.name);
     const compareChk = COMPARE_MODE
       ? `<button type="button" class="run-compare-chk"
@@ -2146,7 +2157,7 @@ function renderRunCards() {
         ${compareChk}
         ${caps.length ? `<button type="button" class="run-backfill-btn" title="Quick backfill">↻ Reports</button>` : ''}
         ${caps.length ? `<button type="button" class="run-backfill-adv-btn" title="Advanced backfill">↻ Advanced</button>` : ''}
-        ${fgmBtn}${importFgmBtn}${convBtn}${fieldsBtn}
+        ${fgmBtn}${importFgmBtn}${convBtn}${fieldsBtn}${verifyEngineBtn}
         <button type="button" class="run-delete-btn" title="Delete run" style="color:#e07070;">🗑 Delete</button>
       </div>`;
 
@@ -2154,7 +2165,7 @@ function renderRunCards() {
       'single': 'single', 'sweep': 'sweep', 'optimizer': 'optimizer',
       'turntable': 'turntable', 'fgm_iterate': 'FGM-iter',
       'orientation_optimizer': 'orient-opt', 'placement_optimizer': 'place-opt',
-      'shell_sweep': 'shell-sweep',
+      'shell_sweep': 'shell-sweep', 'schedule_cosolve': 'sched-cosolve',
     };
     const modeBadge = modeBadgeMap[String(run.run_type || '')] || String(run.run_type || '');
     // Engine version chip: stamped by v2+ engines into summary.json; a run
@@ -2515,6 +2526,51 @@ function renderRunCards() {
       fieldsActionBtn.addEventListener("click", (ev) => {
         ev.stopPropagation();
         _showFieldViewer(run.name);
+      });
+    }
+
+    const verifyEngineActionBtn = card.querySelector(".run-verify-engine-btn");
+    if (verifyEngineActionBtn) {
+      verifyEngineActionBtn.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        // Shape is the second token of runs/<shape>/schedule_cosolve/<id>.
+        const toks = String(run.name).split("/");
+        const shape = toks.length > 1 ? toks[1] : "";
+        const runId = toks[toks.length - 1] || "cosolve";
+        const minutesRaw = window.prompt(
+          "Verify on engine: run this co-solve's emitted turntable program\n" +
+          "through the production engine's program mode.\n\n" +
+          "Exposure minutes (a short horizon is fine for an execution check):",
+          "2");
+        if (minutesRaw === null) return;
+        const minutes = Number(minutesRaw);
+        if (!Number.isFinite(minutes) || minutes <= 0) {
+          window.alert("Exposure minutes must be a positive number.");
+          return;
+        }
+        const payload = {
+          mode: "turntable",
+          shape,
+          output_name: `${runId}_engineverify`.slice(0, 80),
+          exposure_minutes: minutes,
+          turntable_program_json:
+            `outputs_eqs/${run.name}/turntable_program_deliverable.json`,
+          turntable_corotate_dopant: true,
+          turntable_corotate_eps: true,
+        };
+        try {
+          const resp = await fetchJson("/api/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const status = byId("serverStatus");
+          if (status) status.textContent =
+            `Engine-verify job queued (${resp.job_id || "queued"}) on ${shape}: ` +
+            `program mode, ${minutes} min`;
+        } catch (err) {
+          window.alert("Engine verify error: " + err.message);
+        }
       });
     }
 

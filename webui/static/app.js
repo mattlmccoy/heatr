@@ -669,6 +669,13 @@ function buildPayload(includeOutput = true) {
         String(byId("ttCorotEps")?.value || "true") === "true";
     }
   }
+  if (mode === "schedule_cosolve") {
+    payload.schedule_mode = String(byId("schedCosolveMode")?.value || "indexed");
+    payload.schedule_positions = parseInt(byId("schedCosolvePositions")?.value) || 4;
+    payload.budget = Number(byId("schedCosolveBudget")?.value) || 40;
+    const lbl = String(byId("schedCosolveLabel")?.value || "").trim();
+    if (lbl) payload.label = lbl;
+  }
   if (mode === "orientation_optimizer") {
     const targetExposureS = Number(byId("exposureMinutes")?.value) * 60.0;
     let orientationExposureMinS = Number(byId("orientationExposureMinS")?.value);
@@ -1407,6 +1414,62 @@ function _buildFgmConvergenceSparkline(iters) {
     </div>`;
 }
 
+function _buildSolveProgressPanel(sp) {
+  // Live solve dashboard (v2 deferred item (a)): structured SOLVE_PROGRESS /
+  // SCHEDULE_PROGRESS fields from /api/jobs rendered as labeled numbers plus
+  // a J sparkline, instead of the raw log-tail line.
+  if (!sp) return "";
+  const fe   = Number(sp.fe_spent);
+  const feB  = Number(sp.fe_budget);
+  const feTxt = Number.isFinite(fe)
+    ? `${fe.toFixed(1)}${Number.isFinite(feB) && feB > 0 ? " / " + feB.toFixed(0) : ""}`
+    : "?";
+  const fePct = (Number.isFinite(fe) && Number.isFinite(feB) && feB > 0)
+    ? Math.min(100, (100 * fe) / feB) : null;
+  const jNow  = Number.isFinite(Number(sp.J)) ? Number(sp.J).toFixed(2) : "–";
+  const jBest = Number.isFinite(Number(sp.best_J)) ? Number(sp.best_J).toFixed(2) : "–";
+  const iouBest = Number.isFinite(Number(sp.best_IoU)) ? Number(sp.best_IoU).toFixed(4) : "–";
+
+  // J sparkline over the trace (log scale; J spans decades during a solve)
+  let spark = "";
+  const tr = Array.isArray(sp.trace) ? sp.trace.filter((p) => Number.isFinite(Number(p.J)) && Number(p.J) > 0) : [];
+  if (tr.length >= 2) {
+    const W = 240, H = 44, pad = 4;
+    const logs = tr.map((p) => Math.log10(Number(p.J)));
+    const lo = Math.min(...logs), hi = Math.max(...logs);
+    const span = Math.max(hi - lo, 1e-6);
+    const pts = tr.map((p, i) => {
+      const x = pad + (i / (tr.length - 1)) * (W - 2 * pad);
+      const y = pad + (1 - (Math.log10(Number(p.J)) - lo) / span) * (H - 2 * pad);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    spark = `<svg width="${W}" height="${H}" style="display:block;">
+        <rect x="0" y="0" width="${W}" height="${H}" fill="#0d1520" rx="2"/>
+        <polyline points="${pts}" fill="none" stroke="#e0a050" stroke-width="1.5"/>
+      </svg>
+      <div style="font-size:9px;color:#607080;">objective J per gradient evaluation (log scale)</div>`;
+  }
+  const feBar = fePct === null ? "" :
+    `<div style="height:4px;background:#0d1520;border-radius:2px;margin:3px 0;">
+       <div style="height:4px;width:${fePct.toFixed(1)}%;background:#3fa34d;border-radius:2px;"></div>
+     </div>`;
+  return `
+    <div class="solve-progress-panel" style="margin-top:6px;padding:6px 8px;background:#0a0f1a;
+                border-radius:6px;border:1px solid #1e2d44;">
+      <div style="font-size:10px;color:#7090b0;display:flex;justify-content:space-between;gap:8px;">
+        <span>Solve dashboard</span>
+        <span title="forward-solve equivalents spent / budget">FE ${feTxt}</span>
+      </div>
+      ${feBar}
+      <div style="font-size:11px;color:#cfe3f5;display:flex;gap:14px;flex-wrap:wrap;margin:2px 0 4px 0;">
+        <span title="objective at the latest gradient evaluation">J now <strong>${jNow}</strong></span>
+        <span title="lowest objective so far">J best <strong style="color:#8fe09a;">${jBest}</strong></span>
+        <span title="best intersection over union so far">IoU best <strong style="color:#f0c060;">${iouBest}</strong></span>
+      </div>
+      ${spark}
+    </div>`;
+}
+
 function _buildJobCardHTML(j, pct, snap, physicsOpen) {
   const statusCls = j.status;
   const cfg = j.config_resolution?.[0]?.resolved;
@@ -1476,6 +1539,9 @@ function _buildJobCardHTML(j, pct, snap, physicsOpen) {
     ${_buildPhysicsPanel(snap, physicsOpen)}
     ${j.mode === "fgm_iterate" && Array.isArray(j.convergence_iters) && j.convergence_iters.length
         ? _buildFgmConvergenceSparkline(j.convergence_iters)
+        : ""}
+    ${(j.mode === "fgm_solve" || j.mode === "schedule_cosolve") && j.solve_progress
+        ? _buildSolveProgressPanel(j.solve_progress)
         : ""}
     <div>${j.mode} \u2022 ${j.output_name || "(batch)"}</div>
     <div>${j.started_at || j.created_at || ""}</div>
@@ -1728,7 +1794,7 @@ function renderLiveArtifacts(jobs) {
 // the project's known failure mode (launches post to routes the stale
 // process does not have and nothing queues); on mismatch or absence a loud
 // banner tells the user to restart the server process and reload.
-const EXPECTED_API_GENERATION = 20260801;
+const EXPECTED_API_GENERATION = 20260803;
 
 function _checkApiGeneration(meta) {
   const got = meta?.api_generation;
@@ -1973,6 +2039,25 @@ async function launchRun(ev) {
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
       alert("FGM Solve error: " + err.message);
+    }
+    return;
+  }
+
+  // schedule_cosolve (map + turntable program) uses a dedicated endpoint
+  if (mode === "schedule_cosolve") {
+    const btn = ev.target?.querySelector('[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = "Queuing…"; }
+    try {
+      await fetchJson("/api/tools/schedule-cosolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
+      await loadJobs();
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.textContent = "Launch Run"; }
+      alert("Schedule co-solve error: " + err.message);
     }
     return;
   }
@@ -2999,10 +3084,17 @@ function _setEngineVersionBadge(meta) {
 }
 
 async function _loadShapeStandards() {
+  // Single source: the server-side preset YAML files (presets/, served at
+  // /api/presets). The static standards JSON stays as the fallback for a
+  // pre-preset server process (promote, never remove).
   try {
-    state.shapeStandards = await fetchJson("/static/fgm_shape_standards.json");
+    state.shapeStandards = await fetchJson("/api/presets");
   } catch (e) {
-    state.shapeStandards = null;
+    try {
+      state.shapeStandards = await fetchJson("/static/fgm_shape_standards.json");
+    } catch (e2) {
+      state.shapeStandards = null;
+    }
   }
   _updateFgmShapeHint();
   _updateShapeStandardInfo();
@@ -3099,6 +3191,23 @@ function _initV2Promotions() {
     _updateShapeStandardInfo();
   });
   byId("applyShapeStandardBtn")?.addEventListener("click", _applyShapeStandard);
+
+  // Near-continuous turntable preset chip (v2 deferred item (d)): one click
+  // fills the fixed-step fields with the stored near-continuous schedule
+  // (15 degrees x 48 rotation events = two full turns,
+  // configs/diamond_tt_15deg_48rot_nearcont.yaml). Fixed-step fields only;
+  // the dwell-program select is left untouched.
+  byId("ttNearContChip")?.addEventListener("click", () => {
+    const set = (id, v) => { const e = byId(id); if (e) { e.value = String(v); e.dispatchEvent(new Event("input")); } };
+    set("turntableRotationDeg", 15);
+    set("turntableTotalRotations", 48);
+    const interval = byId("turntableIntervalS");
+    if (interval) { interval.value = ""; interval.dispatchEvent(new Event("input")); }
+    const info = byId("ttNearContInfo");
+    if (info) info.textContent =
+      "Applied: 15 deg per step, 48 events (two full turns), interval auto-spaced. " +
+      "Source: configs/diamond_tt_15deg_48rot_nearcont.yaml (near-continuous class).";
+  });
   byId("advGridNx")?.addEventListener("input", _updateGridWarning);
   byId("advGridNy")?.addEventListener("input", _updateGridWarning);
 

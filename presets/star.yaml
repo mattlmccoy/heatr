@@ -1,0 +1,26 @@
+engine_version_floor: 2.0.0
+generated_from: webui/static/fgm_shape_standards.json
+preset_version: 1
+shape: star
+shape_standard:
+  actuator_note: 'Rotation upgrade: turntable rotation alone reaches IoU 0.953 at
+    grid 120; the dopant map is inert for this shape (CONTINUOUS_ROTATION_REPORT,
+    commit b1cb582).'
+  quick_look_gain: 0.85
+  quick_look_verdict: neutral
+  solve_class: IMPROVED
+  solve_iou_4bpp: 0.7031802120141343
+  v_cal_v: 3223.45363052456
+sources:
+- v_cal
+- quick_look
+- solve_census
+- upgrades
+standard_parameters:
+  bpp: 4
+  enforce_generator_power: false
+  grid_nx: 120
+  grid_ny: 120
+  note: 'HEATR_STANDARD_PARAMETERS.md section 4: voltage drive for FGM comparisons,
+    grid 120, T_phi90 proxy, 4 bpp.'
+  proxy_field: T_phi90
