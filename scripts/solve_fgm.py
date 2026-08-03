@@ -444,7 +444,8 @@ def _resolve_warm_start(sc: FgmSolveConfig, case, cfg: dict, shape: str, log):
 
 def run_solve(config_path: str | Path, output_dir: str | Path,
               budget_override: float | None = None,
-              skip_verify: bool = False) -> dict:
+              skip_verify: bool = False,
+              intake_v2_json: str | Path | None = None) -> dict:
     """Run the production-recipe shape-fidelity solve on one shape config."""
     _ensure_import_paths()
     import numpy as np
@@ -698,6 +699,18 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
 
     res["wall_s"] = time.perf_counter() - t_start
     (out / "results.json").write_text(json.dumps(res, indent=2, default=float))
+
+    # --- print-package manifest fragment (FROZEN schema 2.0.0, section 7b) --
+    # The 2-D lane's contribution to the Studio print package: engine
+    # version stamp, plan block, correction provenance with the explicit
+    # three-state transfer record, the voltage power block, and the real
+    # (or explicitly not-run) production_verify record.
+    from scripts import package_fragment as pfrag
+    frag_path = pfrag.emit_fragment(out, results=res, cfg=cfg,
+                                    map_npz_path=npz_path, method="solve",
+                                    intake_v2_json=intake_v2_json)
+    log(f"print-package fragment (schema 2.0.0) -> {frag_path.name}")
+
     log(f"done in {res['wall_s']:.0f} s")
     return res
 
@@ -757,9 +770,17 @@ def main(argv: list[str] | None = None) -> int:
                          "full standard figure suite into production_verify/ "
                          "and checks the solve numbers). Default is ON; use "
                          "this flag only for fast iterations.")
+    ap.add_argument("--intake-v2-json", default=None,
+                    help="path to the geometry intake actuator classifier "
+                         "version 2 record for this shape, ONLY when the run "
+                         "came through the intake path; the print-package "
+                         "fragment then carries the classifier "
+                         "recommendation. Default: the fragment records the "
+                         "classifier as absent with the stated reason.")
     args = ap.parse_args(argv)
     run_solve(args.config, args.output_dir, budget_override=args.budget,
-              skip_verify=args.skip_verify)
+              skip_verify=args.skip_verify,
+              intake_v2_json=args.intake_v2_json)
     return 0
 
 
