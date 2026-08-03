@@ -1,7 +1,21 @@
 # heatr3d Workbench: the 3-D simulation operator surface
 
 Date: 2026-08-02
-Status: stage-1 design, awaiting Matt's review (no build until approved)
+Status: APPROVED with changes (Matt, 2026-08-02) - stage 2 build authorized.
+DECISION CHANGE vs section 3: Matt: "the current heatr3d tab is pretty
+useless. We should just write over top of that as long as we don't lose any
+real functionality there." The workbench therefore REPLACES THE HEATR-3D TAB
+IN PLACE in the existing GUI (webui/static/heatr3d.html + heatr3d.js and the
+tab's routes) instead of standing up a separate app. The clean-backend design
+survives: all new server logic lives in a heatr3d_workbench/ module mounted
+into rfam_gui_server.py; only the heatr3d tab's routes/templates/static are
+touched, never 2-D tab code (the 2-D lane has been notified). Functionality
+parity is guaranteed by the inventory in Appendix A - nothing real is lost
+silently. Other calls confirmed: Q2 honest tiers, wait for the additive
+snapshot hook (no checkpoint replay); Q3 run-grid nominal mask only; Q4
+sigma_T diagnostic-only; Q5 MERGE feat/shape-library-3d before the library
+screen (no vendored copies); Q6 badge wording "exploratory (S1-verified
+numerics, convergence bands pending)".
 Owner: 3-D / graduation lane
 Related: docs/superpowers/specs/2026-07-30-heatr3d-graduation-design.md (badge
 requirement), docs/superpowers/specs/2026-07-20-heatr3d-usability-design.md
@@ -395,3 +409,37 @@ Each step independently shippable; commits with explicit paths only.
 6. Badge wording: is the proposed "S1 verified (validity domain n<=96)" +
    exploratory chip the right public phrasing until S2, or should every
    heatr3d number carry the plain "exploratory" word until S2 passes?
+
+## Appendix A. Functionality-parity inventory (required by the in-place decision)
+
+Every capability of the current HEATR-3D tab (webui/static/heatr3d.html 273
+lines + heatr3d.js 389 lines, verified 2026-08-02), mapped to its replacement
+or explicitly deprecated. Nothing is dropped silently.
+
+| # | Current capability (citation) | Disposition in the workbench |
+|---|---|---|
+| 1 | Parametric shapes sphere/cone/cylinder/dumbbell + diam/zspan (heatr3d.html:144-160) | KEPT: LIBRARY screen retains the parametric block alongside the 14-shape library |
+| 2 | STL upload, base64-in-JSON, unvalidated (heatr3d.js:107-116) | REPLACED-IMPROVED: LIBRARY intake with loud typed refusal gates (watertight, planarity, zero volume, self-intersection, chamber fit) |
+| 3 | Grid n select 32/40/48/64, default 40 (heatr3d.html:172) | KEPT-EXTENDED: 32/48/64/96 with the 96 full-physics ceiling labeled; default 64. 40 dropped (non-standard grid, not in the standard set); 128 EQS-only mode DEFERRED with an explicit note |
+| 4 | FGM mode none/melt/density (heatr3d.html:174-178); magnitude supported by the job but hidden by the UI | KEPT: launch panel, with magnitude EXPOSED |
+| 5 | densify toggle, exposure_s, stop_mean_rho (heatr3d.html:181-189) | KEPT: launch panel |
+| 6 | Preview geometry (voxel count, dims, h) via /api/heatr3d/preview (heatr3d.js:121-133) | KEPT: same endpoint, plus the voxel-volume-vs-V* report |
+| 7 | Run + 4-step progress bar + 1.5 s status polling (heatr3d.js:135-164) | REPLACED-IMPROVED: on-disk queue + run rail with live march series (parsed from run(verbose=True) output); polling cadence kept |
+| 8 | three.js surface-voxel viewer, color by geometry/sat, electrode planes (heatr3d.js:48-76) | KEPT: STUDY screen 3-D view (plus the cutting plane) |
+| 9 | Post-sinter warp toggle, displacement-colored, /api/heatr3d/warp (heatr3d.js:79-94, 260-271) | KEPT: STUDY screen |
+| 10 | Grouped metric gauges: sigma_T, T_max, t90, dice, sintered frac, rho mean/std, shrink, warp, layers, solve time (heatr3d.js:183-215) | KEPT-REORGANIZED: STUDY metrics with trust badges; dice demoted below the new shape-metrics strip; sigma_T labeled sigma_T^3D diagnostic |
+| 11 | Layer slice viewer: z scrub, field select, play, colorbar, keyboard arrows (heatr3d.js:223-259) | KEPT-EXTENDED: axis select x/y/z for new runs (old runs have z-only slices and say so) |
+| 12 | Summary plots gallery, 7 plots (heatr3d.js:272-280) | KEPT: STUDY screen |
+| 13 | Past-run picker grouped by shape sorted by FGM (heatr3d.js:303-330, commit eb6f) | REPLACED-IMPROVED: run rail + run browser preserving shape grouping and FGM sort |
+| 14 | sigma_T compare bars panel (heatr3d.js:332-373, commit 26bab) | KEPT-DEMOTED: COMPARE screen diagnostic bar pair (Matt-confirmed Q4); the shape-metrics strip becomes the headline |
+| 15 | Deep link ?id= reopens a past run (heatr3d.js:388-389) | KEPT: ?run= deep link (old ?id= links redirect) |
+| 16 | Shared header, theme settings, nav tabs, nav job badge (heatr3d.html:92-128) | KEPT: unchanged shared chrome |
+
+Server endpoints preserved: /api/heatr3d/preview, /run, /status, /fields,
+/slice, /warp, /runs keep working (the new UI consumes them); new endpoints
+are added under /api/heatr3d/wb/* by the mounted module. heatr3d_job.py stays
+untouched as the legacy executor; new runs launch via workbench_job.py.
+
+Deprecated (with reason): the n=40 grid option (not in the standardized
+parameter set; historical n=40 runs still load and render); the silent
+sat-to-blue render fallback (replaced by an explicit state per the F7 intent).
