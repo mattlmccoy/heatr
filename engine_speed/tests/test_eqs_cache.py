@@ -11,6 +11,9 @@ otherwise need n >= 37 and a much slower test.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -21,6 +24,7 @@ from engine_speed.eqs_cache import (EqsCache, assemble_eqs,
                                     solve_eqs_3d_cached)
 
 P = h3.Params()
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _setup(n=24, diam=0.020, sat_seed=None):
@@ -297,3 +301,174 @@ def test_march_with_cache_is_bit_identical_to_heatr3d():
         assert np.array_equal(getattr(ref, name), getattr(b, name)), f"{name} (hit)"
     assert ref.phi_hist == a.phi_hist == b.phi_hist
     assert ref.energy_residual_frac == a.energy_residual_frac == b.energy_residual_frac
+
+
+# --------------------------------------------------------------------------- #
+# PER-JOB DISK SOLUTION STORE
+#
+# Only SOLUTIONS go to disk. SuperLU factorization objects are not picklable,
+# so the factorization cache stays in-memory only -- a fresh process re-ILUs.
+# --------------------------------------------------------------------------- #
+def test_disk_store_hits_from_a_cold_in_memory_cache(tmp_path):
+    """The package-verify case: a brand-new EqsCache (as a fresh process would
+    build) must serve from disk instead of re-solving."""
+    g, part, gamma = _setup(20)
+    store = tmp_path / "eqs_store"
+    c1 = EqsCache(store_dir=store)
+    v1 = solve_eqs_3d_cached(gamma, g, P, cache=c1)
+    assert c1.stats["solution_misses"] == 1
+    assert list(store.glob("*.npy")), "nothing was written to the store"
+
+    c2 = EqsCache(store_dir=store)          # cold memory, warm disk
+    v2 = solve_eqs_3d_cached(gamma, g, P, cache=c2)
+    assert c2.stats["disk_hits"] == 1
+    assert c2.stats["solution_misses"] == 0, "a disk hit must not count a miss"
+    assert np.array_equal(v1, v2)
+    assert np.array_equal(v2, h3.solve_eqs_3d(gamma, g, P))
+
+
+def test_disk_store_misses_on_a_changed_sat(tmp_path):
+    g, part, gamma_a = _setup(20)
+    _, _, gamma_b = _setup(20, sat_seed=11)
+    store = tmp_path / "eqs_store"
+    solve_eqs_3d_cached(gamma_a, g, P, cache=EqsCache(store_dir=store))
+    c2 = EqsCache(store_dir=store)
+    vb = solve_eqs_3d_cached(gamma_b, g, P, cache=c2)
+    assert c2.stats["disk_hits"] == 0, "changed sat produced a FALSE DISK HIT"
+    assert np.array_equal(vb, h3.solve_eqs_3d(gamma_b, g, P))
+
+
+def test_disk_store_misses_on_a_one_ulp_poisoned_key(tmp_path):
+    g, part, gamma = _setup(20)
+    store = tmp_path / "eqs_store"
+    solve_eqs_3d_cached(gamma, g, P, cache=EqsCache(store_dir=store))
+    poisoned = gamma.copy()
+    tgt = tuple(x // 2 for x in gamma.shape)
+    poisoned[tgt] = complex(np.nextafter(poisoned[tgt].real, np.inf),
+                            poisoned[tgt].imag)
+    c2 = EqsCache(store_dir=store)
+    solve_eqs_3d_cached(poisoned, g, P, cache=c2)
+    assert c2.stats["disk_hits"] == 0, "1-ULP change produced a FALSE DISK HIT"
+
+
+# ---- CORRUPTION GATE: never load garbage, and say so ----------------------- #
+def test_bit_flipped_payload_misses_loudly(tmp_path, caplog):
+    """A single flipped bit inside the stored V must be REFUSED. The payload
+    is hashed on write and re-verified on read precisely because .npy has no
+    checksum of its own -- a silent bit flip would otherwise be marched with."""
+    import logging
+    g, part, gamma = _setup(20)
+    store = tmp_path / "eqs_store"
+    v_ref = solve_eqs_3d_cached(gamma, g, P, cache=EqsCache(store_dir=store))
+    payload = sorted(store.glob("*.npy"))[0]
+    raw = bytearray(payload.read_bytes())
+    raw[-9] ^= 0x01                       # flip one bit in the data region
+    payload.write_bytes(bytes(raw))
+
+    c2 = EqsCache(store_dir=store)
+    with caplog.at_level(logging.ERROR):
+        v = solve_eqs_3d_cached(gamma, g, P, cache=c2)
+    assert c2.stats["disk_hits"] == 0, "loaded a CORRUPTED field"
+    assert c2.stats["disk_corrupt"] == 1
+    assert any("corrupt" in r.message.lower() for r in caplog.records), \
+        "corruption must be logged at ERROR, not swallowed"
+    assert np.array_equal(v, v_ref), "must fall back to a real solve"
+
+
+def test_truncated_payload_misses_loudly(tmp_path, caplog):
+    import logging
+    g, part, gamma = _setup(20)
+    store = tmp_path / "eqs_store"
+    v_ref = solve_eqs_3d_cached(gamma, g, P, cache=EqsCache(store_dir=store))
+    payload = sorted(store.glob("*.npy"))[0]
+    raw = payload.read_bytes()
+    payload.write_bytes(raw[:len(raw) // 2])      # torn write / full disk
+
+    c2 = EqsCache(store_dir=store)
+    with caplog.at_level(logging.ERROR):
+        v = solve_eqs_3d_cached(gamma, g, P, cache=c2)
+    assert c2.stats["disk_hits"] == 0
+    assert c2.stats["disk_corrupt"] == 1
+    assert np.array_equal(v, v_ref)
+
+
+def test_sidecar_key_mismatch_misses(tmp_path):
+    """Defence against a renamed / hand-copied payload: the sidecar records
+    the key it was written under and it must match the key being requested."""
+    import json as _json
+    g, part, gamma = _setup(20)
+    store = tmp_path / "eqs_store"
+    solve_eqs_3d_cached(gamma, g, P, cache=EqsCache(store_dir=store))
+    side = sorted(store.glob("*.json"))[0]
+    meta = _json.loads(side.read_text())
+    meta["key"] = "0" * len(meta["key"])
+    side.write_text(_json.dumps(meta))
+    c2 = EqsCache(store_dir=store)
+    solve_eqs_3d_cached(gamma, g, P, cache=c2)
+    assert c2.stats["disk_hits"] == 0, "key mismatch produced a FALSE HIT"
+
+
+def test_missing_sidecar_misses(tmp_path):
+    g, part, gamma = _setup(20)
+    store = tmp_path / "eqs_store"
+    solve_eqs_3d_cached(gamma, g, P, cache=EqsCache(store_dir=store))
+    sorted(store.glob("*.json"))[0].unlink()
+    c2 = EqsCache(store_dir=store)
+    solve_eqs_3d_cached(gamma, g, P, cache=c2)
+    assert c2.stats["disk_hits"] == 0
+
+
+def test_store_is_disabled_by_default():
+    g, part, gamma = _setup(20)
+    c = EqsCache()
+    assert c.store_dir is None
+    solve_eqs_3d_cached(gamma, g, P, cache=c)
+    assert c.stats["disk_hits"] == 0
+
+
+# ---- the headline claim: a FRESH PROCESS hits ------------------------------ #
+def test_fresh_process_hits_the_disk_store(tmp_path):
+    """Subprocess proof of the cross-process save. Run the identical solve in
+    two separate interpreters against a shared store: the second must report a
+    disk hit and return a bit-identical field."""
+    import subprocess
+    import sys
+    script = tmp_path / "one_solve.py"
+    script.write_text(
+        "import json, sys, numpy as np, heatr3d as h3\n"
+        "from engine_speed.eqs_cache import EqsCache, solve_eqs_3d_cached\n"
+        "store, outp = sys.argv[1], sys.argv[2]\n"
+        "g = h3.Grid(n=20)\n"
+        "part = h3.make_geometry(g, 'square', diam=0.020, zspan=0.020)\n"
+        "gamma = h3.build_gamma(part, h3.Params(), None)\n"
+        "c = EqsCache(store_dir=store)\n"
+        "import time; t0=time.perf_counter()\n"
+        "V = solve_eqs_3d_cached(gamma, g, h3.Params(), cache=c)\n"
+        "dt = time.perf_counter()-t0\n"
+        "np.save(outp + '.npy', V)\n"
+        "print('RESULT ' + json.dumps({'stats': c.stats, 'wall_s': dt}))\n")
+    store = tmp_path / "eqs_store"
+    env = {**__import__("os").environ, "PYTHONPATH": str(_REPO_ROOT),
+           "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1"}
+
+    def _run(tag):
+        r = subprocess.run([sys.executable, str(script), str(store),
+                            str(tmp_path / tag)],
+                           capture_output=True, text=True, env=env,
+                           cwd=str(_REPO_ROOT))
+        assert r.returncode == 0, r.stderr[-2000:]
+        line = [l for l in r.stdout.splitlines() if l.startswith("RESULT ")][0]
+        return json.loads(line[len("RESULT "):])
+
+    a = _run("a")
+    b = _run("b")
+    assert a["stats"]["solution_misses"] == 1, "first process should have solved"
+    assert a["stats"]["disk_hits"] == 0
+    assert b["stats"]["disk_hits"] == 1, "second PROCESS did not hit the store"
+    assert b["stats"]["solution_misses"] == 0
+    va = np.load(str(tmp_path / "a.npy"))
+    vb = np.load(str(tmp_path / "b.npy"))
+    assert np.array_equal(va, vb), "cross-process hit changed the field"
+    assert b["wall_s"] < a["wall_s"], (
+        f"disk hit ({b['wall_s']:.3f}s) was not faster than the solve "
+        f"({a['wall_s']:.3f}s)")

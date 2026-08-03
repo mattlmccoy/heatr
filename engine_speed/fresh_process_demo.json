@@ -1,0 +1,37 @@
+{
+  "n48": {
+    "n": 48,
+    "process1_wall_s": 8.280056249999689,
+    "process2_wall_s": 0.006413292001525406,
+    "saved_s": 8.273642957998163,
+    "speedup": 1291.0773824161245,
+    "process1_stats": {
+      "solution_hits": 0,
+      "solution_misses": 1,
+      "disk_hits": 0,
+      "disk_corrupt": 0,
+      "factorization_hits": 0,
+      "factorization_misses": 1,
+      "direct_solves": 0,
+      "iterative_solves": 1
+    },
+    "process2_stats": {
+      "solution_hits": 0,
+      "solution_misses": 0,
+      "disk_hits": 1,
+      "disk_corrupt": 0,
+      "factorization_hits": 0,
+      "factorization_misses": 0,
+      "direct_solves": 0,
+      "iterative_solves": 0
+    },
+    "process2_disk_hit": true,
+    "process2_solved_nothing": true,
+    "bit_identical_across_processes": true,
+    "store_entries": 1,
+    "store_bytes": 1769877
+  },
+  "env": {
+    "uptime": "17:47  up  5:37, 2 users, load averages: 15.09 13.79 11.37"
+  }
+}

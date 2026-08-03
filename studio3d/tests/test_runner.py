@@ -143,3 +143,58 @@ def test_fast_march_optin_is_bit_identical_and_labeled(box20_stl, tmp_path):
     assert fast["engine_march"] == "march_fast"
     assert "numba" in fast["env_provenance"]
     assert ref.get("engine_march", "heatr3d") == "heatr3d"
+
+
+# --------------------------------------------------------------------------- #
+# RECORDED ACCELERATION (engine-lane requirement)
+#
+# Silent acceleration is fine; UNRECORDED acceleration is not. Any run that
+# produces quoted numbers must say, in its own results dict, whether an EQS
+# cache was active and how many solves it actually avoided.
+# --------------------------------------------------------------------------- #
+def test_default_run_records_eqs_cache_explicitly_disabled(box20_stl, tmp_path):
+    """Absent is not good enough -- a reader must be able to tell 'no cache'
+    from 'nobody recorded it'."""
+    res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0)
+    assert "eqs_cache" in res, "eqs_cache provenance missing from a default run"
+    assert res["eqs_cache"]["enabled"] is False
+    on_disk = json.loads((tmp_path / "out" / "results.json").read_text())
+    assert on_disk["eqs_cache"]["enabled"] is False
+
+
+def test_fast_march_with_store_records_hits_and_misses(box20_stl, tmp_path):
+    """A cold run misses; an identical re-run against the same per-job store
+    hits. Both counts must land in results.json next to env_provenance."""
+    store = tmp_path / "grade" / "heatr3d" / "eqs_store"
+    cold = run_densify(str(box20_stl), tmp_path / "a", n=16, max_time_s=2.0,
+                       fast_march=True, eqs_store_dir=store)
+    assert cold["eqs_cache"]["enabled"] is True
+    assert cold["eqs_cache"]["store"] == str(store)
+    assert cold["eqs_cache"]["misses"] == 1
+    assert cold["eqs_cache"]["hits"] == 0
+
+    warm = run_densify(str(box20_stl), tmp_path / "b", n=16, max_time_s=2.0,
+                       fast_march=True, eqs_store_dir=store)
+    assert warm["eqs_cache"]["hits"] == 1, "identical re-run did not hit"
+    assert warm["eqs_cache"]["misses"] == 0
+    # and the acceleration must not have changed a single number
+    with np.load(tmp_path / "a" / "fields.npz") as a, \
+         np.load(tmp_path / "b" / "fields.npz") as b:
+        for key in ("T_phi90", "phi_final", "rho_final", "Qrf"):
+            assert np.array_equal(a[key], b[key]), key
+    assert json.loads(
+        (tmp_path / "b" / "results.json").read_text())["eqs_cache"]["hits"] == 1
+
+
+def test_fast_march_without_store_records_memory_only(box20_stl, tmp_path):
+    res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0,
+                      fast_march=True)
+    assert res["eqs_cache"]["enabled"] is True
+    assert res["eqs_cache"]["store"] is None
+    assert res["eqs_cache"]["misses"] == 1
+
+
+def test_eqs_cache_record_survives_strict_json(box20_stl, tmp_path):
+    res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0,
+                      fast_march=True, eqs_store_dir=tmp_path / "store")
+    json.dumps(res, allow_nan=False)

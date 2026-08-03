@@ -61,8 +61,22 @@ def reconstruct_sat_stack(job_dir: str | Path
 def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
                    tiff_job_dir: str | Path,
                    max_time_s: float = 1500.0,
-                   stop_mean_rho: float | None = 0.98) -> Dict[str, Any]:
-    """Reconstruct -> transfer -> densify -> record. Never silent."""
+                   stop_mean_rho: float | None = 0.98,
+                   fast_march: bool = False,
+                   eqs_store_dir: str | Path | None = None) -> Dict[str, Any]:
+    """Reconstruct -> transfer -> densify -> record. Never silent.
+
+    eqs_store_dir: the originating job's <grade_dir>/heatr3d/eqs_store. A
+    re-verify of the SAME emitted rasters reproduces the same sat volume and
+    therefore the same gamma, so the EQS solve is served from the store even
+    though this is a fresh process. Only takes effect with fast_march=True
+    (the only path that accepts a cache); both default off.
+
+    Note this verify normally MISSES on a first run: the rasters are
+    re-quantized, so its sat differs from the corrected arm's. That is the
+    intended behaviour -- a hit there would mean the cache had ignored a real
+    change to the dopant map.
+    """
     pkg = Path(pkg_dir)
     rec: Dict[str, Any]
     try:
@@ -77,7 +91,9 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
                           arm="corrected", sat_path=str(sat_path),
                           correction_engine="emitted_rasters",
                           max_time_s=max_time_s,
-                          stop_mean_rho=stop_mean_rho)
+                          stop_mean_rho=stop_mean_rho,
+                          fast_march=fast_march,
+                          eqs_store_dir=(eqs_store_dir if fast_march else None))
         g = res["gates"]
         gates_ok = bool(g["energy_residual_ok"] and g["T_ceiling_ok"]
                         and not g["clamp_bound"])
@@ -85,7 +101,11 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
                "transfer": {k: v for k, v in tr.items() if k != "sat"},
                "grid_n": n, "gates": g, "gates_ok": gates_ok,
                "sigma_T": res["sigma_T"],
-               "rho_final_mean": res.get("rho_final_mean")}
+               "rho_final_mean": res.get("rho_final_mean"),
+               # recorded acceleration travels with the verify record too
+               "engine_march": res.get("engine_march"),
+               "env_provenance": res.get("env_provenance"),
+               "eqs_cache": res.get("eqs_cache")}
     except Exception as e:
         rec = {"run": True, "source": "emitted_rasters", "gates_ok": False,
                "error": f"verification failed: {e}"}

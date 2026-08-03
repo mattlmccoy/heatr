@@ -6,10 +6,12 @@ modified, not monkeypatched, and not imported from `heatr3d_s2/`.
 | item | status |
 |---|---|
 | **§2–5 numba thermal march** | bit-identity gate PASSED (8/8 exact). Speed **5.9x** at n=48 / **6.3x** at n=96, against a 10x bar — **target NOT met**. Blessed by the engine lane as an opt-in; wired into studio3d behind `fast_march=True`. |
-| **§6 EQS cache** | gate PASSED (20 tests). Saves **8.26 s** per hit at n=48 and **195.50 s** at n=96; the corrected (AFTER) arm correctly MISSES. The renorm shortcut is **rejected with measurements**. |
+| **§6 EQS cache** | gate PASSED (29 tests). Saves **8.26 s** per hit at n=48 and **195.50 s** at n=96; the corrected (AFTER) arm correctly MISSES. The renorm shortcut is **rejected with measurements**. |
+| **§6.6-6.7 disk store + recorded acceleration** | gate PASSED. A **fresh process** hits the per-job store: 8.280 s -> 0.0064 s, bit-identical, zero solves. Corruption (truncation, bit flip, key mismatch) MISSES loudly. Every run records `eqs_cache` hits/misses in `results.json`. |
 
 All numbers below are quoted from recorded JSON (`gate_results_n32.json`,
-`bench_results.json`, `eqs_cache_bench.json`), not transcribed by hand.
+`bench_results.json`, `eqs_cache_bench.json`, `fresh_process_demo.json`), not
+transcribed by hand.
 
 ---
 
@@ -23,7 +25,11 @@ All numbers below are quoted from recorded JSON (`gate_results_n32.json`,
 | `gate.py` | parity harness; writes `gate_results_n32.json` |
 | `bench.py` | march-only benchmark; writes `bench_results.json` |
 | `profile_march.py` | per-stage profile |
-| `tests/test_parity_gate.py` | red-first gate test (12 tests, all passing) |
+| `eqs_cache.py` | content-addressed EQS solution/factorization cache + `DiskSolutionStore` |
+| `bench_eqs_cache.py` | Express-scenario cache benchmark; writes `eqs_cache_bench.json` |
+| `demo_fresh_process.py` | two-subprocess cross-process store demo; writes `fresh_process_demo.json` |
+| `tests/test_parity_gate.py` | red-first march gate (12 tests) |
+| `tests/test_eqs_cache.py` | red-first cache gate (29 tests) |
 
 Supported envelope (anything else raises `UnsupportedConfig`, it does not
 silently run different physics): `power_schedule=None`, no heatsink field, no
@@ -367,14 +373,94 @@ toward the catastrophic failure mode (a false hit):
   every field including `phi_hist` and `energy_residual_frac`, on both the miss
   and the hit.
 
-### 6.6 What the cache does NOT do
+### 6.6 Per-job disk solution store (`DiskSolutionStore`)
 
-* **No cross-process persistence.** The cache is in-memory only, so a
-  package-verify in a *fresh process* still pays the full solve. SuperLU objects
-  are not picklable; a disk-backed **solution** store would work (V is 1.7 MB at
-  n=48, 14 MB at n=96) and is the obvious next increment, but it adds filesystem
-  side effects and was not built without a decision on where it should live.
+Approved location: `<grade_dir>/heatr3d/eqs_store/`. **Off by default**
+everywhere; only reachable via `fast_march=True`, the only path that takes an
+`EqsCache`.
+
+**Solutions only.** SuperLU/ILU objects are not picklable, so the factorization
+cache stays in memory and a fresh process still rebuilds the ILU on a genuine
+miss. Only exact repeats are free.
+
+One pair of files per key: `<key>.npy` (raw complex128 V) + `<key>.json`
+(format, key, payload blake2b, shape, dtype, engine fingerprint).
+
+**Why `.npy` and not `.npz`.** A `.npy` payload has no checksum of its own,
+which is exactly what makes the sidecar hash load-bearing: a flipped bit in the
+data region loads without complaint and would otherwise be marched with. A
+`.npz` would hide that behind the zip CRC and the corruption gate would never
+actually be exercised — an untested corruption gate is not a corruption gate.
+
+**Corruption policy — never load garbage, and say so.** Missing sidecar,
+missing payload, key mismatch, shape/dtype mismatch, payload-hash mismatch, or
+an unreadable file are each logged at **ERROR**, counted in `disk_corrupt`, and
+treated as a **MISS** that falls back to a real solve. Writes are atomic
+(tmp + `os.replace`) with the payload written *before* the sidecar, so a torn
+write leaves a sidecar-less payload, which misses. A read-only or full disk
+degrades to memory-only with a warning rather than killing a run that would
+otherwise have succeeded.
+
+**Campaign-level shared store: deliberately NOT built** (deferred by the engine
+lane). A campaign that wants one points `store_dir` at a shared directory
+explicitly.
+
+#### Fresh-process demonstration
+
+`demo_fresh_process.py` → `fresh_process_demo.json`: two separate interpreters,
+one shared store. Process 2 must report a disk hit, perform **zero** solves,
+and return a bit-identical field. The subprocess test
+(`test_fresh_process_hits_the_disk_store`) asserts all three, not just the
+timing.
+
+Recorded at **n=48**, single-threaded, load-checked (load 17.8, one competing
+heavy solve):
+
+| | |
+|---|---|
+| process 1 (cold solve) | **8.280 s** |
+| process 2 (fresh interpreter, disk hit) | **0.0064 s** |
+| **saved** | **8.274 s (1291x)** |
+| process 2 disk hit / solves performed | yes / **0** |
+| bit-identical across processes | **yes** |
+| store size on disk | 1.8 MB |
+
+This is the package-verify claim demonstrated end to end: a fresh process no
+longer pays for the EQS solve when gamma is identical.
+
+### 6.7 Recorded acceleration
+
+Engine-lane requirement: silent acceleration is fine, **unrecorded acceleration
+is not**. `studio3d.runner.run_densify` now always writes an `eqs_cache` block
+into `results.json` next to `engine_march` / `env_provenance`:
+
+```json
+"eqs_cache": {"enabled": true, "store": "<grade_dir>/heatr3d/eqs_store",
+              "hits": 1, "misses": 0,
+              "memory_hits": 0, "disk_hits": 1, "disk_corrupt": 0}
+```
+
+A default (reference-march) run records `{"enabled": false}` **explicitly** —
+"no cache" must never be confusable with "nobody recorded it", which is what a
+missing key would mean. `hits` and `misses` always sum to the number of EQS
+solves requested, because the lookup increments exactly one counter per call.
+`disk_corrupt` surfaces any refused entry, so a silently rotting store shows up
+in the results rather than only in a log nobody reads.
+
+`eqs_store_dir` passed *without* `fast_march=True` is ignored with an explicit
+warning and still records `enabled: false`, rather than pretending to
+accelerate. `package_verify` carries `engine_march`, `env_provenance` and
+`eqs_cache` into its verify record too.
+
+Note a first package-verify normally **misses**: the emitted rasters are
+re-quantized, so its `sat` differs from the corrected arm's. A hit there would
+mean the cache had ignored a real change to the dopant map.
+
+### 6.8 What the cache does NOT do
+
 * **No direct-path factorization reuse** (see 6.2 — `splu` ≠ `spsolve` bitwise).
+* **No cross-process factorization reuse.** Only solutions persist; a fresh
+  process rebuilds the ILU on a genuine miss.
 * **No CG/AMG.** That is the other lane's; not prototyped here.
 * **It does not make S4 coupled re-solves cheap** when the coefficients are
   nonzero. That is a genuine physics change, not a cache miss to be optimised
@@ -387,12 +473,14 @@ toward the catastrophic failure mode (a false hit):
 ```bash
 cd <repo root>
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMBA_NUM_THREADS=1
-.venv312/bin/python -m pytest engine_speed/tests -q      # 32 tests (~6 min)
+.venv312/bin/python -m pytest engine_speed/tests -q      # 41 tests (~6 min)
 .venv312/bin/python -m engine_speed.gate 32              # -> gate_results_n32.json
 .venv312/bin/python -m engine_speed.bench                # -> bench_results.json
 .venv312/bin/python -m engine_speed.profile_march 48     # per-stage profile
 # EQS cache bench: n=96 takes ~6 min of real solves. --no-n96 to skip.
 .venv312/bin/python -m engine_speed.bench_eqs_cache      # -> eqs_cache_bench.json
+# cross-process disk-store demo (two subprocesses, one shared store)
+.venv312/bin/python -m engine_speed.demo_fresh_process 48  # -> fresh_process_demo.json
 ```
 
 Pinned: **numba 0.66.0, llvmlite 0.48.0** (installed into `.venv312`),

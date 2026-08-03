@@ -117,12 +117,23 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                 stop_mean_rho: Optional[float] = 0.98,
                 power_density_w_per_m3: Optional[float] = None,
                 correction_engine: Optional[str] = None,
-                fast_march: bool = False) -> Dict[str, Any]:
+                fast_march: bool = False,
+                eqs_store_dir: Optional[str | Path] = None) -> Dict[str, Any]:
     """One densify=True heatr3d march + the standard artifact set.
 
     sat_path: optional npz with a (n, n, n) ``sat`` array (the corrected
     arm's dopant volume, already on this grid). correction_engine labels
     which engine produced that map; required when sat_path is given.
+
+    eqs_store_dir: optional per-job directory for the EQS solution store
+    (the Studio passes ``<grade_dir>/heatr3d/eqs_store``). Only meaningful
+    together with fast_march=True, which is the only path that takes an
+    EqsCache; it is IGNORED with an explicit warning otherwise rather than
+    silently pretending to accelerate. Default None everywhere.
+
+    Recorded acceleration: results["eqs_cache"] always states whether a cache
+    was active and, when it was, how many solves it hit and missed. Silent
+    acceleration is fine; unrecorded acceleration is not.
     """
     if n > N_MAX:
         raise ValueError(f"grid n={n} exceeds the enforced ceiling {N_MAX}")
@@ -150,19 +161,44 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
     t0 = time.time()
     env_provenance = None
     engine_march = "heatr3d"
+    # Recorded acceleration: explicitly DISABLED unless a cache is actually
+    # constructed below. "absent" and "off" must never be confusable.
+    eqs_cache_record: Dict[str, Any] = {"enabled": False}
     if fast_march:
         # engine-lane blessed opt-in (2026-08-03): bit-identical by gate,
         # so results carry no caveat; env pins recorded (the
         # scipy-downgrade lesson)
         import llvmlite
         import numba
+        from engine_speed.eqs_cache import EqsCache
         from engine_speed.march_fast import march_fast as _march
         engine_march = "march_fast"
         env_provenance = {"numba": numba.__version__,
                           "llvmlite": llvmlite.__version__}
+        cache = EqsCache(store_dir=eqs_store_dir)
         r = _march(grid, part, p, sat=sat, max_time_s=float(max_time_s),
-                   densify=True, stop_mean_rho=stop_mean_rho, verbose=True)
+                   densify=True, stop_mean_rho=stop_mean_rho, verbose=True,
+                   eqs_cache=cache)
+        st = cache.stats
+        eqs_cache_record = {
+            "enabled": True,
+            "store": (str(eqs_store_dir) if eqs_store_dir is not None else None),
+            # hits = solves avoided, from either tier; misses = solves actually
+            # performed. The two always sum to the number of EQS solves asked for.
+            "hits": int(st["solution_hits"] + st["disk_hits"]),
+            "misses": int(st["solution_misses"]),
+            "memory_hits": int(st["solution_hits"]),
+            "disk_hits": int(st["disk_hits"]),
+            # a nonzero count here means a stored field was REFUSED as corrupt
+            # and re-solved -- visible, never silent
+            "disk_corrupt": int(st["disk_corrupt"]),
+        }
     else:
+        if eqs_store_dir is not None:
+            logger.warning(
+                "eqs_store_dir=%s was given without fast_march=True; the "
+                "reference march does not take a cache, so it is IGNORED "
+                "and results.json records eqs_cache disabled.", eqs_store_dir)
         # verbose march lines feed the Studio's live progress bars
         r = H.run(grid, part, p, sat=sat, max_time_s=float(max_time_s),
                   densify=True, stop_mean_rho=stop_mean_rho, verbose=True)
@@ -182,6 +218,7 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         "engine": ENGINE_LABEL,
         "engine_march": engine_march,
         "env_provenance": env_provenance,
+        "eqs_cache": eqs_cache_record,
         "trust_badge": TRUST_BADGE,
         "arm": str(arm),
         "correction_engine": correction_engine,

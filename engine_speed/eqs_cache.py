@@ -61,13 +61,25 @@ FACTORIZATION CACHE ENTRIES ARE LARGE. An ILU at n=48 with fill_factor=12 is
 order 10^7 complex nonzeros (~250 MB); at n=96 heatr3d's own note records
 2.21 GB for the solve. ``max_factorizations`` therefore defaults to 1. Raise it
 only if you know the memory is there.
+
+  * Optional PER-JOB DISK STORE of solutions only (``DiskSolutionStore``), so a
+    package-verify in a FRESH PROCESS hits instead of re-solving. Factorizations
+    stay in memory (SuperLU objects are not picklable), so a fresh process still
+    rebuilds the ILU on a genuine miss. Every stored payload carries a blake2b
+    hash that is re-verified on read: a truncated or bit-flipped file MISSES
+    loudly and is never loaded. Off by default; a campaign-level SHARED store is
+    deliberately not built in (point ``store_dir`` at a shared directory to get
+    one explicitly).
 """
 from __future__ import annotations
 
 import hashlib
 import inspect
+import json
 import logging
+import os
 from collections import OrderedDict
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -78,8 +90,9 @@ import heatr3d as h3
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["EqsCache", "assemble_eqs", "solve_eqs_3d_cached",
-           "solver_fingerprint", "scale_invariance_deviation"]
+__all__ = ["EqsCache", "DiskSolutionStore", "assemble_eqs",
+           "solve_eqs_3d_cached", "solver_fingerprint",
+           "scale_invariance_deviation"]
 
 # Bump when the ASSEMBLY PORT below changes in a way that could alter results.
 _PORT_VERSION = "engine_speed.eqs_cache/1"
@@ -189,37 +202,160 @@ def _solution_key(matrix_key: str, p: h3.Params) -> str:
     return hsh.hexdigest()
 
 
+class DiskSolutionStore:
+    """Per-job on-disk store of EQS SOLUTIONS (V vectors).
+
+    ONLY solutions go to disk. SuperLU/ILU objects are not picklable, so the
+    factorization cache is in-memory only and a fresh process re-builds it.
+
+    Layout, one pair of files per key:
+        <key>.npy   -- the raw complex128 V array
+        <key>.json  -- {format, key, payload_blake2b, shape, dtype, ...}
+
+    WHY NOT .npz. A .npy payload has no checksum of its own, which makes the
+    sidecar hash below genuinely load-bearing: a flipped bit inside the data
+    region loads without complaint and would otherwise be marched with. A .npz
+    would hide that behind the zip CRC and this gate would never actually be
+    exercised -- an untested corruption gate is not a corruption gate.
+
+    CORRUPTION POLICY: any anomaly -- missing sidecar, key mismatch, shape or
+    dtype mismatch, payload-hash mismatch, unreadable file -- is logged at
+    ERROR and treated as a MISS. The store never returns a field it cannot
+    prove is the one it wrote. A miss costs a solve; a false hit corrupts a
+    result.
+
+    Writes are atomic (tmp + os.replace), payload BEFORE sidecar, so a torn
+    write leaves a sidecar-less payload, which misses.
+    """
+
+    FORMAT = 1
+
+    def __init__(self, root: str | Path):
+        self.root = Path(root)
+
+    def _paths(self, key: str) -> tuple[Path, Path]:
+        return self.root / f"{key}.npy", self.root / f"{key}.json"
+
+    @staticmethod
+    def _payload_hash(V: np.ndarray) -> str:
+        return hashlib.blake2b(np.ascontiguousarray(V).tobytes(),
+                               digest_size=16).hexdigest()
+
+    def get(self, key: str) -> tuple[np.ndarray | None, bool]:
+        """Return (V, corrupt). V is None on any miss; ``corrupt`` separates
+        'not present' from 'present but REFUSED'."""
+        pay, side = self._paths(key)
+        if not pay.exists() and not side.exists():
+            return None, False
+        try:
+            if not side.exists():
+                raise ValueError("sidecar missing (torn write?)")
+            if not pay.exists():
+                raise ValueError("payload missing")
+            meta = json.loads(side.read_text())
+            if meta.get("format") != self.FORMAT:
+                raise ValueError(f"unknown store format {meta.get('format')!r}")
+            if meta.get("key") != key:
+                raise ValueError("sidecar key does not match the requested key")
+            V = np.load(pay, allow_pickle=False)
+            if list(V.shape) != list(meta["shape"]):
+                raise ValueError(f"shape {V.shape} != recorded {meta['shape']}")
+            if str(V.dtype) != meta["dtype"]:
+                raise ValueError(f"dtype {V.dtype} != recorded {meta['dtype']}")
+            got = self._payload_hash(V)
+            if got != meta["payload_blake2b"]:
+                raise ValueError(
+                    f"payload hash {got} != recorded {meta['payload_blake2b']}")
+        except Exception as exc:
+            logger.error(
+                "EQS disk store: REFUSING a CORRUPT or unreadable entry for "
+                "key %s... (%s). Falling back to a full solve; the files are "
+                "left in place under %s for inspection.",
+                key[:16], exc, self.root)
+            return None, True
+        return V, False
+
+    def put(self, key: str, V: np.ndarray) -> None:
+        pay, side = self._paths(key)
+        try:
+            self.root.mkdir(parents=True, exist_ok=True)
+            V = np.ascontiguousarray(V)
+            tmp_pay = pay.with_suffix(".npy.tmp")
+            with open(tmp_pay, "wb") as fh:
+                np.save(fh, V, allow_pickle=False)
+            os.replace(tmp_pay, pay)                       # payload first
+            meta = {"format": self.FORMAT, "key": key,
+                    "payload_blake2b": self._payload_hash(V),
+                    "shape": list(V.shape), "dtype": str(V.dtype),
+                    "engine_fingerprint": solver_fingerprint()}
+            tmp_side = side.with_suffix(".json.tmp")
+            tmp_side.write_text(json.dumps(meta, indent=2))
+            os.replace(tmp_side, side)                     # sidecar last
+        except OSError as exc:
+            # A read-only or full disk must degrade to memory-only, not kill a
+            # run that was going to succeed anyway.
+            logger.warning("EQS disk store: could not write %s (%s); "
+                           "continuing memory-only", pay, exc)
+
+
 class EqsCache:
-    """In-memory LRU cache of EQS solutions and ILU factorizations.
+    """In-memory LRU cache of EQS solutions and ILU factorizations, with an
+    optional per-job disk store for the solutions.
 
     ``max_factorizations`` defaults to 1 because a single ILU is hundreds of MB
     at production grid sizes (see the module docstring).
+
+    store_dir: optional directory for the disk SOLUTION store (the Studio
+    passes ``<grade_dir>/heatr3d/eqs_store``). None = memory only. A
+    campaign-level SHARED store is deliberately not built in; a caller that
+    wants one points store_dir at a shared directory explicitly.
     """
 
-    def __init__(self, max_solutions: int = 8, max_factorizations: int = 1):
+    def __init__(self, max_solutions: int = 8, max_factorizations: int = 1,
+                 store_dir: str | Path | None = None):
         self.max_solutions = int(max_solutions)
         self.max_factorizations = int(max_factorizations)
+        self.store_dir = Path(store_dir) if store_dir is not None else None
+        self._store = (DiskSolutionStore(self.store_dir)
+                       if self.store_dir is not None else None)
         self._sol: OrderedDict[str, np.ndarray] = OrderedDict()
         self._fac: OrderedDict[str, Any] = OrderedDict()
         self.stats = {"solution_hits": 0, "solution_misses": 0,
+                      "disk_hits": 0, "disk_corrupt": 0,
                       "factorization_hits": 0, "factorization_misses": 0,
                       "direct_solves": 0, "iterative_solves": 0}
 
     # -- solutions -------------------------------------------------------- #
-    def get_solution(self, key: str) -> np.ndarray | None:
+    def lookup_solution(self, key: str) -> np.ndarray | None:
+        """Memory tier, then disk tier. Increments EXACTLY ONE of
+        solution_hits (memory), disk_hits (disk) or solution_misses (neither,
+        i.e. a real solve is about to happen), so the recorded counts add up."""
         v = self._sol.get(key)
-        if v is None:
-            self.stats["solution_misses"] += 1
-            return None
-        self._sol.move_to_end(key)
-        self.stats["solution_hits"] += 1
-        return v.copy()          # callers must not be able to poison the cache
+        if v is not None:
+            self._sol.move_to_end(key)
+            self.stats["solution_hits"] += 1
+            return v.copy()      # callers must not be able to poison the cache
+        if self._store is not None:
+            v, corrupt = self._store.get(key)
+            if corrupt:
+                self.stats["disk_corrupt"] += 1
+            if v is not None:
+                self._promote(key, v)
+                self.stats["disk_hits"] += 1
+                return v.copy()
+        self.stats["solution_misses"] += 1
+        return None
 
-    def put_solution(self, key: str, V: np.ndarray) -> None:
-        self._sol[key] = V.copy()
+    def _promote(self, key: str, V: np.ndarray) -> None:
+        self._sol[key] = V
         self._sol.move_to_end(key)
         while len(self._sol) > self.max_solutions:
             self._sol.popitem(last=False)
+
+    def put_solution(self, key: str, V: np.ndarray) -> None:
+        self._promote(key, V.copy())
+        if self._store is not None:
+            self._store.put(key, V)
 
     # -- factorizations --------------------------------------------------- #
     def get_factorization(self, key: str):
@@ -259,7 +395,7 @@ def solve_eqs_3d_cached(gamma: np.ndarray, grid: h3.Grid, p: h3.Params,
     mkey = _matrix_key(gamma, grid, use_iter)
     skey = _solution_key(mkey, p)
 
-    V = cache.get_solution(skey)
+    V = cache.lookup_solution(skey)
     if V is not None:
         return V
 
