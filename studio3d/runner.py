@@ -64,6 +64,24 @@ def voxelize_stl(mesh_path: str, n: int, chamber_m: float = CHAMBER_M
     return part
 
 
+def _finite(v: Any) -> Any:
+    """Strict-JSON sanitizer: non-finite floats become None, recursively.
+
+    NaN survives Python's json.dumps but breaks every browser JSON.parse;
+    a never-reached t_phi90_s must arrive as null, never NaN."""
+    if isinstance(v, dict):
+        return {k: _finite(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_finite(x) for x in v]
+    if isinstance(v, (float, np.floating)):
+        return float(v) if np.isfinite(v) else None
+    if isinstance(v, (np.integer,)):
+        return int(v)
+    if isinstance(v, (np.bool_,)):
+        return bool(v)
+    return v
+
+
 def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                 sat_path: Optional[str] = None, arm: str = "uncorrected",
                 max_time_s: float = 1500.0,
@@ -132,6 +150,8 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         sh = H.shrinkage_analysis(r, p, grid.h)
         results.update({k: v for k, v in sh.items()
                         if not k.startswith("_")})
+
+    results = _finite(results)
 
     np.savez_compressed(
         out / "fields.npz", part=part,

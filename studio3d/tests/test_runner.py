@@ -72,3 +72,10 @@ def test_run_densify_writes_the_artifact_set(box20_stl, tmp_path):
     assert "rho_final" in meta["fields"]
     assert (out / "slices").is_dir()
     assert res["phi_hist_len"] > 0
+    # results must be STRICT JSON: a 2 s horizon never reaches phi90, so
+    # t_phi90_s is non-finite in the raw Result; NaN in the file breaks
+    # every browser JSON.parse downstream (found live: /grade/status 500)
+    on_disk = json.loads((out / "results.json").read_text())
+    json.dumps(on_disk, allow_nan=False)
+    assert on_disk["t_phi90_s"] is None
+    json.dumps(res, allow_nan=False)
