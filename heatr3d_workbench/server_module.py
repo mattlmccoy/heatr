@@ -200,6 +200,13 @@ def validate_cfg(cfg: Dict[str, Any]) -> Tuple[bool, str]:
         return False, "source=stl requires an accepted intake upload first"
     if src == "parametric" and not cfg.get("shape"):
         return False, "source=parametric requires a shape"
+    base = cfg.get("baseline_run_id")
+    if base:
+        if "/" in str(base) or ".." in str(base):
+            return False, "invalid baseline_run_id"
+        if not (H3D_OUT / str(base) / "fields.npz").exists():
+            return False, (f"baseline run '{base}' has no fields.npz on disk "
+                           f"(comparison figures need its volumes)")
     return True, ""
 
 
@@ -207,7 +214,7 @@ _CFG_KEYS = ("source", "shape", "library_shape", "stl", "stl_name", "diam",
              "zspan", "n", "fgm", "magnitude", "densify", "exposure_s",
              "stop_mean_rho", "phase_update", "power_density_w_per_m3",
              "eqs_update_interval_s", "sigma_temp_coeff_per_K",
-             "sigma_density_coeff", "snapshots")
+             "sigma_density_coeff", "snapshots", "baseline_run_id")
 
 
 def enqueue(payload: Dict[str, Any]) -> Dict[str, Any]:

@@ -216,6 +216,7 @@ function buildCfg() {
   const eqs = parseFloat($("eqsInterval").value), st = parseFloat($("sigmaTemp").value);
   if (eqs > 0) cfg.eqs_update_interval_s = eqs;
   if (st !== 0) cfg.sigma_temp_coeff_per_K = st;
+  if ($("baselineRun").value) cfg.baseline_run_id = $("baselineRun").value;
   if (src === "library") cfg.library_shape = state.selectedShape;
   if (src === "parametric") {
     cfg.shape = $("shapeSel").value;
@@ -312,6 +313,7 @@ function runLabel(r) {
 async function loadRuns() {
   try { state.runs = await (await fetch("/api/heatr3d/runs")).json(); } catch (e) { state.runs = []; }
   fillRunPicker($("studyRunSel"), "pick a run...");
+  fillRunPicker($("baselineRun"), "none");
   fillComparePickers();
 }
 function fillRunPicker(sel, placeholder) {
@@ -626,7 +628,9 @@ function wireTime(d) {
 function wirePlots(d) {
   const gal = $("wbPlots");
   gal.innerHTML = "";
-  const plots = ["melt_vs_cad", "ortho_slices", "melt_progression", "fgm_z_profile",
+  const plots = ["fig_dopant_cutaway", "fig_layer_stack", "fig_density_temperature",
+    "fig_vs_baseline", "fig_what_changed",
+    "melt_vs_cad", "ortho_slices", "melt_progression", "fgm_z_profile",
     "temperature_hist", "density_hist", "radial_density"];
   for (const name of plots) {
     const img = document.createElement("img");

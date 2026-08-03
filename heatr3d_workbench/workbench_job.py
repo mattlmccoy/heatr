@@ -421,6 +421,10 @@ def _do_rerender(cfg_path: Path) -> None:
                           zz["phi"].astype(float)))
         if snaps:
             _write_snapshots(out, snaps, part, h_m)
+    cfg = json.loads((out / "config.json").read_text()) if (out / "config.json").exists() else {}
+    results = json.loads((out / "results.json").read_text()) if (out / "results.json").exists() else {}
+    from heatr3d_workbench import runfigs
+    runfigs.render_run_figs(out, cfg, results)
     print("RERENDER_OK", flush=True)
 
 
@@ -563,6 +567,14 @@ def main(argv: List[str]) -> None:
         LJ._write_warped_geometry(out, part, r.rho_final, p, grid)
     if snaps:
         _write_snapshots(out, snaps, part, grid.h)
+
+    # Per-run figure set LAST (style3d mutates rcParams; see runfigs docstring)
+    from heatr3d_workbench import runfigs
+    try:
+        runfigs.render_run_figs(out, cfg, results)
+    except Exception as e:  # figures must never fail the run  # noqa: BLE001
+        logger.error("run-figure rendering failed: %s", e)
+        print(f"RUNFIGS_FAILED {e}", flush=True)
 
     print("PROGRESS 100", flush=True)
     print("RESULTS " + json.dumps(results), flush=True)
