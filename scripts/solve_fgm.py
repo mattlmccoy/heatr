@@ -58,6 +58,13 @@ def _ensure_import_paths() -> None:
         if p not in sys.path:
             sys.path.insert(0, p)
 
+
+def _engine_version() -> str:
+    """The single source of truth: ``rfam_eqs_coupled.ENGINE_VERSION``."""
+    _ensure_import_paths()
+    import rfam_eqs_coupled as rfam
+    return str(rfam.ENGINE_VERSION)
+
 # ---------------------------------------------------------------------------
 # fgm_solve config block (pure logic, unit tested in test_solve_fgm.py)
 # ---------------------------------------------------------------------------
@@ -68,7 +75,20 @@ _ALLOWED_KEYS = {
     "warm_start",
     "eps_channel_model_only",
     "bpp",
+    # v2.1.0
+    "stop_rule",
+    "w_out",
+    "density_floor_rho_rel",
+    "optimizer",
+    "objective_rescale",
 }
+
+# The band the density floor is quoted in (DENSE_IFF_INBOUNDS_REPORT.md
+# Section 2.2: "willing to compromise in-bounds density down to about 0.80 to
+# 0.90 relative density"). Anything outside it is a configuration error, not a
+# knob: below the powder floor the soft side of the objective is deleted, and
+# at or above 1.0 no cell can ever clear it.
+FLOOR_BAND = (0.55, 1.0)
 
 
 @dataclass(frozen=True)
@@ -80,6 +100,27 @@ class FgmSolveConfig:
               campaign when one exists, else start cold (logged loudly);
       "cold"  always the uniform full-depth start;
       a path  a stored dopant-map npz to inject (filtered) as the start.
+
+    v2.1.0 keys, each an adopted-by-verdict decision made flag-visible:
+
+      stop_rule              "j_asym" (default) reads the deliverable at the
+                             argmin of the dense-if-and-only-if-in-bounds
+                             objective; "j_phi" restores the v2.0.x melt-region
+                             read state exactly.
+      w_out                  the out-of-bounds price of that stop rule.
+      density_floor_rho_rel  its in-bounds relative-density floor.
+      optimizer              "auto" applies the per-objective-class policy
+                             (method of moving asymptotes on the constrained
+                             class, L-BFGS-B on the smooth one); "lbfgsb" or
+                             "mma" override it.
+      objective_rescale      divide J and its gradient by |g0| once at solve
+                             start (a pure reparameterization; the upper-rail
+                             stall fix). Default on.
+
+    ``map_objective`` is a read-only property, NOT a configuration key: the
+    adopted verdict is that the melt-region objective drives the MAP and the
+    asymmetric objective owns the STOP, and a run must not be able to become a
+    different experiment through a config key.
     """
 
     budget_forward_equivalents: float = 40.0
@@ -87,6 +128,16 @@ class FgmSolveConfig:
     warm_start: str = "auto"
     eps_channel_model_only: bool = False
     bpp: int = 4
+    stop_rule: str = "j_asym"
+    w_out: float = 2.0
+    density_floor_rho_rel: float = 0.85
+    optimizer: str = "auto"
+    objective_rescale: bool = True
+
+    @property
+    def map_objective(self) -> str:
+        """The MAP driver, fixed by verdict at the melt-region objective."""
+        return "j_phi"
 
 
 def parse_fgm_solve_block(cfg: dict[str, Any],
@@ -131,13 +182,130 @@ def parse_fgm_solve_block(cfg: dict[str, Any],
     if bpp not in (2, 4):
         raise ValueError(f"fgm_solve bpp must be 2 or 4, got {bpp}")
 
+    _ensure_import_paths()
+    from adjoint2d import optimizer_policy as opol
+    from adjoint2d import stop_rule as srule
+
+    stop = srule.validate_stop_rule(str(raw.get("stop_rule",
+                                                srule.DEFAULT_STOP_RULE)))
+
+    w_out = float(raw.get("w_out", srule.W_OUT_PRODUCTION))
+    if w_out <= 0.0:
+        raise ValueError(f"fgm_solve w_out must be > 0, got {w_out}")
+
+    floor = float(raw.get("density_floor_rho_rel",
+                          srule.FLOOR_RHO_REL_PRODUCTION))
+    if not (FLOOR_BAND[0] < floor < FLOOR_BAND[1]):
+        raise ValueError(
+            f"fgm_solve density_floor_rho_rel must lie strictly inside "
+            f"{FLOOR_BAND} (relative density), got {floor}. The recommended "
+            f"value is 0.85 (DENSE_IFF_INBOUNDS_REPORT.md Section 7).")
+
+    optimizer = str(raw.get("optimizer", "auto")).strip().lower()
+    if optimizer not in opol.OPTIMIZER_CHOICES:
+        raise ValueError(f"unknown fgm_solve optimizer {optimizer!r}; allowed: "
+                         f"{list(opol.OPTIMIZER_CHOICES)}")
+
     return FgmSolveConfig(
         budget_forward_equivalents=budget,
         filter_radius_mm=radius_mm,
         warm_start=warm,
         eps_channel_model_only=bool(raw.get("eps_channel_model_only", False)),
         bpp=bpp,
+        stop_rule=stop,
+        w_out=w_out,
+        density_floor_rho_rel=floor,
+        optimizer=optimizer,
+        objective_rescale=bool(raw.get("objective_rescale", True)),
     )
+
+
+# ---------------------------------------------------------------------------
+# resolve-at-deployment-grid guidance
+# ---------------------------------------------------------------------------
+
+def plan_grid_transfer(map_grid: int | None, config_grid: int,
+                       resolve_native: bool,
+                       filter_radius_mm: float) -> dict:
+    """Decide what to do when a stored map's grid is not the config's grid.
+
+    THE MEASUREMENT BEHIND THIS. HOLDOUT_FOLLOWUP_REPORT.md Section 1 Verdict 2
+    re-solved two shapes natively at grid 160. On the keyhole the class loss on
+    a transferred map was MAP TRANSFER, not forward non-convergence: the
+    transferred map read intersection over union 0.9447 at grid 160 while a map
+    SOLVED at 160 read 0.9716 and returned the arm to the solved class. Maps are
+    grid entangled even filtered and even under rotation.
+
+    THE OTHER HALF, from Section 3.1: the design filter width is a PHYSICAL
+    length, 0.75 mm there and 1.0 mm in the production recipe. Holding the CELL
+    count across grids would shrink the design length with the grid and let a
+    finer solve buy fidelity with finer features, confounding the comparison.
+    Every path below therefore holds the radius in millimetres.
+
+    Behaviour, and it is a real difference rather than a label:
+      * grids equal: use the map as it is;
+      * grids differ and ``--resolve-native`` was NOT passed: refuse to seed the
+        solve from the off-grid map, start COLD, and warn loudly. A silent
+        off-grid warm start is how a transferred map's fidelity claim leaks into
+        a run at another grid;
+      * grids differ and ``--resolve-native`` WAS passed: re-solve at the
+        requested grid from the resampled map as a START ONLY, which is the
+        recipe the report measured (its native re-solves warm started from the
+        resampled grid-120 map and beat their own cold starts).
+
+    Args:
+        map_grid: the stored map's grid, or None when it could not be read.
+        config_grid: the grid the configuration asks for.
+        resolve_native: whether ``--resolve-native`` was passed.
+        filter_radius_mm: the physical design filter radius.
+
+    Returns:
+        A record carrying the decision, the warning (or None) and the radius.
+    """
+    base = {"map_grid": (int(map_grid) if map_grid is not None else None),
+            "config_grid": int(config_grid),
+            "resolve_native_requested": bool(resolve_native),
+            "filter_radius_mm": float(filter_radius_mm),
+            "filter_radius_held_in": "mm",
+            "evidence": ("HOLDOUT_FOLLOWUP_REPORT.md Section 1 Verdict 2 "
+                         "(keyhole: transferred 0.9447 against natively solved "
+                         "0.9716 at grid 160) and Section 3.1 (the filter width "
+                         "is a physical length)")}
+    if map_grid is None:
+        return {**base, "mismatch": None, "action": "unknown_map_grid",
+                "warm_start_allowed": True, "note": "",
+                "warning": ("the stored map's solve grid could not be read from "
+                            "its npz, so no grid-transfer check was made; treat "
+                            "its fidelity numbers as unestablished at this "
+                            "grid")}
+    if int(map_grid) == int(config_grid):
+        return {**base, "mismatch": False,
+                "action": "use_map_at_its_native_grid",
+                "warm_start_allowed": True, "warning": None,
+                "note": (f"map and configuration are both at grid "
+                         f"{int(config_grid)}")}
+    if not resolve_native:
+        return {**base, "mismatch": True, "action": "cold_start_with_warning",
+                "warm_start_allowed": False, "note": "",
+                "warning": (
+                    f"GRID MISMATCH: the stored map was solved at grid "
+                    f"{int(map_grid)} and this configuration asks for grid "
+                    f"{int(config_grid)}. Maps are grid entangled (a keyhole map "
+                    f"transferred 120 -> 160 lost intersection over union 0.9716 "
+                    f"-> 0.9447, HOLDOUT_FOLLOWUP_REPORT.md Verdict 2), so this "
+                    f"run will NOT seed itself from that map; it starts COLD. "
+                    f"Pass --resolve-native to re-solve at grid "
+                    f"{int(config_grid)} using the resampled map as a START "
+                    f"only, with the design filter radius held at "
+                    f"{float(filter_radius_mm):g} mm (a physical length, not a "
+                    f"cell count).")}
+    return {**base, "mismatch": True, "action": "resolve_native",
+            "warm_start_allowed": True, "warning": None,
+            "note": (f"--resolve-native: re-solving at grid {int(config_grid)}; "
+                     f"the grid-{int(map_grid)} map is resampled and used as a "
+                     f"START only, never as the answer, and the design filter "
+                     f"radius is held at {float(filter_radius_mm):g} mm rather "
+                     f"than at a fixed cell count")}
 
 
 # ---------------------------------------------------------------------------
@@ -390,12 +558,37 @@ def run_production_verify(out: Path, cfg: dict[str, Any], npz_path: Path,
 # warm start resolution
 # ---------------------------------------------------------------------------
 
-def _resolve_warm_start(sc: FgmSolveConfig, case, cfg: dict, shape: str, log):
+def stored_map_grid(npz_path: str | Path) -> int | None:
+    """The simulation grid a stored dopant map was solved at, or None.
+
+    Read from the npz ``sat_map`` key, which is the map at SIMULATION
+    resolution. ``level_map`` is at printer resolution (dots per inch) and says
+    nothing about the solve grid, so a file carrying only ``level_map`` returns
+    None and the caller reports the grid as unknown rather than guessing.
+    """
+    import numpy as np
+
+    try:
+        with np.load(Path(npz_path), allow_pickle=True) as d:
+            if "sat_map" not in d.files:
+                return None
+            shp = np.asarray(d["sat_map"]).shape
+    except Exception:  # noqa: BLE001 - an unreadable map is "unknown", not fatal
+        return None
+    return int(shp[0]) if len(shp) == 2 else None
+
+
+def _resolve_warm_start(sc: FgmSolveConfig, case, cfg: dict, shape: str, log,
+                        resolve_native: bool = False):
     """The production warm-start rule: warm only from a strong historical mask.
 
     Returns (v0, meta). The warm start injects the FILTERED historical mask by
     construction (v0 is a design variable; the filter is applied inside the
     solve chain), the ``ms_solve.build_starts`` convention.
+
+    v2.1.0: any stored map whose solve grid differs from the configuration's
+    grid goes through ``plan_grid_transfer`` first. Without ``--resolve-native``
+    the off-grid map is refused as a start and the run goes cold, loudly.
     """
     import numpy as np
     from adjoint2d import multistart as ms
@@ -403,6 +596,25 @@ def _resolve_warm_start(sc: FgmSolveConfig, case, cfg: dict, shape: str, log):
 
     pm = case.part_mask
     cold = np.ones(pm.shape)
+    config_grid = int(pm.shape[0])
+
+    def _gated(p: Path, base_meta: dict):
+        """Apply the grid-transfer plan to one candidate start map."""
+        plan = plan_grid_transfer(stored_map_grid(p), config_grid,
+                                  resolve_native, sc.filter_radius_mm)
+        if plan["warning"]:
+            log(f"WARNING: {plan['warning']}")
+        elif plan["note"]:
+            log(plan["note"])
+        if not plan["warm_start_allowed"]:
+            return cold, {"start": "cold (off-grid stored map refused)",
+                          "refused_map_npz": str(p), "grid_transfer": plan}
+        s_h = load_stored_map(case, p, cfg)
+        if base_meta.get("convention") == "outside1":
+            s_h = np.where(pm, s_h, 1.0)
+        return ms.start_from_map(s_h, pm, (0.0, 1.0)), {**base_meta,
+                                                        "grid_transfer": plan}
+
     if sc.warm_start == "cold":
         return cold, {"start": "cold uniform full depth (requested)"}
 
@@ -412,10 +624,9 @@ def _resolve_warm_start(sc: FgmSolveConfig, case, cfg: dict, shape: str, log):
             p = ROOT / p
         if not p.exists():
             raise FileNotFoundError(f"fgm_solve warm_start map not found: {p}")
-        s_h = load_stored_map(case, p, cfg)
         log(f"warm start from configured map {p.name}")
-        return ms.start_from_map(s_h, pm, (0.0, 1.0)), {
-            "start": "warm from configured path", "map_npz": str(p)}
+        return _gated(p, {"start": "warm from configured path",
+                          "map_npz": str(p)})
 
     # auto: the best stored historical mask recorded by the library campaign
     lib_json = CAMPAIGN_DIR / "out_lib" / f"{shape}.json"
@@ -423,16 +634,13 @@ def _resolve_warm_start(sc: FgmSolveConfig, case, cfg: dict, shape: str, log):
         j = json.loads(lib_json.read_text())
         h = j.get("arms", {}).get("HIST_best")
         if h and h.get("map_npz") and Path(h["map_npz"]).exists():
-            s_h = load_stored_map(case, Path(h["map_npz"]), cfg)
-            if h.get("convention") == "outside1":
-                s_h = np.where(pm, s_h, 1.0)
             log(f"warm start AUTO: library HIST_best "
                 f"(IoU {h.get('IoU', float('nan')):.4f} in its own channel)")
-            return ms.start_from_map(s_h, pm, (0.0, 1.0)), {
+            return _gated(Path(h["map_npz"]), {
                 "start": "warm from library HIST_best",
                 "map_npz": h["map_npz"], "convention": h.get("convention"),
                 "note": "historical arm was scored in the permittivity-"
-                        "co-varying channel; used only as a start point"}
+                        "co-varying channel; used only as a start point"})
     log("warm start AUTO: no stored historical mask found in out_lib; "
         "starting COLD (stated loudly, not silently)")
     return cold, {"start": "cold (auto found no historical mask)"}
@@ -445,7 +653,8 @@ def _resolve_warm_start(sc: FgmSolveConfig, case, cfg: dict, shape: str, log):
 def run_solve(config_path: str | Path, output_dir: str | Path,
               budget_override: float | None = None,
               skip_verify: bool = False,
-              intake_v2_json: str | Path | None = None) -> dict:
+              intake_v2_json: str | Path | None = None,
+              resolve_native: bool = False) -> dict:
     """Run the production-recipe shape-fidelity solve on one shape config."""
     _ensure_import_paths()
     import numpy as np
@@ -454,10 +663,15 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
     from adjoint2d import adjoint, chi_area, control as ctl, energy_gate as eg
     from adjoint2d import forward as fwd, gradops
     from adjoint2d import library_solve as lib
+    from adjoint2d import mma as mma_mod
     from adjoint2d import ms_solve as msv
+    from adjoint2d import objective_scale as osc
+    from adjoint2d import optimizer_policy as opol
     from adjoint2d import printability as pq
+    from adjoint2d import stop_rule as srule
     from adjoint2d import topopt
     from adjoint2d import topopt_objective as tobj
+    from adjoint2d import topopt_stage as tstage
     from adjoint2d.pins import build_case, load_cfg
 
     t_start = time.perf_counter()
@@ -487,6 +701,23 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
     eps_covary = bool(sc.eps_channel_model_only)
     beta = 0.0  # production recipe: NO smoothed-Heaviside projection
 
+    # --- v2.1.0 policy resolution, all three flag-visible ---------------------
+    opt_pick = opol.resolve_optimizer(
+        sc.map_objective, override=(None if sc.optimizer == "auto"
+                                    else sc.optimizer))
+    log(f"read state: stop_rule {sc.stop_rule} "
+        f"(w_out {sc.w_out:g}, density floor {sc.density_floor_rho_rel:g} "
+        f"relative density); the MAP is driven by the melt-region objective "
+        f"{sc.map_objective}, the stop rule owns only the read state")
+    if sc.stop_rule == "j_phi":
+        log("stop_rule j_phi: LEGACY v2.0.x read state selected; the "
+            "dense-if-and-only-if-in-bounds stop is still computed and "
+            "recorded, it is simply not the one delivered")
+    log(f"optimizer {opt_pick['optimizer']} (source {opt_pick['source']}, "
+        f"objective class {opt_pick['objective_class']}): {opt_pick['reason']}")
+    log(f"objective rescale: {'ON' if sc.objective_rescale else 'OFF'} "
+        f"(1/|g0| at solve start; pure reparameterization, reported J stays raw)")
+
     log(f"shape {shape}, grid {pm.shape[0]}, dx {case.dx*1e3:.4f} mm, "
         f"filter radius {sc.filter_radius_mm:.2f} mm = {sigma_cells:.3f} cells, "
         f"beta 0 (no projection), channel "
@@ -499,14 +730,61 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
             f"campaign standard 40. This is a reduced-budget run (smoke "
             f"test class), NOT a quality solve.")
 
-    def run_forward(s):
+    # The shape-fidelity early stop truncates the march 250 stored steps after
+    # the MELT argmin. The dense-if-and-only-if-in-bounds argmin sits LATER
+    # than the melt argmin on every arm the report measured (43 to 160 stored
+    # steps at w_out = 1), so under stop_rule j_asym a truncated trajectory
+    # could pin the asymmetric argmin at the truncation instead of at the
+    # physics. Every SCORING forward therefore runs the full horizon under that
+    # rule. The SOLVE-LOOP forwards keep the early stop unchanged, because the
+    # map driver is still the melt objective and its argmin is inside the
+    # patience window by construction.
+    need_full_horizon = (sc.stop_rule == "j_asym")
+
+    def run_forward(s, full_horizon: bool = False):
         return fwd.forward(case, s, keep_checkpoints=True, stop_after_phi=None,
-                           shape_stop_patience=lib.PATIENCE,
+                           shape_stop_patience=(None if full_horizon
+                                                else lib.PATIENCE),
                            eps_covary=eps_covary)
 
+    def read_state(tr) -> dict:
+        """Both stops, both objective values, and the one this run delivers."""
+        return srule.dual_stop(tr, case, chi, rule=sc.stop_rule,
+                               w_out=sc.w_out,
+                               floor=sc.density_floor_rho_rel)
+
+    def metrics_at_selected_stop(tr) -> dict:
+        """The v2.0.x metric record, read at the SELECTED stop.
+
+        ``J`` stays the same quantity it always was, the melt-region objective;
+        under stop_rule j_asym it is simply read at the asymmetric argmin
+        instead of at its own. Under stop_rule j_phi this record is identical
+        to the v2.0.x ``topopt_objective.full_metrics`` output.
+        """
+        stop = read_state(tr)
+        i = int(stop["index"])
+        T = tr.T_at_end(i)
+        m = {"t_stop_index": i,
+             "t_stop_s": float(stop["time_s"]),
+             "t_stop_at_horizon": bool(stop["at_horizon"]),
+             "J": float(stop["J_phi_at_stop"]),
+             "J_per_part_cell": float(stop["J_phi_at_stop"]) / max(int(pm.sum()), 1),
+             "J_at_first_step": float(stop["j_phi_stop"]["J_first"]),
+             "J_asym": float(stop["J_asym_at_stop"]),
+             "stop": stop}
+        m.update(tobj.metrics(T, case, chi))
+        return m
+
     def score(s):
-        tr = run_forward(s)
-        m = tobj.full_metrics(tr, case, chi)
+        tr = run_forward(s, full_horizon=need_full_horizon)
+        m = metrics_at_selected_stop(tr)
+        m["scoring_forward_full_horizon"] = bool(need_full_horizon)
+        m["scoring_forward_stopped_early"] = bool(tr.stopped_early)
+        if bool(tr.stopped_early) and m["t_stop_at_horizon"]:
+            log("WARNING: the selected stop is the LAST stored step of a "
+                "trajectory that stopped early; this arm's stop is a "
+                "truncation, not an argmin, and its objective is an upper "
+                "bound")
         i = int(m["t_stop_index"])
         m["P_abs_W_per_m"] = tr.P_abs_B
         m["sat_mean_in_part"] = float(np.mean(s[pm]))
@@ -531,12 +809,23 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
     adjoint.gradient(case, s_u, tr_u, {st_u.index: seed_u}, grad_ops=ops,
                      eps_covary=eps_covary)
     t_d = time.perf_counter()
-    m_u = tobj.full_metrics(tr_u, case, chi)
-    m_u["P_abs_W_per_m"] = tr_u.P_abs_B
-    m_u["energy_gate"] = eg.gate_from_trajectory(tr_u, int(m_u["t_stop_index"]))
-    m_u["J_raster_chi"] = tobj.optimal_stop(tr_u, case, pm.astype(float)).J
-    del tr_u
     ratio, ratio_info = msv.budget_ratio(shape, (t_d - t_c) / max(t_b - t_a, 1e-9), log)
+    if need_full_horizon:
+        # The cost-model forward above keeps the early stop so the budget
+        # accounting stays bit-identical to v2.0.x; the uniform REFERENCE arm
+        # then needs its own full-horizon forward to be read at the same rule
+        # as the deliverable.
+        del tr_u
+        m_u, _melted_u = score(s_u)
+        log("uniform reference re-run at the full horizon so it is read under "
+            "the same stop rule as the deliverable (one extra forward, counted "
+            "in the overhead)")
+    else:
+        m_u = metrics_at_selected_stop(tr_u)
+        m_u["P_abs_W_per_m"] = tr_u.P_abs_B
+        m_u["energy_gate"] = eg.gate_from_trajectory(tr_u, int(m_u["t_stop_index"]))
+        m_u["J_raster_chi"] = tobj.optimal_stop(tr_u, case, pm.astype(float)).J
+        del tr_u
     pool = max(int(ctl.max_gradient_evals(float(budget), ratio)), 1)
     log(f"pool {pool} gradient evaluations (budget {budget:g} forward-"
         f"equivalents, adjoint-to-forward ratio {ratio:.2f})")
@@ -544,20 +833,24 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
         f"P {m_u['P_abs_W_per_m']:.1f} W/m")
 
     # --- warm start -----------------------------------------------------------
-    v0_full, start_meta = _resolve_warm_start(sc, case, cfg, shape, log)
+    v0_full, start_meta = _resolve_warm_start(sc, case, cfg, shape, log,
+                                              resolve_native=resolve_native)
 
-    # --- filtered beta = 0 solve, single start, L-BFGS-B -----------------------
+    # --- filtered beta = 0 solve, single start --------------------------------
     rows: list[dict] = []
     store: dict[int, np.ndarray] = {}
     idx = np.flatnonzero(pm.ravel())
     box = (0.0, 1.0)
+    # The 1/|g0| rescale is built from the FIRST evaluation, which both
+    # optimizers make at the start point, so it costs no extra forward.
+    rescale_box: list = [None]
 
     def unpack(vec):
         v = np.ones(pm.shape)
         v.ravel()[idx] = vec
         return v
 
-    def fun(vec):
+    def fun_raw(vec):
         if len(rows) >= pool:
             raise StopIteration
         v = unpack(vec)
@@ -586,17 +879,37 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
               flush=True)
         return float(J), g.ravel()[idx].astype(float)
 
+    def fun(vec):
+        """What the optimizer sees: the rescaled pair. ``rows`` keep raw J."""
+        J, g = fun_raw(vec)
+        if rescale_box[0] is None:
+            rescale_box[0] = osc.ObjectiveRescale.from_start_gradient(
+                g, enabled=sc.objective_rescale)
+            log(rescale_box[0].reason)
+        return rescale_box[0].apply(J, g)
+
     v0 = np.clip(np.asarray(v0_full, dtype=float).ravel()[idx], *box)
     stop_reason = "budget"
-    try:
-        minimize(fun, v0, jac=True, method="L-BFGS-B", bounds=[box] * len(idx),
-                 options={"maxiter": 10_000, "maxfun": 10_000,
-                          "ftol": 1e-16, "gtol": 1e-16})
-        stop_reason = "L-BFGS-B converged"
-    except StopIteration:
-        pass
+    if opt_pick["optimizer"] == "mma":
+        state = mma_mod.MMA(v0, box[0], box[1])
+        runner = tstage.StageRunner(fun, box, optimizer="mma", mma_state=state)
+        runner.run(v0, int(pool))
+        stop_reason = "method of moving asymptotes, budget"
+        opt_pick["mma_config"] = dict(state.cfg.__dict__)
+    else:
+        try:
+            minimize(fun, v0, jac=True, method="L-BFGS-B",
+                     bounds=[box] * len(idx),
+                     options={"maxiter": 10_000, "maxfun": 10_000,
+                              "ftol": 1e-16, "gtol": 1e-16})
+            stop_reason = "L-BFGS-B converged"
+        except StopIteration:
+            pass
     if not rows:
         raise RuntimeError("the solve produced no evaluation")
+    if rescale_box[0] is None:  # defensive: no evaluation ever completed
+        rescale_box[0] = osc.ObjectiveRescale.from_start_gradient(
+            np.zeros(1), enabled=sc.objective_rescale)
     best = min(rows, key=lambda r: r["J"])
     v_best = store[best["eval_index"]]
     log(f"solve done: {len(rows)} evaluations ({stop_reason}), best J "
@@ -615,6 +928,16 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
         f"under {m_q['part_under_melt_pct']:.2f}% "
         f"stop {m_q['t_stop_s']:.1f} s"
         f"{' HORIZON' if m_q['t_stop_at_horizon'] else ''}")
+    _st = m_q["stop"]
+    log(f"DUAL STOP (deliverable): j_asym stop "
+        f"{_st['j_asym_stop']['time_s']:.1f} s "
+        f"(J_asym {_st['j_asym_stop']['J_asym']:.5f}, "
+        f"J_phi {_st['j_asym_stop']['J_phi']:.2f}) | j_phi stop "
+        f"{_st['j_phi_stop']['time_s']:.1f} s "
+        f"(J_asym {_st['j_phi_stop']['J_asym']:.5f}, "
+        f"J_phi {_st['j_phi_stop']['J_phi']:.2f}) | gap "
+        f"{_st['stop_gap_steps']:+d} stored steps | DELIVERED at the "
+        f"{_st['stop_rule']} stop")
 
     # --- outputs ---------------------------------------------------------------
     run_name = out.name
@@ -647,7 +970,21 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
             "bpp": sc.bpp,
             "quantizer": "printability.quantize_in_part (production convention,"
                          " nominal 1.0 outside the part)",
+            # --- v2.1.0 -------------------------------------------------------
+            "map_objective": sc.map_objective,
+            "stop_rule": sc.stop_rule,
+            "stop_rule_w_out": sc.w_out,
+            "stop_rule_density_floor_rho_rel": sc.density_floor_rho_rel,
+            "stop_rule_note": (
+                "v2.1.0: the deliverable is READ at the argmin of the "
+                "dense-if-and-only-if-in-bounds objective; the MAP is still "
+                "solved on the melt-region objective. stop_rule 'j_phi' "
+                "restores the v2.0.x read state."),
+            "optimizer": opt_pick,
+            "objective_rescale": rescale_box[0].as_dict(),
+            "scoring_forward_full_horizon": bool(need_full_horizon),
         },
+        "engine_version": _engine_version(),
         "grid_qualifier": (
             f"All numbers in this file are at grid {n_grid}. A map solved at "
             f"one grid is not established at another; this entry point runs "
@@ -667,6 +1004,9 @@ def run_solve(config_path: str | Path, output_dir: str | Path,
         "arms": {"U_uniform": m_u, "SOLVE_cont": m_c,
                  f"SOLVE_{sc.bpp}bpp": m_q},
         "deliverable_arm": f"SOLVE_{sc.bpp}bpp",
+        # Both stops and both objective values of the DELIVERABLE arm, hoisted
+        # to the top level so a v2.0.x comparison never has to dig for them.
+        "read_state": m_q["stop"],
         "vs_uniform": {"dJ_rel": (m_u["J"] - m_q["J"]) / max(abs(m_u["J"]), 1e-30),
                        "dIoU": m_q["IoU"] - m_u["IoU"]},
         "rows": rows,
@@ -777,10 +1117,20 @@ def main(argv: list[str] | None = None) -> int:
                          "fragment then carries the classifier "
                          "recommendation. Default: the fragment records the "
                          "classifier as absent with the stated reason.")
+    ap.add_argument("--resolve-native", action="store_true",
+                    help="acknowledge a grid mismatch and re-solve at the "
+                         "grid the configuration asks for, using the resampled "
+                         "stored map as a START only, with the design filter "
+                         "radius held in millimetres (a physical length). "
+                         "Without this flag a stored map solved at another "
+                         "grid is REFUSED as a start and the run goes cold, "
+                         "loudly (HOLDOUT_FOLLOWUP_REPORT.md Verdict 2: maps "
+                         "are grid entangled).")
     args = ap.parse_args(argv)
     run_solve(args.config, args.output_dir, budget_override=args.budget,
               skip_verify=args.skip_verify,
-              intake_v2_json=args.intake_v2_json)
+              intake_v2_json=args.intake_v2_json,
+              resolve_native=args.resolve_native)
     return 0
 
 

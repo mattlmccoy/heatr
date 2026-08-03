@@ -94,6 +94,164 @@ class TestParseFgmSolveBlock:
 
 
 # ---------------------------------------------------------------------------
+# 1b. v2.1.0 config keys: stop rule, optimizer policy, objective rescale
+# ---------------------------------------------------------------------------
+
+class TestV210SolveKeys:
+    """The three adopted-by-verdict decisions, each flag-visible.
+
+    Defaults change behaviour, which is why v2.1.0 is a MINOR bump with the
+    change stated plainly: stop_rule 'j_phi' restores the v2.0.x read state.
+    """
+
+    def test_stop_rule_defaults_to_j_asym(self):
+        sc = parse_fgm_solve_block({})
+        assert sc.stop_rule == "j_asym"
+
+    def test_the_stop_rule_prices_default_to_the_reports_recommended_values(self):
+        # DENSE_IFF_INBOUNDS_REPORT.md Section 6 (w_out 2 to 3) and Section 7
+        # (floor 0.85 relative density).
+        sc = parse_fgm_solve_block({})
+        assert sc.w_out == 2.0
+        assert sc.density_floor_rho_rel == 0.85
+
+    def test_j_phi_restores_the_legacy_read_state(self):
+        sc = parse_fgm_solve_block({"fgm_solve": {"stop_rule": "j_phi"}})
+        assert sc.stop_rule == "j_phi"
+
+    def test_an_unknown_stop_rule_is_rejected(self):
+        with pytest.raises(ValueError, match="stop_rule"):
+            parse_fgm_solve_block({"fgm_solve": {"stop_rule": "melt_onset"}})
+
+    def test_a_non_positive_out_of_bounds_price_is_rejected(self):
+        with pytest.raises(ValueError, match="w_out"):
+            parse_fgm_solve_block({"fgm_solve": {"w_out": 0.0}})
+
+    def test_a_floor_outside_the_stated_band_is_rejected(self):
+        for bad in (0.4, 1.0, 1.5):
+            with pytest.raises(ValueError, match="density_floor_rho_rel"):
+                parse_fgm_solve_block({"fgm_solve": {"density_floor_rho_rel": bad}})
+
+    def test_optimizer_defaults_to_auto_the_per_class_policy(self):
+        sc = parse_fgm_solve_block({})
+        assert sc.optimizer == "auto"
+
+    def test_optimizer_override_is_respected_either_way(self):
+        assert parse_fgm_solve_block(
+            {"fgm_solve": {"optimizer": "mma"}}).optimizer == "mma"
+        assert parse_fgm_solve_block(
+            {"fgm_solve": {"optimizer": "lbfgsb"}}).optimizer == "lbfgsb"
+
+    def test_an_unknown_optimizer_is_rejected(self):
+        with pytest.raises(ValueError, match="optimizer"):
+            parse_fgm_solve_block({"fgm_solve": {"optimizer": "newton"}})
+
+    def test_objective_rescale_defaults_on(self):
+        sc = parse_fgm_solve_block({})
+        assert sc.objective_rescale is True
+
+    def test_objective_rescale_can_be_turned_off(self):
+        sc = parse_fgm_solve_block({"fgm_solve": {"objective_rescale": False}})
+        assert sc.objective_rescale is False
+
+    def test_the_map_solve_objective_is_the_melt_objective_and_is_not_a_knob(self):
+        """The verdict: the melt objective drives the MAP, J_asym owns the STOP.
+
+        There is deliberately no config key that switches the map driver, so a
+        run cannot silently become a different experiment.
+        """
+        sc = parse_fgm_solve_block({})
+        assert sc.map_objective == "j_phi"
+        with pytest.raises(ValueError, match="unknown fgm_solve key"):
+            parse_fgm_solve_block({"fgm_solve": {"map_objective": "j_asym"}})
+
+
+# ---------------------------------------------------------------------------
+# 1c. resolve-at-deployment-grid guidance
+# ---------------------------------------------------------------------------
+
+class TestPlanGridTransfer:
+    """The keyhole map-transfer verdict, wired as guidance.
+
+    HOLDOUT_FOLLOWUP_REPORT.md Section 1 Verdict 2: on the keyhole the grid-120
+    class loss was MAP TRANSFER, and a map SOLVED natively at grid 160 returned
+    the arm to the solved class (IoU 0.9716 against the transferred map's
+    0.9447). Section 3.1: the design filter width is a PHYSICAL length of
+    0.75 mm, and holding the CELL count instead would let a finer solve buy
+    fidelity with finer features.
+    """
+
+    def test_matching_grids_are_a_no_op(self):
+        from scripts.solve_fgm import plan_grid_transfer
+        p = plan_grid_transfer(map_grid=120, config_grid=120,
+                               resolve_native=False, filter_radius_mm=1.0)
+        assert p["mismatch"] is False
+        assert p["action"] == "use_map_at_its_native_grid"
+        assert p["warm_start_allowed"] is True
+        assert p["warning"] is None
+
+    def test_a_mismatch_without_the_flag_warns_loudly_and_starts_cold(self):
+        from scripts.solve_fgm import plan_grid_transfer
+        p = plan_grid_transfer(map_grid=120, config_grid=160,
+                               resolve_native=False, filter_radius_mm=1.0)
+        assert p["mismatch"] is True
+        assert p["action"] == "cold_start_with_warning"
+        assert p["warm_start_allowed"] is False
+        assert "120" in p["warning"] and "160" in p["warning"]
+        assert "--resolve-native" in p["warning"]
+
+    def test_the_flag_re_solves_at_the_requested_grid_from_the_resampled_map(self):
+        from scripts.solve_fgm import plan_grid_transfer
+        p = plan_grid_transfer(map_grid=120, config_grid=160,
+                               resolve_native=True, filter_radius_mm=1.0)
+        assert p["mismatch"] is True
+        assert p["action"] == "resolve_native"
+        assert p["warm_start_allowed"] is True
+        assert p["warning"] is None
+        assert "start" in p["note"].lower()
+
+    def test_the_filter_radius_is_recorded_as_held_in_millimetres(self):
+        from scripts.solve_fgm import plan_grid_transfer
+        for native in (True, False):
+            p = plan_grid_transfer(map_grid=120, config_grid=160,
+                                   resolve_native=native, filter_radius_mm=1.25)
+            assert p["filter_radius_mm"] == 1.25
+            assert p["filter_radius_held_in"] == "mm"
+
+    def test_stored_map_grid_reads_the_simulation_resolution_map(self, tmp_path,
+                                                                 synthetic_case):
+        from scripts.solve_fgm import emit_production_npz, stored_map_grid
+        x, y, _pm, sat = synthetic_case
+        p = emit_production_npz(sat, x, y, tmp_path / "m.npz", bpp=4,
+                                run_name="unit")
+        # sat_map is at SIMULATION resolution (60 here), level_map at printer
+        # resolution; the grid must come from the former.
+        assert stored_map_grid(p) == 60
+
+    def test_stored_map_grid_is_none_without_a_sat_map(self, tmp_path):
+        import numpy as np
+        from scripts.solve_fgm import stored_map_grid
+        p = tmp_path / "printer_only.npz"
+        np.savez_compressed(p, level_map=np.zeros((720, 720), dtype=np.uint8))
+        assert stored_map_grid(p) is None
+
+    def test_stored_map_grid_is_none_for_an_unreadable_file(self, tmp_path):
+        from scripts.solve_fgm import stored_map_grid
+        p = tmp_path / "not_an_npz.npz"
+        p.write_text("this is not an npz")
+        assert stored_map_grid(p) is None
+
+    def test_an_unknown_map_grid_is_reported_not_guessed(self):
+        from scripts.solve_fgm import plan_grid_transfer
+        p = plan_grid_transfer(map_grid=None, config_grid=160,
+                               resolve_native=False, filter_radius_mm=1.0)
+        assert p["mismatch"] is None
+        assert p["action"] == "unknown_map_grid"
+        assert p["warm_start_allowed"] is True
+        assert "could not be read" in p["warning"]
+
+
+# ---------------------------------------------------------------------------
 # 2. production map emitter: key set + REAL production-loader round trip
 # ---------------------------------------------------------------------------
 
@@ -274,6 +432,70 @@ class TestEmitMapPngs:
 # ---------------------------------------------------------------------------
 # 5. the standard-suite inventory constant (used by the post-run check)
 # ---------------------------------------------------------------------------
+
+STORED_V20X_RUN = (
+    Path(__file__).parent / "outputs_eqs" / "runs" / "ellipse" / "fgm_solve"
+    / "ellipse_fragment_smoke_20260802")
+
+
+@pytest.mark.slow
+def test_j_phi_legacy_path_reproduces_a_stored_v2_0_x_run_stop_exactly():
+    """The flag-off identity claim, proven against a REAL stored v2.0.1 run.
+
+    Takes the delivered 4-bits-per-pixel map of
+    ``outputs_eqs/runs/ellipse/fgm_solve/ellipse_fragment_smoke_20260802``
+    (its ``production_verify.engine_version`` reads 2.0.1), re-runs the same
+    forward with the current code, and reads it under ``stop_rule = "j_phi"``.
+    The stop index, the stop time and the intersection over union must
+    reproduce the stored numbers EXACTLY. The melt-region objective is asserted
+    to 1e-12 relative rather than bitwise, and the reason is measured rather
+    than assumed: ``solve_maps.npz`` archives the delivered map in float32,
+    which perturbs it by up to 2.8e-08 in saturation. Feeding the archived
+    float32 map straight in reproduces J to 7.4e-10 relative; restoring the
+    exact 4-bits-per-pixel levels (k / 15, which is what the run itself
+    marched) reproduces it to 1.1e-13 relative, that is to the accumulation
+    noise of a 1500-step double-precision march. The archive's storage
+    precision is the whole of the difference.
+
+    Marked slow: one full grid-120 forward march.
+    """
+    import json
+
+    import numpy as np
+
+    from scripts.solve_fgm import _ensure_import_paths
+    _ensure_import_paths()
+    from adjoint2d import chi_area, forward as fwd, library_solve as lib
+    from adjoint2d import stop_rule as srule, topopt_objective as tobj
+    from adjoint2d.pins import build_case, load_cfg
+
+    stored = json.loads((STORED_V20X_RUN / "results.json").read_text())
+    assert stored["production_verify"]["engine_version"] == "2.0.1"
+    arm = stored["arms"]["SOLVE_4bpp"]
+
+    cfg = load_cfg(Path(stored["config"]))
+    case = build_case(cfg)
+    chi, _info = chi_area.chi_from_cfg(cfg, case.x, case.y)
+    with np.load(STORED_V20X_RUN / "solve_maps.npz") as d:
+        s32 = np.asarray(d["SOLVE_4bpp"], dtype=float)
+    # restore the exact 16 printable levels the run actually marched
+    s_q = np.where(case.part_mask, np.round(s32 * 15.0) / 15.0, 1.0)
+    assert float(np.max(np.abs(s32 - s_q))) < 1e-7  # float32 storage only
+
+    tr = fwd.forward(case, s_q, keep_checkpoints=True, stop_after_phi=None,
+                     shape_stop_patience=lib.PATIENCE, eps_covary=False)
+    rec = srule.dual_stop(tr, case, chi, rule="j_phi")
+    iou = float(tobj.metrics(tr.T_at_end(int(rec["index"])), case, chi)["IoU"])
+
+    assert int(rec["index"]) == int(arm["t_stop_index"])
+    assert float(rec["time_s"]) == float(arm["t_stop_s"])
+    assert iou == float(arm["IoU"])
+    assert abs(float(rec["J_phi_at_stop"]) - float(arm["J"])) \
+        <= 1e-12 * abs(float(arm["J"]))
+
+    # and the SAME trajectory carries the v2.1.0 stop, later, as designed
+    assert rec["j_asym_stop"]["index"] >= rec["j_phi_stop"]["index"]
+
 
 def test_production_suite_files_match_showcase_inventory():
     """The file set the verification pass asserts is the showcase set

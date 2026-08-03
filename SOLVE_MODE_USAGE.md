@@ -40,7 +40,86 @@ fgm_solve:
   warm_start: auto                   # auto | cold | <path to stored map npz>
   eps_channel_model_only: false      # keep false; see deployability below
   bpp: 4
+  # --- v2.1.0 ---
+  stop_rule: j_asym                  # j_asym (default) | j_phi (v2.0.x)
+  w_out: 2.0                         # out-of-bounds price of the stop rule
+  density_floor_rho_rel: 0.85        # in-bounds relative-density floor
+  optimizer: auto                    # auto | lbfgsb | mma
+  objective_rescale: true            # 1/|g0| at solve start
 ```
+
+## The read state (v2.1.0 behaviour change)
+
+**A default run now delivers at a LATER stop than v2.0.x.** The stop is the
+argmin over the arm's own stored trajectory of the dense-if-and-only-if-in-bounds
+objective
+
+    J_asym(s, t) = [ w_out * sum over the BED of phi(x, t)^2
+                   + w_in  * sum over the PART of h(rho_rel(x, t))^2 ] / n_part
+
+at `w_out = 2.0` and a density floor of 0.85 relative density, the values
+DENSE_IFF_INBOUNDS_REPORT.md Sections 6 and 7 recommend. Set
+`stop_rule: j_phi` to restore the v2.0.x melt-region read state exactly.
+
+**The MAP is still solved on the melt-region objective.** Only the stop
+changed. That split is the recorded verdict: reading the same melt-solved map at
+its own asymmetric argmin improved J_asym by 4.3 to 36.1 percent, while
+re-solving under the asymmetric objective on top of that changed it by only
++17.5, +6.5, +5.3, +0.1 and -15.6 percent and lost on one shape of five.
+
+Both stops and both objective values are recorded on every run, so a v2.0.x
+comparison never needs a re-run: `results.json` carries `read_state` at the top
+level and a `stop` block inside every arm, each with `j_phi_stop` and
+`j_asym_stop` sub-records (index, time, both objectives at that index, the
+horizon flag and the asymmetric guard flags).
+
+One cost consequence, recorded because it is real: under `j_asym` every SCORING
+forward runs the full horizon, because the shape-fidelity early stop truncates
+the march 250 stored steps after the melt argmin and the asymmetric argmin sits
+later than that argmin. The solve-loop forwards keep the early stop, so the
+budget accounting is unchanged; the uniform reference costs one extra forward.
+
+## The optimizer (v2.1.0)
+
+`optimizer: auto` applies a per-objective-class policy: the constrained
+(hinge / asymmetric) class defaults to the method of moving asymptotes, which
+beat L-BFGS-B (limited-memory Broyden-Fletcher-Goldfarb-Shanno with box
+constraints) on 4 of 5 shapes at a matched 40 forward-equivalents; the smooth
+melt-region class keeps L-BFGS-B, where the same comparison was 4 of 6 with two
+catastrophic failures. Because this entry point drives the MAP with the
+melt-region objective, `auto` resolves to L-BFGS-B here. `optimizer: mma` or
+`optimizer: lbfgsb` overrides the policy in either direction, and the resolved
+choice with its source (`policy` or `config`) is logged and written into
+`results.json` under `recipe.optimizer`.
+
+## The objective rescale (v2.1.0)
+
+`objective_rescale: true` divides the objective and its gradient by the
+Euclidean norm of the gradient at the start point, once, at solve start. It is a
+pure reparameterization by a positive constant: it cannot move a minimizer,
+rotate a descent direction or reorder two candidate designs, and every J the run
+reports stays RAW. It fixes the upper-rail stall class, where an objective
+magnitude far below 1 turns the optimizer's relative convergence test into an
+absolute one and the solve returns its own start point. The applied factor,
+`|g0|` and the stated reason are recorded in `results.json` under
+`recipe.objective_rescale`.
+
+## Grid mismatch and `--resolve-native` (v2.1.0)
+
+Maps are grid entangled, even filtered and even under rotation: a keyhole map
+transferred from grid 120 to grid 160 read intersection over union 0.9447, while
+the same shape SOLVED natively at 160 read 0.9716 and returned to the solved
+class (HOLDOUT_FOLLOWUP_REPORT.md Verdict 2).
+
+So when a stored map's solve grid differs from the grid the configuration asks
+for, the run REFUSES that map as a warm start, starts cold, and says so loudly.
+Passing `--resolve-native` acknowledges the mismatch and re-solves at the
+requested grid, using the resampled map as a START only, with the design filter
+radius held in millimetres (a physical length) rather than in cells. Holding the
+cell count instead would shrink the design length with the grid and let a finer
+solve buy fidelity with finer features. The decision, both grids, the radius and
+the warning text are recorded in `results.json` under
+`recipe.start.grid_transfer`.
 
 ## Run from the graphical user interface
 

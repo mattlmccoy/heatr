@@ -48,9 +48,25 @@ def _load_reference_extractor():
 def test_engine_version_constants_exist_and_are_semver():
     v = rfam_eqs_coupled.ENGINE_VERSION
     assert re.fullmatch(r"\d+\.\d+\.\d+", v), v
-    assert v == "2.0.1"
+    # v2.1.0: MINOR bump. New modes and read states behind config keys, with
+    # the previous behaviour reachable by flag (fgm_solve.stop_rule: j_phi).
+    assert v == "2.1.0"
     name = rfam_eqs_coupled.ENGINE_VERSION_NAME
-    assert "2.0" in name
+    assert "2.1" in name
+
+
+def test_the_changelog_carries_a_real_v2_1_0_entry_not_a_planned_one():
+    """The version record and the changelog must not disagree.
+
+    A "Planned v2.1.0" heading while ENGINE_VERSION already reads 2.1.0 is the
+    exact state this test exists to make impossible.
+    """
+    text = (BASE / "CHANGELOG_ENGINE.md").read_text()
+    assert "## v2.1.0" in text
+    assert "Planned v2.1.0" not in text
+    # the behaviour change has to be stated where a reader will meet it
+    assert "stop_rule" in text
+    assert "j_phi" in text
 
 
 def test_stamped_config_echo_adds_version_without_mutating_input():
