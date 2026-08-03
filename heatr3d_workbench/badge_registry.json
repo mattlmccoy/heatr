@@ -1,0 +1,42 @@
+{
+  "registry_version": "2026-08-02",
+  "note": "Hand-maintained per docs/superpowers/specs/2026-08-02-heatr3d-workbench-design.md section 6. Updated only when a gate report lands, never inferred.",
+  "classes": {
+    "thermal": {
+      "level": "S1",
+      "label": "exploratory (S1-verified numerics, convergence bands pending)",
+      "detail": "Thermal/phase scalars and volumes. S1 passed within the stated validity domain (n<=96 full physics). S2 convergence bands pending.",
+      "evidence": "docs/superpowers/specs/s1-gate-report.md"
+    },
+    "eqs": {
+      "level": "S1",
+      "label": "exploratory (S1-verified numerics, convergence bands pending)",
+      "detail": "EQS-derived quantities (Qrf, sigma_T^3D) under the EQS-02 corrected drive (qrf_gradient=masked). sigma_T^3D is a diagnostic, never comparable to 2-D sigma_T.",
+      "evidence": "docs/superpowers/specs/s1-gate-report.md"
+    },
+    "shape": {
+      "level": "S1",
+      "label": "exploratory (S1-verified numerics, convergence bands pending)",
+      "detail": "Shape-fidelity metrics (IoU, out-of-bounds melt) computed from the phi field; definitions shared with solve3d/shape_metrics.py.",
+      "evidence": "solve3d/PHASE_A_REPORT.md"
+    },
+    "shrinkage": {
+      "level": "S1",
+      "label": "exploratory (S1-verified numerics, convergence bands pending)",
+      "detail": "Densification, shrinkage and warp outputs. No physical anchor exists yet (P2 parked until the rig runs).",
+      "evidence": "docs/superpowers/specs/2026-07-30-heatr3d-graduation-design.md"
+    },
+    "solved_map": {
+      "level": "sim-only",
+      "label": "sim-only (design method certified on the dolfinx forward; no S-gate earned)",
+      "detail": "Direct-solve FGM maps from solve3d. The SOLVED label certifies the design method, not heatr3d physics trust.",
+      "evidence": "solve3d/PHASE_C_REPORT.md"
+    },
+    "flir": {
+      "level": "S4-not-passed",
+      "label": "S4 not passed (historical FLIR anchor)",
+      "detail": "Top-surface temperature comparisons against Allison FLIR data did not pass the pre-registered gates.",
+      "evidence": "heatr3d_s4_flir/S4_GATE_REPORT.md"
+    }
+  }
+}
