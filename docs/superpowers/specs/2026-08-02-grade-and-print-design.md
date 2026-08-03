@@ -300,7 +300,25 @@ folder, and job_info.json gains the package id + manifest hash.
 - The turntable recommendation remains advisory everywhere it appears;
   verification of the chosen program is what gates send.
 
-## 8. Non-goals
+## 7d. Amendment (Matt, 2026-08-03): progress and Express mode
+
+- PROGRESS: every long step shows a real progress bar with time remaining.
+  The densify arms parse heatr3d's verbose march lines (t= simulated seconds
+  out of max_time_s) for true percent-complete; ETA extrapolates from
+  elapsed wall time. Verification keeps its runs-started/expected bar.
+  Estimates are labeled as estimates.
+- EXPRESS MODE ("Auto Grade"): one button after import. The tool runs the
+  whole deployable pipeline automatically: intake -> analyze -> BEFORE
+  densification -> 2.5-D verification -> AFTER densification, with a stage
+  timeline (done/running/failed per stage, progress bars inline) and the
+  before/after/difference viewer at the end. Options at launch: turntable
+  intent (y/n) and dwell-scheduling intent (y/n). HONESTY RULE: in this
+  phase those toggles record INTENT into the job state and the future
+  package (advisory, per the frozen schema's turntable block); program
+  GENERATION lands with the Phase 4 package emitter and the 2-D lane's
+  intake API. The UI says so; no control pretends to do physics it does
+  not do. Express failures surface the failing stage's error loudly and
+  stop the chain.
 
 - No scheduler/uploader (hardware blocked); packages/ drop folder only.
 - No 3-D turntable simulation (heatr3d has no rotation machinery; the

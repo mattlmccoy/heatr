@@ -117,8 +117,9 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                              f"grid {part.shape}")
 
     t0 = time.time()
+    # verbose march lines feed the Studio's live progress bars
     r = H.run(grid, part, p, sat=sat, max_time_s=float(max_time_s),
-              densify=True)
+              densify=True, verbose=True)
     wall_s = time.time() - t0
 
     gates = {
@@ -179,6 +180,11 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
     J._render_slices(out, fields_for_view, meta)
     J._render_summary_plots(out, r.phi_hist, results["dt_s"],
                             fields_for_view, meta)
+    if r.rho_final is not None:
+        from studio3d.warped_mesh import build_warped_mesh
+        J._write_warped_geometry(out, part, r.rho_final, p, grid)
+        build_warped_mesh(part, r.rho_final, p, grid).export(
+            out / "warped_mesh.stl")
     logger.info("densify %s arm done in %.1f s (n=%d)", arm, wall_s, n)
     return results
 

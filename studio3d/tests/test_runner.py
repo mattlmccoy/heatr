@@ -71,6 +71,9 @@ def test_run_densify_writes_the_artifact_set(box20_stl, tmp_path):
     assert meta["dims"] == [16, 16, 16]
     assert "rho_final" in meta["fields"]
     assert (out / "slices").is_dir()
+    # densified-form 3-D model artifacts (spec 7d follow-on)
+    assert (out / "warped_mesh.stl").exists()
+    assert (out / "warped_geometry.json").exists()
     assert res["phi_hist_len"] > 0
     # results must be STRICT JSON: a 2 s horizon never reaches phi90, so
     # t_phi90_s is non-finite in the raw Result; NaN in the file breaks
