@@ -1,0 +1,3 @@
+# Regenerable forward fields and solver checkpoints. JSON gates, the delivered
+# design MAP (force-added) and figures are tracked. Same rule as solve3d/results.
+*.npz

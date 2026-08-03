@@ -1,0 +1,231 @@
+{
+ "arm": "solve_filter_only",
+ "shape": "pyramid",
+ "mesh_holdout": {
+  "solve_lc_m": 0.0009375,
+  "score_lc_m": 0.000625,
+  "transfer": {
+   "radius_m": 0.001,
+   "method": "normalized-convolution re-evaluation (design filter kernel)",
+   "total_dopant_src_m3": 3.2501446863241617e-06,
+   "total_dopant_dst_m3": 3.251467691191373e-06,
+   "total_dopant_rel_move": 0.0004070602988162898
+  },
+  "checks": {
+   "J_rel": {
+    "measured": 0.1508409196004331,
+    "band": 0.07701611045752257,
+    "pass": false,
+    "uniform_own_move": 0.051344073638348385
+   },
+   "iou_phi0p9": {
+    "measured": 0.009335155972925668,
+    "band": 0.014185311161501651,
+    "pass": true,
+    "uniform_own_move": 0.009456874107667768
+   },
+   "iou_phi0p8": {
+    "measured": 0.008463569322340159,
+    "band": 0.014594944150499709,
+    "pass": true,
+    "uniform_own_move": 0.009729962766999806
+   },
+   "in_part_phi0p9": {
+    "measured": 0.009335155972925668,
+    "band": 0.014185311161501651,
+    "pass": true,
+    "uniform_own_move": 0.009456874107667768
+   },
+   "out_of_part_phi0p9": {
+    "measured": 0.0,
+    "band": 0.0,
+    "pass": true,
+    "uniform_own_move": 0.0
+   },
+   "front_ssd_mm": {
+    "measured": 0.08981441060088002,
+    "band": 0.24405049012821878,
+    "pass": true,
+    "uniform_own_move": 0.16270032675214585
+   }
+  },
+  "pass": false,
+  "J_solved_coarse": 6.101506534701989e-07,
+  "J_solved_fine": 7.021863391344489e-07,
+  "J_uniform_coarse": 1.4520042968916383e-06,
+  "J_uniform_fine": 1.5265561124344408e-06,
+  "solved_still_beats_uniform_at_score_mesh": true,
+  "margin_at_score_mesh": 0.5400193065850339,
+  "wall_s": 1402.492784,
+  "band_rule": "1.5 x the UNIFORM arm's own coarse-to-fine move for each metric, measured before any solved map is scored on the fine mesh",
+  "scores": {
+   "uniform_at_score_mesh": {
+    "arm": "uniform_at_score_mesh",
+    "shape": "pyramid",
+    "wall_forward_s": 721.7185020420002,
+    "n_steps": 13000,
+    "n_eqs_solves": 1,
+    "J_symmetric": 1.233453704369884e-06,
+    "argmin_symmetric": 13000,
+    "J_asymmetric": 1.5265561124344408e-06,
+    "argmin_asymmetric": 8223,
+    "t_stop_s": 411.15000000000003,
+    "at_horizon_asymmetric": false,
+    "J_asym_w3_at_same_read": 1.4853911803821372e-06,
+    "J_out_of_bounds": 5.880704578900528e-08,
+    "J_in_bounds_deficit": 1.4677490666454356e-06,
+    "out_of_part_melt_fraction_of_part": 0.003916734301728304,
+    "in_bounds_below_floor_fraction": 0.6449647876930975,
+    "part_mean_phi": 0.4084173978127973,
+    "sigma_T_diagnostic_c": 29.414120471963834,
+    "eval_missed": 0,
+    "map_stats": {
+     "mean": 1.0,
+     "min": 1.0,
+     "max": 1.0
+    },
+    "gates": {
+     "energy_residual_frac": 1.165738275141286e-13,
+     "clamp_bound": false,
+     "cfl_violated": false
+    },
+    "iou_phi0p8": 0.20313997368494724,
+    "in_part_phi0p8": 0.20313997368494724,
+    "out_of_part_phi0p8": 0.0,
+    "iou_phi0p9": 0.19424051678284485,
+    "in_part_phi0p9": 0.19424051678284485,
+    "out_of_part_phi0p9": 0.0,
+    "front_ssd_mm": 2.9009347307165445,
+    "iou_phi0p8__plane_spread": 0.5966326530612245,
+    "in_part_phi0p8__plane_spread": 0.5966326530612245,
+    "out_of_part_phi0p8__plane_spread": 0.0,
+    "iou_phi0p9__plane_spread": 0.5759693877551021,
+    "in_part_phi0p9__plane_spread": 0.5759693877551021,
+    "out_of_part_phi0p9__plane_spread": 0.0,
+    "front_ssd_mm__plane_spread": 0.5487421110076727,
+    "z_planes_used_m": [
+     -0.00929957881207701,
+     -0.004649789406038505,
+     0.0,
+     0.004649789406038505,
+     0.00929957881207701
+    ],
+    "n_planes_used": 5
+   },
+   "solved_at_score_mesh": {
+    "arm": "solve_filter_only_at_score_mesh",
+    "shape": "pyramid",
+    "wall_forward_s": 621.7512874999993,
+    "n_steps": 13000,
+    "n_eqs_solves": 1,
+    "J_symmetric": 8.432038496266681e-07,
+    "argmin_symmetric": 13000,
+    "J_asymmetric": 7.021863391344489e-07,
+    "argmin_asymmetric": 12078,
+    "t_stop_s": 603.9,
+    "at_horizon_asymmetric": false,
+    "J_asym_w3_at_same_read": 6.825297916334363e-07,
+    "J_out_of_bounds": 2.808078214430362e-08,
+    "J_in_bounds_deficit": 6.741055569901453e-07,
+    "out_of_part_melt_fraction_of_part": 0.003313629392057203,
+    "in_bounds_below_floor_fraction": 0.36650055658377867,
+    "part_mean_phi": 0.6763331808004058,
+    "sigma_T_diagnostic_c": 25.104244163352657,
+    "eval_missed": 0,
+    "map_stats": {
+     "mean": 0.776230733035049,
+     "min": 0.04293610016625235,
+     "max": 0.9999999557119157
+    },
+    "gates": {
+     "energy_residual_frac": 1.168656966071254e-13,
+     "clamp_bound": false,
+     "cfl_violated": false
+    },
+    "iou_phi0p8": 0.3837010028741816,
+    "in_part_phi0p8": 0.3837010028741816,
+    "out_of_part_phi0p8": 0.0,
+    "iou_phi0p9": 0.3709062072780021,
+    "in_part_phi0p9": 0.3709062072780021,
+    "out_of_part_phi0p9": 0.0,
+    "front_ssd_mm": 1.7225659832796552,
+    "iou_phi0p8__plane_spread": 0.8673696844993142,
+    "in_part_phi0p8__plane_spread": 0.8673696844993142,
+    "out_of_part_phi0p8__plane_spread": 0.0,
+    "iou_phi0p9__plane_spread": 0.8526234567901234,
+    "in_part_phi0p9__plane_spread": 0.8526234567901234,
+    "out_of_part_phi0p9__plane_spread": 0.0,
+    "front_ssd_mm__plane_spread": 2.548467668457841,
+    "z_planes_used_m": [
+     -0.00929957881207701,
+     -0.004649789406038505,
+     0.0,
+     0.004649789406038505,
+     0.00929957881207701
+    ],
+    "n_planes_used": 5
+   }
+  }
+ },
+ "smoothing_robustness": {
+  "perturbation_radius_m": 0.0005,
+  "filter_radius_m": 0.001,
+  "J_unblurred": 6.101506534701989e-07,
+  "J_blurred": 6.19152206923174e-07,
+  "rel_change": 0.014753001413305423,
+  "tolerance": 0.1,
+  "pass": true,
+  "scores": {
+   "blurred": {
+    "arm": "solve_filter_only_blurred",
+    "shape": "pyramid",
+    "wall_forward_s": 151.69113649999963,
+    "n_steps": 13000,
+    "n_eqs_solves": 1,
+    "J_symmetric": 8.006512487891209e-07,
+    "argmin_symmetric": 13000,
+    "J_asymmetric": 6.19152206923174e-07,
+    "argmin_asymmetric": 12696,
+    "t_stop_s": 634.8000000000001,
+    "at_horizon_asymmetric": false,
+    "J_asym_w3_at_same_read": 6.007687509510239e-07,
+    "J_out_of_bounds": 2.626207996021434e-08,
+    "J_in_bounds_deficit": 5.928901269629596e-07,
+    "out_of_part_melt_fraction_of_part": 0.0035110338871543116,
+    "in_bounds_below_floor_fraction": 0.36158667519745574,
+    "part_mean_phi": 0.671517088708324,
+    "sigma_T_diagnostic_c": 25.17522441710272,
+    "eval_missed": 0,
+    "map_stats": {
+     "mean": 0.7759034383155659,
+     "min": 0.024330277102456672,
+     "max": 1.0000000000000007
+    },
+    "gates": {
+     "energy_residual_frac": 1.272549245466072e-13,
+     "clamp_bound": false,
+     "cfl_violated": false
+    },
+    "iou_phi0p8": 0.3355795673837874,
+    "in_part_phi0p8": 0.3355795673837874,
+    "out_of_part_phi0p8": 0.0,
+    "iou_phi0p9": 0.31872068433900697,
+    "in_part_phi0p9": 0.31872068433900697,
+    "out_of_part_phi0p9": 0.0,
+    "front_ssd_mm": 2.4241180908486335
+   }
+  }
+ },
+ "beats_uniform_in_grid": true,
+ "in_grid_margin_rel": 0.5797872948610606,
+ "solved_label": false,
+ "solved_label_rule": {
+  "all_of": [
+   "beats uniform on the PRIMARY objective beyond the in-grid noise band",
+   "passes the mesh hold-out on every banded metric",
+   "passes smoothing robustness"
+  ],
+  "null_result_is_a_valid_finding": true
+ },
+ "s2_honesty_note": "BOTH cases are CORNERED shapes and the pyramid additionally has an APEX. S2 measured that heatr3d's melt-region geometry does not settle at a reentrant corner even with geometry held fixed (lshape front SSD 0.33342 mm on the commensurate pair, above its 0.25 mm ceiling, with the corner power peak growing 2.8125 -> 3.3788 -> 3.7135). solve3d's conforming mesh removes the staircase but does NOT remove a physical field singularity. Therefore no ABSOLUTE shape-fidelity number on these shapes is gated by anything, and none will be quoted as if it were."
+}
