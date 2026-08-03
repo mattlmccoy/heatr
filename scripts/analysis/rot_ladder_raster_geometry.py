@@ -34,6 +34,7 @@ sys.path.insert(0, str(REPO / "scripts" / "analysis"))
 from adjoint2d import chi_area, robust_rot as rr          # noqa: E402
 from adjoint2d.library_solve import shape_config          # noqa: E402
 from adjoint2d.pins import build_case, load_cfg           # noqa: E402
+from rot_ladder_variants import snap_cross_cfg            # noqa: E402
 
 OUT = REPO / "fgm_solve_campaign/out_rot_ladder"
 GRIDS = (96, 120, 160, 180, 200, 240, 360)
@@ -46,10 +47,18 @@ CROSS_ARM_HALF_M = 0.011 / 3.0
 
 
 def main() -> None:
+    snap = "--snap" in sys.argv[1:]
+    grids = tuple(int(v) for v in sys.argv[1:] if v.isdigit()) or GRIDS
     cfg = load_cfg(shape_config("cross"))
     rows = []
-    for n in GRIDS:
+    for n in grids:
         c = rr.cfg_at_grid(cfg, n)
+        limb_m, arm_m = CROSS_LIMB_HALF_M, CROSS_ARM_HALF_M
+        snap_info = None
+        if snap:
+            c, snap_info = snap_cross_cfg(c, int(n))
+            limb_m = snap_info["limb_half_m"]
+            arm_m = snap_info["arm_half_m"]
         case = build_case(c)
         pm = np.asarray(case.part_mask, dtype=bool)
         chi, info = chi_area.chi_from_cfg(c, case.x, case.y)
@@ -66,10 +75,10 @@ def main() -> None:
         rows_with_part = np.flatnonzero(col)
         j = int(rows_with_part[0]) + 1              # one row inside the limb tip
         arm_cells = int(pm[j, :].sum()) / 2.0
-        exact_limb = CROSS_LIMB_HALF_M / dx
-        exact_arm = CROSS_ARM_HALF_M / dx
+        exact_limb = limb_m / dx
+        exact_arm = arm_m / dx
         rows.append({
-            "n_grid": n, "dx_mm": dx * 1e3,
+            "n_grid": n, "dx_mm": dx * 1e3, "snap": snap_info,
             "n_part_cells": int(pm.sum()),
             "limb_half_cells_exact": exact_limb,
             "limb_half_cells_raster": limb_cells,
@@ -95,8 +104,9 @@ def main() -> None:
               f"raster-area {r['raster_minus_area_pct']:+6.3f} %", flush=True)
 
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "cross_raster_geometry.json").write_text(json.dumps(
-        {"shape": "cross",
+    name = "cross_raster_geometry_snapA.json" if snap else "cross_raster_geometry.json"
+    (OUT / name).write_text(json.dumps(
+        {"shape": "cross", "snapped": bool(snap),
          "limb_half_m": CROSS_LIMB_HALF_M, "arm_half_m": CROSS_ARM_HALF_M,
          "note": "the limb boundary sits on a cell edge when the grid number is "
                  "a multiple of 60; the ARM boundary needs a multiple of 180, "

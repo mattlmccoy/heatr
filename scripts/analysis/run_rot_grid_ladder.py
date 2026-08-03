@@ -91,6 +91,7 @@ sys.path.insert(0, str(REPO / "scripts" / "analysis"))
 from adjoint2d import robust_rot as rr                    # noqa: E402
 from adjoint2d.library_solve import shape_config          # noqa: E402
 from adjoint2d.pins import build_case, load_cfg           # noqa: E402
+from rot_ladder_variants import snap_cross_cfg            # noqa: E402
 
 OUT = REPO / "fgm_solve_campaign/out_rot_ladder"
 LOGS = REPO / "fgm_solve_campaign/logs_rot_ladder"
@@ -187,10 +188,30 @@ def program_for(spec: dict, dt_s: float, n_steps: int):
     return ang, pos, info
 
 
-def run_one_grid(name: str, spec: dict, n_grid: int, with_map: bool) -> dict:
+def run_one_grid(name: str, spec: dict, n_grid: int, with_map: bool,
+                 snap: bool = False) -> dict:
     tag = f"{name}@{n_grid}"
     t0 = time.perf_counter()
     cfg = base_cfg(spec, n_grid)
+    snap_info = None
+    if snap:
+        # VARIANT A. Both cross boundaries moved to the nearest whole cell
+        # multiple at THIS grid, so the raster represents them exactly and the
+        # sub-cell area-fill target collapses onto the binary raster. The
+        # geometry deltas are recorded because they are the price of the
+        # variant: the part itself moves by up to half a cell.
+        cfg, snap_info = snap_cross_cfg(cfg, int(n_grid))
+        print(f"[{tag}] SNAP limb half {snap_info['limb_half_m_original'] * 1e3:.4f}"
+              f" -> {snap_info['limb_half_m'] * 1e3:.4f} mm "
+              f"({snap_info['limb_cells']} cells, "
+              f"{snap_info['d_limb_frac_of_cell']:+.3f} cell, "
+              f"{snap_info['d_limb_pct_of_dimension']:+.2f} %); arm half "
+              f"{snap_info['arm_half_m_original'] * 1e3:.4f} -> "
+              f"{snap_info['arm_half_m'] * 1e3:.4f} mm "
+              f"({snap_info['arm_cells']} cells, "
+              f"{snap_info['d_arm_frac_of_cell']:+.3f} cell, "
+              f"{snap_info['d_arm_pct_of_dimension']:+.2f} %)"
+              + ("  NO-OP" if snap_info["is_no_op"] else ""), flush=True)
 
     probe = build_case(rr.cfg_at_grid(cfg, n_grid))
     dt = float(probe.pins.dt)
@@ -240,6 +261,7 @@ def run_one_grid(name: str, spec: dict, n_grid: int, with_map: bool) -> dict:
 
     return {
         "n_grid": int(n_grid),
+        "snap": snap_info,
         "n_part_cells": n_part,
         "dx_m": float(rc.case.dx), "dy_m": float(rc.case.dy),
         "dt_s": dt, "n_steps": n_steps, "n_substeps": n_substeps,
@@ -257,12 +279,27 @@ def run_one_grid(name: str, spec: dict, n_grid: int, with_map: bool) -> dict:
         **fields}
 
 
-def reproduction_gate(name: str, grids: dict) -> dict:
+def reproduction_gate(name: str, grids: dict, snap: bool = False) -> dict:
     """Reproduce the stored 120 and 160 numbers before any new grid is trusted.
 
     Read from the stored JSON, not transcribed. A grid the stored file does not
     contain is reported as NOT CHECKED rather than silently passing.
+
+    When the geometry has been DELIBERATELY changed (variant A), the stored
+    numbers are numbers about a different part and the gate does not apply. It
+    says so in its own status rather than failing, and rather than passing: the
+    variant carries its own identity control instead, a snapped run at a grid
+    where the snap is a no-op against an unsnapped run at the same grid.
     """
+    if snap:
+        return {"status": "NOT APPLICABLE, the geometry was deliberately "
+                          "modified by the snap, so the stored numbers "
+                          "describe a different part",
+                "ALL_PASS": None, "n_comparisons_actually_made": 0,
+                "substitute_control": "a snapped run at a grid where the snap "
+                                      "is a no-op must equal an unsnapped run "
+                                      "at that grid; see the grid-181 identity "
+                                      "gate"}
     path, ref = REPRO_SOURCE[name]
     if not path.exists():
         return {"status": "NO STORED FILE", "path": str(path)}
@@ -351,6 +388,9 @@ def main() -> None:
     ap.add_argument("--grids", type=int, nargs="+", default=list(LADDER))
     ap.add_argument("--with-map", action="store_true")
     ap.add_argument("--tag", default=None)
+    ap.add_argument("--snap-geometry", action="store_true",
+                    help="VARIANT A: snap both cross boundaries to whole cell "
+                         "multiples at every grid")
     a = ap.parse_args()
 
     name = a.shape
@@ -365,6 +405,11 @@ def main() -> None:
                 "uniform dopant on the primary arm",
         "ladder": [int(g) for g in a.grids],
         "with_transferred_map": bool(a.with_map),
+        "snap_geometry": bool(a.snap_geometry),
+        "variant": ("VARIANT A, snapped geometry: both cross boundaries moved "
+                    "to the nearest whole cell multiple at each grid"
+                    if a.snap_geometry else
+                    "original geometry, unchanged from the stored ladder"),
         "objective": "J = sum over the whole domain of (phi - chi_area)^2; "
                      "J is a sum over cells and is NOT comparable between "
                      "grids; J_per_part_cell is emitted as a normalization "
@@ -381,7 +426,8 @@ def main() -> None:
     store: dict[str, np.ndarray] = {}
     walls: dict[int, float] = {}
     for i, n in enumerate(a.grids):
-        g, arrs = run_one_grid(name, spec, int(n), a.with_map)
+        g, arrs = run_one_grid(name, spec, int(n), a.with_map,
+                               snap=a.snap_geometry)
         res["grids"][str(int(n))] = g
         walls[int(n)] = g["wall_s"]
         for k, v in arrs.items():
@@ -403,7 +449,8 @@ def main() -> None:
         (OUT / f"{tag}_ladder.json").write_text(
             json.dumps(res, indent=2, default=float))
 
-    res["reproduction_gate"] = reproduction_gate(name, res["grids"])
+    res["reproduction_gate"] = reproduction_gate(name, res["grids"],
+                                                 snap=a.snap_geometry)
     res["convergence"] = {
         k: convergence(res["grids"], k)
         for k in ("ROT_uniform", "STATIC_uniform", "QS_uniform")
