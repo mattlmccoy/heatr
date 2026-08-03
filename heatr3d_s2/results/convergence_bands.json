@@ -1,0 +1,2284 @@
+{
+ "what": "S2 Task 3 convergence bands and verdicts",
+ "band_rule": {
+  "safety_factor": 1.5,
+  "statement": "band(quantity, shape) = 1.5 x the FINEST successive-pair change of that quantity (relative change for t90 and sigma_T, absolute for the shape metrics, which are already fractions or millimetres). The rule is fixed here, before any number exists; 1.5 is the same safety factor Phase A and its close-out used.",
+  "not_richardson": "bands are MEASURED spreads. A Richardson extrapolation and an observed order p are reported alongside as diagnostics and are never presented as the converged truth."
+ },
+ "pass_criteria": {
+  "requires_non_increasing_successive_changes": true,
+  "tolerance_on_non_increase": 1.1,
+  "tolerance_why": "a successive change may exceed its predecessor by up to 10 % and still count as bounded-oscillatory rather than diverging; beyond that it is a FAIL",
+  "diverging_is_FAIL": true,
+  "diverging_definition": "successive-pair changes growing beyond the 10 % tolerance -- reported as FAIL, never converted into a band",
+  "finest_pair_below_ceiling": true,
+  "richardson_is_reported_not_truth": true,
+  "verdict_rule": "S2 PASSES for a (shape, quantity) iff BOTH the non-increase criterion and the finest-pair ceiling hold. The S2 gate PASSES overall iff every VERDICT-CARRYING quantity passes on every shape that completed; t90 failures are reported as PARTIAL; sigma_T never affects the verdict."
+ },
+ "preregistration_ambiguity_resolved": "AMBIGUITY IN MY OWN PRE-REGISTRATION, recorded rather than quietly\npicked. The pre-registration describes the IoU quantities as \"IoU of the\nphi>=0.9 melt region against the ANALYTIC nominal shape\", but anchors their\nceiling on a precedent (0.0344 from phase_a_shape_gate.json) that is the\nJaccard distance between TWO GRIDS' melt regions, not between one grid and the\nnominal. Those are different quantities and only one of them is what the\nceiling was calibrated against.\n\nResolution: BOTH are computed and reported, and the VERDICT is taken on the\ngrid-to-grid form, because\n  (a) it is what the cited precedent measures, so the ceiling means something;\n  (b) it is what \"convergence\" means -- does the melt region stop MOVING as the\n      grid refines -- whereas agreement with the nominal is a physics outcome\n      that a converged solver is free to get wrong.\nThe nominal-referenced form is reported with its own band as the physics\nreading. Nothing is widened; an ambiguity is closed toward the calibrated side\nand the other side is published beside it.",
+ "shapes": {
+  "circle": {
+   "grids": [
+    48,
+    64,
+    80
+   ],
+   "reads": {
+    "melt_onset": {
+     "iou_vs_nominal_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8771829373031779,
+       0.8539937016890924,
+       0.8505582593758947
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8771829373031779,
+        "q_hi": 0.8539937016890924,
+        "signed_change": -0.02318923561408548,
+        "change": 0.02318923561408548,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8539937016890924,
+        "q_hi": 0.8505582593758947,
+        "signed_change": -0.0034354423131977008,
+        "change": 0.0034354423131977008,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "monotone",
+      "finest_change": 0.0034354423131977008,
+      "safety": 1.5,
+      "band": 0.005153163469796551,
+      "observed_order": 4.0,
+      "r2": 0.9925554413191976,
+      "richardson_limit_diagnostic": 0.8499607911475126,
+      "ceiling": null,
+      "pass": null,
+      "reason": "no ceiling supplied (diagnostic quantity)"
+     },
+     "iou_vs_nominal_phi0p8": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8902089894073862,
+       0.8651588892069852,
+       0.8627254509018037
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8902089894073862,
+        "q_hi": 0.8651588892069852,
+        "signed_change": -0.025050100200400993,
+        "change": 0.025050100200400993,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8651588892069852,
+        "q_hi": 0.8627254509018037,
+        "signed_change": -0.002433438305181501,
+        "change": 0.002433438305181501,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "monotone",
+      "finest_change": 0.002433438305181501,
+      "safety": 1.5,
+      "band": 0.0036501574577722518,
+      "observed_order": 4.0,
+      "r2": 0.9844022364015598,
+      "richardson_limit_diagnostic": 0.8624636252613729,
+      "ceiling": null,
+      "pass": null,
+      "reason": "no ceiling supplied (diagnostic quantity)"
+     },
+     "in_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8771829373031779,
+       0.8539937016890924,
+       0.8505582593758947
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8771829373031779,
+        "q_hi": 0.8539937016890924,
+        "signed_change": -0.02318923561408548,
+        "change": 0.02318923561408548,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8539937016890924,
+        "q_hi": 0.8505582593758947,
+        "signed_change": -0.0034354423131977008,
+        "change": 0.0034354423131977008,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "monotone",
+      "finest_change": 0.0034354423131977008,
+      "safety": 1.5,
+      "band": 0.005153163469796551,
+      "observed_order": 4.0,
+      "r2": 0.9925554413191976,
+      "richardson_limit_diagnostic": 0.8499607911475126,
+      "ceiling": 0.02,
+      "pass": true,
+      "reason": ""
+     },
+     "out_of_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.0,
+        "q_hi": 0.0,
+        "signed_change": 0.0,
+        "change": 0.0,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.0,
+        "q_hi": 0.0,
+        "signed_change": 0.0,
+        "change": 0.0,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "bounded_oscillatory",
+      "value_trend": "monotone",
+      "finest_change": 0.0,
+      "safety": 1.5,
+      "band": 0.0,
+      "observed_order": 0.25,
+      "r2": NaN,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.02,
+      "pass": true,
+      "reason": ""
+     },
+     "sigma_T": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       20.11684029021101,
+       20.103141496882763,
+       19.851359854901997
+      ],
+      "relative": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 20.11684029021101,
+        "q_hi": 20.103141496882763,
+        "signed_change": -0.0006814255040869953,
+        "change": 0.0006814255040869953,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 20.103141496882763,
+        "q_hi": 19.851359854901997,
+        "signed_change": -0.012683344809680273,
+        "change": 0.012683344809680273,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "monotone",
+      "finest_change": 0.012683344809680273,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.710125236540202,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "t90": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       323.35,
+       323.35,
+       325.25
+      ],
+      "relative": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 323.35,
+        "q_hi": 323.35,
+        "signed_change": 0.0,
+        "change": 0.0,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 323.35,
+        "q_hi": 325.25,
+        "signed_change": 0.005841660261337363,
+        "change": 0.005841660261337363,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.005841660261337363,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.6677070899114261,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.01,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "jaccard_dist_phi0p9_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.042408546455163454,
+       0.03303600925008254
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.042408546455163454,
+        "signed_change": 0.042408546455163454,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.03303600925008254,
+        "signed_change": 0.03303600925008254,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "finest_change": 0.03303600925008254,
+      "safety": 1.5,
+      "band": 0.049554013875123815,
+      "observed_order": 0.9778356515279654,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": true,
+      "reason": ""
+     },
+     "jaccard_dist_phi0p8_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.04511398055157023,
+       0.03371884671770642
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.04511398055157023,
+        "signed_change": 0.04511398055157023,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.03371884671770642,
+        "signed_change": 0.03371884671770642,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "finest_change": 0.03371884671770642,
+      "safety": 1.5,
+      "band": 0.05057827007655963,
+      "observed_order": 1.1398616050709047,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": true,
+      "reason": ""
+     },
+     "front_ssd_mm_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.19838751587832618,
+       0.16712288565049377
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.19838751587832618,
+        "signed_change": 0.19838751587832618,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.16712288565049377,
+        "signed_change": 0.16712288565049377,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "finest_change": 0.16712288565049377,
+      "safety": 1.5,
+      "band": 0.2506843284757406,
+      "observed_order": 0.6714341523049012,
+      "r2": 1.0,
+      "ceiling": 0.25,
+      "pass": true,
+      "reason": ""
+     }
+    },
+    "heating_fixed_time": {
+     "iou_vs_nominal_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8708846263956485,
+       0.8462639564843973,
+       0.8398225021471515
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8708846263956485,
+        "q_hi": 0.8462639564843973,
+        "signed_change": -0.024620669911251114,
+        "change": 0.024620669911251114,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8462639564843973,
+        "q_hi": 0.8398225021471515,
+        "signed_change": -0.0064414543372458555,
+        "change": 0.0064414543372458555,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "monotone",
+      "finest_change": 0.0064414543372458555,
+      "safety": 1.5,
+      "band": 0.009662181505868783,
+      "observed_order": 4.0,
+      "r2": 0.9999432928978678,
+      "richardson_limit_diagnostic": 0.837540097067025,
+      "ceiling": null,
+      "pass": null,
+      "reason": "no ceiling supplied (diagnostic quantity)"
+     },
+     "iou_vs_nominal_phi0p8": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8829086744918409,
+       0.8590037217291726,
+       0.850128829086745
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8829086744918409,
+        "q_hi": 0.8590037217291726,
+        "signed_change": -0.02390495276266824,
+        "change": 0.02390495276266824,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8590037217291726,
+        "q_hi": 0.850128829086745,
+        "signed_change": -0.008874892642427579,
+        "change": 0.008874892642427579,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "monotone",
+      "finest_change": 0.008874892642427579,
+      "safety": 1.5,
+      "band": 0.013312338963641368,
+      "observed_order": 2.8425000000000002,
+      "r2": 0.9999999983040609,
+      "richardson_limit_diagnostic": 0.8448884162883593,
+      "ceiling": null,
+      "pass": null,
+      "reason": "no ceiling supplied (diagnostic quantity)"
+     },
+     "in_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8708846263956485,
+       0.8462639564843973,
+       0.8398225021471515
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8708846263956485,
+        "q_hi": 0.8462639564843973,
+        "signed_change": -0.024620669911251114,
+        "change": 0.024620669911251114,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8462639564843973,
+        "q_hi": 0.8398225021471515,
+        "signed_change": -0.0064414543372458555,
+        "change": 0.0064414543372458555,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "monotone",
+      "finest_change": 0.0064414543372458555,
+      "safety": 1.5,
+      "band": 0.009662181505868783,
+      "observed_order": 4.0,
+      "r2": 0.9999432928978678,
+      "richardson_limit_diagnostic": 0.837540097067025,
+      "ceiling": 0.02,
+      "pass": true,
+      "reason": ""
+     },
+     "out_of_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.0,
+        "q_hi": 0.0,
+        "signed_change": 0.0,
+        "change": 0.0,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.0,
+        "q_hi": 0.0,
+        "signed_change": 0.0,
+        "change": 0.0,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "bounded_oscillatory",
+      "value_trend": "monotone",
+      "finest_change": 0.0,
+      "safety": 1.5,
+      "band": 0.0,
+      "observed_order": 0.25,
+      "r2": NaN,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.02,
+      "pass": true,
+      "reason": ""
+     },
+     "sigma_T": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       19.975441490294973,
+       19.99914420956822,
+       19.69701920818734
+      ],
+      "relative": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 19.975441490294973,
+        "q_hi": 19.99914420956822,
+        "signed_change": 0.0011851866772333661,
+        "change": 0.0011851866772333661,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 19.99914420956822,
+        "q_hi": 19.69701920818734,
+        "signed_change": -0.015338615360404418,
+        "change": 0.015338615360404418,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.015338615360404418,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.5997495680516765,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "jaccard_dist_phi0p9_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.04561746497230368,
+       0.03486820153486825
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.04561746497230368,
+        "signed_change": 0.04561746497230368,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.03486820153486825,
+        "signed_change": 0.03486820153486825,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "finest_change": 0.03486820153486825,
+      "safety": 1.5,
+      "band": 0.05230230230230237,
+      "observed_order": 1.0520825557664795,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": true,
+      "reason": ""
+     },
+     "jaccard_dist_phi0p8_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.042310167310167346,
+       0.03230059327620305
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.042310167310167346,
+        "signed_change": 0.042310167310167346,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.03230059327620305,
+        "signed_change": 0.03230059327620305,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "finest_change": 0.03230059327620305,
+      "safety": 1.5,
+      "band": 0.048450889914304573,
+      "observed_order": 1.0568844192978395,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": true,
+      "reason": ""
+     },
+     "front_ssd_mm_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.21380301490290793,
+       0.17568017059587981
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.21380301490290793,
+        "signed_change": 0.21380301490290793,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.17568017059587981,
+        "signed_change": 0.17568017059587981,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "finest_change": 0.17568017059587981,
+      "safety": 1.5,
+      "band": 0.2635202558938197,
+      "observed_order": 0.7689119788978438,
+      "r2": 1.0,
+      "ceiling": 0.25,
+      "pass": true,
+      "reason": ""
+     }
+    }
+   }
+  },
+  "square": {
+   "grids": [
+    48,
+    64,
+    80
+   ],
+   "reads": {
+    "melt_onset": {
+     "iou_vs_nominal_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8357632933104633,
+       0.8473066443093691,
+       0.8130861504907306
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8357632933104633,
+        "q_hi": 0.8473066443093691,
+        "signed_change": 0.0115433509989058,
+        "change": 0.0115433509989058,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8473066443093691,
+        "q_hi": 0.8130861504907306,
+        "signed_change": -0.03422049381863845,
+        "change": 0.03422049381863845,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.03422049381863845,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.33618541096643495,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "iou_vs_nominal_phi0p8": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8381521391230129,
+       0.8493636553306907,
+       0.8175984337611485
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8381521391230129,
+        "q_hi": 0.8493636553306907,
+        "signed_change": 0.011211516207677796,
+        "change": 0.011211516207677796,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8493636553306907,
+        "q_hi": 0.8175984337611485,
+        "signed_change": -0.0317652215695422,
+        "change": 0.0317652215695422,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.0317652215695422,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.3197693719723472,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "in_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8683448429494319,
+       0.9005346402316775,
+       0.8304744932056136
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8683448429494319,
+        "q_hi": 0.9005346402316775,
+        "signed_change": 0.03218979728224558,
+        "change": 0.03218979728224558,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.9005346402316775,
+        "q_hi": 0.8304744932056136,
+        "signed_change": -0.07006014702606389,
+        "change": 0.07006014702606389,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.07006014702606389,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.21291229461915506,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.02,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "out_of_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.038984183559812875,
+       0.06282022722209846,
+       0.021385609267097348
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.038984183559812875,
+        "q_hi": 0.06282022722209846,
+        "signed_change": 0.023836043662285582,
+        "change": 0.023836043662285582,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.06282022722209846,
+        "q_hi": 0.021385609267097348,
+        "signed_change": -0.04143461795500111,
+        "change": 0.04143461795500111,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.04143461795500111,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.11509517159870597,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.02,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "sigma_T": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       19.75932511573381,
+       19.855769637204993,
+       19.666181898356726
+      ],
+      "relative": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 19.75932511573381,
+        "q_hi": 19.855769637204993,
+        "signed_change": 0.004857254250697506,
+        "change": 0.004857254250697506,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 19.855769637204993,
+        "q_hi": 19.666181898356726,
+        "signed_change": -0.009640292143545618,
+        "change": 0.009640292143545618,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.009640292143545618,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.16833539345573856,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "t90": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       323.70000000000005,
+       316.05,
+       321.6
+      ],
+      "relative": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 323.70000000000005,
+        "q_hi": 316.05,
+        "signed_change": -0.02420503084954923,
+        "change": 0.02420503084954923,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 316.05,
+        "q_hi": 321.6,
+        "signed_change": 0.017257462686567197,
+        "change": 0.017257462686567197,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "oscillatory",
+      "finest_change": 0.017257462686567197,
+      "safety": 1.5,
+      "band": 0.025886194029850797,
+      "observed_order": 4.0,
+      "r2": 0.3069533593375501,
+      "richardson_limit_diagnostic": 336.26785714285705,
+      "ceiling": 0.01,
+      "pass": false,
+      "reason": "finest-pair change 0.0172575 exceeds the pre-registered ceiling 0.01"
+     },
+     "jaccard_dist_phi0p9_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.058157012371372385,
+       0.11573592322811888
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.058157012371372385,
+        "signed_change": 0.058157012371372385,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.11573592322811888,
+        "signed_change": 0.11573592322811888,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.11573592322811888,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -2.6943229830253523,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     },
+     "jaccard_dist_phi0p8_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.05702857142857143,
+       0.11622857142857146
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.05702857142857143,
+        "signed_change": 0.05702857142857143,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.11622857142857146,
+        "signed_change": 0.11622857142857146,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.11622857142857146,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -2.7876686962093933,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     },
+     "front_ssd_mm_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.29884707302457303,
+       0.6121918471540797
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.29884707302457303,
+        "signed_change": 0.29884707302457303,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.6121918471540797,
+        "signed_change": 0.6121918471540797,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.6121918471540797,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -2.8076654524525635,
+      "r2": 1.0,
+      "ceiling": 0.25,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     }
+    },
+    "heating_fixed_time": {
+     "iou_vs_nominal_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8285065917441108,
+       0.8469773299748111,
+       0.8028076332529064
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8285065917441108,
+        "q_hi": 0.8469773299748111,
+        "signed_change": 0.018470738230700334,
+        "change": 0.018470738230700334,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8469773299748111,
+        "q_hi": 0.8028076332529064,
+        "signed_change": -0.04416969672190474,
+        "change": 0.04416969672190474,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.04416969672190474,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.25297180221987703,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "iou_vs_nominal_phi0p8": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.834552495697074,
+       0.8479532163742689,
+       0.8118444055944056
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.834552495697074,
+        "q_hi": 0.8479532163742689,
+        "signed_change": 0.013400720677194888,
+        "change": 0.013400720677194888,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8479532163742689,
+        "q_hi": 0.8118444055944056,
+        "signed_change": -0.036108810779863276,
+        "change": 0.036108810779863276,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.036108810779863276,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.3008389894925294,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "in_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8539763867231009,
+       0.8988638895076855,
+       0.8153263533080863
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8539763867231009,
+        "q_hi": 0.8988638895076855,
+        "signed_change": 0.04488750278458453,
+        "change": 0.04488750278458453,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8988638895076855,
+        "q_hi": 0.8153263533080863,
+        "signed_change": -0.08353753619959914,
+        "change": 0.08353753619959914,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.08353753619959914,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.1443601902524151,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.02,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "out_of_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.030741813321452437,
+       0.061260859879705955,
+       0.01559367342392515
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.030741813321452437,
+        "q_hi": 0.061260859879705955,
+        "signed_change": 0.030519046558253517,
+        "change": 0.030519046558253517,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.061260859879705955,
+        "q_hi": 0.01559367342392515,
+        "signed_change": -0.0456671864557808,
+        "change": 0.0456671864557808,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.0456671864557808,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.05691252532376989,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.02,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "sigma_T": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       19.341209045082756,
+       19.82149002079262,
+       19.48908960188794
+      ],
+      "relative": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 19.341209045082756,
+        "q_hi": 19.82149002079262,
+        "signed_change": 0.02423031644977506,
+        "change": 0.02423031644977506,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 19.82149002079262,
+        "q_hi": 19.48908960188794,
+        "signed_change": -0.017055718132286665,
+        "change": 0.017055718132286665,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "oscillatory",
+      "finest_change": 0.017055718132286665,
+      "safety": 1.5,
+      "band": 0.025583577198429998,
+      "observed_order": 4.0,
+      "r2": 0.341049565573024,
+      "richardson_limit_diagnostic": 18.74193229551152,
+      "ceiling": null,
+      "pass": null,
+      "reason": "no ceiling supplied (diagnostic quantity)"
+     },
+     "jaccard_dist_phi0p9_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.07853828306264499,
+       0.13457076566125292
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.07853828306264499,
+        "signed_change": 0.07853828306264499,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.13457076566125292,
+        "signed_change": 0.13457076566125292,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.13457076566125292,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -2.1083672632476516,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     },
+     "jaccard_dist_phi0p8_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.07364074328974535,
+       0.1277816012846983
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.07364074328974535,
+        "signed_change": 0.07364074328974535,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.1277816012846983,
+        "signed_change": 0.1277816012846983,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.1277816012846983,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -2.157777884101368,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     },
+     "front_ssd_mm_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.40820380546462226,
+       0.7178812638830381
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.40820380546462226,
+        "signed_change": 0.40820380546462226,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.7178812638830381,
+        "signed_change": 0.7178812638830381,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.7178812638830381,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -2.210294807425666,
+      "r2": 1.0,
+      "ceiling": 0.25,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     }
+    }
+   }
+  },
+  "lshape": {
+   "grids": [
+    48,
+    64,
+    80
+   ],
+   "reads": {
+    "melt_onset": {
+     "iou_vs_nominal_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.4702843538026144,
+       0.44016649323621226,
+       0.4733287702486882
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.4702843538026144,
+        "q_hi": 0.44016649323621226,
+        "signed_change": -0.030117860566402144,
+        "change": 0.030117860566402144,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.44016649323621226,
+        "q_hi": 0.4733287702486882,
+        "signed_change": 0.03316227701247593,
+        "change": 0.03316227701247593,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.03316227701247593,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 4.0,
+      "r2": 0.054299177594327785,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "iou_vs_nominal_phi0p8": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.46899536045681656,
+       0.4391503781147981,
+       0.4721706444454508
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.46899536045681656,
+        "q_hi": 0.4391503781147981,
+        "signed_change": -0.029844982342018433,
+        "change": 0.029844982342018433,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.4391503781147981,
+        "q_hi": 0.4721706444454508,
+        "signed_change": 0.03302026633065269,
+        "change": 0.03302026633065269,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.03302026633065269,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 4.0,
+      "r2": 0.05244464303843388,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "in_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8818227762803235,
+       0.8907513477088947,
+       0.8737365229110512
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8818227762803235,
+        "q_hi": 0.8907513477088947,
+        "signed_change": 0.008928571428571286,
+        "change": 0.008928571428571286,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8907513477088947,
+        "q_hi": 0.8737365229110512,
+        "signed_change": -0.017014824797843553,
+        "change": 0.017014824797843553,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.017014824797843553,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.15470643188687094,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.02,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "out_of_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.8750842318059299,
+       1.0236691374663074,
+       0.8459400269541779
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.8750842318059299,
+        "q_hi": 1.0236691374663074,
+        "signed_change": 0.14858490566037752,
+        "change": 0.14858490566037752,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 1.0236691374663074,
+        "q_hi": 0.8459400269541779,
+        "signed_change": -0.17772911051212947,
+        "change": 0.17772911051212947,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.17772911051212947,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 4.0,
+      "r2": 0.026927756413488657,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.02,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "sigma_T": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       60.206187314255175,
+       66.42014088643374,
+       60.05364379280572
+      ],
+      "relative": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 60.206187314255175,
+        "q_hi": 66.42014088643374,
+        "signed_change": 0.09355526033591662,
+        "change": 0.09355526033591662,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 66.42014088643374,
+        "q_hi": 60.05364379280572,
+        "signed_change": -0.10601350212142682,
+        "change": 0.10601350212142682,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.10601350212142682,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 4.0,
+      "r2": 0.08582615023202722,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "t90": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       632.7,
+       680.9000000000001,
+       664.35
+      ],
+      "relative": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 632.7,
+        "q_hi": 680.9000000000001,
+        "signed_change": 0.07078866206491415,
+        "change": 0.07078866206491415,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 680.9000000000001,
+        "q_hi": 664.35,
+        "signed_change": -0.02491156769774978,
+        "change": 0.02491156769774978,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "oscillatory",
+      "finest_change": 0.02491156769774978,
+      "safety": 1.5,
+      "band": 0.03736735154662467,
+      "observed_order": 4.0,
+      "r2": 0.7268516322252487,
+      "richardson_limit_diagnostic": 655.6958925750395,
+      "ceiling": 0.01,
+      "pass": false,
+      "reason": "finest-pair change 0.0249116 exceeds the pre-registered ceiling 0.01"
+     },
+     "jaccard_dist_phi0p9_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.08227736712425204,
+       0.10172474480816618
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.08227736712425204,
+        "signed_change": 0.08227736712425204,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.10172474480816618,
+        "signed_change": 0.10172474480816618,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.10172474480816618,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -0.8307121259086786,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     },
+     "jaccard_dist_phi0p8_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.08264354796549622,
+       0.1010281432430078
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.08264354796549622,
+        "signed_change": 0.08264354796549622,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.1010281432430078,
+        "signed_change": 0.1010281432430078,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.1010281432430078,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -0.7864224423187289,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     },
+     "front_ssd_mm_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.6408567611407415,
+       0.7973699207947442
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.6408567611407415,
+        "signed_change": 0.6408567611407415,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.7973699207947442,
+        "signed_change": 0.7973699207947442,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.7973699207947442,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -0.8555277263992264,
+      "r2": 1.0,
+      "ceiling": 0.25,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     }
+    },
+    "heating_fixed_time": {
+     "iou_vs_nominal_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.45518177576040386,
+       0.44196091587687664,
+       0.46991855285065026
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.45518177576040386,
+        "q_hi": 0.44196091587687664,
+        "signed_change": -0.013220859883527225,
+        "change": 0.013220859883527225,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.44196091587687664,
+        "q_hi": 0.46991855285065026,
+        "signed_change": 0.027957636973773625,
+        "change": 0.027957636973773625,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.027957636973773625,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.20037535583288868,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "iou_vs_nominal_phi0p8": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.4535583519212155,
+       0.44061446234544765,
+       0.4686048588781707
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.4535583519212155,
+        "q_hi": 0.44061446234544765,
+        "signed_change": -0.012943889575767864,
+        "change": 0.012943889575767864,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.44061446234544765,
+        "q_hi": 0.4686048588781707,
+        "signed_change": 0.02799039653272306,
+        "change": 0.02799039653272306,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.02799039653272306,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.2101066795876465,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "in_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.9038072776280324,
+       0.8877190026954178,
+       0.8796327493261454
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.9038072776280324,
+        "q_hi": 0.8877190026954178,
+        "signed_change": -0.016088274932614555,
+        "change": 0.016088274932614555,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 0.8877190026954178,
+        "q_hi": 0.8796327493261454,
+        "signed_change": -0.008086253369272378,
+        "change": 0.008086253369272378,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "monotone_convergent",
+      "value_trend": "monotone",
+      "finest_change": 0.008086253369272378,
+      "safety": 1.5,
+      "band": 0.012129380053908567,
+      "observed_order": 1.6825,
+      "r2": 0.9999999953132034,
+      "richardson_limit_diagnostic": 0.8714613775003541,
+      "ceiling": 0.02,
+      "pass": true,
+      "reason": ""
+     },
+     "out_of_part_melt_fraction_phi0p9": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       0.9855963611859838,
+       1.0085916442048517,
+       0.871883423180593
+      ],
+      "relative": false,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 0.9855963611859838,
+        "q_hi": 1.0085916442048517,
+        "signed_change": 0.022995283018867885,
+        "change": 0.022995283018867885,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 1.0085916442048517,
+        "q_hi": 0.871883423180593,
+        "signed_change": -0.13670822102425872,
+        "change": 0.13670822102425872,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.13670822102425872,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.5132939131871079,
+      "richardson_limit_diagnostic": null,
+      "ceiling": 0.02,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "sigma_T": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "values": [
+       61.68689419974199,
+       66.19800586357655,
+       60.397853238059895
+      ],
+      "relative": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "q_lo": 61.68689419974199,
+        "q_hi": 66.19800586357655,
+        "signed_change": 0.0681457334701477,
+        "change": 0.0681457334701477,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "q_lo": 66.19800586357655,
+        "q_hi": 60.397853238059895,
+        "signed_change": -0.09603243020335821,
+        "change": 0.09603243020335821,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "value_trend": "oscillatory",
+      "finest_change": 0.09603243020335821,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": 0.25,
+      "r2": 0.01492160590516134,
+      "richardson_limit_diagnostic": null,
+      "ceiling": null,
+      "pass": false,
+      "reason": "diverging: successive-pair changes grow beyond the 1.1x tolerance, so no band is emitted"
+     },
+     "jaccard_dist_phi0p9_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.043105325031567054,
+       0.07635588326744547
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.043105325031567054,
+        "signed_change": 0.043105325031567054,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.07635588326744547,
+        "signed_change": 0.07635588326744547,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.07635588326744547,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -2.2385664248181087,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     },
+     "jaccard_dist_phi0p8_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.042049424246344946,
+       0.07566093344477187
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.042049424246344946,
+        "signed_change": 0.042049424246344946,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.07566093344477187,
+        "signed_change": 0.07566093344477187,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.07566093344477187,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -2.299869994596759,
+      "r2": 1.0,
+      "ceiling": 0.05,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     },
+     "front_ssd_mm_grid_to_grid": {
+      "grids": [
+       48,
+       64,
+       80
+      ],
+      "pair_values": [
+       0.33638989292669524,
+       0.5890028885266957
+      ],
+      "pairwise": true,
+      "changes": [
+       {
+        "n_lo": 48,
+        "n_hi": 64,
+        "change": 0.33638989292669524,
+        "signed_change": 0.33638989292669524,
+        "h_pair_m": 0.0010825317547305483
+       },
+       {
+        "n_lo": 64,
+        "n_hi": 80,
+        "change": 0.5890028885266957,
+        "signed_change": 0.5890028885266957,
+        "h_pair_m": 0.0008385254915624211
+       }
+      ],
+      "status": "diverging",
+      "finest_change": 0.5890028885266957,
+      "safety": 1.5,
+      "band": null,
+      "observed_order": -2.1931562508165987,
+      "r2": 1.0,
+      "ceiling": 0.25,
+      "pass": false,
+      "reason": "diverging: pairwise disagreement grows with refinement, so no band is emitted"
+     }
+    }
+   }
+  }
+ },
+ "not_run": {},
+ "verdicts": {
+  "circle": {
+   "per_read": {
+    "melt_onset": {
+     "verdict_quantities": {
+      "jaccard_dist_phi0p9_grid_to_grid": true,
+      "jaccard_dist_phi0p8_grid_to_grid": true,
+      "front_ssd_mm_grid_to_grid": true,
+      "in_part_melt_fraction_phi0p9": true,
+      "out_of_part_melt_fraction_phi0p9": true
+     },
+     "t90": false,
+     "sigma_T_diagnostic_band": null,
+     "sigma_T_status": "diverging",
+     "all_verdict_quantities_pass": true
+    },
+    "heating_fixed_time": {
+     "verdict_quantities": {
+      "jaccard_dist_phi0p9_grid_to_grid": true,
+      "jaccard_dist_phi0p8_grid_to_grid": true,
+      "front_ssd_mm_grid_to_grid": true,
+      "in_part_melt_fraction_phi0p9": true,
+      "out_of_part_melt_fraction_phi0p9": true
+     },
+     "t90": null,
+     "sigma_T_diagnostic_band": null,
+     "sigma_T_status": "diverging",
+     "all_verdict_quantities_pass": true
+    }
+   },
+   "verdict": "PASS"
+  },
+  "square": {
+   "per_read": {
+    "melt_onset": {
+     "verdict_quantities": {
+      "jaccard_dist_phi0p9_grid_to_grid": false,
+      "jaccard_dist_phi0p8_grid_to_grid": false,
+      "front_ssd_mm_grid_to_grid": false,
+      "in_part_melt_fraction_phi0p9": false,
+      "out_of_part_melt_fraction_phi0p9": false
+     },
+     "t90": false,
+     "sigma_T_diagnostic_band": null,
+     "sigma_T_status": "diverging",
+     "all_verdict_quantities_pass": false
+    },
+    "heating_fixed_time": {
+     "verdict_quantities": {
+      "jaccard_dist_phi0p9_grid_to_grid": false,
+      "jaccard_dist_phi0p8_grid_to_grid": false,
+      "front_ssd_mm_grid_to_grid": false,
+      "in_part_melt_fraction_phi0p9": false,
+      "out_of_part_melt_fraction_phi0p9": false
+     },
+     "t90": null,
+     "sigma_T_diagnostic_band": 0.025583577198429998,
+     "sigma_T_status": "monotone_convergent",
+     "all_verdict_quantities_pass": false
+    }
+   },
+   "verdict": "FAIL"
+  },
+  "lshape": {
+   "per_read": {
+    "melt_onset": {
+     "verdict_quantities": {
+      "jaccard_dist_phi0p9_grid_to_grid": false,
+      "jaccard_dist_phi0p8_grid_to_grid": false,
+      "front_ssd_mm_grid_to_grid": false,
+      "in_part_melt_fraction_phi0p9": false,
+      "out_of_part_melt_fraction_phi0p9": false
+     },
+     "t90": false,
+     "sigma_T_diagnostic_band": null,
+     "sigma_T_status": "diverging",
+     "all_verdict_quantities_pass": false
+    },
+    "heating_fixed_time": {
+     "verdict_quantities": {
+      "jaccard_dist_phi0p9_grid_to_grid": false,
+      "jaccard_dist_phi0p8_grid_to_grid": false,
+      "front_ssd_mm_grid_to_grid": false,
+      "in_part_melt_fraction_phi0p9": true,
+      "out_of_part_melt_fraction_phi0p9": false
+     },
+     "t90": null,
+     "sigma_T_diagnostic_band": null,
+     "sigma_T_status": "diverging",
+     "all_verdict_quantities_pass": false
+    }
+   },
+   "verdict": "FAIL"
+  }
+ },
+ "s2_task3_verdict": {
+  "shapes_scored": [
+   "circle",
+   "square",
+   "lshape"
+  ],
+  "shapes_insufficient": [],
+  "verdict": "FAIL",
+  "rule": "S2 PASSES for a (shape, quantity) iff BOTH the non-increase criterion and the finest-pair ceiling hold. The S2 gate PASSES overall iff every VERDICT-CARRYING quantity passes on every shape that completed; t90 failures are reported as PARTIAL; sigma_T never affects the verdict."
+ }
+}

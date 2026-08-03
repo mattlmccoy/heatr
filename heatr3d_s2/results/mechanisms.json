@@ -1,0 +1,82 @@
+{
+ "what": "S2 Task 5 mechanism checks",
+ "lshape_outlier": {
+  "corner_band_m": 0.0015,
+  "reentrant_corner_xy_m": [
+   -0.001666666666666667,
+   -0.001666666666666667
+  ],
+  "rows": [
+   {
+    "n": 48,
+    "h_m": 0.00125,
+    "corner_power_share": 0.05817821567335984,
+    "corner_volume_share": 0.02857142857142857,
+    "corner_max_over_mean": 2.812450100839783,
+    "in_part_max_over_mean": 2.812450100839783,
+    "in_part_cv": 0.5878695670048987,
+    "n_voxels_in_band": 240,
+    "wall_s": 10.84353133291006
+   },
+   {
+    "n": 64,
+    "h_m": 0.0009375,
+    "corner_power_share": 0.03787239034550458,
+    "corner_volume_share": 0.015873015873015872,
+    "corner_max_over_mean": 3.3788329232330025,
+    "in_part_max_over_mean": 3.3788329232330025,
+    "in_part_cv": 0.624663191295213,
+    "n_voxels_in_band": 320,
+    "wall_s": 36.82311225007288
+   },
+   {
+    "n": 80,
+    "h_m": 0.00075,
+    "corner_power_share": 0.049758937164403404,
+    "corner_volume_share": 0.022172949002217297,
+    "corner_max_over_mean": 3.7135054420941405,
+    "in_part_max_over_mean": 3.7135054420941405,
+    "in_part_cv": 0.6154358943162712,
+    "n_voxels_in_band": 800,
+    "wall_s": 91.21543416706845
+   }
+  ],
+  "concentration_ratio": [
+   2.0362375485675943,
+   2.3859605917667888,
+   2.2441280661145933
+  ],
+  "concentration_growing": false,
+  "corner_peak_growing": true,
+  "reading": "power share divided by volume share is 1.0 for a volume-proportional field; a value that keeps GROWING with refinement is the grid chasing a singularity, while one that settles is a resolved feature"
+ },
+ "cylinder_null": {
+  "skin_depth_m": 0.48322043657753555,
+  "part_radius_m": 0.01,
+  "skin_depth_over_radius": 48.322043657753554,
+  "loss_tangent_sigma_over_omega_eps": 1.325597609478049,
+  "rows": [
+   {
+    "n": 48,
+    "interior_cv": 0.020065548239105,
+    "interior_max_over_mean": 1.0639254677783334,
+    "in_part_cv": 0.12944968023413966
+   },
+   {
+    "n": 64,
+    "interior_cv": 0.050364915859133996,
+    "interior_max_over_mean": 1.183207514646958,
+    "in_part_cv": 0.18032887389137656
+   },
+   {
+    "n": 80,
+    "interior_cv": 0.041455524829080985,
+    "interior_max_over_mean": 1.1617100761079309,
+    "in_part_cv": 0.12138633686588102
+   }
+  ],
+  "interior_cv_falling": false,
+  "reading": "the skin depth is enormous compared with the part, and the loss tangent places the doped part far on the conductive side, so there is no attenuation mechanism to make the interior field vary; the interior coefficient of variation should be small and falling"
+ },
+ "source_anomalies": "heatr3d_eqs02_rerank/RERANK_REPORT.md: lshape sigma_T 33.204 -> 66.420 (+100.0 %) under the corrected default; cylinder corrected-design inversion benefit +0.3 % (null)"
+}
