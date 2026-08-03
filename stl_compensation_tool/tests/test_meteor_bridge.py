@@ -52,7 +52,12 @@ def test_apply_sat_to_levels_scales_and_preserves_zeros():
     assert out.dtype == np.uint8
     assert out[0, 0] == 0          # no ink stays no ink
     assert out[0, 1] == 15         # sat 1.0 unchanged
-    assert out[1, 0] == 8          # round(15 * 0.5)
+    # dithered quantization (spec 7b amendment 2026-08-03): a
+    # half-level dose is position-dependent {7, 8}; the legacy
+    # rounding path is dither=None and still rounds to 8
+    assert out[1, 0] in (7, 8)
+    assert apply_sat_to_levels(levels, sat, bpp=4,
+                               dither=None)[1, 0] == 8
     assert out[1, 1] == 0          # sat 0 removes ink
     # never exceeds the bpp ceiling even for sat > 1
     out2 = apply_sat_to_levels(levels, np.full((2, 2), 1.4), bpp=4)
