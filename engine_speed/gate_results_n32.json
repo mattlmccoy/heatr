@@ -1,0 +1,1240 @@
+{
+  "floor_rtol": 1e-16,
+  "grid_n": 32,
+  "numba_version": "0.66.0",
+  "numpy_version": "2.2.6",
+  "all_pass": true,
+  "all_bit_identical": true,
+  "cases": [
+    {
+      "fields": {
+        "T_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "T_phi90": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "phi_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "Qrf": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "rho_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "part": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "sigma_T": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 12.043527339738489,
+          "fast": 12.043527339738489
+        },
+        "T_max_c": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 101.57662536887536,
+          "fast": 101.57662536887536
+        },
+        "t_phi90_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": NaN,
+          "fast": NaN
+        },
+        "exposure_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 60.0,
+          "fast": 60.0
+        },
+        "energy_in_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 629.4702339083841,
+          "fast": 629.4702339083841
+        },
+        "energy_stored_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 629.4697427080598,
+          "fast": 629.4697427080598
+        },
+        "energy_loss_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0.0004912003148580956,
+          "fast": 0.0004912003148580956
+        },
+        "energy_residual_frac": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1.4985037078256556e-14,
+          "fast": 1.4985037078256556e-14
+        },
+        "reached": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "clamp_bound": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_substeps_used": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "cfl_violated": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_eqs_solves": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "n_eqs_resolves_skipped": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0,
+          "fast": 0
+        },
+        "phi_hist": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "len_ref": 1200,
+          "len_fast": 1200
+        }
+      },
+      "bit_identical": true,
+      "pass": true,
+      "failures": [],
+      "name": "uniform_cube",
+      "description": "solid 20 mm square prism, uniform dopant, enthalpy scheme",
+      "wall_ref_s": 25.161451666001085,
+      "wall_fast_s": 20.799169249999977,
+      "n_steps_ref": 1200,
+      "guards": {
+        "cfl_ref": 1,
+        "cfl_fast": 1,
+        "clamp_ref": false,
+        "clamp_fast": false
+      },
+      "guard_fired": null
+    },
+    {
+      "fields": {
+        "T_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "T_phi90": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "phi_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "Qrf": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "rho_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "part": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "sigma_T": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 11.846482206001882,
+          "fast": 11.846482206001882
+        },
+        "T_max_c": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 103.85250952755484,
+          "fast": 103.85250952755484
+        },
+        "t_phi90_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": NaN,
+          "fast": NaN
+        },
+        "exposure_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 60.0,
+          "fast": 60.0
+        },
+        "energy_in_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 629.4702339083841,
+          "fast": 629.4702339083841
+        },
+        "energy_stored_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 629.469736729951,
+          "fast": 629.469736729951
+        },
+        "energy_loss_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0.0004971784249926773,
+          "fast": 0.0004971784249926773
+        },
+        "energy_residual_frac": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1.2846506400718772e-14,
+          "fast": 1.2846506400718772e-14
+        },
+        "reached": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "clamp_bound": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_substeps_used": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "cfl_violated": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_eqs_solves": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "n_eqs_resolves_skipped": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0,
+          "fast": 0
+        },
+        "phi_hist": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "len_ref": 1200,
+          "len_fast": 1200
+        }
+      },
+      "bit_identical": true,
+      "pass": true,
+      "failures": [],
+      "name": "graded_sat_cube",
+      "description": "same cube with a graded FGM saturation map",
+      "wall_ref_s": 22.428328416001023,
+      "wall_fast_s": 18.804697167000995,
+      "n_steps_ref": 1200,
+      "guards": {
+        "cfl_ref": 1,
+        "cfl_fast": 1,
+        "clamp_ref": false,
+        "clamp_fast": false
+      },
+      "guard_fired": null
+    },
+    {
+      "fields": {
+        "T_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "T_phi90": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "phi_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "Qrf": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "rho_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "part": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "sigma_T": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 20.61142460506789,
+          "fast": 20.61142460506789
+        },
+        "T_max_c": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 113.77137753211062,
+          "fast": 113.77137753211062
+        },
+        "t_phi90_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": NaN,
+          "fast": NaN
+        },
+        "exposure_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 60.0,
+          "fast": 60.0
+        },
+        "energy_in_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 402.8609497013525,
+          "fast": 402.8609497013525
+        },
+        "energy_stored_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 402.8607436709561,
+          "fast": 402.8607436709561
+        },
+        "energy_loss_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0.00020603040360000103,
+          "fast": 0.00020603040360000103
+        },
+        "energy_residual_frac": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": -1.776967620100925e-14,
+          "fast": -1.776967620100925e-14
+        },
+        "reached": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "clamp_bound": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_substeps_used": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "cfl_violated": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_eqs_solves": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "n_eqs_resolves_skipped": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0,
+          "fast": 0
+        },
+        "phi_hist": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "len_ref": 1200,
+          "len_fast": 1200
+        }
+      },
+      "bit_identical": true,
+      "pass": true,
+      "failures": [],
+      "name": "tube",
+      "description": "hollow cylinder: internal + external mask boundaries",
+      "wall_ref_s": 21.887976832998902,
+      "wall_fast_s": 19.61040970800059,
+      "n_steps_ref": 1200,
+      "guards": {
+        "cfl_ref": 1,
+        "cfl_fast": 1,
+        "clamp_ref": false,
+        "clamp_fast": false
+      },
+      "guard_fired": null
+    },
+    {
+      "fields": {
+        "T_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "T_phi90": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "phi_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "Qrf": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "rho_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "part": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "sigma_T": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 12.08128477952847,
+          "fast": 12.08128477952847
+        },
+        "T_max_c": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 101.76041671804353,
+          "fast": 101.76041671804353
+        },
+        "t_phi90_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": NaN,
+          "fast": NaN
+        },
+        "exposure_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 60.0,
+          "fast": 60.0
+        },
+        "energy_in_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 629.470233908374,
+          "fast": 629.470233908374
+        },
+        "energy_stored_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 629.46990435467,
+          "fast": 629.46990435467
+        },
+        "energy_loss_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0.0003295537048621035,
+          "fast": 0.0003295537048621035
+        },
+        "energy_residual_frac": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": -1.4051857431013536e-15,
+          "fast": -1.4051857431013536e-15
+        },
+        "reached": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "clamp_bound": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_substeps_used": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 3,
+          "fast": 3
+        },
+        "cfl_violated": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_eqs_solves": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "n_eqs_resolves_skipped": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0,
+          "fast": 0
+        },
+        "phi_hist": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "len_ref": 20,
+          "len_fast": 20
+        }
+      },
+      "bit_identical": true,
+      "pass": true,
+      "failures": [],
+      "name": "cfl_substep",
+      "description": "dt_s=3.0 s > CFL_SAFETY*dt_stable(n=32)=1.406 s, so THM-03 substepping MUST engage (n_sub=3)",
+      "wall_ref_s": 18.63087145800091,
+      "wall_fast_s": 17.32335945900013,
+      "n_steps_ref": 20,
+      "guards": {
+        "cfl_ref": 3,
+        "cfl_fast": 3,
+        "clamp_ref": false,
+        "clamp_fast": false
+      },
+      "guard_fired": true
+    },
+    {
+      "fields": {
+        "T_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "T_phi90": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "phi_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "Qrf": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "rho_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "part": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "sigma_T": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 26.265847688383005,
+          "fast": 26.265847688383005
+        },
+        "T_max_c": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 275.700687193793,
+          "fast": 275.700687193793
+        },
+        "t_phi90_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 2.2,
+          "fast": 2.2
+        },
+        "exposure_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 60.0,
+          "fast": 60.0
+        },
+        "energy_in_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 14949.918055323951,
+          "fast": 14949.918055323951
+        },
+        "energy_stored_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 11272.190437105906,
+          "fast": 11272.190437105906
+        },
+        "energy_loss_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 4.8991960661738654e-08,
+          "fast": 4.8991960661738654e-08
+        },
+        "energy_residual_frac": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0.24600319577399585,
+          "fast": 0.24600319577399585
+        },
+        "reached": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": true,
+          "fast": true
+        },
+        "clamp_bound": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": true,
+          "fast": true
+        },
+        "n_substeps_used": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "cfl_violated": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_eqs_solves": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "n_eqs_resolves_skipped": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0,
+          "fast": 0
+        },
+        "phi_hist": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "len_ref": 285,
+          "len_fast": 285
+        }
+      },
+      "bit_identical": true,
+      "pass": true,
+      "failures": [],
+      "name": "clamp_hot",
+      "description": "100x absorbed-power density so the THM-01 dT cap and the THM-02 temp_max clamp BIND",
+      "wall_ref_s": 18.1891391249992,
+      "wall_fast_s": 16.96308449999924,
+      "n_steps_ref": 285,
+      "guards": {
+        "cfl_ref": 1,
+        "cfl_fast": 1,
+        "clamp_ref": true,
+        "clamp_fast": true
+      },
+      "guard_fired": true
+    },
+    {
+      "fields": {
+        "T_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "T_phi90": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "phi_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "Qrf": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "rho_final": {
+          "status": "both_none"
+        },
+        "part": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "sigma_T": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 22.315152564337655,
+          "fast": 22.315152564337655
+        },
+        "T_max_c": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 249.39983390699734,
+          "fast": 249.39983390699734
+        },
+        "t_phi90_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 11.3,
+          "fast": 11.3
+        },
+        "exposure_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 11.3,
+          "fast": 11.3
+        },
+        "energy_in_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 2371.004547721547,
+          "fast": 2371.004547721547
+        },
+        "energy_stored_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 2371.004547720785,
+          "fast": 2371.004547720785
+        },
+        "energy_loss_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 7.62027959258504e-10,
+          "fast": 7.62027959258504e-10
+        },
+        "energy_residual_frac": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 5.423896269342888e-17,
+          "fast": 5.423896269342888e-17
+        },
+        "reached": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": true,
+          "fast": true
+        },
+        "clamp_bound": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_substeps_used": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "cfl_violated": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_eqs_solves": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "n_eqs_resolves_skipped": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0,
+          "fast": 0
+        },
+        "phi_hist": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "len_ref": 226,
+          "len_fast": 226
+        }
+      },
+      "bit_identical": true,
+      "pass": true,
+      "failures": [],
+      "name": "melt_onset_break",
+      "description": "densify=False + 20x power: mean phi crosses phi_target, so the melt-onset read, t_phi90_s and the append-then-break exit are all exercised",
+      "wall_ref_s": 18.061382292000417,
+      "wall_fast_s": 17.77962737499911,
+      "n_steps_ref": 226,
+      "guards": {
+        "cfl_ref": 1,
+        "cfl_fast": 1,
+        "clamp_ref": false,
+        "clamp_fast": false
+      },
+      "guard_fired": null
+    },
+    {
+      "fields": {
+        "T_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "T_phi90": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "phi_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "Qrf": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "rho_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "part": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "sigma_T": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 12.043527339738503,
+          "fast": 12.043527339738503
+        },
+        "T_max_c": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 101.57662536887543,
+          "fast": 101.57662536887543
+        },
+        "t_phi90_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": NaN,
+          "fast": NaN
+        },
+        "exposure_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 60.0,
+          "fast": 60.0
+        },
+        "energy_in_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 629.4702339083841,
+          "fast": 629.4702339083841
+        },
+        "energy_stored_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 629.4697427080591,
+          "fast": 629.4697427080591
+        },
+        "energy_loss_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0.0004912003148583544,
+          "fast": 0.0004912003148583544
+        },
+        "energy_residual_frac": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1.60682689620542e-14,
+          "fast": 1.60682689620542e-14
+        },
+        "reached": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "clamp_bound": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_substeps_used": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "cfl_violated": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_eqs_solves": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "n_eqs_resolves_skipped": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0,
+          "fast": 0
+        },
+        "phi_hist": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "len_ref": 1200,
+          "len_fast": 1200
+        }
+      },
+      "bit_identical": true,
+      "pass": true,
+      "failures": [],
+      "name": "apparent_cp",
+      "description": "legacy apparent-cp phase update (the other supported phase_update branch)",
+      "wall_ref_s": 19.75263249999989,
+      "wall_fast_s": 16.809571083000264,
+      "n_steps_ref": 1200,
+      "guards": {
+        "cfl_ref": 1,
+        "cfl_fast": 1,
+        "clamp_ref": false,
+        "clamp_fast": false
+      },
+      "guard_fired": null
+    },
+    {
+      "fields": {
+        "T_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "T_phi90": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "phi_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "Qrf": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "rho_final": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "part": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true
+        },
+        "sigma_T": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 10.977070815184819,
+          "fast": 10.977070815184819
+        },
+        "T_max_c": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 104.11012725455276,
+          "fast": 104.11012725455276
+        },
+        "t_phi90_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": NaN,
+          "fast": NaN
+        },
+        "exposure_s": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 60.0,
+          "fast": 60.0
+        },
+        "energy_in_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 629.4702339083841,
+          "fast": 629.4702339083841
+        },
+        "energy_stored_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 422.1278239776186,
+          "fast": 422.1278239776186
+        },
+        "energy_loss_j": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 207.34240993075562,
+          "fast": 207.34240993075562
+        },
+        "energy_residual_frac": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1.5667672021780775e-14,
+          "fast": 1.5667672021780775e-14
+        },
+        "reached": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "clamp_bound": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_substeps_used": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "cfl_violated": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": false,
+          "fast": false
+        },
+        "n_eqs_solves": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 1,
+          "fast": 1
+        },
+        "n_eqs_resolves_skipped": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "ref": 0,
+          "fast": 0
+        },
+        "phi_hist": {
+          "bit_identical": true,
+          "max_rel_dev": 0.0,
+          "pass": true,
+          "len_ref": 1200,
+          "len_fast": 1200
+        }
+      },
+      "bit_identical": true,
+      "pass": true,
+      "failures": [],
+      "name": "hot_top_convection",
+      "description": "T0_override puts a 250 C band on the y_max electrode plane so the top-face convection term -- and with it energy_loss_j -- is O(1) instead of ~5e-4 J",
+      "wall_ref_s": 20.158166958000947,
+      "wall_fast_s": 16.569433957998626,
+      "n_steps_ref": 1200,
+      "guards": {
+        "cfl_ref": 1,
+        "cfl_fast": 1,
+        "clamp_ref": false,
+        "clamp_fast": false
+      },
+      "guard_fired": null
+    }
+  ]
+}

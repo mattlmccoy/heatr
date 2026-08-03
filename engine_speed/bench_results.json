@@ -1,0 +1,58 @@
+{
+  "n48": {
+    "n": 48,
+    "cells": 110592,
+    "nsteps": 1200,
+    "qrf_mode": "eqs",
+    "qrf_build_s": 9.952984583000216,
+    "numba_warmup_s": 0.10950341600073443,
+    "heatr3d_wall_s": 11.631067208998502,
+    "march_fast_wall_s": 1.968731208000463,
+    "heatr3d_ms_per_step": 9.692556007498752,
+    "march_fast_ms_per_step": 1.6406093400003858,
+    "speedup": 5.907900053462131,
+    "bit_identical_T_and_rho": true
+  },
+  "n96": {
+    "n": 96,
+    "cells": 884736,
+    "nsteps": 100,
+    "qrf_mode": "synthetic",
+    "qrf_build_s": 0.000809208000646322,
+    "numba_warmup_s": 0.0002523340008337982,
+    "heatr3d_wall_s": 8.466375375001007,
+    "march_fast_wall_s": 1.3459883750001609,
+    "heatr3d_ms_per_step": 84.66375375001007,
+    "march_fast_ms_per_step": 13.459883750001609,
+    "speedup": 6.290080607122625,
+    "bit_identical_T_and_rho": true
+  },
+  "n48_synthetic_qrf": {
+    "n": 48,
+    "cells": 110592,
+    "nsteps": 400,
+    "qrf_mode": "synthetic",
+    "qrf_build_s": 0.0001195840013679117,
+    "numba_warmup_s": 0.00021087499953864608,
+    "heatr3d_wall_s": 3.8573632090010506,
+    "march_fast_wall_s": 0.6359557079995284,
+    "heatr3d_ms_per_step": 9.643408022502626,
+    "march_fast_ms_per_step": 1.589889269998821,
+    "speedup": 6.06545889985771,
+    "bit_identical_T_and_rho": true
+  },
+  "qrf_sensitivity_pct": 3.0915385378430758,
+  "projection_n96_30k_steps_s": {
+    "heatr3d": 2539.912612500302,
+    "march_fast": 403.79651250004827
+  },
+  "env": {
+    "numba": "0.66.0",
+    "numpy": "2.2.6",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "NUMBA_NUM_THREADS": "1",
+    "numba_config_num_threads": 1,
+    "uptime": "16:47  up  4:38, 2 users, load averages: 9.82 11.57 10.59"
+  }
+}
