@@ -113,3 +113,17 @@ def test_stop_mean_rho_is_wired_and_recorded(box20_stl, tmp_path):
     assert res["stop_mean_rho"] == 0.9
     assert "sim_time_s" in res
     assert res["sim_time_s"] <= 5.0 + 1e-9
+
+
+def test_voxelize_is_fast_on_real_size_meshes(tmp_path):
+    """Perf gate (found live: a 125k-triangle part sat 34 minutes inside
+    mesh.contains at n=64). An 82k-triangle sphere at n=64 must voxelize
+    in seconds."""
+    import time
+    p = tmp_path / "sphere.stl"
+    trimesh.creation.icosphere(subdivisions=6, radius=15.0).export(p)
+    t0 = time.time()
+    part = voxelize_stl(str(p), n=64)
+    dt = time.time() - t0
+    assert part.sum() > 1000
+    assert dt < 20.0, f"voxelize took {dt:.1f} s"

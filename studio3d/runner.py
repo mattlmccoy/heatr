@@ -54,13 +54,42 @@ def voxelize_stl(mesh_path: str, n: int, chamber_m: float = CHAMBER_M
             f"fit the {chamber_m / _MM_TO_M:.0f} mm chamber")
     mesh.apply_translation(-(lo + hi) / 2.0)      # center on chamber center
     grid = H.Grid(n=n)
-    xs, ys, zs = np.meshgrid(grid.x, grid.y, grid.z, indexing="ij")
-    pts = np.column_stack([xs.ravel(), ys.ravel(), zs.ravel()])
-    inside = mesh.contains(pts)
-    part = inside.reshape((n, n, n))
+    part = _fill_by_slicing(mesh, grid)
     if not part.any():
         raise ValueError("voxelization produced an empty part (mesh thinner "
                          f"than the n={n} cell size?)")
+    return part
+
+
+def _fill_by_slicing(mesh: "trimesh.Trimesh", grid) -> np.ndarray:
+    """Slice-based solid fill at the Grid cell centers.
+
+    mesh.contains ray-casts every cell center against every triangle
+    (found live: 34 minutes at n=64 on a 125k-triangle part). This path
+    sections the mesh once per z layer (C-backed) and tests the layer's
+    cell centers against the section polygons (shapely vectorized,
+    hole-correct via interiors). Same strict containment-at-cell-centers
+    convention.
+    """
+    import shapely
+
+    n = grid.n
+    part = np.zeros((n, n, n), dtype=bool)
+    zmin = float(mesh.bounds[0][2])
+    heights = np.asarray(grid.z, float) - zmin
+    in_range = (heights > 0) & (grid.z < mesh.bounds[1][2])
+    sections = mesh.section_multiplane(
+        plane_origin=[0.0, 0.0, zmin], plane_normal=[0.0, 0.0, 1.0],
+        heights=heights[in_range])
+    X, Y = np.meshgrid(grid.x, grid.y, indexing="ij")
+    xf, yf = X.ravel(), Y.ravel()
+    for k, sec in zip(np.where(in_range)[0], sections):
+        if sec is None:
+            continue
+        layer = np.zeros(n * n, dtype=bool)
+        for poly in sec.polygons_full:      # exteriors WITH their holes
+            layer |= shapely.contains_xy(poly, xf, yf)
+        part[:, :, k] = layer.reshape(n, n)
     return part
 
 
