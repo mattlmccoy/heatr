@@ -131,23 +131,38 @@ def build_part(grid, cfg: Dict[str, Any]) -> np.ndarray:
 
 
 # --------------------------------------------------------------------------- #
-# Rendering extensions (x/y slices; z + plots reuse the legacy writers)
+# Rendering (all three axes, locked colormaps, phi-front contours, DPI 180)
 # --------------------------------------------------------------------------- #
-_AXES = {"x": 0, "y": 1}
+_AXES = {"x": 0, "y": 1, "z": 2}
+
+# Visualization standard (memory: visualization-standard): thermal = inferno,
+# dopant/sat = viridis, density = powder-gray -> melt-purple -> dense-gold.
+from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
+
+_DENSITY_CMAP = LinearSegmentedColormap.from_list(
+    "rfam_density", ["#8f8f8f", "#6b3fa0", "#d4a017"])
+_FIELD_CMAPS = {"T_phi90": "inferno", "rho_final": _DENSITY_CMAP,
+                "sat": "viridis", "Qrf": "viridis", "phi_final": "viridis"}
 
 
-def _render_slices_xy(out: Path, fields: Dict[str, Any], meta: Dict[str, Any]) -> None:
-    """Pre-render x- and y-axis slices for each real field (z is done by the
-    legacy writer). Same per-field global color range for scrub stability."""
+def _render_slices_all(out: Path, fields: Dict[str, Any], meta: Dict[str, Any]) -> None:
+    """Pre-render x/y/z slices for each real field: per-field locked colormap,
+    per-field GLOBAL color range (scrub-stable), outside-part transparent,
+    CAD outline, and the phi = 0.9 / 0.5 front contours from the ORIGINAL
+    (unsmoothed) phi overlaid on every field. phi itself renders as a
+    gradient with contours, never a saturated indicator (spec 4.2)."""
     sl = out / "slices"
     sl.mkdir(parents=True, exist_ok=True)
     part = fields.get("part")
     mask3d = part if getattr(part, "ndim", 0) == 3 else None
+    phi3d = fields.get("phi_final")
+    phi3d = phi3d if getattr(phi3d, "ndim", 0) == 3 else None
     for name, info in meta["fields"].items():
         a = fields[name]
         vmin, vmax = info["min"], info["max"]
         if vmax <= vmin:
             vmax = vmin + 1e-9
+        cmap = _FIELD_CMAPS.get(name, "viridis")
         for ax_name, ax_idx in _AXES.items():
             nk = a.shape[ax_idx]
             for k in range(nk):
@@ -155,14 +170,28 @@ def _render_slices_xy(out: Path, fields: Dict[str, Any], meta: Dict[str, Any]) -
                 mk = (np.take(mask3d, k, axis=ax_idx) if mask3d is not None else None)
                 if mk is not None:
                     img = np.where(mk, img, np.nan)
-                fig = plt.figure(figsize=(2.6, 2.6), dpi=150)
+                fig = plt.figure(figsize=(2.6, 2.6), dpi=180)
                 axp = fig.add_axes([0, 0, 1, 1]); axp.axis("off")
-                axp.imshow(img.T, origin="lower", cmap="viridis",
+                axp.imshow(img.T, origin="lower", cmap=cmap,
                            vmin=vmin, vmax=vmax, interpolation="nearest")
                 if mk is not None:
                     LJ._cad_outline(axp, mk.T)
+                if phi3d is not None:
+                    pm = np.take(phi3d, k, axis=ax_idx).astype(float)
+                    for lev, ls, lw in ((0.9, "-", 1.1), (0.5, "--", 0.7)):
+                        if (pm >= lev).any() and not (pm >= lev).all():
+                            axp.contour(pm.T, levels=[lev], colors="#ffffff",
+                                        linewidths=lw, linestyles=ls)
                 fig.savefig(sl / f"{name}_{ax_name}_{k:03d}.png", transparent=True)
                 plt.close(fig)
+    # preview.png: first real field's mid-z slice via the legacy helper
+    prim = next(iter(meta["fields"]), None)
+    if prim is not None:
+        info = meta["fields"][prim]
+        LJ._save_preview(out / "preview.png", fields[prim], mask3d,
+                         info["min"], info["max"])
+    elif mask3d is not None:
+        LJ._save_preview(out / "preview.png", mask3d.astype(float), mask3d, 0.0, 1.0)
 
 
 def _write_snapshots(out: Path, snaps: List[Tuple[float, np.ndarray, np.ndarray]],
@@ -339,8 +368,7 @@ def main(argv: List[str]) -> None:
     meta["axes"] = {"x": int(part.shape[0]), "y": int(part.shape[1]),
                     "z": int(part.shape[2])}
     LJ._write_summary(out, results, cfg)
-    LJ._render_slices(out, fields_for_view, meta)          # z slices + preview
-    _render_slices_xy(out, fields_for_view, meta)          # x/y slices (new)
+    _render_slices_all(out, fields_for_view, meta)   # x/y/z, locked colormaps
     (out / "fieldmeta.json").write_text(json.dumps(meta, indent=2))  # with axes
     LJ._render_summary_plots(out, r.phi_hist, getattr(p, "dt_s", 0.05),
                              fields_for_view, meta)

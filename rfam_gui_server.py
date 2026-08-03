@@ -5816,6 +5816,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/heatr3d/runs":
             return self._json(_h3d_list_runs())
 
+        # ── HEATR-3D workbench (3-D lane): mounted module, stdlib-only ──────
+        # See heatr3d_workbench/server_module.py + the 2026-08-02 workbench
+        # spec Appendix B. Lazy import so a module error cannot break startup.
+        if path.startswith("/api/heatr3d/wb/"):
+            try:
+                from heatr3d_workbench import server_module as _wb
+                r = _wb.handle_get(path, urlparse(self.path).query)
+            except Exception as e:
+                return self._json({"error": f"workbench module error: {e}"}, status=500)
+            if r is not None:
+                return self._json(r[1], status=r[0])
+            return self._json({"error": "not found"}, status=404)
+
         if path == "/api/meta":
             model_info = _experimental_model_info()
             return self._json({
@@ -6218,6 +6231,9 @@ class Handler(BaseHTTPRequestHandler):
             "/api/tools/prewarp",
             "/api/heatr3d/preview",
             "/api/heatr3d/run",
+            "/api/heatr3d/wb/enqueue",
+            "/api/heatr3d/wb/cancel",
+            "/api/heatr3d/wb/intake",
         }:
             return self._json({"error": "not found"}, status=404)
 
@@ -6238,6 +6254,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"id": _h3d_spawn(payload)})
             except Exception as e:
                 return self._text(str(e), status=500)
+
+        # ── HEATR-3D workbench POST (3-D lane; mounted module) ──────────────
+        if path.startswith("/api/heatr3d/wb/"):
+            try:
+                from heatr3d_workbench import server_module as _wb
+                r = _wb.handle_post(path, payload)
+            except Exception as e:
+                return self._json({"error": f"workbench module error: {e}"}, status=500)
+            if r is not None:
+                return self._json(r[1], status=r[0])
+            return self._json({"error": "not found"}, status=404)
 
         if path == "/api/queue/reorder":
             job_id = str(payload.get("job_id", "")).strip()
