@@ -80,12 +80,19 @@ def surface(mask_f: np.ndarray, h_m: float, ax0_m: float):
     return tri, cen + sign * 0.9 * h_m * nrm, nrm * sign, verts, faces
 
 
-def face_colors(phi_vol, sample_pts, ax0_m, h_m, normals):
-    """Per-face RGBA: phi through the lifted colormap, lambertian-shaded."""
+def face_colors(phi_vol, sample_pts, ax0_m, h_m, normals, cmap=None,
+                norm=None):
+    """Per-face RGBA: the field through a colormap, lambertian-shaded.
+
+    `cmap`/`norm` default to the melt-fraction pair used by the cutaway pair
+    figure, so that figure renders bit-identically; the loop schematic passes
+    its own for the mismatch and gradient stages.
+    """
+    cmap = CMAP if cmap is None else cmap
     idx = ((sample_pts - ax0_m) / h_m).T
-    phi_f = np.clip(map_coordinates(phi_vol, idx, order=1, mode="nearest"),
-                    0.0, 1.0)
-    rgba = CMAP(phi_f)
+    phi_f = map_coordinates(phi_vol, idx, order=1, mode="nearest")
+    phi_f = np.clip(phi_f, 0.0, 1.0) if norm is None else norm(phi_f)
+    rgba = cmap(phi_f)
     light = np.array([0.55, 0.5, 0.68])
     light = light / np.linalg.norm(light)
     lam = np.clip(-(normals @ light), 0.0, 1.0)     # normals point INTO solid

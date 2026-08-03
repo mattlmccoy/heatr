@@ -1,0 +1,16 @@
+{
+ "shape": "pyramid",
+ "arm": "solve_filter_only",
+ "J": 6.101506534701989e-07,
+ "J_stored": 6.101506534701989e-07,
+ "J_reproduction_rel": 0.0,
+ "argmin_step": 12775,
+ "t_stop_s": 638.75,
+ "wall_s": 496.18151733299965,
+ "n_design": 24442,
+ "grad_norm": 1.7004716061293502e-08,
+ "grad_min": -7.292814831420136e-10,
+ "grad_max": 9.061084819229277e-10,
+ "grad_frac_negative": 0.5453727190900908,
+ "note": "dJ/ds on the design cells, one adjoint sweep, Phase B FD-gated gradient"
+}
