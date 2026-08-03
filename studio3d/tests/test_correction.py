@@ -192,3 +192,23 @@ def test_error_only_when_no_source_at_all(box_stl, tmp_path):
     with pytest.raises(FileNotFoundError, match="BEFORE"):
         build_correction(gd, str(box_stl), 16,
                          registry_path=tmp_path / "missing.json")
+
+
+def test_correction_also_emits_the_meteor_stack(box_stl, tmp_path):
+    """Whatever engine built the correction, the print path grades TIFFs
+    from a meteor-convention stack (sat[k, iy, ix], z_mm from part bottom,
+    1.0 = unmodulated outside the mask)."""
+    from studio3d.runner import voxelize_stl
+    n = 16
+    gd = tmp_path / "grade"
+    part = voxelize_stl(str(box_stl), n)
+    _fake_before_arm(gd, part, n)
+    build_correction(gd, str(box_stl), n,
+                     registry_path=tmp_path / "missing.json")
+    with np.load(gd / "heatr3d" / "correction_stack.npz") as d:
+        sat, mask, z = d["sat"], d["part_mask"], d["z_mm"]
+    zs = np.where(part.any(axis=(0, 1)))[0]
+    assert sat.shape == (len(zs), n, n)
+    assert mask.dtype == bool
+    assert z[0] > 0 and np.all(np.diff(z) > 0)
+    assert sat[~mask].min() == 1.0          # unmodulated outside the part

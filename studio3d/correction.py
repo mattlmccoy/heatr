@@ -134,6 +134,18 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
     out.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out / "correction_sat.npz",
                         sat=rec["sat"].astype(np.float32), part=part)
+    # meteor-convention stack for the TIFF grading path: sat[k, iy, ix],
+    # z_mm relative to the part bottom, 1.0 (unmodulated) outside the mask
+    h = 0.060 / n
+    zs = np.where(part.any(axis=(0, 1)))[0]
+    stack_sat = np.transpose(rec["sat"][:, :, zs], (2, 1, 0))
+    stack_mask = np.transpose(part[:, :, zs], (2, 1, 0))
+    stack_sat = np.where(stack_mask, stack_sat, 1.0)
+    np.savez_compressed(
+        out / "correction_stack.npz",
+        sat=stack_sat.astype(np.float32), part_mask=stack_mask,
+        z_mm=(np.arange(len(zs)) + 0.5) * h * 1e3,
+        chamber_m=0.060)
     (out / "correction_provenance.json").write_text(
         json.dumps(prov, indent=2, default=float))
     logger.info("correction built: engine=%s move=%.3e", prov["engine"],
