@@ -690,6 +690,144 @@
    },
    "field_npz": "field_circle_n96.npz",
    "wall_total_s": 1756.4493787498213
+  },
+  "square_n96": {
+   "shape": "square",
+   "n": 96,
+   "h_m": 0.000625,
+   "n_voxels_in_part": 98304,
+   "part_volume_m3": 2.4000000000000004e-05,
+   "p_total_w": 38.19718634205487,
+   "wall_eqs_s": 651.7995419590734,
+   "reads": {
+    "melt_onset": {
+     "iou_phi0p8": 0.8359726086026107,
+     "in_part_phi0p8": 0.870238360436623,
+     "out_of_part_phi0p8": 0.04098908442860325,
+     "iou_phi0p9": 0.8292918454935624,
+     "in_part_phi0p9": 0.8608821563822676,
+     "out_of_part_phi0p9": 0.038093116507017154,
+     "iou_phi0p8__plane_spread": 0.0,
+     "in_part_phi0p8__plane_spread": 0.0,
+     "out_of_part_phi0p8__plane_spread": 0.0,
+     "iou_phi0p9__plane_spread": 0.0,
+     "in_part_phi0p9__plane_spread": 0.0,
+     "out_of_part_phi0p9__plane_spread": 0.0,
+     "sigma_T_c": 19.82854871815394,
+     "T_max_c": 237.03906188214813,
+     "T_mean_c": 210.2290657229728,
+     "part_mean_phi": 0.9000392048554758,
+     "t90_s": 318.25,
+     "reached": true,
+     "wall_march_s": 643.9466893330682
+    },
+    "heating_fixed_time": {
+     "iou_phi0p8": 0.8317957519845527,
+     "in_part_phi0p8": 0.8636667409222543,
+     "out_of_part_phi0p8": 0.03831588327021608,
+     "iou_phi0p9": 0.8258717176065431,
+     "in_part_phi0p9": 0.854756070394297,
+     "out_of_part_phi0p9": 0.03497438182223212,
+     "iou_phi0p8__plane_spread": 0.0,
+     "in_part_phi0p8__plane_spread": 0.0,
+     "out_of_part_phi0p8__plane_spread": 0.0,
+     "iou_phi0p9__plane_spread": 0.0,
+     "in_part_phi0p9__plane_spread": 0.0,
+     "out_of_part_phi0p9__plane_spread": 0.0,
+     "sigma_T_c": 19.749507753439566,
+     "T_max_c": 235.98679878939785,
+     "T_mean_c": 209.3383043369928,
+     "part_mean_phi": 0.8947922723494356,
+     "t_ref_s": 315.0,
+     "wall_march_s": 486.8737380001694,
+     "precedes_melt_onset": true
+    }
+   },
+   "gates": {
+    "melt_onset": {
+     "energy_residual_frac": -8.289082508436959e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1
+    },
+    "heating_fixed_time": {
+     "energy_residual_frac": -8.011895991422045e-14,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1
+    }
+   },
+   "field_npz": "field_square_n96.npz",
+   "wall_total_s": 1782.7704975418746
+  },
+  "lshape_n96": {
+   "shape": "lshape",
+   "n": 96,
+   "h_m": 0.000625,
+   "n_voxels_in_part": 63648,
+   "part_volume_m3": 1.5539062500000002e-05,
+   "p_total_w": 24.731186078889053,
+   "wall_eqs_s": 192.367560707964,
+   "reads": {
+    "melt_onset": {
+     "iou_phi0p8": 0.45087200582765563,
+     "in_part_phi0p8": 0.8862870619946092,
+     "out_of_part_phi0p8": 0.9657176549865231,
+     "iou_phi0p9": 0.45210446794733433,
+     "in_part_phi0p9": 0.8821597035040432,
+     "out_of_part_phi0p9": 0.9512297843665769,
+     "iou_phi0p8__plane_spread": 0.0,
+     "in_part_phi0p8__plane_spread": 0.0,
+     "out_of_part_phi0p8__plane_spread": 0.0,
+     "iou_phi0p9__plane_spread": 0.0,
+     "in_part_phi0p9__plane_spread": 0.0,
+     "out_of_part_phi0p9__plane_spread": 0.0,
+     "sigma_T_c": 64.11179148497433,
+     "T_max_c": 372.59016399808297,
+     "T_mean_c": 272.67688309770466,
+     "part_mean_phi": 0.9000089899041293,
+     "t90_s": 692.4000000000001,
+     "reached": true,
+     "wall_march_s": 633.5021802079864
+    },
+    "heating_fixed_time": {
+     "iou_phi0p8": 0.456517927588323,
+     "in_part_phi0p8": 0.8772742587601078,
+     "out_of_part_phi0p8": 0.9216644204851752,
+     "iou_phi0p9": 0.4575679971741434,
+     "in_part_phi0p9": 0.8728942048517521,
+     "out_of_part_phi0p9": 0.9076819407008087,
+     "iou_phi0p8__plane_spread": 0.0,
+     "in_part_phi0p8__plane_spread": 0.0,
+     "out_of_part_phi0p8__plane_spread": 0.0,
+     "iou_phi0p9__plane_spread": 0.0,
+     "in_part_phi0p9__plane_spread": 0.0,
+     "out_of_part_phi0p9__plane_spread": 0.0,
+     "sigma_T_c": 63.53860385723101,
+     "T_max_c": 368.64979969769126,
+     "T_mean_c": 269.3795392558765,
+     "part_mean_phi": 0.8915420936318915,
+     "t_ref_s": 675.0,
+     "wall_march_s": 568.0019498339389,
+     "precedes_melt_onset": true
+    }
+   },
+   "gates": {
+    "melt_onset": {
+     "energy_residual_frac": 1.9950946205778593e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1
+    },
+    "heating_fixed_time": {
+     "energy_residual_frac": 2.3297269381206995e-13,
+     "clamp_bound": false,
+     "cfl_violated": false,
+     "n_substeps_used": 1
+    }
+   },
+   "field_npz": "field_lshape_n96.npz",
+   "wall_total_s": 1394.0103698330931
   }
  },
  "not_run": {}

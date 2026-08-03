@@ -1,0 +1,326 @@
+{
+ "what": "S2 Task 4: densify=True coupled march; first exercise of sigma_density_coeff",
+ "registration": {
+  "assignment": "Matt's explicit S2 assignment: sigma_density_coeff has been provably INERT in every prior study (densify=False made it unreachable). This exercises it for the first time.",
+  "shape": "circle",
+  "grid": 64,
+  "densify": true,
+  "eqs_update_interval_s": 60.0,
+  "sigma_temp_coeff_per_K": -0.002,
+  "sigma_density_coeff_arms": [
+   0.0,
+   0.3,
+   0.6,
+   -0.3
+  ],
+  "arms_why": "0.0 is the CONTROL and must reproduce the densify-only march; 0.6 is the only value with any provenance in this repo (configs/_archive_old/rfam_eqs_comsol_mimic.yaml l.83-85), 0.3 is half of it, and -0.3 tests the sign. All are EXPLORATORY: there is NO validated nonzero value anywhere in this repo and none is claimed.",
+  "validity_bound_abs_a_per_K": 0.0044,
+  "validity_bound_note": "carried from S4: |sigma_temp_coeff_per_K| must stay well inside 1/(T_max - T_ref) so the (1 + a dT) factor never changes sign. -0.002 is inside it.",
+  "zero_control_must_reproduce": "the sigma_density_coeff = 0 arm must reproduce the densify-only march to the reproducibility tolerance class (relative ~1e-12, never array_equal)",
+  "standing_gates": [
+   "energy_audit",
+   "clamp_bound",
+   "cfl"
+  ],
+  "questions": {
+   "a": "does density coupling move late-time surface topology in the FLIR-observed direction (S4 mechanism 3)?",
+   "b": "do the Task-3 convergence bands hold with densification on? ONE shape, TWO grids -- a spot check, labelled as such, NOT a convergence claim"
+  },
+  "anti_circularity": "the S4 rule stands: nothing here is fitted to scored FLIR frames. The coefficient arms are pre-registered above and are not tuned to match any observation."
+ },
+ "max_time_s": 600.0,
+ "controls": {
+  "densify_off_inertness": {
+   "arms": {
+    "0.0": {
+     "sigma_density_coeff": 0.0,
+     "densify": false,
+     "n": 64,
+     "max_time_s": 600.0,
+     "t90_s": 320.20000000000005,
+     "reached": true,
+     "sigma_T_c": 19.04136800470891,
+     "T_max_c": 236.7347505246423,
+     "T_mean_c": 207.50846443450456,
+     "n_eqs_solves": 6,
+     "n_eqs_resolves_skipped": 0,
+     "wall_s": 1148.8641607500613,
+     "gates": {
+      "energy_residual_frac": -2.3818777989231183e-14,
+      "clamp_bound": false,
+      "cfl_violated": false
+     },
+     "topology": {
+      "surface_mean_c": 183.31874030167498,
+      "interior_mean_c": 217.33553986346658,
+      "surface_minus_interior_c": -34.0167995617916,
+      "n_surface": 6656,
+      "n_interior": 16384
+     }
+    },
+    "0.6": {
+     "sigma_density_coeff": 0.6,
+     "densify": false,
+     "n": 64,
+     "max_time_s": 600.0,
+     "t90_s": 320.20000000000005,
+     "reached": true,
+     "sigma_T_c": 19.04136800470891,
+     "T_max_c": 236.7347505246423,
+     "T_mean_c": 207.50846443450456,
+     "n_eqs_solves": 6,
+     "n_eqs_resolves_skipped": 0,
+     "wall_s": 960.4198100410867,
+     "gates": {
+      "energy_residual_frac": -2.3818777989231183e-14,
+      "clamp_bound": false,
+      "cfl_violated": false
+     },
+     "topology": {
+      "surface_mean_c": 183.31874030167498,
+      "interior_mean_c": 217.33553986346658,
+      "surface_minus_interior_c": -34.0167995617916,
+      "n_surface": 6656,
+      "n_interior": 16384
+     }
+    }
+   },
+   "max_abs_dT_c": 0.0,
+   "sigma_T_rel_diff": 0.0,
+   "t90_identical": true,
+   "inert": true,
+   "why": "with densify=False rho never leaves rho_ref, so the coupling factor (1 + b (rho - rho_ref)) is exactly 1.0 for ANY b. This is the prior inertness, proven rather than asserted."
+  }
+ },
+ "arms": {
+  "0.0": {
+   "sigma_density_coeff": 0.0,
+   "densify": true,
+   "n": 64,
+   "max_time_s": 600.0,
+   "t90_s": 320.15000000000003,
+   "reached": true,
+   "sigma_T_c": 19.04321355260373,
+   "T_max_c": 236.73458277336934,
+   "T_mean_c": 207.50937228867673,
+   "n_eqs_solves": 10,
+   "n_eqs_resolves_skipped": 0,
+   "wall_s": 934.5664007498417,
+   "gates": {
+    "energy_residual_frac": -1.0451699317604855e-13,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "topology": {
+    "surface_mean_c": 183.3162813072559,
+    "interior_mean_c": 217.33781549987896,
+    "surface_minus_interior_c": -34.02153419262305,
+    "n_surface": 6656,
+    "n_interior": 16384
+   },
+   "rho_final": {
+    "mean": 0.9978969437502963,
+    "min": 0.9668209695227002,
+    "max": 0.9999999999691033,
+    "std": 0.005656136045005264
+   }
+  },
+  "0.3": {
+   "sigma_density_coeff": 0.3,
+   "densify": true,
+   "n": 64,
+   "max_time_s": 600.0,
+   "t90_s": 321.90000000000003,
+   "reached": true,
+   "sigma_T_c": 19.495262652505918,
+   "T_max_c": 238.1531864949203,
+   "T_mean_c": 208.02785070674855,
+   "n_eqs_solves": 10,
+   "n_eqs_resolves_skipped": 0,
+   "wall_s": 607.6756442498881,
+   "gates": {
+    "energy_residual_frac": -1.057602352422983e-13,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "topology": {
+    "surface_mean_c": 183.35265759707693,
+    "interior_mean_c": 218.05214790755264,
+    "surface_minus_interior_c": -34.69949031047571,
+    "n_surface": 6656,
+    "n_interior": 16384
+   },
+   "rho_final": {
+    "mean": 0.9977585282242754,
+    "min": 0.9641812454586609,
+    "max": 0.9999999999831805,
+    "std": 0.006085145645164054
+   },
+   "vs_zero_arm": {
+    "max_abs_dT_c": 1.4186055073481896,
+    "mean_abs_dT_c": 0.2252124900280642
+   },
+   "delta_vs_zero": {
+    "t90_s": 1.75,
+    "sigma_T_c": 0.45204909990218667,
+    "surface_minus_interior_c": -0.6779561178526592,
+    "rho_mean": -0.00013841552602089635
+   }
+  },
+  "0.6": {
+   "sigma_density_coeff": 0.6,
+   "densify": true,
+   "n": 64,
+   "max_time_s": 600.0,
+   "t90_s": 323.5,
+   "reached": true,
+   "sigma_T_c": 19.911181483297167,
+   "T_max_c": 239.4452994122411,
+   "T_mean_c": 208.50349944899247,
+   "n_eqs_solves": 10,
+   "n_eqs_resolves_skipped": 0,
+   "wall_s": 565.703932417091,
+   "gates": {
+    "energy_residual_frac": -1.0254630556283801e-13,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "topology": {
+    "surface_mean_c": 183.38788184725868,
+    "interior_mean_c": 218.70671909969684,
+    "surface_minus_interior_c": -35.31883725243816,
+    "n_surface": 6656,
+    "n_interior": 16384
+   },
+   "rho_final": {
+    "mean": 0.9976305802154593,
+    "min": 0.9616725413373992,
+    "max": 0.9999999999900208,
+    "std": 0.006490711222872375
+   },
+   "vs_zero_arm": {
+    "max_abs_dT_c": 2.7107170832738916,
+    "mean_abs_dT_c": 0.4311958812201396
+   },
+   "delta_vs_zero": {
+    "t90_s": 3.349999999999966,
+    "sigma_T_c": 0.8679679306934354,
+    "surface_minus_interior_c": -1.297303059815107,
+    "rho_mean": -0.0002663635348369997
+   }
+  },
+  "-0.3": {
+   "sigma_density_coeff": -0.3,
+   "densify": true,
+   "n": 64,
+   "max_time_s": 600.0,
+   "t90_s": 318.3,
+   "reached": true,
+   "sigma_T_c": 18.55637802648177,
+   "T_max_c": 235.20224444137415,
+   "T_mean_c": 206.9602001588404,
+   "n_eqs_solves": 10,
+   "n_eqs_resolves_skipped": 0,
+   "wall_s": 570.5559329581447,
+   "gates": {
+    "energy_residual_frac": -9.831489277997785e-14,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "topology": {
+    "surface_mean_c": 183.28929755788496,
+    "interior_mean_c": 216.57650434047855,
+    "surface_minus_interior_c": -33.287206782593586,
+    "n_surface": 6656,
+    "n_interior": 16384
+   },
+   "rho_final": {
+    "mean": 0.9980475800734396,
+    "min": 0.9696024358854076,
+    "max": 0.9999999999370355,
+    "std": 0.005200816418885321
+   },
+   "vs_zero_arm": {
+    "max_abs_dT_c": 1.532339307333416,
+    "mean_abs_dT_c": 0.23814224921841826
+   },
+   "delta_vs_zero": {
+    "t90_s": -1.8500000000000227,
+    "sigma_T_c": -0.48683552612196124,
+    "surface_minus_interior_c": 0.734327410029465,
+    "rho_mean": 0.0001506363231433827
+   }
+  }
+ },
+ "spot_check": {
+  "48": {
+   "sigma_density_coeff": 0.6,
+   "densify": true,
+   "n": 48,
+   "max_time_s": 600.0,
+   "t90_s": 323.55,
+   "reached": true,
+   "sigma_T_c": 19.940208248338177,
+   "T_max_c": 240.80995726491585,
+   "T_mean_c": 209.7236619158482,
+   "n_eqs_solves": 10,
+   "n_eqs_resolves_skipped": 0,
+   "wall_s": 183.39883162500337,
+   "gates": {
+    "energy_residual_frac": -6.906270579874164e-14,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "topology": {
+    "surface_mean_c": 188.89097847796415,
+    "interior_mean_c": 223.83612488989868,
+    "surface_minus_interior_c": -34.94514641193453,
+    "n_surface": 4032,
+    "n_interior": 5952
+   },
+   "rho_final": {
+    "mean": 0.9983760462616507,
+    "min": 0.9815097810602001,
+    "max": 0.9999999999968304,
+    "std": 0.0036676173017197895
+   }
+  },
+  "64": {
+   "sigma_density_coeff": 0.6,
+   "densify": true,
+   "n": 64,
+   "max_time_s": 600.0,
+   "t90_s": 323.5,
+   "reached": true,
+   "sigma_T_c": 19.911181483297167,
+   "T_max_c": 239.4452994122411,
+   "T_mean_c": 208.50349944899247,
+   "n_eqs_solves": 10,
+   "n_eqs_resolves_skipped": 0,
+   "wall_s": 573.6467335419729,
+   "gates": {
+    "energy_residual_frac": -1.0254630556283801e-13,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "topology": {
+    "surface_mean_c": 183.38788184725868,
+    "interior_mean_c": 218.70671909969684,
+    "surface_minus_interior_c": -35.31883725243816,
+    "n_surface": 6656,
+    "n_interior": 16384
+   },
+   "rho_final": {
+    "mean": 0.9976305802154593,
+    "min": 0.9616725413373992,
+    "max": 0.9999999999900208,
+    "std": 0.006490711222872375
+   }
+  }
+ },
+ "question_a_density_coupling_is_reachable": {
+  "answer": true,
+  "note": "the term is reachable iff a nonzero b moves the field with densify ON; with densify OFF it provably cannot"
+ },
+ "spot_check_caveat": "TWO grids at ONE shape is a SPOT CHECK, not a convergence claim: the pre-registration requires 3 grids for a band and this deliberately does not meet it"
+}

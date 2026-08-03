@@ -107,3 +107,71 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def commensurability_table() -> str:
+    d = _l("commensurability.json")
+    o = ["### Addendum -- axis-aligned staircase commensurability", "",
+         "| n | h [mm] | cells across | effective half-width [mm] | error [mm] | "
+         "error [%] | commensurate |", "|---|---|---|---|---|---|---|"]
+    for r in d["geometry"]:
+        o.append(f"| {r['n']} | {r['h_m']*1e3:.4f} | {r['cells_across']} | "
+                 f"{r['half_width_effective_m']*1e3:.4f} | "
+                 f"{r['half_width_error_m']*1e3:+.4f} | "
+                 f"{100*r['half_width_error_rel']:+.2f} | "
+                 f"{str(r['commensurate']).lower()} |")
+    o += ["", "| shape | pair | jaccard phi>=0.9 | geometry jump [mm] | "
+              "jaccard per mm of jump |", "|---|---|---|---|---|"]
+    for s, e in d["shapes"].items():
+        for m in e["successive_pairs"]:
+            rat = m["metric_per_mm_of_geometry_jump"]
+            o.append(f"| {s} | {m['pair'][0]}->{m['pair'][1]} | "
+                     f"{m['jaccard_dist_phi0p9']:.5f} | "
+                     f"{m['geometry_jump_m']*1e3:.4f} | "
+                     f"{'n/a' if rat is None else f'{rat:.4f}'} |")
+    o += ["", "| shape | COMMENSURATE pair | jaccard phi>=0.9 | front SSD [mm] |",
+          "|---|---|---|---|"]
+    for s, e in d["shapes"].items():
+        c = e.get("commensurate_pair")
+        if c:
+            o.append(f"| {s} | {c['pair'][0]}<->{c['pair'][1]} | "
+                     f"{c['jaccard_dist_phi0p9']:.5f} | {c['front_ssd_mm']:.5f} |")
+    return "\n".join(o)
+
+
+def densify_table() -> str:
+    d = _l("densify_coupled.json")
+    c = d["controls"]["densify_off_inertness"]
+    o = ["### Task 4 -- the densify=True coupled march", "",
+         f"**Control, densify OFF**: `inert` = "
+         f"`{str(c['inert']).lower()}`, max |dT| between b = 0.0 and b = 0.6 is "
+         f"**{c['max_abs_dT_c']}** C, t90 identical: "
+         f"`{str(c['t90_identical']).lower()}`. The prior inertness is proven "
+         f"bit-for-bit, exactly as the structural argument predicts.", "",
+         f"**Reachable with densify ON**: "
+         f"`{str(d['question_a_density_coupling_is_reachable']['answer']).lower()}`.",
+         "", "| b | t90 [s] | sigma_T [C] | surface-minus-interior [C] | "
+         "rho_final mean | EQS solves | energy resid | clamp |",
+         "|---|---|---|---|---|---|---|---|"]
+    for b, r in d["arms"].items():
+        t, g = r["topology"], r["gates"]
+        rho = r.get("rho_final", {}).get("mean", float("nan"))
+        o.append(f"| {b} | {r['t90_s']:.2f} | {r['sigma_T_c']:.3f} | "
+                 f"{t['surface_minus_interior_c']:+.3f} | {rho:.5f} | "
+                 f"{r['n_eqs_solves']} | {g['energy_residual_frac']:.2e} | "
+                 f"{str(g['clamp_bound']).lower()} |")
+    o += ["", "| b | d t90 [s] | d sigma_T [C] | d(surface-interior) [C] | "
+              "max abs dT vs b=0 [C] |", "|---|---|---|---|---|"]
+    for b, r in d["arms"].items():
+        if b == "0.0":
+            continue
+        dv, vz = r["delta_vs_zero"], r.get("vs_zero_arm", {})
+        o.append(f"| {b} | {dv['t90_s']:+.3f} | {dv['sigma_T_c']:+.4f} | "
+                 f"{dv['surface_minus_interior_c']:+.4f} | "
+                 f"{vz.get('max_abs_dT_c', float('nan')):.4f} |")
+    sc = d["spot_check"]
+    o += ["", "| spot-check grid | t90 [s] | sigma_T [C] |", "|---|---|---|"]
+    for k, v in sc.items():
+        o.append(f"| {k} | {v['t90_s']:.2f} | {v['sigma_T_c']:.3f} |")
+    o += ["", d["spot_check_caveat"]]
+    return "\n".join(o)

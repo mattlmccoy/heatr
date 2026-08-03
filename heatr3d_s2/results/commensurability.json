@@ -1,0 +1,180 @@
+{
+ "what": "S2 addendum: axis-aligned staircase commensurability",
+ "geometry": [
+  {
+   "n": 48,
+   "h_m": 0.00125,
+   "cells_across": 16,
+   "half_width_effective_m": 0.01,
+   "half_width_error_m": 0.0,
+   "half_width_error_rel": 0.0,
+   "centre_offset_frac": 0.5,
+   "commensurate": true
+  },
+  {
+   "n": 64,
+   "h_m": 0.0009375,
+   "cells_across": 22,
+   "half_width_effective_m": 0.010312499999999999,
+   "half_width_error_m": 0.00031249999999999854,
+   "half_width_error_rel": 0.031249999999999854,
+   "centre_offset_frac": 0.16666666666666785,
+   "commensurate": false
+  },
+  {
+   "n": 80,
+   "h_m": 0.00075,
+   "cells_across": 26,
+   "half_width_effective_m": 0.00975,
+   "half_width_error_m": -0.0002500000000000002,
+   "half_width_error_rel": -0.025000000000000022,
+   "centre_offset_frac": 0.8333333333333339,
+   "commensurate": false
+  },
+  {
+   "n": 96,
+   "h_m": 0.000625,
+   "cells_across": 32,
+   "half_width_effective_m": 0.01,
+   "half_width_error_m": 0.0,
+   "half_width_error_rel": 0.0,
+   "centre_offset_frac": 0.5,
+   "commensurate": true
+  }
+ ],
+ "commensurate_grids": [
+  48,
+  96
+ ],
+ "shapes": {
+  "square": {
+   "successive_pairs": [
+    {
+     "pair": [
+      48,
+      64
+     ],
+     "jaccard_dist_phi0p9": 0.058157012371372385,
+     "front_ssd_mm": 0.29884707302457303,
+     "geometry_jump_m": 0.00031249999999999854,
+     "metric_per_mm_of_geometry_jump": 0.18610243958839248
+    },
+    {
+     "pair": [
+      64,
+      80
+     ],
+     "jaccard_dist_phi0p9": 0.11573592322811888,
+     "front_ssd_mm": 0.6121918471540797,
+     "geometry_jump_m": 0.0005624999999999988,
+     "metric_per_mm_of_geometry_jump": 0.2057527524055451
+    },
+    {
+     "pair": [
+      80,
+      96
+     ],
+     "jaccard_dist_phi0p9": 0.052409862470573665,
+     "front_ssd_mm": 0.26117339969781883,
+     "geometry_jump_m": 0.0002500000000000002,
+     "metric_per_mm_of_geometry_jump": 0.20963944988229447
+    }
+   ],
+   "commensurate_pair": {
+    "pair": [
+     48,
+     96
+    ],
+    "jaccard_dist_phi0p9": 0.01237896801078564,
+    "front_ssd_mm": 0.0659733394621926,
+    "geometry_jump_m": 0.0
+   }
+  },
+  "lshape": {
+   "successive_pairs": [
+    {
+     "pair": [
+      48,
+      64
+     ],
+     "jaccard_dist_phi0p9": 0.08227736712425204,
+     "front_ssd_mm": 0.6408567611407415,
+     "geometry_jump_m": 0.00031249999999999854,
+     "metric_per_mm_of_geometry_jump": 0.2632875747976078
+    },
+    {
+     "pair": [
+      64,
+      80
+     ],
+     "jaccard_dist_phi0p9": 0.10172474480816618,
+     "front_ssd_mm": 0.7973699207947442,
+     "geometry_jump_m": 0.0005624999999999988,
+     "metric_per_mm_of_geometry_jump": 0.1808439907700736
+    },
+    {
+     "pair": [
+      80,
+      96
+     ],
+     "jaccard_dist_phi0p9": 0.06202333915280711,
+     "front_ssd_mm": 0.4628054601993764,
+     "geometry_jump_m": 0.0002500000000000002,
+     "metric_per_mm_of_geometry_jump": 0.24809335661122822
+    }
+   ],
+   "commensurate_pair": {
+    "pair": [
+     48,
+     96
+    ],
+    "jaccard_dist_phi0p9": 0.04450153690874892,
+    "front_ssd_mm": 0.33342350122256637,
+    "geometry_jump_m": 0.0
+   }
+  },
+  "circle": {
+   "successive_pairs": [
+    {
+     "pair": [
+      48,
+      64
+     ],
+     "jaccard_dist_phi0p9": 0.042408546455163454,
+     "front_ssd_mm": 0.19838751587832618,
+     "geometry_jump_m": 0.00031249999999999854,
+     "metric_per_mm_of_geometry_jump": 0.13570734865652367
+    },
+    {
+     "pair": [
+      64,
+      80
+     ],
+     "jaccard_dist_phi0p9": 0.03303600925008254,
+     "front_ssd_mm": 0.16712288565049377,
+     "geometry_jump_m": 0.0005624999999999988,
+     "metric_per_mm_of_geometry_jump": 0.05873068311125798
+    },
+    {
+     "pair": [
+      80,
+      96
+     ],
+     "jaccard_dist_phi0p9": 0.016898608349900646,
+     "front_ssd_mm": 0.08742604617445957,
+     "geometry_jump_m": 0.0002500000000000002,
+     "metric_per_mm_of_geometry_jump": 0.06759443339960253
+    }
+   ],
+   "commensurate_pair": {
+    "pair": [
+     48,
+     96
+    ],
+    "jaccard_dist_phi0p9": 0.019550342130987275,
+    "front_ssd_mm": 0.09798148014950202,
+    "geometry_jump_m": 0.0
+   }
+  }
+ }
+}

@@ -46,13 +46,13 @@
 
 ### Task 3: The convergence campaign
 
-- [x] Ran the pre-registered grid ladder x 3 shapes at n=48/64/80 (n=96 NOT_RUN, in flight at session end), corrected defaults, coupling off, densify off (the baseline physics), dual read states. Emit per-run JSONs + `results/convergence_bands.json` with observed order and the frozen-rule bands per quantity.
+- [x] Ran the pre-registered grid ladder x 3 shapes at n=48/64/80/96 (COMPLETE, 12/12 cases), corrected defaults, coupling off, densify off (the baseline physics), dual read states. Emit per-run JSONs + `results/convergence_bands.json` with observed order and the frozen-rule bands per quantity.
 - [x] Verdict per quantity per shape: **circle PASS, square FAIL, lshape FAIL -> S2 FAIL**. Compare the same-engine bands against Phase A's cross-family bands (phase_a_shape_gate.json self-spreads) - consistency statement, not a gate. Commit.
 
 ### Task 4: densify=True coupled march (re-registered - Matt's assignment)
 
-- [ ] **NOT_RUN (runner implemented and committed; did not complete in session).** Per the Task-0 registration: the S4-convention march with densify=True, exercising sigma_density_coeff for the FIRST time (it has been provably inert in every prior study). Arms: coefficient 0 control (must reproduce the densify-only march bit-for-bit at the tolerance class), plus the registered exploratory +/- values within validity bounds. Standing gates (energy audit, clamp, CFL) on every arm.
-- [ ] **NOT_RUN.** Two questions, answered with numbers: (a) does density coupling move late-time surface topology in the FLIR-observed direction (S4 mechanism 3)? (b) do the Task-3 convergence bands hold with densification on (one shape, two grids - a spot check, labeled as such)? Emit `results/densify_coupled.json`. Commit.
+- [x] **DONE.** Control proves prior inertness bit-for-bit (max|dT| = 0.0 with densify OFF); with densify ON the term is reachable and near-linear in b. Per the Task-0 registration: the S4-convention march with densify=True, exercising sigma_density_coeff for the FIRST time (it has been provably inert in every prior study). Arms: coefficient 0 control (must reproduce the densify-only march bit-for-bit at the tolerance class), plus the registered exploratory +/- values within validity bounds. Standing gates (energy audit, clamp, CFL) on every arm.
+- [x] Two questions, answered with numbers: **(a) NO** -- positive b moves surface topology AWAY from the FLIR direction (-34.022 -> -35.319 C) and is ~2 orders too small anyway (~1.3 C against an S4 gap of tens of degrees); the fixed-power renormalization divides out the near-uniform conductivity change. **(b)** spot check n=48 vs 64 agrees to 0.015 % on t90, labelled a spot check not a band. (a) does density coupling move late-time surface topology in the FLIR-observed direction (S4 mechanism 3)? (b) do the Task-3 convergence bands hold with densification on (one shape, two grids - a spot check, labeled as such)? Emit `results/densify_coupled.json`. Commit.
 
 ### Task 5: Mechanism checks (analysis, not vibes)
 
