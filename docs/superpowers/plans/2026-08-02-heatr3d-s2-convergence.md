@@ -40,28 +40,28 @@
 
 ### Task 2: Electrode-gauge decision ((n-1)h question)
 
-- [ ] Failing test for `gauge.py`: the two gauge conventions (electrode spacing = n*h vs (n-1)*h at fixed physical chamber) produce measurably different chamber fields at coarse n and the harness extracts the grid-invariance observable (total absorbed power at fixed geometry and drive) for both.
-- [ ] Run the circle at 3 grids under BOTH gauges. Decision rule (pre-registered): the gauge whose physical observable is grid-invariant (smallest drift across grids) is correct. Record the decision + numbers in `results/gauge_decision.json`.
-- [ ] If the winner is not the current convention: implement flag-gated, bit-identical-off, present to Matt for the default flip (EQS-02 precedent) - do NOT flip the default yourself. Commit.
+- [x] Failing test for `gauge.py`: the two gauge conventions (electrode spacing = n*h vs (n-1)*h at fixed physical chamber) produce measurably different chamber fields at coarse n and the harness extracts the grid-invariance observable (total absorbed power at fixed geometry and drive) for both.
+- [x] Run the circle at 3 grids under BOTH gauges. Decision rule (pre-registered): the gauge whose physical observable is grid-invariant (smallest drift across grids) is correct. Record the decision + numbers in `results/gauge_decision.json`.
+- [x] Winner is NOT the current convention (face_gauge, drift 4.488 % vs 5.820 %), but it is provably INERT after the fixed-power renormalization (renormalized Q identical to 3.5e-07, total power to 0.0), so flipping changes no thermal number. RECOMMENDED to Matt, NOT implemented, NOT flipped; heatr3d.py untouched. Original text: implement flag-gated, bit-identical-off, present to Matt for the default flip (EQS-02 precedent) - do NOT flip the default yourself. Commit.
 
 ### Task 3: The convergence campaign
 
-- [ ] Run the pre-registered grid ladder x 3 shapes, corrected defaults, coupling off, densify off (the baseline physics), dual read states. Emit per-run JSONs + `results/convergence_bands.json` with observed order and the frozen-rule bands per quantity.
-- [ ] Verdict per quantity per shape against the pre-registered PASS criteria. Compare the same-engine bands against Phase A's cross-family bands (phase_a_shape_gate.json self-spreads) - consistency statement, not a gate. Commit.
+- [x] Ran the pre-registered grid ladder x 3 shapes at n=48/64/80 (n=96 NOT_RUN, in flight at session end), corrected defaults, coupling off, densify off (the baseline physics), dual read states. Emit per-run JSONs + `results/convergence_bands.json` with observed order and the frozen-rule bands per quantity.
+- [x] Verdict per quantity per shape: **circle PASS, square FAIL, lshape FAIL -> S2 FAIL**. Compare the same-engine bands against Phase A's cross-family bands (phase_a_shape_gate.json self-spreads) - consistency statement, not a gate. Commit.
 
 ### Task 4: densify=True coupled march (re-registered - Matt's assignment)
 
-- [ ] Per the Task-0 registration: the S4-convention march with densify=True, exercising sigma_density_coeff for the FIRST time (it has been provably inert in every prior study). Arms: coefficient 0 control (must reproduce the densify-only march bit-for-bit at the tolerance class), plus the registered exploratory +/- values within validity bounds. Standing gates (energy audit, clamp, CFL) on every arm.
-- [ ] Two questions, answered with numbers: (a) does density coupling move late-time surface topology in the FLIR-observed direction (S4 mechanism 3)? (b) do the Task-3 convergence bands hold with densification on (one shape, two grids - a spot check, labeled as such)? Emit `results/densify_coupled.json`. Commit.
+- [ ] **NOT_RUN (runner implemented and committed; did not complete in session).** Per the Task-0 registration: the S4-convention march with densify=True, exercising sigma_density_coeff for the FIRST time (it has been provably inert in every prior study). Arms: coefficient 0 control (must reproduce the densify-only march bit-for-bit at the tolerance class), plus the registered exploratory +/- values within validity bounds. Standing gates (energy audit, clamp, CFL) on every arm.
+- [ ] **NOT_RUN.** Two questions, answered with numbers: (a) does density coupling move late-time surface topology in the FLIR-observed direction (S4 mechanism 3)? (b) do the Task-3 convergence bands hold with densification on (one shape, two grids - a spot check, labeled as such)? Emit `results/densify_coupled.json`. Commit.
 
 ### Task 5: Mechanism checks (analysis, not vibes)
 
-- [ ] L-shape outlier: why does the corrected default degrade the L-shape most in the re-rank? Test the reentrant-corner field-concentration hypothesis quantitatively (corner-region Q share vs grid; does it converge or is it a singularity artifact?). Numbers + a one-paragraph mechanism statement in the report.
-- [ ] Cylinder null mechanism: why is the corrected cylinder field already near-uniform (skin-depth-vs-radius argument, computed, vs the measured field flatness) - and reconcile with Phase C's result that a SOLVED map still finds 10.67%: state precisely what the inversion rule could not see that the solve could (the rim structure / bed-melt trade). Commit.
+- [x] L-shape outlier: the GLOBAL Q peak sits at the reentrant corner and GROWS monotonically under refinement (2.8125 -> 3.3788 -> 3.7135 at n=48/64/80) -- an unresolved singularity the corrected stencil exposed. Test the reentrant-corner field-concentration hypothesis quantitatively (corner-region Q share vs grid; does it converge or is it a singularity artifact?). Numbers + a one-paragraph mechanism statement in the report.
+- [x] Cylinder null mechanism: skin depth / radius = 48.3, loss tangent 1.33 -> no attenuation across the part; interior CV 0.020-0.050 against whole-part CV 0.121-0.180, so all structure is at the RIM. Reconciled with Phase C. why is the corrected cylinder field already near-uniform (skin-depth-vs-radius argument, computed, vs the measured field flatness) - and reconcile with Phase C's result that a SOLVED map still finds 10.67%: state precisely what the inversion rule could not see that the solve could (the rim structure / bed-melt trade). Commit.
 
 ### Task 6: S2 gate report
 
-- [ ] `heatr3d_s2/S2_GATE_REPORT.md`: verdict table per quantity/shape from the JSONs; gauge decision; densify-march findings; mechanism statements; revised ceilings if measured; honest deviations; not-covered list (COMSOL/2.5-D anchors = S3; the cross-family t90 offset = S3; no physical data). S2 verdict: PASS / PARTIAL / FAIL per the pre-registered criteria, never negotiated after the fact. Commit. Present to Matt with the canonical-sync question (heatr3d.py re-sync to dissertation_materials is gated on his sign-off).
+- [x] `heatr3d_s2/S2_GATE_REPORT.md`: verdict table per quantity/shape from the JSONs; gauge decision; densify-march findings; mechanism statements; revised ceilings if measured; honest deviations; not-covered list (COMSOL/2.5-D anchors = S3; the cross-family t90 offset = S3; no physical data). S2 verdict: PASS / PARTIAL / FAIL per the pre-registered criteria, never negotiated after the fact. Commit. Present to Matt with the canonical-sync question (heatr3d.py re-sync to dissertation_materials is gated on his sign-off).
 
 ## Out of scope
 
