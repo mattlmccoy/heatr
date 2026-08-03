@@ -2,8 +2,11 @@
 
 Date: 2026-08-02
 Status: DRAFT, awaiting Matt's approval. The package-format section (section 7)
-additionally goes to the 2-D solve session for review BEFORE freeze; their
-emitters conform to what freezes here.
+went to the 2-D solve session for pre-freeze review; their verdict 2026-08-03
+was APPROVE WITH THREE CHANGES, all folded into section 7b (conditional
+engine_versions keys, optional plan block, exactly-one power settings rule,
+three-state transfer record, 2-D correction engine values). Freeze now waits
+only on Matt's approval.
 Owner: Matt McCoy
 Builds on: docs/superpowers/specs/2026-07-31-solve-port-3d-design.md (Studio
 integration thin and badge-gated), studio_handoff/ (2-D lane's manifest seed),
@@ -231,18 +234,32 @@ spirit):
 
 Contents:
 - manifest.json (SCHEMA_VERSION 2.0.0, since the layer-wise 3-D content is
-  a breaking extension of their 1.0.0 draft):
-  - schema_version, created_utc, engine_versions (plural: heatr3d version
-    stamp, solve3d artifact id, stl_compensation_tool rev)
+  a breaking extension of their 1.0.0 draft; the three 2-D-lane review
+  changes of 2026-08-03 are folded in below):
+  - schema_version, created_utc, engine_versions (plural). Keys are
+    CONDITIONALLY REQUIRED by source_route, not always-required: a 3-D
+    Studio package carries heatr3d version stamp, solve3d artifact id,
+    stl_compensation_tool rev; a 2-D-native package may carry only
+    {"heatr_2d": <rfam_eqs_coupled ENGINE_VERSION>}.
   - part: name, source_geometry_sha256 (STL bytes), source_route, intake
     verdict record (the refusal gate result that admitted this mesh)
-  - correction_provenance: engine ("solve3d solved" | "heatr_25d_perslice"
-    | "none"), artifact ids/hashes, trust badge string, transfer record
-    (support-aware method + measured dopant-mass move, must be < 2%)
+  - plan (OPTIONAL block, restored from the 1.0.0 draft for
+    Import-and-Plan provenance): classifier recommendation + its advisory
+    disclaimer, classifier version, expected outcomes (J/IoU) with the
+    grid qualifier. 3-D packages may omit the whole block.
+  - correction_provenance: engine ("solve3d_solved" | "heatr_25d_perslice"
+    | "heatr_2d_solve" | "heatr_2d_proportional" | "none"; the last two
+    are the 2-D lane's adjoint-solve and calibrated-inverse channels),
+    artifact ids/hashes, trust badge string, transfer record with THREE
+    explicit states: measured-and-passed (< 2% dopant-mass move),
+    measured-and-failed, or transfer_not_applicable (for rasters native to
+    the production path with no volume-to-grid transfer step, e.g. the 2-D
+    fgm_generator dpi resample). Absence NEVER implies not-applicable.
   - densify_summary: uncorrected and corrected arm summaries (mean part
     rho, sigma_T diagnostic, T_max_c, standing gates, n, engine label each)
-  - power_settings: power_density_w_per_m3 for 3-D arms; the 2-D lane's
-    voltage block stays for their emitters (rf_mode "constant" retained)
+  - power_settings: EXACTLY ONE of power_density_w_per_m3 (3-D arms) or
+    the 2-D voltage block (rf_mode "constant" retained), enforced by the
+    validator; neither, or silently both, is invalid
   - raster block: dpi (720), bpp, level_map shape, convention string
     (WhiteIsZero, loader inverse), per-layer file list
   - turntable block: mode program|static, file, plus advisory: true and the
