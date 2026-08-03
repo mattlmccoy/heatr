@@ -74,6 +74,16 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
 
     prov["transfer"] = {k: v for k, v in rec.items() if k != "sat"}
     prov["grid_n"] = int(n)
+    # A map that never deviates from 1.0 in-part modulates nothing; the
+    # AFTER arm will equal the BEFORE arm by construction. Say so loudly
+    # (no false impression of a correction having been applied).
+    max_dev = float(np.abs(rec["sat"][part] - 1.0).max()) if part.any() else 0.0
+    prov["null_correction"] = bool(max_dev < 1e-6)
+    if prov["null_correction"]:
+        prov["null_note"] = (
+            "correction is NULL for this part: the source map is 1.0 "
+            "(unmodulated) everywhere in the part, so the corrected arm "
+            "equals the uncorrected arm by construction")
 
     out = grade_dir / "heatr3d"
     out.mkdir(parents=True, exist_ok=True)

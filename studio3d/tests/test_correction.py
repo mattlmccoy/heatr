@@ -75,3 +75,44 @@ def test_no_correction_source_is_a_loud_error(box_stl, tmp_path):
     with pytest.raises(FileNotFoundError, match="verification"):
         build_correction(gd, str(box_stl), 16,
                          registry_path=tmp_path / "missing.json")
+
+
+def test_null_correction_is_flagged_loudly(box_stl, tmp_path):
+    """A dopant volume with sat = 1.0 everywhere corrects nothing; the
+    provenance must say so instead of letting two identical arms render
+    silently (found live on the l_extrusion stored 2.5-D result)."""
+    n = 16
+    gd = tmp_path / "grade"
+    (gd / "heatr").mkdir(parents=True)
+    ng, nz = 40, 8
+    yy, xx = np.meshgrid(np.arange(ng), np.arange(ng), indexing="ij")
+    mask2 = (np.abs(xx - ng / 2) < ng * 0.2) & (np.abs(yy - ng / 2) < ng * 0.2)
+    np.savez(gd / "heatr" / "dopant_volume.npz",
+             sat=np.ones((nz, ng, ng), np.float32),
+             part_mask=mask2[None].repeat(nz, 0),
+             z_mm=(np.arange(nz) + 0.5) * 2.5,
+             area_mm2=np.full(nz, 100.0), method=np.array(["m0"] * nz),
+             gain=np.ones(nz), chamber_m=0.060)
+    prov = build_correction(gd, str(box_stl), n,
+                            registry_path=tmp_path / "missing.json")
+    assert prov["null_correction"] is True
+    assert "NULL" in prov["null_note"]
+
+
+def test_real_correction_is_not_flagged_null(box_stl, tmp_path):
+    prov_modulated = None
+    n = 16
+    gd = tmp_path / "grade"
+    (gd / "heatr").mkdir(parents=True)
+    ng, nz = 40, 8
+    yy, xx = np.meshgrid(np.arange(ng), np.arange(ng), indexing="ij")
+    mask2 = (np.abs(xx - ng / 2) < ng * 0.2) & (np.abs(yy - ng / 2) < ng * 0.2)
+    np.savez(gd / "heatr" / "dopant_volume.npz",
+             sat=np.where(mask2, 0.6, 1.0)[None].repeat(nz, 0).astype(np.float32),
+             part_mask=mask2[None].repeat(nz, 0),
+             z_mm=(np.arange(nz) + 0.5) * 2.5,
+             area_mm2=np.full(nz, 100.0), method=np.array(["m"] * nz),
+             gain=np.ones(nz), chamber_m=0.060)
+    prov_modulated = build_correction(gd, str(box_stl), n,
+                                      registry_path=tmp_path / "missing.json")
+    assert prov_modulated["null_correction"] is False
