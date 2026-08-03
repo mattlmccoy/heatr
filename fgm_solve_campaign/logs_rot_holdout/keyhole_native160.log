@@ -1,0 +1,15 @@
+[keyhole/native160] grid 160, 1844 part cells, drive 2428.2 V gives 380.3 W/m here, recalibrated to 2784.0 V, verified 500.00 W/m
+[keyhole/native160] design filter sigma 2.0000 cells at 160 = 0.75 mm, the same physical length as 1.5 cells at 120
+[keyhole/native160] program: stored turntable program, 12 positions, 456 moves
+[keyhole/native160]   start/cold: 16 evaluations, J 411.94 -> 67.02, 845 s
+[keyhole/native160]   start/warm: 16 evaluations, J 344.81 -> 46.64, 836 s
+[keyhole/native160] solve done, winner start warm, best filtered J 46.64 on the solve objective
+[keyhole] ROT_uniform                J    384.03  IoU 0.7749  IoUa 0.7709  grow  13.45  under  12.09  stop 1108 ( 554.5 s)  P  314.0  Eres 0.95%  Jrast    408.85  17.2 s
+[keyhole] ROT_transferred120         J     62.39  IoU 0.9447  IoUa 0.9318  grow   4.01  under   1.74  stop 1443 ( 722.0 s)  P  258.7  Eres 0.31%  Jrast     82.14  18.5 s
+[keyhole] ROT_native160              J     24.93  IoU 0.9716  IoUa 0.9549  grow   1.30  under   1.57  stop 1499 ( 750.0 s) HORIZON  P  251.0  Eres 0.18%  Jrast     47.06  18.3 s
+[keyhole] ROT_native160_cont         J     25.85  IoU 0.9701  IoUa 0.9544  grow   1.57  under   1.46  stop 1497 ( 749.0 s)  P  251.5  Eres 0.19%  Jrast     47.61  18.4 s
+[keyhole] QS_transferred120_equalW   J     63.58  IoU 0.9331  IoUa 0.9277  grow   3.80  under   3.15  stop 1433 ( 717.0 s)  P  258.5  Eres 0.28%  Jrast     87.36  18.4 s
+[keyhole] QS_native160_equalW        J     24.25  IoU 0.9743  IoUa 0.9548  grow   1.19  under   1.41  stop 1499 ( 750.0 s) HORIZON  P  250.7  Eres 0.17%  Jrast     46.02  18.6 s
+[keyhole] STATIC_uniform             J    759.35  IoU 0.6328  IoUa 0.6293  grow  26.14  under  20.17  stop  677 ( 339.0 s)  P  500.0  Eres 1.94%  Jrast    781.97  9.9 s
+[keyhole] STATIC_solved              J    351.91  IoU 0.7991  IoUa 0.7945  grow  14.43  under   8.57  stop  879 ( 440.0 s)  P  404.0  Eres 1.05%  Jrast    376.13  12.1 s
+[keyhole/native160] VERDICT MAP TRANSFER: IoU at 160 is 0.9716 solved at 160 against 0.9447 transferred from 120 (and 0.9828 at grid 120); SOLVED class recovered True; wall 1818 s

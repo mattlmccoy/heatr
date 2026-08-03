@@ -1,0 +1,15 @@
+[cross/native160] grid 160, 1920 part cells, drive 2815.4 V gives 456.3 W/m here, recalibrated to 2947.0 V, verified 500.00 W/m
+[cross/native160] design filter sigma 2.0000 cells at 160 = 0.75 mm, the same physical length as 1.5 cells at 120
+[cross/native160] program: fixed-interval indexing, 4 positions, 375 moves
+[cross/native160]   start/cold: 16 evaluations, J 442.16 -> 376.89, 457 s
+[cross/native160]   start/warm: 16 evaluations, J 451.07 -> 164.76, 556 s
+[cross/native160] solve done, winner start warm, best filtered J 164.76 on the solve objective
+[cross] ROT_uniform                J    442.71  IoU 0.7832  IoUa 0.7544  grow  16.25  under   8.96  stop  684 ( 342.5 s)  P  500.0  Eres 1.28%  Jrast    440.36  10.7 s
+[cross] ROT_transferred120         J    303.70  IoU 0.8052  IoUa 0.7924  grow   7.50  under  13.44  stop  849 ( 425.0 s)  P  384.9  Eres 0.67%  Jrast    309.11  12.5 s
+[cross] ROT_native160              J    154.96  IoU 0.8751  IoUa 0.8564  grow   5.10  under   8.02  stop 1005 ( 503.0 s)  P  345.0  Eres 0.44%  Jrast    159.35  14.1 s
+[cross] ROT_native160_cont         J    158.37  IoU 0.8699  IoUa 0.8546  grow   4.90  under   8.75  stop 1000 ( 500.5 s)  P  345.5  Eres 0.43%  Jrast    163.13  14.1 s
+[cross] QS_transferred120_equalW   J    305.50  IoU 0.8037  IoUa 0.7922  grow   7.71  under  13.44  stop  852 ( 426.5 s)  P  384.9  Eres 0.69%  Jrast    311.13  12.5 s
+[cross] QS_native160_equalW        J    156.73  IoU 0.8734  IoUa 0.8558  grow   5.31  under   8.02  stop 1007 ( 504.0 s)  P  345.0  Eres 0.45%  Jrast    160.87  14.2 s
+[cross] STATIC_uniform             J    724.72  IoU 0.6152  IoUa 0.6034  grow   6.67  under  34.38  stop  516 ( 258.5 s)  P  500.0  Eres 0.70%  Jrast    746.22  8.3 s
+[cross] STATIC_solved              J    631.36  IoU 0.6667  IoUa 0.6609  grow  11.88  under  25.42  stop  878 ( 439.5 s)  P  372.4  Eres 1.01%  Jrast    647.39  12.1 s
+[cross/native160] VERDICT FORWARD NON-CONVERGENCE: IoU at 160 is 0.8751 solved at 160 against 0.8052 transferred from 120 (and 0.9700 at grid 120); SOLVED class recovered False; wall 1112 s

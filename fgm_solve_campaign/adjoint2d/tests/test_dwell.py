@@ -159,12 +159,102 @@ def test_cycle_program_rejects_a_cycle_too_short_to_give_each_position_a_step():
 
 
 def test_cycle_program_realized_weights_are_the_quantized_ones():
-    """What the machine executes, not what the optimizer asked for."""
+    """What the machine executes, not what the optimizer asked for.
+
+    The realized fraction is measured over the WHOLE exposure, not over one
+    cycle, because the allocation rotates the leftover control steps across
+    cycles. Over one cycle it is a quantization; over the exposure it tracks
+    the request to within one control step.
+    """
     prog = dwell.cycle_program([0.37, 0.33, 0.30], (0.0, 120.0, 240.0),
                                cycle_time_s=20.0, total_s=800.0, dt_s=0.5)
     assert prog.realized_weights.sum() == pytest.approx(1.0, abs=1e-12)
+    assert sum(prog.steps_per_position) == 40
+    n_total = 1600
     assert np.allclose(prog.realized_weights,
-                       np.asarray(prog.steps_per_position) / 40.0)
+                       np.asarray(prog.steps_per_position_total) / n_total)
+    assert np.max(np.abs(prog.realized_weights
+                         - np.array([0.37, 0.33, 0.30]))) <= 1.0 / n_total
+
+
+# --- the divisor bug: 40 control steps do not divide into 12 positions -------
+
+def _dwell_by_position(prog, angles):
+    got = {float(a): 0.0 for a in angles}
+    for m in prog.moves:
+        got[float(m["position_deg"])] += float(m["dwell_s"])
+    return np.array([got[float(a)] for a in angles])
+
+
+KEYHOLE_ANG12 = tuple(15.0 * k for k in range(12))
+
+
+def test_cycle_program_realizes_equal_dwell_when_the_cycle_does_not_divide():
+    """The keyhole case: 40 control steps per 20 s cycle across 12 positions.
+
+    `ROTATING_HOLDOUT_REPORT.md` Section 5 measured the failure: the emitter
+    allocated the SAME 4/4/4/4 then 3 eight times split in every cycle, so a
+    per-cycle rounding bias became a permanent bias, realizing 0.100 on four
+    positions against the design 1/12 = 0.08333, and costing 73.2 percent of J
+    at grid 120. The realized dwell fraction over the exposure must track the
+    design to within one control step.
+    """
+    total, dt = 747.5, 0.5
+    prog = dwell.cycle_program([1.0 / 12] * 12, KEYHOLE_ANG12,
+                               cycle_time_s=20.0, total_s=total, dt_s=dt)
+    n_total = int(round(total / dt))
+    got = _dwell_by_position(prog, KEYHOLE_ANG12)
+    assert got.sum() == pytest.approx(total, abs=1e-9)
+    assert np.max(np.abs(got / total - 1.0 / 12)) <= 1.0 / n_total
+    assert np.max(np.abs(prog.realized_weights - 1.0 / 12)) <= 1.0 / n_total
+
+
+def test_cycle_program_visits_every_kept_position_every_cycle():
+    """A rotating turntable must still sweep the positions in angular order."""
+    prog = dwell.cycle_program([1.0 / 12] * 12, KEYHOLE_ANG12,
+                               cycle_time_s=20.0, total_s=747.5, dt_s=0.5)
+    first = [m["position_deg"] for m in prog.moves[:12]]
+    assert first == list(KEYHOLE_ANG12)
+    assert all(m["dwell_s"] > 0.0 for m in prog.moves)
+
+
+def test_cycle_program_slot_allocations_are_non_negative_and_fill_each_cycle():
+    """Property check over awkward weight vectors, including near-dropped ones."""
+    rng = np.random.default_rng(0)
+    for _ in range(40):
+        k = int(rng.integers(2, 13))
+        w = rng.dirichlet(np.full(k, 0.7))
+        prog = dwell.cycle_program(w, tuple(360.0 * j / k for j in range(k)),
+                                   cycle_time_s=20.0, total_s=747.5, dt_s=0.5)
+        plan = np.asarray(prog.cycle_slot_plan)
+        assert plan.min() >= 0
+        assert int(plan.sum()) == 1495
+        assert set(plan[:-1].sum(axis=1)) <= {40}
+        assert prog.realized_weights.sum() == pytest.approx(1.0, abs=1e-12)
+
+
+def test_cycle_program_keeps_the_full_cycle_when_the_positions_do_divide():
+    """The cross deliverable's 4-position 40-slot cycle is untouched per cycle.
+
+    `fgm_solve_campaign/out_dwell/cross_turntable_deliverable.json`: 10 control
+    steps per position per cycle, dwell fraction 0.25 on each. 750 s is 37.5
+    cycles, so the exposure ends mid cycle; the half cycle is apportioned by the
+    same rule, which makes the EXECUTED dwell exactly equal. The old emitter
+    ran the round robin off the end instead and executed 0.2533 / 0.2533 /
+    0.2467 / 0.2467, which was invisible on the cross only because its four-fold
+    symmetry makes 0 and 180 degrees the same part-frame heating.
+    """
+    prog = dwell.cycle_program([0.25] * 4, ANG4, cycle_time_s=20.0,
+                               total_s=750.0, dt_s=0.5)
+    assert prog.steps_per_position == (10, 10, 10, 10)
+    assert prog.cycle_slot_plan[:37] == ((10, 10, 10, 10),) * 37
+    assert prog.cycle_slot_plan[37] == (5, 5, 5, 5)
+    assert np.allclose(prog.realized_weights, 0.25)
+    assert [m["position_deg"] for m in prog.moves[:5]] == [0.0, 90.0, 180.0,
+                                                           270.0, 0.0]
+    assert all(m["dwell_s"] == 5.0 for m in prog.moves[:148])
+    got = _dwell_by_position(prog, ANG4)
+    assert np.allclose(got, 187.5)
 
 
 # ---------------------------------------------------------------------------

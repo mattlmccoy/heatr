@@ -117,6 +117,9 @@ class TurntableProgram:
     total_s: float
     dt_s: float
     n_cycles: float
+    steps_per_position_total: tuple[int, ...] = ()
+    cycle_slot_plan: tuple[tuple[int, ...], ...] = ()
+    allocation_rule: str = "carry-forward largest remainder across cycles"
 
     def as_json(self) -> dict:
         return {
@@ -127,6 +130,8 @@ class TurntableProgram:
             "n_cycles": self.n_cycles,
             "positions_deg": list(self.kept_positions_deg),
             "steps_per_position_per_cycle": list(self.steps_per_position),
+            "steps_per_position_over_exposure": list(self.steps_per_position_total),
+            "allocation_rule": self.allocation_rule,
             "realized_dwell_fraction": [float(x) for x in self.realized_weights],
             "requested_dwell_fraction": [float(x) for x in self.requested_weights],
             "total_dwell_s_per_position": [
@@ -158,6 +163,74 @@ def largest_remainder(weights: Sequence[float], n_slots: int) -> np.ndarray:
     return base
 
 
+def carry_forward_slots(frac: Sequence[float], n_slots: int,
+                        n_total: int) -> np.ndarray:
+    """Per-cycle integer slot allocations that carry their rounding forward.
+
+    THE BUG THIS EXISTS TO FIX. Applying largest-remainder INSIDE one cycle and
+    then repeating that same allocation every cycle turns a per-cycle rounding
+    into a permanent bias. With `n_slots` 40 control steps and 12 equally
+    weighted positions the per-cycle quota is 3.333 steps, largest remainder
+    gives 4/4/4/4 then 3 eight times, and repeating it realizes dwell fractions
+    0.100 and 0.075 against a design 1/12 = 0.08333 forever. That is the
+    keyhole's emitted program (`ROTATING_HOLDOUT_REPORT.md` Section 5) and it
+    cost 73.2 percent of J at grid 120 with no physics involved.
+
+    THE RULE. Largest remainder is applied to a running DEBT, the exact quota
+    accumulated so far minus the slots already handed out. A position that was
+    rounded up this cycle carries a negative debt into the next one and is
+    rounded down there, so the leftover steps rotate. Each cycle still receives
+    exactly its own slot count, every allocation is non-negative, and the
+    cumulative allocation tracks the exact quota to within one control step
+    over the whole exposure.
+
+    Returns an integer array of shape `(n_cycles, k)`. The final row is a
+    partial cycle when `n_total` is not a multiple of `n_slots`.
+    """
+    f = np.asarray(frac, dtype=float).ravel()
+    if np.any(f < 0.0):
+        raise ValueError("weights must be non-negative")
+    tot = float(np.sum(f))
+    if tot <= 0.0:
+        raise ValueError("weights must not be all zero")
+    f = f / tot
+    ns, nt = int(n_slots), int(n_total)
+    if ns < 1:
+        raise ValueError(f"n_slots must be at least 1, got {n_slots!r}")
+    rows: list[np.ndarray] = []
+    debt = np.zeros(f.size)
+    done = 0
+    while done < nt:
+        chunk = min(ns, nt - done)
+        debt = debt + f * chunk
+        base = np.floor(debt).astype(int)
+        # A position rounded up in an earlier cycle can carry a negative debt;
+        # its floor is then negative, which is not a dwell. Clamp, then repair
+        # the cycle total deterministically by the same remainder ordering.
+        np.maximum(base, 0, out=base)
+        rem = debt - base
+        left = chunk - int(base.sum())
+        if left > 0:
+            order = np.argsort(-rem, kind="stable")
+            base[order[:left]] += 1
+        elif left < 0:
+            order = np.argsort(rem, kind="stable")
+            for j in order:
+                if left == 0:
+                    break
+                take = min(int(base[j]), -left)
+                base[j] -= take
+                left += take
+            if left != 0:                                   # pragma: no cover
+                raise RuntimeError(
+                    f"could not fit {chunk} control steps into the cycle "
+                    f"allocation; {left} left over")
+        rows.append(base)
+        debt = debt - base
+        done += chunk
+    return np.asarray(rows, dtype=int)
+
+
 def cycle_program(weights: Sequence[float], angles_deg: Sequence[float],
                   cycle_time_s: float, total_s: float, dt_s: float,
                   drop_below: float = 0.5) -> TurntableProgram:
@@ -167,6 +240,16 @@ def cycle_program(weights: Sequence[float], angles_deg: Sequence[float],
     is DROPPED, and the remaining positions are re-apportioned over the whole
     cycle. That is what makes "park nowhere near this orientation" expressible
     as a program even though the softmax never returns exactly zero.
+
+    THE ALLOCATION IS DIVISOR AWARE. The leftover control steps of a cycle that
+    does not divide evenly across the kept positions ROTATE from cycle to cycle
+    (`carry_forward_slots`), so the dwell fraction the machine actually realizes
+    over the exposure matches the design to within one control step even when
+    the cycle length is not a multiple of the position count. Before this the
+    same per-cycle rounding was repeated every cycle and became permanent; the
+    keyhole's twelve-position program realized 0.100 and 0.075 instead of
+    1/12 and paid 73.2 percent of J for it (`ROTATING_HOLDOUT_REPORT.md`
+    Section 5).
     """
     w_req = np.asarray(weights, dtype=float).ravel()
     ang = np.asarray(angles_deg, dtype=float).ravel()
@@ -188,17 +271,24 @@ def cycle_program(weights: Sequence[float], angles_deg: Sequence[float],
             f"cycle of {n_slots} control steps cannot give each of "
             f"{int(keep.sum())} kept positions a step; lengthen cycle_time_s")
 
-    slots = largest_remainder(frac[keep], n_slots)
-    kept_ang = ang[keep]
-    # A position that survived the keep test but lost every slot to rounding
-    # would be a silent no-op in the program; drop it and re-apportion.
-    while np.any(slots == 0) and int(np.sum(slots > 0)) >= 1:
-        alive = slots > 0
-        kept_ang = kept_ang[alive]
-        slots = largest_remainder(slots[alive].astype(float), n_slots)
-
-    realized = slots / float(n_slots)
     total = float(total_s)
+    n_total = int(round(total / dt))
+    kept_ang = ang[keep]
+    kept_frac = frac[keep]
+    plan = carry_forward_slots(kept_frac, n_slots, n_total)
+    # A position that survived the keep test but wins no control step ANYWHERE
+    # in the exposure would be a silent no-op in the program; drop it and
+    # re-apportion. The test is over the exposure, not over one cycle, because
+    # under the carry-forward rule a position legitimately sits out some cycles.
+    while np.any(plan.sum(axis=0) == 0) and int(np.sum(plan.sum(axis=0) > 0)) >= 1:
+        alive = plan.sum(axis=0) > 0
+        kept_ang = kept_ang[alive]
+        kept_frac = kept_frac[alive]
+        plan = carry_forward_slots(kept_frac, n_slots, n_total)
+
+    totals = plan.sum(axis=0)
+    slots = plan[0]
+    realized = totals / float(max(n_total, 1))
     n_cycles = total / (n_slots * dt)
 
     moves: list[dict] = []
@@ -207,21 +297,29 @@ def cycle_program(weights: Sequence[float], angles_deg: Sequence[float],
         moves.append({"position_deg": float(kept_ang[0]), "dwell_s": total,
                       "move_at_s": 0.0})
     else:
-        k = 0
-        while t < total - 1e-9:
-            i = k % len(kept_ang)
-            hold = min(slots[i] * dt, total - t)
-            if hold > 1e-9:
-                moves.append({"position_deg": float(kept_ang[i]),
-                              "dwell_s": float(hold), "move_at_s": float(t)})
+        for row in plan:
+            for i in range(len(kept_ang)):
+                if t >= total - 1e-9:
+                    break
+                hold = min(int(row[i]) * dt, total - t)
+                if hold <= 1e-9:
+                    continue
+                if moves and moves[-1]["position_deg"] == float(kept_ang[i]):
+                    moves[-1]["dwell_s"] += float(hold)   # no null move
+                else:
+                    moves.append({"position_deg": float(kept_ang[i]),
+                                  "dwell_s": float(hold), "move_at_s": float(t)})
                 t += hold
-            k += 1
+        if moves and t < total - 1e-9:
+            moves[-1]["dwell_s"] += total - t              # sub-step remainder
     return TurntableProgram(
         moves=tuple(moves), kept_positions_deg=tuple(float(a) for a in kept_ang),
         steps_per_position=tuple(int(s) for s in slots),
         realized_weights=realized, requested_weights=w_req,
         cycle_time_s=float(n_slots * dt), total_s=total, dt_s=dt,
-        n_cycles=float(n_cycles))
+        n_cycles=float(n_cycles),
+        steps_per_position_total=tuple(int(s) for s in totals),
+        cycle_slot_plan=tuple(tuple(int(v) for v in r) for r in plan))
 
 
 def expand_to_full_weights(prog: TurntableProgram,

@@ -111,7 +111,11 @@ def score(kern: AveragedKernel, s: np.ndarray) -> tuple[dict, np.ndarray, np.nda
     return m, phi_stop, jc
 
 
-def solve_start(kern, ops, v0, n_evals: int, log, name: str):
+def solve_start(kern, ops, v0, n_evals: int, log, name: str,
+                sigma_cells: float | None = None):
+    """`sigma_cells` defaults to the grid-120 width; pass it to hold the design
+    filter at a fixed PHYSICAL length when the grid changes."""
+    sigma = SIGMA_CELLS if sigma_cells is None else float(sigma_cells)
     case = kern.case0
     pm = case.part_mask
     idx = np.flatnonzero(pm.ravel())
@@ -127,13 +131,13 @@ def solve_start(kern, ops, v0, n_evals: int, log, name: str):
         if len(rows) >= int(n_evals):
             raise StopIteration
         v = unpack(vec)
-        s = df.apply_filter(v, pm, SIGMA_CELLS)
+        s = df.apply_filter(v, pm, sigma)
         tr = kern.forward(s, keep_checkpoints=True, n_steps=N_STEPS,
                           shape_stop_patience=PATIENCE)
         st = so.optimal_stop(tr, case)
         J, seed = so.shape_J_and_seed(tr.T_at_end(st.index), case)
         g_s = kern.gradient(s, tr, {st.index: seed}, grad_ops=ops)
-        g = df.filter_vjp(g_s, pm, SIGMA_CELLS)
+        g = df.filter_vjp(g_s, pm, sigma)
         rows.append({"eval_index": len(rows) + 1, "start": name, "J": float(J),
                      "t_stop_index": int(st.index), "t_stop_s": float(st.time_s),
                      "t_stop_at_horizon": bool(st.at_horizon),

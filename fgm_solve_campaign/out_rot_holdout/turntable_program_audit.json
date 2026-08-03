@@ -1,0 +1,436 @@
+{
+  "task": "divisor-bug audit of every emitted turntable program",
+  "bug": "a per-cycle largest-remainder allocation repeated every cycle turns a rounding into a permanent bias in the realized dwell",
+  "cyclic_programs": [
+    {
+      "file": "fgm_solve_campaign/out_dwell/L_shape_dwell.json",
+      "path": "/programs/deliverable",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 2,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 75,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/L_shape_dwell.json",
+      "path": "/programs/equal_dwell_control",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/L_shape_turntable_deliverable.json",
+      "path": "/",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 2,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 75,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/L_shape_turntable_equal_dwell_control.json",
+      "path": "/",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/T_shape_dwell.json",
+      "path": "/programs/deliverable",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 6,
+      "divides_evenly": false,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 225,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/T_shape_dwell.json",
+      "path": "/programs/equal_dwell_control",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/T_shape_turntable_deliverable.json",
+      "path": "/",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 6,
+      "divides_evenly": false,
+      "request_on_the_slot_grid": false,
+      "max_abs_realized_minus_requested": 0.01079863064003882,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 225,
+      "AFFECTED": true
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/T_shape_turntable_equal_dwell_control.json",
+      "path": "/",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/cross_dwell.json",
+      "path": "/programs/deliverable",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 4,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 150,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/cross_dwell.json",
+      "path": "/programs/equal_dwell_control",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/cross_turntable_deliverable.json",
+      "path": "/",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 4,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 150,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/cross_turntable_equal_dwell_control.json",
+      "path": "/",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/square_dwell.json",
+      "path": "/programs/deliverable",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/square_dwell.json",
+      "path": "/programs/equal_dwell_control",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/square_turntable_deliverable.json",
+      "path": "/",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_dwell/square_turntable_equal_dwell_control.json",
+      "path": "/",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 8,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.0006666666666666666,
+      "n_control_steps_over_the_exposure": 1500,
+      "n_moves": 300,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_intake/gear8_novel.json",
+      "path": "/turntable_programs/continuous",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 12,
+      "divides_evenly": false,
+      "request_on_the_slot_grid": false,
+      "max_abs_realized_minus_requested": 0.016666666666666677,
+      "one_control_step_over_the_exposure": 0.0015037593984962407,
+      "n_control_steps_over_the_exposure": 665,
+      "n_moves": 199,
+      "AFFECTED": true
+    },
+    {
+      "file": "fgm_solve_campaign/out_intake/gear8_novel.json",
+      "path": "/turntable_programs/index8",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 4,
+      "divides_evenly": true,
+      "request_on_the_slot_grid": true,
+      "max_abs_realized_minus_requested": 0.0,
+      "one_control_step_over_the_exposure": 0.00141643059490085,
+      "n_control_steps_over_the_exposure": 706,
+      "n_moves": 71,
+      "AFFECTED": false
+    },
+    {
+      "file": "fgm_solve_campaign/out_intake/keyhole_novel.json",
+      "path": "/turntable_programs/continuous",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 12,
+      "divides_evenly": false,
+      "request_on_the_slot_grid": false,
+      "max_abs_realized_minus_requested": 0.016666666666666677,
+      "one_control_step_over_the_exposure": 0.0006688963210702341,
+      "n_control_steps_over_the_exposure": 1495,
+      "n_moves": 448,
+      "AFFECTED": true
+    },
+    {
+      "file": "fgm_solve_campaign/out_rot_holdout/keyhole_program_fixed.json",
+      "path": "/program",
+      "emitter": "cyclic (dwell.cycle_program)",
+      "control_steps_per_cycle": 40,
+      "n_kept_positions": 12,
+      "divides_evenly": false,
+      "request_on_the_slot_grid": false,
+      "max_abs_realized_minus_requested": 0.0003901895206242928,
+      "one_control_step_over_the_exposure": 0.0006688963210702341,
+      "n_control_steps_over_the_exposure": 1495,
+      "n_moves": 456,
+      "AFFECTED": false
+    }
+  ],
+  "sequential_programs": [
+    {
+      "file": "fgm_solve_campaign/out_seq/L_shape_turntable_DELIVERABLE.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/L_shape_turntable_S_seq_cosolved.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/L_shape_turntable_S_seq_cosolved_4bpp.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/L_shape_turntable_S_seq_uniform_three.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 3,
+      "positions_deg": [
+        90.0,
+        0.0,
+        135.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/L_shape_turntable_S_seq_uniform_two.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/L_shape_turntable_S_seq_uniform_two_refined.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/T_shape_turntable_DELIVERABLE.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/T_shape_turntable_S_seq_cosolved.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/T_shape_turntable_S_seq_cosolved_4bpp.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/T_shape_turntable_S_seq_uniform_two.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    },
+    {
+      "file": "fgm_solve_campaign/out_seq/T_shape_turntable_S_seq_uniform_two_refined.json",
+      "emitter": "sequential (seq_dwell.sequential_program)",
+      "n_moves": 2,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "max_off_control_step_grid_s": 0.0,
+      "cyclic_apportionment": false,
+      "AFFECTED": false,
+      "why_not": "no per-cycle apportionment exists; the holds are named durations and they land exactly on the control-step grid"
+    }
+  ],
+  "n_cyclic": 20,
+  "n_cyclic_affected": 3,
+  "n_cyclic_in_the_exposed_class_not_dividing": 5,
+  "n_sequential": 11
+}

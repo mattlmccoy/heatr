@@ -58,6 +58,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -86,8 +87,13 @@ SOLVED_CLASS_IOU = 0.95
 # the arm registry: what was solved, and the program the machine would run
 # ---------------------------------------------------------------------------
 
-def _dwell_program(path: Path, key: str | None = None) -> dict:
+def _dwell_program(path: Path, key: str | None = None,
+                   keypath: Sequence[str] | None = None) -> dict:
     d = json.loads(path.read_text())
+    if keypath is not None:
+        for k in keypath:
+            d = d[k]
+        return d
     if key is not None:
         d = d["turntable_programs"][key]
     return d
@@ -146,6 +152,28 @@ ARMS: dict[str, dict] = {
                                  "quasi-static twelve-angle average, area-fill chi",
                        "J": 8.0759, "IoU": 0.9753, "arm": "A_continuous_4bpp"},
     },
+    # The SAME arm with the program-emission arithmetic fixed. Everything else
+    # is identical: same shape, same solved map, same drive, same grids, same
+    # twelve positions, same 20 s cycle and 0.5 s control step, same 747.5 s
+    # exposure. Only the allocation of the leftover control steps changes, from
+    # the same rounding repeated every cycle to a rounding that rotates
+    # (`dwell.carry_forward_slots`). Emitted by
+    # `scripts/analysis/reemit_keyhole_program.py`.
+    "keyhole_cont_fixedprog": {
+        "shape": "keyhole",
+        "label": "keyhole, continuous-rotation co-solve, divisor-aware re-emitted "
+                 "twelve-position program",
+        "source": "novel_polygon",
+        "angles_deg": None,
+        "program": {"kind": "stored",
+                    "path": OUT / "keyhole_program_fixed.json",
+                    "keypath": ["program"]},
+        "map": (OUT_INTAKE / "keyhole_maps.npz", "continuous_cont"),
+        "static_map": (OUT_INTAKE / "keyhole_maps.npz", "static_cont"),
+        "stored_120": {"report": "GEOMETRY_GENERALIZATION_REPORT.md Section 6.1, "
+                                 "quasi-static twelve-angle average, area-fill chi",
+                       "J": 8.0759, "IoU": 0.9753, "arm": "A_continuous_4bpp"},
+    },
 }
 
 
@@ -180,7 +208,7 @@ def program_for(spec: dict, dt_s: float, n_steps: int
                 "n_moves": int(np.sum(np.diff(pos) != 0)) + 1,
                 "source": "CONTINUOUS_ROTATION_REPORT.md Section 7"}
         return ang, pos, info
-    prog = _dwell_program(pr["path"], pr.get("key"))
+    prog = _dwell_program(pr["path"], pr.get("key"), pr.get("keypath"))
     ang = np.asarray(prog["positions_deg"], dtype=float)
     pos = rr.moves_to_positions(prog["moves"], ang, dt_s, n_steps)
     info = {"kind": "stored turntable program", "source": str(pr["path"]),
