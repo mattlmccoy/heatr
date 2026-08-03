@@ -1,0 +1,19 @@
+{
+  "arm": "uniform",
+  "grid_n": 48,
+  "exposure_s": 900.0,
+  "densify": true,
+  "phase_update": "enthalpy",
+  "sigma_T_stdT_phi90": 28.953,
+  "t_phi90_s": null,
+  "reached_phi90": false,
+  "T_max_C": 245.1,
+  "wall_s": 179.2,
+  "voxels": 1956,
+  "honesty": "heuristic graded map (not solved), heatr3d n=48, simulation-only",
+  "nominal_vox": 1956,
+  "sintered_vox": 1616,
+  "sintered_frac": 0.8261758691206544,
+  "dice": 0.9048152295632699,
+  "unsintered_vox": 340
+}

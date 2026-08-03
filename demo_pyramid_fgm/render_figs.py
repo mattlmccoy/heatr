@@ -24,7 +24,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.colors import ListedColormap  # noqa: E402
 
 import style3d as S  # noqa: E402
-from demo_pyramid_fgm.grading import HONESTY_TEXT, LAW_TEXT  # noqa: E402
+from demo_pyramid_fgm.grading import (  # noqa: E402
+    HONESTY_TEXT, LAW_TEXT, LAW_TEXT_STRONG)
 
 DPI = 200
 # Colormap floors clipped so nothing reads black on the dark background.
@@ -69,7 +70,7 @@ def fig_graded_all_axes(d: dict) -> None:
     ii, jj, kk = np.indices(part.shape)
     cx = cy = n // 2
     keep = part & ~((ii >= cx) & (jj <= cy))          # quarter cut toward viewer
-    vmin, vmax = 0.20, 1.00
+    vmin, vmax = 0.10, 1.00
     colors = np.zeros(part.shape + (4,))
     colors[..., :] = CMAP_HOT((sat - vmin) / (vmax - vmin))
     colors[..., 3] = 1.0
@@ -90,8 +91,9 @@ def fig_graded_all_axes(d: dict) -> None:
     ax.view_init(elev=20, azim=-55)
 
     S.title_block(fig, "Graded through every axis",
-                  "quarter-cut dopant volume, pyramid, cyan = nominal CAD wireframe")
-    fig.text(0.035, 0.055, LAW_TEXT, fontsize=8.5, color=S.DIM)
+                  "quarter-cut dopant volume (strong law), pyramid, "
+                  "cyan = nominal CAD wireframe")
+    fig.text(0.035, 0.055, LAW_TEXT_STRONG, fontsize=8.5, color=S.DIM)
     sm = plt.cm.ScalarMappable(cmap=CMAP_HOT,
                                norm=matplotlib.colors.Normalize(vmin, vmax))
     cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02, shrink=0.55)
@@ -127,7 +129,7 @@ def fig_densification(d: dict) -> None:
     fig.subplots_adjust(top=0.80, bottom=0.10, wspace=0.14)
     panels = [
         (axs[0], rho, CMAP_RHO, "relative density (final)", None, None),
-        (axs[1], T, CMAP_HOT, "temperature at phi=0.90 (C)", None, None),
+        (axs[1], T, CMAP_HOT, "temperature at end of exposure (C)", None, None),
     ]
     for ax, img, cmap, label, vmin, vmax in panels:
         im = ax.imshow(img, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax,
@@ -143,8 +145,8 @@ def fig_densification(d: dict) -> None:
         cb.ax.tick_params(colors=S.DIM, labelsize=8)
         cb.outline.set_edgecolor(S.DIM)
     S.title_block(fig, "Densification of the graded pyramid",
-                  "XZ mid-slice, apex up; cyan = melt front (phi = 0.5), "
-                  f"white = part outline, voxel {h_mm:.2f} mm")
+                  "strong law, 900 s exposure; XZ mid-slice, apex up; "
+                  f"cyan = melt front, voxel {h_mm:.2f} mm")
     _honesty(fig, "densify=True, enthalpy phase update")
     fig.savefig(HERE / "fig2_densification.png")
     plt.close(fig)
@@ -162,19 +164,27 @@ def fig_graded_vs_uniform(dg: dict, du: dict) -> None:
         m = d["part"]
         return float(d["rho_final"][m].std())
 
+    def _melt_h(d):
+        m = d["part"]
+        melted = m & (d["phi_final"] >= 0.5)
+        ks = np.where(m.any(axis=(0, 1)))[0]
+        km = np.where(melted.any(axis=(0, 1)))[0]
+        return (km.max() - ks[0] + 1) * float(d["h"]) * 1e3
+
     fig, axs = plt.subplots(1, 2, figsize=(10.6, 5.6), dpi=DPI)
     fig.subplots_adjust(top=0.80, bottom=0.10, wspace=0.10)
-    for ax, img, phi, mk, name, sd in (
-            (axs[0], ru, pu, mu, "uniform dopant", _std(du)),
-            (axs[1], rg, pg, mg, "graded dopant (heuristic)", _std(dg))):
+    for ax, img, phi, mk, name, sd, mh in (
+            (axs[0], ru, pu, mu, "uniform dopant", _std(du), _melt_h(du)),
+            (axs[1], rg, pg, mg, "graded dopant (strong law)", _std(dg),
+             _melt_h(dg))):
         im = ax.imshow(img, origin="lower", cmap=CMAP_RHO, vmin=vmin, vmax=vmax,
                        interpolation="nearest")
         ax.contour(np.nan_to_num(phi), levels=[0.5], colors=S.ACCENT,
                    linewidths=1.4)
         ax.contour(mk.astype(float), levels=[0.5], colors=S.FG,
                    linewidths=0.7, alpha=0.7)
-        ax.set_title(f"{name}   std(rho) = {sd:.4f}", fontsize=10,
-                     color=S.FG, pad=8)
+        ax.set_title(f"{name}\nstd(rho) = {sd:.4f}   melt height = {mh:.1f} mm",
+                     fontsize=10, color=S.FG, pad=8)
         _crop(ax, mk)
         ax.axis("off")
     cb = fig.colorbar(im, ax=axs, fraction=0.03, pad=0.02, shrink=0.8)
@@ -182,8 +192,8 @@ def fig_graded_vs_uniform(dg: dict, du: dict) -> None:
     cb.ax.tick_params(colors=S.DIM, labelsize=8)
     cb.outline.set_edgecolor(S.DIM)
     S.title_block(fig, "Graded vs uniform dopant",
-                  "final relative density, XZ mid-slice, shared color scale; "
-                  "cyan = melt front (phi = 0.5)")
+                  "final relative density at 900 s (pre-saturation read), "
+                  "XZ mid-slice; cyan = melt front")
     _honesty(fig, "same grid, exposure, and physics in both arms")
     fig.savefig(HERE / "fig3_graded_vs_uniform.png")
     plt.close(fig)
@@ -201,7 +211,7 @@ def fig_layer_stack(d: dict) -> None:
     fig.subplots_adjust(top=0.66, bottom=0.03, left=0.02, right=0.98, wspace=0.08)
     for ax, k in zip(axs, picks):
         img = np.where(part[:, :, k], sat[:, :, k].astype(float), np.nan).T
-        ax.imshow(img, origin="lower", cmap=CMAP_HOT, vmin=0.20, vmax=1.00,
+        ax.imshow(img, origin="lower", cmap=CMAP_HOT, vmin=0.10, vmax=1.00,
                   interpolation="nearest")
         ax.contour(part[:, :, k].T.astype(float), levels=[0.5], colors=S.ACCENT,
                    linewidths=0.8, alpha=0.8)
@@ -220,13 +230,14 @@ def fig_layer_stack(d: dict) -> None:
 
 
 def main() -> None:
-    dg = _load("graded")
+    dg = _load("strong_900")
     if dg is None:
-        raise SystemExit("out_graded/fields.npz missing; run run_demo.py graded first")
+        raise SystemExit("out_strong_900/fields.npz missing; "
+                         "run run_demo.py strong 900 first")
     fig_graded_all_axes(dg)
     fig_layer_stack(dg)
     fig_densification(dg)
-    du = _load("uniform")
+    du = _load("uniform_900")
     if du is not None:
         fig_graded_vs_uniform(dg, du)
     for f in sorted(HERE.glob("fig*.png")):

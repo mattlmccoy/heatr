@@ -1,0 +1,4 @@
+2026-08-03 09:38:06,616 arm=uniform exposure=900 voxels=1956 h=1.250 mm
+2026-08-03 09:41:05,850 MELT-ONSET FALLBACK: mean melt fraction never crossed phi_target=0.90 within max_time_s=900.0 s (final mean phi=0.8184). sigma_T / T_phi90 / T_max_c are FINAL-TIMESTEP reads, not melt-onset reads. Check Result.reached before quoting.
+2026-08-03 09:41:05,871 arm=uniform DONE wall=179.2 s sigma_T=28.953
+  [s1-energy] in=5472.2 J stored=5357.7 J loss=114.5 J residual_frac=+0.0000

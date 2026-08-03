@@ -24,7 +24,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 import heatr3d as H  # noqa: E402
-from demo_pyramid_fgm.grading import graded_sat  # noqa: E402
+from demo_pyramid_fgm.grading import graded_sat, graded_sat_strong  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -58,26 +58,32 @@ def voxelize_pyramid(grid: H.Grid) -> np.ndarray:
     return part
 
 
-def main(arm: str) -> None:
-    if arm not in ("graded", "uniform"):
-        raise SystemExit("arm must be 'graded' or 'uniform'")
-    out = Path(__file__).resolve().parent / f"out_{arm}"
+_SAT_BUILDERS = {"graded": graded_sat, "strong": graded_sat_strong,
+                 "uniform": lambda part: None}
+
+
+def main(arm: str, exposure_s: float = EXPOSURE_S) -> None:
+    if arm not in _SAT_BUILDERS:
+        raise SystemExit("arm must be 'graded', 'strong', or 'uniform'")
+    tag = f"_{int(exposure_s)}" if exposure_s != EXPOSURE_S else ""
+    out = Path(__file__).resolve().parent / f"out_{arm}{tag}"
     out.mkdir(parents=True, exist_ok=True)
 
     grid = H.Grid(n=N_GRID)
     p = H.Params(phase_update="enthalpy")
     part = voxelize_pyramid(grid)
-    logger.info("arm=%s voxels=%d h=%.3f mm", arm, int(part.sum()), grid.h * 1e3)
+    logger.info("arm=%s exposure=%.0f voxels=%d h=%.3f mm",
+                arm, exposure_s, int(part.sum()), grid.h * 1e3)
 
-    sat = graded_sat(part) if arm == "graded" else None
+    sat = _SAT_BUILDERS[arm](part)
 
     t0 = time.time()
-    r = H.run(grid, part, p, sat=sat, max_time_s=EXPOSURE_S,
+    r = H.run(grid, part, p, sat=sat, max_time_s=exposure_s,
               densify=True, verbose=False)
     wall = time.time() - t0
 
     results = {
-        "arm": arm, "grid_n": grid.n, "exposure_s": EXPOSURE_S,
+        "arm": arm, "grid_n": grid.n, "exposure_s": exposure_s,
         "densify": True, "phase_update": "enthalpy",
         "sigma_T_stdT_phi90": round(float(r.sigma_T), 3),
         "t_phi90_s": round(float(r.t_phi90_s), 1),
@@ -100,9 +106,12 @@ def main(arm: str) -> None:
         Qrf=r.Qrf.astype(np.float32),
         rho_final=(r.rho_final.astype(np.float32) if r.rho_final is not None
                    else np.zeros((1,), np.float32)),
-        h=grid.h, L=grid.L)
+        phi_hist=(np.asarray(r.phi_hist, np.float32) if r.phi_hist is not None
+                  else np.zeros((1,), np.float32)),
+        dt_s=p.dt_s, h=grid.h, L=grid.L)
     logger.info("arm=%s DONE wall=%.1f s sigma_T=%.3f", arm, wall, r.sigma_T)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "graded")
+    main(sys.argv[1] if len(sys.argv) > 1 else "graded",
+         float(sys.argv[2]) if len(sys.argv) > 2 else EXPOSURE_S)

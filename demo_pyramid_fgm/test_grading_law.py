@@ -12,7 +12,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from demo_pyramid_fgm.grading import graded_sat  # noqa: E402
+from demo_pyramid_fgm.grading import graded_sat, graded_sat_strong  # noqa: E402
 
 
 def _toy_pyramid(n: int = 24) -> np.ndarray:
@@ -68,8 +68,37 @@ def test_core_higher_than_skin_and_base_higher_than_apex() -> None:
     assert zprof[0] > zprof[-1], "base should carry more dopant than the apex"
 
 
+def test_strong_law_bounds_and_outside_zero() -> None:
+    part = _toy_pyramid()
+    sat = graded_sat_strong(part)
+    assert np.all(sat[~part] == 0.0)
+    inside = sat[part]
+    assert inside.min() >= 0.10 - 1e-12
+    assert inside.max() <= 1.00 + 1e-12
+
+
+def test_strong_law_has_more_contrast_than_mild() -> None:
+    part = _toy_pyramid()
+    mild = graded_sat(part)[part]
+    strong = graded_sat_strong(part)[part]
+    assert np.ptp(strong) > np.ptp(mild), "strong law must span a wider range"
+    ks = np.where(part.any(axis=(0, 1)))[0]
+
+    def apex_over_base(sat3):
+        base = float(sat3[:, :, ks[0]][part[:, :, ks[0]]].mean())
+        apex = float(sat3[:, :, ks[-1]][part[:, :, ks[-1]]].mean())
+        return apex / base
+
+    s3 = graded_sat_strong(part)
+    m3 = graded_sat(part)
+    assert apex_over_base(s3) < apex_over_base(m3), \
+        "strong law must cut the apex harder relative to the base"
+
+
 if __name__ == "__main__":
     test_bounds_and_outside_zero()
     test_varies_along_every_axis()
     test_core_higher_than_skin_and_base_higher_than_apex()
+    test_strong_law_bounds_and_outside_zero()
+    test_strong_law_has_more_contrast_than_mild()
     print("ALL PASS")
