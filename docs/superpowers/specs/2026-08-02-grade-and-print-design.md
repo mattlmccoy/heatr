@@ -333,6 +333,42 @@ folder, and job_info.json gains the package id + manifest hash.
   runs; the snapshot hook is queued as a post-S2 engine ask.
 - No new claims about print physics: everything 3-D stays sim-only badged.
 
+## 7e. Amendment (Matt, 2026-08-03): the direct solve as the standard
+correction, run cancellation
+
+- The Studio gains an on-demand DIRECT SOLVE correction source, ranked
+  FIRST in the correction chain when its artifact exists: a solve3d
+  service for EXTRUDED geometry (constant cross-section, which the
+  Phase A-C machinery already supports): imported part mid-slice outline
+  -> extruded conforming mesh -> chi via the shared fill contract -> the
+  Phase C filter-only scaled-first-step asymmetric solve at the inherited
+  40 forward-equivalent budget -> BOTH Phase C acceptance gates (mesh
+  hold-out + sub-filter smoothing) -> DG0 artifact + gates record +
+  solved_label. A map that fails the gates is delivered UNLABELED (usable,
+  badged "solve completed, gates not passed") - never called solved.
+- UX honesty: a solve is HOURS-scale (Phase C: 40 fwd-eq ~ 1.5 h wall,
+  still descending at budget). The Studio exposes it as a queued "Direct
+  solve" action with progress and ETA; Express keeps the inversion as the
+  immediate quick-look (badged legacy) and can queue the solve to replace
+  it when it lands.
+- ALL-GEOMETRY requirement (recorded): non-extruded parts need STL tet
+  meshing, explicitly unsettled by the D1 spike; that lands with Phase E
+  proper. No shape heuristics in the extrusion path: extrusion-ness is
+  DETECTED from the part (identical slices within tolerance), not assumed.
+- SPEED-UP requirement (recorded; no accuracy or functionality loss):
+  candidates in evidence order: (a) warm-start from the inversion map
+  (recorded option, cold start stays the reference until a same-budget
+  comparison), (b) coarse-to-fine mesh continuation with the hold-out
+  gate validating each promotion, (c) budget-adaptive stopping on
+  gradient plateau. Each lands only with a same-budget comparison against
+  the cold-start reference.
+- RUN CANCELLATION: every long run (densify arms, 2.5-D verification,
+  package verify, direct solve, Express) gets a Stop control. The server
+  tracks subprocess ids, terminates the process group on request, and
+  marks the stage "cancelled" (distinct from "failed"); Express stops its
+  chain at the cancelled stage. Partial artifacts from a cancelled run
+  are removed so a later run can never adopt them.
+
 ## 9. Hardening items found while reading (P1, bundled into this work)
 
 - /mesh_file/<job_id>/... and /grade/asset/... do not sanitize job_id
