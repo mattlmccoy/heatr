@@ -217,25 +217,25 @@ def score_arm(tc: adjoint.TransientCase, s_map: np.ndarray, shape: str,
 # --------------------------------------------------------------------------- #
 # Arms
 # --------------------------------------------------------------------------- #
-class _BudgetExhausted(Exception):
-    pass
-
-
 def run_solve_arm(tc, chain, shape: str, name: str, objective_name: str,
                   beta: float = 0.0, w_ratio: float | None = None,
                   budget_evals: int = 12) -> dict:
-    """L-BFGS-B on the Phase B gradient. The 1/|g0| rescale is the STANDING
-    CONVENTION (registration conventions.scale_first_step), not a deviation."""
-    from scipy.optimize import minimize
+    """L-BFGS-B on the Phase B gradient, CHECKPOINTED after every evaluation.
+
+    The 1/|g0| rescale is the STANDING CONVENTION (registration
+    conventions.scale_first_step), not a deviation. The checkpoint exists
+    because a shutdown killed an earlier run of this exact arm five evaluations
+    into twelve; see solve3d/phase_e/checkpoint.py for what a resume does and
+    does not preserve.
+    """
+    from solve3d.phase_e import checkpoint as ck
+
     tc.set_objective(objective_name, w_ratio)
     n = chain.n_design
-    v0 = np.ones(n)
-    st = {"n": 0, "best_J": np.inf, "best_v": v0.copy(), "hist": [],
-          "t0": time.perf_counter(), "scale": 1.0}
+    ckpt = RESULTS / f"ckpt_{shape}_{name}.npz"
+    t0 = time.perf_counter()
 
     def fg(v):
-        if st["n"] >= budget_evals:
-            raise _BudgetExhausted()
         s = chain.design_to_map(v, beta)
         tr = tc.forward(tc.design_to_sigma(s))
         Jt = tc.J_trajectory(tr)
@@ -244,41 +244,33 @@ def run_solve_arm(tc, chain, shape: str, name: str, objective_name: str,
         g_s, _ = tc.gradient_design(s, tr=tr, read_step=k,
                                     checkpoint_interval=CHECKPOINT_INTERVAL)
         g_v = chain.design_vjp(v, g_s, beta=beta)
-        st["n"] += 1
-        if st["n"] == 1:
-            gn = float(np.linalg.norm(g_v))
-            st["scale"] = (1.0 / gn) if gn > 0 else 1.0
-        if J < st["best_J"]:
-            st["best_J"], st["best_v"] = J, np.asarray(v, float).copy()
-        st["hist"].append({"eval": st["n"], "J": J, "argmin_step": k,
-                           "t_stop_s": float(k * tc.p.dt_s),
-                           "at_horizon": bool(k >= tr.n_steps),
-                           "grad_norm": float(np.linalg.norm(g_v)),
-                           "wall_s": time.perf_counter() - st["t0"]})
-        print(f"  [{name}] eval {st['n']}/{budget_evals} J={J:.6e} "
-              f"t_stop={k * tc.p.dt_s:.1f}s |g|={np.linalg.norm(g_v):.3e}",
-              flush=True)
-        return J * st["scale"], g_v * st["scale"]
+        fg.last = {"argmin_step": k, "t_stop_s": float(k * tc.p.dt_s),
+                   "at_horizon": bool(k >= tr.n_steps),
+                   "wall_s": time.perf_counter() - t0}
+        return J, g_v
 
-    status = "budget_exhausted"
-    try:
-        r = minimize(fg, v0, jac=True, method="L-BFGS-B",
-                     bounds=[(0.0, 1.0)] * n,
-                     options={"ftol": 1e-16, "gtol": 1e-16, "maxiter": 10000})
-        status = f"converged:{r.message}"
-    except _BudgetExhausted:
-        pass
-    v_best = st["best_v"]
+    def on_eval(v, J, g):
+        info = dict(getattr(fg, "last", {}))
+        print(f"  [{name}] eval J={J:.6e} t_stop={info.get('t_stop_s')}s "
+              f"|g|={np.linalg.norm(g):.3e}", flush=True)
+        return info
+
+    res = ck.run_with_checkpoint(fg, np.ones(n), budget=budget_evals,
+                                 path=ckpt, bounds=(0.0, 1.0),
+                                 scale_first_step=True, on_eval=on_eval)
+    v_best = np.asarray(res["best_v"], float)
     s_best = chain.design_to_map(v_best, beta)
     rec = score_arm(tc, s_best, shape, name, extra={
-        "status": status, "objective_optimized": objective_name,
-        "beta": beta, "w_ratio": w_ratio,
+        "status": res.get("status", "resumed_complete"),
+        "objective_optimized": objective_name, "beta": beta, "w_ratio": w_ratio,
         "budget_gradient_evaluations": budget_evals,
-        "gradient_evaluations_used": st["n"],
-        "J_first_eval": st["hist"][0]["J"] if st["hist"] else None,
-        "trajectory": st["hist"], "scale_first_step": True,
-        "objective_scale_applied": st["scale"],
-        "wall_total_s": time.perf_counter() - st["t0"]})
+        "gradient_evaluations_used": res["evals_used"],
+        "resumed_from_eval": res["resumed_from_eval"],
+        "J_first_eval": res["hist"][0]["J"] if res["hist"] else None,
+        "trajectory": res["hist"], "scale_first_step": True,
+        "objective_scale_applied": res["scale"],
+        "checkpoint": ckpt.name,
+        "wall_total_s": time.perf_counter() - t0})
     np.savez_compressed(RESULTS / f"map_{shape}_{name}.npz", v_raw=v_best,
                         s_map=s_best, centroids=chain.centroids,
                         volumes=chain.volumes)
