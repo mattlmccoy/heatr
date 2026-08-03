@@ -1,12 +1,16 @@
 # Grade and Print: Full Feature Set for RFAM Print Studio
 
 Date: 2026-08-02
-Status: DRAFT, awaiting Matt's approval. The package-format section (section 7)
-went to the 2-D solve session for pre-freeze review; their verdict 2026-08-03
-was APPROVE WITH THREE CHANGES, all folded into section 7b (conditional
+Status: APPROVED by Matt 2026-08-03 (given directly in the Studio session:
+"approved, start phases 1-3"; also relayed via the 2-D solve session:
+"I approve the grade and print spec, freeze the package format").
+PACKAGE FORMAT SCHEMA 2.0.0: FROZEN 2026-08-03. Both freeze gates satisfied:
+Matt's approval + the 2-D lane's recorded sign-off on section 7b as amended
+(their APPROVE WITH THREE CHANGES verdict, folded in: conditional
 engine_versions keys, optional plan block, exactly-one power settings rule,
-three-state transfer record, 2-D correction engine values). Freeze now waits
-only on Matt's approval.
+three-state transfer record, 2-D correction engine values). Emitters in both
+lanes conform to 7b as written at this commit; any further change is a schema
+version bump, not an edit.
 Owner: Matt McCoy
 Builds on: docs/superpowers/specs/2026-07-31-solve-port-3d-design.md (Studio
 integration thin and badge-gated), studio_handoff/ (2-D lane's manifest seed),
