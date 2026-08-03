@@ -97,3 +97,25 @@ def test_three_grids_is_the_minimum_and_two_is_refused():
 def test_nan_input_is_refused_rather_than_producing_a_band():
     with pytest.raises(ValueError, match="finite"):
         bands.analyse(GRIDS, [1.0, float("nan"), 1.0, 1.0])
+
+
+def test_pairwise_analysis_bands_already_pairwise_quantities():
+    """Jaccard distance and front SSD exist only for a PAIR of grids; banding
+    them through analyse() would double-difference them."""
+    out = bands.analyse_from_changes(GRIDS, [0.040, 0.020, 0.010], ceiling=0.05)
+    assert out["pairwise"] is True
+    assert out["status"] == "monotone_convergent"
+    assert out["finest_change"] == pytest.approx(0.010)
+    assert out["band"] == pytest.approx(0.015)
+    assert out["pass"] is True
+
+
+def test_pairwise_divergence_still_fails_loudly():
+    out = bands.analyse_from_changes(GRIDS, [0.010, 0.020, 0.040], ceiling=0.05)
+    assert out["status"] == "diverging"
+    assert out["band"] is None and out["pass"] is False
+
+
+def test_pairwise_length_mismatch_is_refused():
+    with pytest.raises(ValueError, match="expected 3 pair values"):
+        bands.analyse_from_changes(GRIDS, [0.01, 0.02])

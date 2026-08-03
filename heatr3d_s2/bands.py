@@ -159,3 +159,56 @@ def analyse(grids, values, relative: bool = True, safety: float = SAFETY,
             "observed_order": p, "r2": r2,
             "richardson_limit_diagnostic": richardson(grids, values),
             "ceiling": ceiling, "pass": ok, "reason": reason}
+
+
+def analyse_from_changes(grids, pair_values, safety: float = SAFETY,
+                         ceiling: float | None = None,
+                         tol: float = NON_INCREASE_TOL) -> dict:
+    """Band a quantity that is ALREADY a successive-pair measurement.
+
+    Some convergence quantities are intrinsically pairwise: the Jaccard
+    distance between two grids' melt regions, or the surface distance between
+    their fronts, exist only for a PAIR of grids and cannot be evaluated on one
+    grid alone. `analyse` would double-difference them; this takes the pair
+    values as given and applies the same trend rule, band rule and ceiling.
+    """
+    grids = [int(g) for g in grids]
+    vals = [float(v) for v in pair_values]
+    if len(vals) != len(grids) - 1:
+        raise ValueError(f"expected {len(grids)-1} pair values for "
+                         f"{len(grids)} grids; got {len(vals)}")
+    if len(grids) < MIN_GRIDS:
+        raise ValueError(f"a convergence claim needs at least {MIN_GRIDS} grids")
+    if not all(np.isfinite(vals)):
+        raise ValueError("pair values must all be finite")
+    changes = [{"n_lo": int(a), "n_hi": int(b), "change": abs(v),
+                "signed_change": float(v),
+                "h_pair_m": float(np.sqrt((L_DOMAIN / a) * (L_DOMAIN / b)))}
+               for a, b, v in zip(grids, grids[1:], vals)]
+    status = classify(changes, tol=tol)
+    finest = changes[-1]["change"]
+    diverging = status == "diverging"
+    band = None if diverging else safety * finest
+    x = np.log([c["h_pair_m"] for c in changes])
+    y = np.log([max(c["change"], 1e-300) for c in changes])
+    if x.size >= 2:
+        p, b0 = np.polyfit(x, y, 1)
+        pred = p * x + b0
+        ss_res = float(np.sum((y - pred) ** 2))
+        ss_tot = float(np.sum((y - y.mean()) ** 2))
+        r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+    else:
+        p, r2 = float("nan"), float("nan")
+    if diverging:
+        ok, reason = False, ("diverging: pairwise disagreement grows with "
+                             "refinement, so no band is emitted")
+    elif ceiling is not None and finest > ceiling:
+        ok, reason = False, (f"finest-pair value {finest:.6g} exceeds the "
+                             f"pre-registered ceiling {ceiling:.6g}")
+    else:
+        ok = True if ceiling is not None else None
+        reason = ""
+    return {"grids": grids, "pair_values": vals, "pairwise": True,
+            "changes": changes, "status": status, "finest_change": finest,
+            "safety": safety, "band": band, "observed_order": float(p),
+            "r2": float(r2), "ceiling": ceiling, "pass": ok, "reason": reason}
