@@ -1,0 +1,2 @@
+# Regenerable per-case evaluation-grid fields (harness.run_case). JSON gates are tracked.
+field_*.npz
