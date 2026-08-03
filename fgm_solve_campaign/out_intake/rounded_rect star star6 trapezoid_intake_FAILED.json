@@ -1,0 +1,4 @@
+{
+  "shape": "rounded_rect star star6 trapezoid",
+  "error": "FileNotFoundError: no calibrated config for 'rounded_rect star star6 trapezoid'"
+}

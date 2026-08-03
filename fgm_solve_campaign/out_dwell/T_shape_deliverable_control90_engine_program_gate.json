@@ -1,0 +1,70 @@
+{
+ "shape": "T_shape",
+ "arm": "deliverable",
+ "program_key": "control90",
+ "n_holds": 150,
+ "n_steps": 1500,
+ "dt_s": 0.5,
+ "dopant_map_key": "sat_D_joint_4bpp",
+ "stored_recommended_stop_s": 647.0,
+ "march": {
+  "J": 507.41197986784675,
+  "IoU": 0.6144578313253012,
+  "t_stop_s": 595.0,
+  "at_horizon": false,
+  "under_pct": 16.847826086956523,
+  "growth_pct": 35.32608695652174,
+  "max_T_c": NaN,
+  "energy_residual_rel": 0.02123732722606552,
+  "n_positions": 4,
+  "positions_deg": [
+   0.0,
+   90.0,
+   180.0,
+   270.0
+  ]
+ },
+ "engine_arms": {
+  "eps_static": {
+   "engine": {
+    "J": 554.3292113252901,
+    "IoU": 0.5653450807635829,
+    "t_stop_s": 395.0,
+    "at_horizon": false,
+    "under_pct": 30.253623188405797,
+    "growth_pct": 23.369565217391305,
+    "max_T_c": 245.10181660989625,
+    "energy_residual_rel": 0.017655000318534547,
+    "energy_gate_PASS": true,
+    "n_events": 149,
+    "wall_s": 433.1795881249709
+   },
+   "vs_march": {
+    "J_rel_gap_pct": -8.463784786891104,
+    "IoU_gap": 0.049112750561718266,
+    "stop_gap_s": 200.0
+   }
+  },
+  "eps_corot": {
+   "engine": {
+    "J": 509.75347476332996,
+    "IoU": 0.6105834464043419,
+    "t_stop_s": 585.0,
+    "at_horizon": false,
+    "under_pct": 18.47826086956522,
+    "growth_pct": 33.51449275362319,
+    "max_T_c": 236.97050148934372,
+    "energy_residual_rel": 0.020617117763929733,
+    "energy_gate_PASS": true,
+    "n_events": 149,
+    "wall_s": 426.0129091249546
+   },
+   "vs_march": {
+    "J_rel_gap_pct": -0.4593386825995302,
+    "IoU_gap": 0.003874384920959262,
+    "stop_gap_s": 10.0
+   }
+  }
+ },
+ "wall_s": 885.9925249579828
+}

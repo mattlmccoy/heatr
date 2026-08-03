@@ -1,0 +1,23 @@
+{
+ "coarse_grid": {
+  "h_mm": 0.975,
+  "n_xz": 64,
+  "n_y": 21,
+  "dt_s": 0.3,
+  "power_w": 15.656464744806348,
+  "energy_residual_frac": 8.068150162793069e-16,
+  "clamp_bound": false,
+  "cfl_violated": false,
+  "n_substeps_used": 1,
+  "face_max_end_c": 198.54439101462344,
+  "part_max_end_c": 249.9127863747841,
+  "r_coarse_vs_fine_0.60": 0.9894623470440389,
+  "r_coarse_vs_measured_0.60": 0.7943989243010127,
+  "chamfer_coarse_vs_fine_0.60": 0.045993031358885016,
+  "cX_coarse_0.60": 0.46179086009958326,
+  "r_coarse_vs_fine_0.95": 0.9914772604907748,
+  "r_coarse_vs_measured_0.95": 0.6356357603216181,
+  "chamfer_coarse_vs_fine_0.95": 0.040418118466898946,
+  "cX_coarse_0.95": -5.040744145704878
+ }
+}

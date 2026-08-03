@@ -1,0 +1,1175 @@
+{
+  "shape": "L_shape",
+  "angles_deg": [
+    0.0,
+    90.0,
+    105.0,
+    135.0
+  ],
+  "n_steps": 1500,
+  "dt_s": 0.5,
+  "early_stop": "DISABLED",
+  "filter_radius_m": 0.001,
+  "sigma_cells": 1.9833333333333376,
+  "screen_best": {
+    "two": {
+      "angles_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        450.0,
+        300.0
+      ],
+      "screen_J": 293.04886049404007,
+      "screen_IoU": 0.7059308072487644
+    },
+    "three": {
+      "angles_deg": [
+        90.0,
+        0.0,
+        135.0
+      ],
+      "durations_s": [
+        450.0,
+        200.0,
+        100.0
+      ],
+      "screen_J": 293.04886049404007,
+      "screen_IoU": 0.7059308072487644
+    }
+  },
+  "arms": {
+    "S_static_best_uniform": {
+      "t_stop_index": 605,
+      "t_stop_s": 303.0,
+      "t_stop_at_horizon": false,
+      "J": 405.9307536891969,
+      "J_per_part_cell": 0.37621015170453836,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 25.305522834892038,
+      "phi_bar_part_at_stop": 0.7591005396641995,
+      "IoU": 0.6470588235294118,
+      "bed_melt_pct_of_part": 18.164967562557923,
+      "part_under_melt_pct": 23.540315106580167,
+      "melted_cells": 1021,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7591005396641995,
+      "mean_phi_bed": 0.014779868696000096,
+      "under_pct": 15.477293790546803,
+      "in_window_pct": 18.535681186283597,
+      "over_pct": 65.98702502316961,
+      "p95_overshoot_c": 54.58866397761423,
+      "max_overshoot_c": 68.37829155409915,
+      "mean_T_part_c": 197.7760394607513,
+      "P_abs_W_per_m": 504.1516010087113,
+      "mean_rho_rel_part_at_stop": 0.7246356635140279,
+      "mean_rho_rel_part_at_end": 0.9971612303074852,
+      "max_T_at_stop_c": 253.37829155409915,
+      "max_T_part_at_stop_c": 253.37829155409915,
+      "max_T_upto_stop_c": 253.37829155409915,
+      "over_ceiling_250c": true,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 1.0,
+      "energy_gate": {
+        "rel_residual": 0.014822487702897258,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.014822487702897258,
+        "rel_residual_max_upto_index": 0.014822487702897258,
+        "rel_residual_max_whole_march": 0.06502587757957524,
+        "index": 605,
+        "energy_in_J_per_m_at_index": 164051.48359641724,
+        "energy_residual_J_per_m_at_index": 2431.651098249946,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 74.42307692307692,
+      "narrow_melted_pct": 78.35420393559929,
+      "note": "static at 135 deg, uniform map",
+      "schedule": "static",
+      "angles_deg": [
+        135.0
+      ],
+      "arm": "S_static_best_uniform"
+    },
+    "S_static_best_prevmap": {
+      "t_stop_index": 607,
+      "t_stop_s": 304.0,
+      "t_stop_at_horizon": false,
+      "J": 402.0580792745824,
+      "J_per_part_cell": 0.37262101879015974,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 25.052445937747052,
+      "phi_bar_part_at_stop": 0.7588207821621511,
+      "IoU": 0.6496062992125984,
+      "bed_melt_pct_of_part": 17.701575532900833,
+      "part_under_melt_pct": 23.540315106580167,
+      "melted_cells": 1016,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7588207821621511,
+      "mean_phi_bed": 0.01444526104203288,
+      "under_pct": 15.56997219647822,
+      "in_window_pct": 18.257645968489342,
+      "over_pct": 66.17238183503244,
+      "p95_overshoot_c": 53.47828422103899,
+      "max_overshoot_c": 66.80493026938828,
+      "mean_T_part_c": 197.43765725353668,
+      "P_abs_W_per_m": 501.72635681996536,
+      "mean_rho_rel_part_at_stop": 0.7239823463251245,
+      "mean_rho_rel_part_at_end": 0.9969442183802257,
+      "max_T_at_stop_c": 251.80493026938828,
+      "max_T_part_at_stop_c": 251.80493026938828,
+      "max_T_upto_stop_c": 251.80493026938828,
+      "over_ceiling_250c": true,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 0.9836886015283056,
+      "energy_gate": {
+        "rel_residual": 0.014518340830394865,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.014518340830394865,
+        "rel_residual_max_upto_index": 0.014518340830394865,
+        "rel_residual_max_whole_march": 0.06477344827963517,
+        "index": 607,
+        "energy_in_J_per_m_at_index": 163730.11891437997,
+        "energy_residual_J_per_m_at_index": 2377.0896706000494,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 74.23076923076923,
+      "narrow_melted_pct": 78.53309481216458,
+      "note": "static at the best angle with the PREVIOUS pass's 4 bits-per-pixel dopant map",
+      "schedule": "static",
+      "map_source": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_dwell/L_shape_dwell_maps.npz::sat_D_joint_4bpp",
+      "arm": "S_static_best_prevmap"
+    },
+    "S_cycled_equal_uniform": {
+      "t_stop_index": 1004,
+      "t_stop_s": 502.5,
+      "t_stop_at_horizon": false,
+      "J": 418.46797626858245,
+      "J_per_part_cell": 0.3878294497391867,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 17.721410622069783,
+      "phi_bar_part_at_stop": 0.7649938182822384,
+      "IoU": 0.6344086021505376,
+      "bed_melt_pct_of_part": 20.66728452270621,
+      "part_under_melt_pct": 23.447636700648747,
+      "melted_cells": 1049,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7649938182822384,
+      "mean_phi_bed": 0.017011258562486902,
+      "under_pct": 12.140871177015756,
+      "in_window_pct": 21.872103799814642,
+      "over_pct": 65.98702502316961,
+      "p95_overshoot_c": 38.64314177636166,
+      "max_overshoot_c": 42.89034345661227,
+      "mean_T_part_c": 195.35829688538232,
+      "P_abs_W_per_m": 365.61295500897546,
+      "mean_rho_rel_part_at_stop": 0.7560429853799071,
+      "mean_rho_rel_part_at_end": 0.9415521300931874,
+      "max_T_at_stop_c": 227.89034345661227,
+      "max_T_part_at_stop_c": 227.89034345661227,
+      "max_T_upto_stop_c": 227.89034345661227,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 1.0,
+      "energy_gate": {
+        "rel_residual": 0.01429793291020186,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.01429793291020186,
+        "rel_residual_max_upto_index": 0.01429793291020186,
+        "rel_residual_max_whole_march": 0.03987410402874772,
+        "index": 1004,
+        "energy_in_J_per_m_at_index": 191456.00972849308,
+        "energy_residual_J_per_m_at_index": 2737.4251823529485,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 71.34615384615384,
+      "narrow_melted_pct": 81.3953488372093,
+      "note": "CYCLED equal dwell over the eight 45-degree positions, executed time-resolved at the 20 s cycle, uniform map",
+      "schedule": "cycled",
+      "cycle_time_s": 20.0,
+      "arm": "S_cycled_equal_uniform"
+    },
+    "S_seq_uniform_two": {
+      "t_stop_index": 1159,
+      "t_stop_s": 580.0,
+      "t_stop_at_horizon": false,
+      "J": 293.04886049404007,
+      "J_per_part_cell": 0.2715930125060612,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 15.519830469699457,
+      "phi_bar_part_at_stop": 0.7901880122734274,
+      "IoU": 0.7059308072487644,
+      "bed_melt_pct_of_part": 12.511584800741428,
+      "part_under_melt_pct": 20.574606116774792,
+      "melted_cells": 992,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7901880122734274,
+      "mean_phi_bed": 0.010196209659894607,
+      "under_pct": 9.453197405004634,
+      "in_window_pct": 25.023169601482856,
+      "over_pct": 65.5236329935125,
+      "p95_overshoot_c": 34.138715086188114,
+      "max_overshoot_c": 38.80845712080384,
+      "mean_T_part_c": 192.15087011794319,
+      "P_abs_W_per_m": 357.4018805163274,
+      "mean_rho_rel_part_at_stop": 0.7208367157827402,
+      "mean_rho_rel_part_at_end": 0.9306847301649055,
+      "max_T_at_stop_c": 223.80845712080384,
+      "max_T_part_at_stop_c": 223.80845712080384,
+      "max_T_upto_stop_c": 223.80845712080384,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 1.0,
+      "energy_gate": {
+        "rel_residual": 0.00924144535696787,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.00924144535696787,
+        "rel_residual_max_upto_index": 0.00924144535696787,
+        "rel_residual_max_whole_march": 0.03673232440153536,
+        "index": 1159,
+        "energy_in_J_per_m_at_index": 182864.38353580088,
+        "energy_residual_J_per_m_at_index": 1689.9312081817188,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 80.1923076923077,
+      "narrow_melted_pct": 78.71198568872987,
+      "note": "UNIFORM map, 2-segment sequential schedule straight off the screen grid",
+      "schedule": "sequential",
+      "segments_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        450.0,
+        300.0
+      ],
+      "arm": "S_seq_uniform_two"
+    },
+    "S_seq_uniform_two_refined": {
+      "t_stop_index": 1159,
+      "t_stop_s": 580.0,
+      "t_stop_at_horizon": false,
+      "J": 293.0487051103137,
+      "J_per_part_cell": 0.2715928684989005,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 15.520536567013863,
+      "phi_bar_part_at_stop": 0.7901961975329421,
+      "IoU": 0.7059308072487644,
+      "bed_melt_pct_of_part": 12.511584800741428,
+      "part_under_melt_pct": 20.574606116774792,
+      "melted_cells": 992,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7901961975329421,
+      "mean_phi_bed": 0.010196903294263126,
+      "under_pct": 9.453197405004634,
+      "in_window_pct": 25.023169601482856,
+      "over_pct": 65.5236329935125,
+      "p95_overshoot_c": 34.141437235152836,
+      "max_overshoot_c": 38.80991525925117,
+      "mean_T_part_c": 192.15172877912244,
+      "P_abs_W_per_m": 357.40386181140394,
+      "mean_rho_rel_part_at_stop": 0.7208425941493865,
+      "mean_rho_rel_part_at_end": 0.9306861013549717,
+      "max_T_at_stop_c": 223.80991525925117,
+      "max_T_part_at_stop_c": 223.80991525925117,
+      "max_T_upto_stop_c": 223.80991525925117,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 1.0,
+      "energy_gate": {
+        "rel_residual": 0.009241739947430841,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.009241739947430841,
+        "rel_residual_max_upto_index": 0.009241739947430841,
+        "rel_residual_max_whole_march": 0.0367322902485332,
+        "index": 1159,
+        "energy_in_J_per_m_at_index": 182865.86950710823,
+        "energy_residual_J_per_m_at_index": 1689.9988112455176,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 80.1923076923077,
+      "narrow_melted_pct": 78.71198568872987,
+      "note": "UNIFORM map, switch times refined on the gated duration gradient, 8 gradient evaluations",
+      "schedule": "sequential",
+      "segments_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        449.99374758385557,
+        300.0
+      ],
+      "n_gradient_evals": 8,
+      "duration_trace": [
+        {
+          "J": 293.04886049404007,
+          "dur": [
+            450.0,
+            300.0
+          ]
+        },
+        {
+          "J": 293.66242710481635,
+          "dur": [
+            446.11599651011363,
+            300.0
+          ]
+        },
+        {
+          "J": 293.16696576314195,
+          "dur": [
+            449.2348011227333,
+            300.0
+          ]
+        },
+        {
+          "J": 293.070895865836,
+          "dur": [
+            449.84895604864425,
+            300.0
+          ]
+        },
+        {
+          "J": 293.0496270277121,
+          "dur": [
+            449.9701431548087,
+            300.0
+          ]
+        },
+        {
+          "J": 293.0487051103137,
+          "dur": [
+            449.99374758385557,
+            300.0
+          ]
+        },
+        {
+          "J": 293.0513295959222,
+          "dur": [
+            449.9888224166668,
+            300.0
+          ]
+        },
+        {
+          "J": 293.05163921255837,
+          "dur": [
+            449.9928685610563,
+            300.0
+          ]
+        }
+      ],
+      "arm": "S_seq_uniform_two_refined"
+    },
+    "S_seq_uniform_three": {
+      "t_stop_index": 1159,
+      "t_stop_s": 580.0,
+      "t_stop_at_horizon": false,
+      "J": 293.04886049404007,
+      "J_per_part_cell": 0.2715930125060612,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 15.519830469699457,
+      "phi_bar_part_at_stop": 0.7901880122734274,
+      "IoU": 0.7059308072487644,
+      "bed_melt_pct_of_part": 12.511584800741428,
+      "part_under_melt_pct": 20.574606116774792,
+      "melted_cells": 992,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7901880122734274,
+      "mean_phi_bed": 0.010196209659894607,
+      "under_pct": 9.453197405004634,
+      "in_window_pct": 25.023169601482856,
+      "over_pct": 65.5236329935125,
+      "p95_overshoot_c": 34.138715086188114,
+      "max_overshoot_c": 38.80845712080384,
+      "mean_T_part_c": 192.15087011794319,
+      "P_abs_W_per_m": 357.95542731749134,
+      "mean_rho_rel_part_at_stop": 0.7208367157827402,
+      "mean_rho_rel_part_at_end": 0.9312089533857185,
+      "max_T_at_stop_c": 223.80845712080384,
+      "max_T_part_at_stop_c": 223.80845712080384,
+      "max_T_upto_stop_c": 223.80845712080384,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 1.0,
+      "energy_gate": {
+        "rel_residual": 0.00924144535696787,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.00924144535696787,
+        "rel_residual_max_upto_index": 0.00924144535696787,
+        "rel_residual_max_whole_march": 0.03581253224102164,
+        "index": 1159,
+        "energy_in_J_per_m_at_index": 182864.38353580088,
+        "energy_residual_J_per_m_at_index": 1689.9312081817188,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 80.1923076923077,
+      "narrow_melted_pct": 78.71198568872987,
+      "note": "UNIFORM map, 3-segment sequential schedule straight off the screen grid; NOT refined: the argmin sits before the third switch, so the third hold is inert",
+      "schedule": "sequential",
+      "segments_deg": [
+        90.0,
+        0.0,
+        135.0
+      ],
+      "durations_s": [
+        450.0,
+        200.0,
+        100.0
+      ],
+      "arm": "S_seq_uniform_three"
+    },
+    "S_seq_cosolved": {
+      "t_stop_index": 1166,
+      "t_stop_s": 583.5,
+      "t_stop_at_horizon": false,
+      "J": 280.7610403225674,
+      "J_per_part_cell": 0.2602048566474211,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 15.914769256268777,
+      "phi_bar_part_at_stop": 0.7876309239790266,
+      "IoU": 0.7153589315525877,
+      "bed_melt_pct_of_part": 11.028730305838739,
+      "part_under_melt_pct": 20.574606116774792,
+      "melted_cells": 976,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7876309239790266,
+      "mean_phi_bed": 0.009184447740723573,
+      "under_pct": 9.823911028730306,
+      "in_window_pct": 27.618164967562556,
+      "over_pct": 62.557924003707136,
+      "p95_overshoot_c": 34.96506167085519,
+      "max_overshoot_c": 39.615984911854724,
+      "mean_T_part_c": 191.8978562696599,
+      "P_abs_W_per_m": 352.62309763163495,
+      "mean_rho_rel_part_at_stop": 0.7196968002494682,
+      "mean_rho_rel_part_at_end": 0.9248935281898766,
+      "max_T_at_stop_c": 224.61598491185472,
+      "max_T_part_at_stop_c": 224.61598491185472,
+      "max_T_upto_stop_c": 224.61598491185472,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 0.9741763990100889,
+      "energy_gate": {
+        "rel_residual": 0.00835714091450798,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.00835714091450798,
+        "rel_residual_max_upto_index": 0.00835714091450798,
+        "rel_residual_max_whole_march": 0.03530251141087888,
+        "index": 1166,
+        "energy_in_J_per_m_at_index": 182364.26715772887,
+        "energy_residual_J_per_m_at_index": 1524.0438784081198,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 78.84615384615384,
+      "narrow_melted_pct": 79.96422182468694,
+      "note": "dopant map co-solved with the switch times, 20 gradient evaluations, filter 1.0 mm, box (0.0, 1.0)",
+      "schedule": "sequential",
+      "segments_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        449.99374758385557,
+        300.0
+      ],
+      "n_gradient_evals": 20,
+      "arm": "S_seq_cosolved"
+    },
+    "S_seq_cosolved_4bpp": {
+      "t_stop_index": 1166,
+      "t_stop_s": 583.5,
+      "t_stop_at_horizon": false,
+      "J": 280.5221432851436,
+      "J_per_part_cell": 0.2599834506813194,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 15.919440689955678,
+      "phi_bar_part_at_stop": 0.7877111752114635,
+      "IoU": 0.7167919799498746,
+      "bed_melt_pct_of_part": 10.936051899907321,
+      "part_under_melt_pct": 20.481927710843372,
+      "melted_cells": 976,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7877111752114635,
+      "mean_phi_bed": 0.009180648137483347,
+      "under_pct": 9.731232622798888,
+      "in_window_pct": 28.081556997219646,
+      "over_pct": 62.187210379981465,
+      "p95_overshoot_c": 34.99372082546506,
+      "max_overshoot_c": 39.647225512838475,
+      "mean_T_part_c": 191.9085960710728,
+      "P_abs_W_per_m": 352.63634453270265,
+      "mean_rho_rel_part_at_stop": 0.7198139217614226,
+      "mean_rho_rel_part_at_end": 0.9249468689006967,
+      "max_T_at_stop_c": 224.64722551283847,
+      "max_T_part_at_stop_c": 224.64722551283847,
+      "max_T_upto_stop_c": 224.64722551283847,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 0.9753475440222429,
+      "energy_gate": {
+        "rel_residual": 0.00835511208502714,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.00835511208502714,
+        "rel_residual_max_upto_index": 0.00835511208502714,
+        "rel_residual_max_whole_march": 0.03529284481946959,
+        "index": 1166,
+        "energy_in_J_per_m_at_index": 182385.24046336475,
+        "energy_residual_J_per_m_at_index": 1523.8491267260397,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 79.03846153846153,
+      "narrow_melted_pct": 79.96422182468694,
+      "note": "the co-solved map at 4 bits per pixel, the deliverable",
+      "schedule": "sequential",
+      "segments_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        449.99374758385557,
+        300.0
+      ],
+      "arm": "S_seq_cosolved_4bpp"
+    },
+    "S_seq_uniform_two_refined_interior": {
+      "t_stop_index": 1182,
+      "t_stop_s": 591.5,
+      "t_stop_at_horizon": false,
+      "J": 291.8876286098174,
+      "J_per_part_cell": 0.2705168013065963,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 15.176369027650527,
+      "phi_bar_part_at_stop": 0.7991194514529363,
+      "IoU": 0.7075163398692811,
+      "bed_melt_pct_of_part": 13.438368860055608,
+      "part_under_melt_pct": 19.74050046339203,
+      "melted_cells": 1011,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7991194514529363,
+      "mean_phi_bed": 0.010845653733817474,
+      "under_pct": 8.804448563484709,
+      "in_window_pct": 24.65245597775718,
+      "over_pct": 66.5430954587581,
+      "p95_overshoot_c": 34.15238110737482,
+      "max_overshoot_c": 38.8587599058834,
+      "mean_T_part_c": 192.59034355725518,
+      "P_abs_W_per_m": 352.6160050139955,
+      "mean_rho_rel_part_at_stop": 0.7261373601810237,
+      "mean_rho_rel_part_at_end": 0.9280886313662355,
+      "max_T_at_stop_c": 223.8587599058834,
+      "max_T_part_at_stop_c": 223.8587599058834,
+      "max_T_upto_stop_c": 223.8587599058834,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 1.0,
+      "energy_gate": {
+        "rel_residual": 0.009690425178388943,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.009690425178388943,
+        "rel_residual_max_upto_index": 0.009690425178388943,
+        "rel_residual_max_whole_march": 0.03548431387769423,
+        "index": 1182,
+        "energy_in_J_per_m_at_index": 185024.97690905194,
+        "energy_residual_J_per_m_at_index": 1792.9706948703097,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 82.5,
+      "narrow_melted_pct": 78.17531305903398,
+      "note": "UNIFORM map, switch time refined from an INTERIOR start, 6 gradient evaluations",
+      "schedule": "sequential",
+      "segments_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        465.102891846314,
+        284.897108153686
+      ],
+      "arm": "S_seq_uniform_two_refined_interior"
+    },
+    "S_seq_cosolved_4bpp_interior_switch": {
+      "t_stop_index": 1188,
+      "t_stop_s": 594.5,
+      "t_stop_at_horizon": false,
+      "J": 276.3892630706839,
+      "J_per_part_cell": 0.25615316317950315,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 15.48059085484977,
+      "phi_bar_part_at_stop": 0.7974166056253456,
+      "IoU": 0.7160596026490066,
+      "bed_melt_pct_of_part": 11.955514365152919,
+      "part_under_melt_pct": 19.833178869323447,
+      "melted_cells": 994,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7974166056253456,
+      "mean_phi_bed": 0.009647636505662315,
+      "under_pct": 8.897126969416126,
+      "in_window_pct": 26.50602409638554,
+      "over_pct": 64.59684893419833,
+      "p95_overshoot_c": 34.68783520866586,
+      "max_overshoot_c": 39.52361960286066,
+      "mean_T_part_c": 192.2156215986092,
+      "P_abs_W_per_m": 347.95900102111847,
+      "mean_rho_rel_part_at_stop": 0.7245622996166053,
+      "mean_rho_rel_part_at_end": 0.9225612583281245,
+      "max_T_at_stop_c": 224.52361960286066,
+      "max_T_part_at_stop_c": 224.52361960286066,
+      "max_T_upto_stop_c": 224.52361960286066,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 0.9753475454916437,
+      "energy_gate": {
+        "rel_residual": 0.008690839966374115,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.008690839966374115,
+        "rel_residual_max_upto_index": 0.008690839966374115,
+        "rel_residual_max_whole_march": 0.03404271938151789,
+        "index": 1188,
+        "energy_in_J_per_m_at_index": 184288.5847256055,
+        "energy_residual_J_per_m_at_index": 1601.6225974798144,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 81.15384615384616,
+      "narrow_melted_pct": 79.24865831842575,
+      "note": "the co-solved 4 bits-per-pixel map, run at the interior-refined switch time. The map was solved at the OLD switch time and is NOT re-solved here",
+      "schedule": "sequential",
+      "segments_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        465.102891846314,
+        284.897108153686
+      ],
+      "arm": "S_seq_cosolved_4bpp_interior_switch"
+    },
+    "S_prior_best_on_record": {
+      "t_stop_index": 608,
+      "t_stop_s": 304.5,
+      "t_stop_at_horizon": false,
+      "J": 396.20047038825976,
+      "J_per_part_cell": 0.3671922802486189,
+      "J_at_first_step": 1079.0,
+      "sigma_T_at_stop_c": 24.230970486101604,
+      "phi_bar_part_at_stop": 0.7512422042985719,
+      "IoU": 0.6483691328560064,
+      "bed_melt_pct_of_part": 16.496756255792402,
+      "part_under_melt_pct": 24.467099165894346,
+      "melted_cells": 993,
+      "part_cells": 1079,
+      "mean_phi_part": 0.7512422042985719,
+      "mean_phi_bed": 0.013492440829598136,
+      "under_pct": 15.848007414272475,
+      "in_window_pct": 18.721037998146432,
+      "over_pct": 65.4309545875811,
+      "p95_overshoot_c": 50.56586004544144,
+      "max_overshoot_c": 61.831327007632666,
+      "mean_T_part_c": 196.33601754467952,
+      "P_abs_W_per_m": 496.4016449274609,
+      "mean_rho_rel_part_at_stop": 0.719128224949236,
+      "mean_rho_rel_part_at_end": 0.9966165078761777,
+      "max_T_at_stop_c": 246.83132700763267,
+      "max_T_part_at_stop_c": 246.83132700763267,
+      "max_T_upto_stop_c": 246.83132700763267,
+      "over_ceiling_250c": false,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 0.9679950588107441,
+      "energy_gate": {
+        "rel_residual": 0.013698570057323155,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.013698570057323155,
+        "rel_residual_max_upto_index": 0.013698570057323155,
+        "rel_residual_max_whole_march": 0.06426046559437311,
+        "index": 608,
+        "energy_in_J_per_m_at_index": 162159.18684253845,
+        "energy_residual_J_per_m_at_index": 2221.348981401068,
+        "PASS_max_upto_index": true
+      },
+      "wide_limb_cells": 520,
+      "narrow_limb_cells": 559,
+      "wide_melted_pct": 73.46153846153847,
+      "narrow_melted_pct": 77.4597495527728,
+      "note": "the PREVIOUS pass's best arm on record, re-run time-resolved at the 20 s cycle",
+      "schedule": "cycled",
+      "source_arm": "D_refined_4bpp_discovered_lib",
+      "stored_J": 396.2,
+      "stored_IoU": 0.6484,
+      "dwell_weights": [
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.5
+      ],
+      "n_moves": 75,
+      "arm": "S_prior_best_on_record",
+      "reproduction_delta_J_pct": 0.00011872495198661554
+    }
+  },
+  "programs": {
+    "S_seq_uniform_two": {
+      "actuator": "indexed turntable, SEQUENTIAL holds, constant radio-frequency power",
+      "schedule_kind": "sequential",
+      "control_step_s": 0.5,
+      "horizon_s": 750.0,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        450.0,
+        300.0
+      ],
+      "n_moves": 2,
+      "moves": [
+        {
+          "position_deg": 90.0,
+          "dwell_s": 450.0,
+          "move_at_s": 0.0
+        },
+        {
+          "position_deg": 0.0,
+          "dwell_s": 300.0,
+          "move_at_s": 450.0
+        }
+      ],
+      "shape": "L_shape",
+      "arm": "S_seq_uniform_two",
+      "grid": 120,
+      "recommended_stop_s": 580.0,
+      "J_phi_at_stop": 293.04886049404007,
+      "IoU_at_stop": 0.7059308072487644,
+      "dopant_map": "L_shape_seq_maps.npz::sat_S_seq_uniform_two",
+      "radio_frequency_program": "constant, calibrated drive voltage",
+      "caveat": "grid 120 only; not verified on the production engine, which cannot express an unequal dwell"
+    },
+    "S_seq_uniform_two_refined": {
+      "actuator": "indexed turntable, SEQUENTIAL holds, constant radio-frequency power",
+      "schedule_kind": "sequential",
+      "control_step_s": 0.5,
+      "horizon_s": 750.0,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        450.0,
+        300.0
+      ],
+      "n_moves": 2,
+      "moves": [
+        {
+          "position_deg": 90.0,
+          "dwell_s": 450.0,
+          "move_at_s": 0.0
+        },
+        {
+          "position_deg": 0.0,
+          "dwell_s": 300.0,
+          "move_at_s": 450.0
+        }
+      ],
+      "shape": "L_shape",
+      "arm": "S_seq_uniform_two_refined",
+      "grid": 120,
+      "recommended_stop_s": 580.0,
+      "J_phi_at_stop": 293.0487051103137,
+      "IoU_at_stop": 0.7059308072487644,
+      "dopant_map": "L_shape_seq_maps.npz::sat_S_seq_uniform_two_refined",
+      "radio_frequency_program": "constant, calibrated drive voltage",
+      "caveat": "grid 120 only; not verified on the production engine, which cannot express an unequal dwell"
+    },
+    "S_seq_uniform_three": {
+      "actuator": "indexed turntable, SEQUENTIAL holds, constant radio-frequency power",
+      "schedule_kind": "sequential",
+      "control_step_s": 0.5,
+      "horizon_s": 750.0,
+      "positions_deg": [
+        90.0,
+        0.0,
+        135.0
+      ],
+      "durations_s": [
+        450.0,
+        200.0,
+        100.0
+      ],
+      "n_moves": 3,
+      "moves": [
+        {
+          "position_deg": 90.0,
+          "dwell_s": 450.0,
+          "move_at_s": 0.0
+        },
+        {
+          "position_deg": 0.0,
+          "dwell_s": 200.0,
+          "move_at_s": 450.0
+        },
+        {
+          "position_deg": 135.0,
+          "dwell_s": 100.0,
+          "move_at_s": 650.0
+        }
+      ],
+      "shape": "L_shape",
+      "arm": "S_seq_uniform_three",
+      "grid": 120,
+      "recommended_stop_s": 580.0,
+      "J_phi_at_stop": 293.04886049404007,
+      "IoU_at_stop": 0.7059308072487644,
+      "dopant_map": "L_shape_seq_maps.npz::sat_S_seq_uniform_three",
+      "radio_frequency_program": "constant, calibrated drive voltage",
+      "caveat": "grid 120 only; not verified on the production engine, which cannot express an unequal dwell"
+    },
+    "S_seq_cosolved": {
+      "actuator": "indexed turntable, SEQUENTIAL holds, constant radio-frequency power",
+      "schedule_kind": "sequential",
+      "control_step_s": 0.5,
+      "horizon_s": 750.0,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        450.0,
+        300.0
+      ],
+      "n_moves": 2,
+      "moves": [
+        {
+          "position_deg": 90.0,
+          "dwell_s": 450.0,
+          "move_at_s": 0.0
+        },
+        {
+          "position_deg": 0.0,
+          "dwell_s": 300.0,
+          "move_at_s": 450.0
+        }
+      ],
+      "shape": "L_shape",
+      "arm": "S_seq_cosolved",
+      "grid": 120,
+      "recommended_stop_s": 583.5,
+      "J_phi_at_stop": 280.7610403225674,
+      "IoU_at_stop": 0.7153589315525877,
+      "dopant_map": "L_shape_seq_maps.npz::sat_S_seq_cosolved",
+      "radio_frequency_program": "constant, calibrated drive voltage",
+      "caveat": "grid 120 only; not verified on the production engine, which cannot express an unequal dwell"
+    },
+    "S_seq_cosolved_4bpp": {
+      "actuator": "indexed turntable, SEQUENTIAL holds, constant radio-frequency power",
+      "schedule_kind": "sequential",
+      "control_step_s": 0.5,
+      "horizon_s": 750.0,
+      "positions_deg": [
+        90.0,
+        0.0
+      ],
+      "durations_s": [
+        450.0,
+        300.0
+      ],
+      "n_moves": 2,
+      "moves": [
+        {
+          "position_deg": 90.0,
+          "dwell_s": 450.0,
+          "move_at_s": 0.0
+        },
+        {
+          "position_deg": 0.0,
+          "dwell_s": 300.0,
+          "move_at_s": 450.0
+        }
+      ],
+      "shape": "L_shape",
+      "arm": "S_seq_cosolved_4bpp",
+      "grid": 120,
+      "recommended_stop_s": 583.5,
+      "J_phi_at_stop": 280.5221432851436,
+      "IoU_at_stop": 0.7167919799498746,
+      "dopant_map": "L_shape_seq_maps.npz::sat_S_seq_cosolved_4bpp",
+      "radio_frequency_program": "constant, calibrated drive voltage",
+      "caveat": "grid 120 only; not verified on the production engine, which cannot express an unequal dwell"
+    }
+  },
+  "snapshots": {
+    "seq": {
+      "steps": [
+        465,
+        929,
+        1017,
+        1102,
+        1188
+      ],
+      "times_s": [
+        233.0,
+        465.0,
+        509.0,
+        551.5,
+        594.5
+      ],
+      "switch_s": 465.102891846314,
+      "stop_step": 1188,
+      "stop_s": 594.5,
+      "segments_deg": [
+        90.0,
+        0.0
+      ]
+    },
+    "static": {
+      "steps": [
+        465,
+        929,
+        1017,
+        1102,
+        1188
+      ],
+      "times_s": [
+        233.0,
+        465.0,
+        509.0,
+        551.5,
+        594.5
+      ],
+      "switch_s": 750.0,
+      "stop_step": 605,
+      "stop_s": 303.0,
+      "segments_deg": [
+        135.0
+      ]
+    }
+  },
+  "wall_s": 2149.9884314169176,
+  "kink_probe": {
+    "shape": "L_shape",
+    "segments_deg": [
+      90.0,
+      0.0
+    ],
+    "probes": {
+      "on_step_edge": {
+        "switch_s": 449.99374758385557,
+        "distance_to_step_edge_s": 0.006252416144434392,
+        "J": 293.0487051103137,
+        "stop_index": 1159,
+        "analytic_dJ_dswitch": 3.893801475734132,
+        "forward_difference": -0.2879326014772232,
+        "backward_difference": -0.17787504662919673,
+        "central_difference": -0.23290382405320997,
+        "rel_err_vs_forward": 1.0739464000082173,
+        "rel_err_vs_central": 1.05981399552716
+      },
+      "interior": {
+        "switch_s": 450.24374758385557,
+        "distance_to_step_edge_s": 0.2437475838555656,
+        "J": 293.01803034367146,
+        "stop_index": 1159,
+        "analytic_dJ_dswitch": 3.97746969305785,
+        "forward_difference": -0.33497990407340694,
+        "backward_difference": -0.03883361686689568,
+        "central_difference": -0.1869067604701513,
+        "rel_err_vs_forward": 1.0842193479583442,
+        "rel_err_vs_central": 1.0469913726297835
+      }
+    },
+    "refine_from_interior": [
+      {
+        "switch_s": 465.25,
+        "J": 291.897217821233,
+        "grad": 4.433758278371465,
+        "stop_index": 1182
+      },
+      {
+        "switch_s": 460.81624172162856,
+        "J": 291.96231528466774,
+        "grad": 4.342764739604823,
+        "stop_index": 1175
+      },
+      {
+        "switch_s": 464.3096844315997,
+        "J": 291.89613497476535,
+        "grad": 4.2890315627424584,
+        "stop_index": 1181
+      },
+      {
+        "switch_s": 465.0489037044924,
+        "J": 291.9050419467573,
+        "grad": 4.349304013272493,
+        "stop_index": 1182
+      },
+      {
+        "switch_s": 465.20769235690886,
+        "J": 291.8911720417017,
+        "grad": 4.414160236771874,
+        "stop_index": 1182
+      },
+      {
+        "switch_s": 465.102891846314,
+        "J": 291.8876286098174,
+        "grad": 4.370203029788376,
+        "stop_index": 1182
+      }
+    ],
+    "best_switch_s": 465.102891846314,
+    "best_J": 291.8876286098174,
+    "previous_refined_switch_s": 449.99374758385557,
+    "previous_refined_J": 293.0487051103137,
+    "fine_scan_min_J": 291.88867693507495,
+    "fine_scan_min_switch_s": 465.0,
+    "wall_s": 190.6125006659422
+  },
+  "fine_scan": {
+    "a1": 1,
+    "a2": 0,
+    "switch_step": 930,
+    "switch_s": 465.0,
+    "J": 291.88867693507495,
+    "stop_step": 1182,
+    "stop_s": 591.5,
+    "at_horizon": false,
+    "J_post_switch": 291.88867693507495,
+    "stop_post_switch_s": 591.5,
+    "stop_is_in_phase_2": true,
+    "IoU": 0.7058823529411765,
+    "bed_melt_pct_of_part": 13.438368860055608,
+    "part_under_melt_pct": 19.925857275254867,
+    "melted_cells": 1009,
+    "part_cells": 1079,
+    "mean_phi_part": 0.7992688823891259,
+    "mean_phi_bed": 0.010856483651592842,
+    "wide_limb_cells": 520,
+    "narrow_limb_cells": 559,
+    "wide_melted_pct": 82.11538461538461,
+    "narrow_melted_pct": 78.17531305903398,
+    "max_T_at_stop_c": 223.88505187976352
+  },
+  "prior_best_on_record": {
+    "t_stop_index": 608,
+    "t_stop_s": 304.5,
+    "t_stop_at_horizon": false,
+    "J": 396.20047038825976,
+    "J_per_part_cell": 0.3671922802486189,
+    "J_at_first_step": 1079.0,
+    "sigma_T_at_stop_c": 24.230970486101604,
+    "phi_bar_part_at_stop": 0.7512422042985719,
+    "IoU": 0.6483691328560064,
+    "bed_melt_pct_of_part": 16.496756255792402,
+    "part_under_melt_pct": 24.467099165894346,
+    "melted_cells": 993,
+    "part_cells": 1079,
+    "mean_phi_part": 0.7512422042985719,
+    "mean_phi_bed": 0.013492440829598136,
+    "under_pct": 15.848007414272475,
+    "in_window_pct": 18.721037998146432,
+    "over_pct": 65.4309545875811,
+    "p95_overshoot_c": 50.56586004544144,
+    "max_overshoot_c": 61.831327007632666,
+    "mean_T_part_c": 196.33601754467952,
+    "P_abs_W_per_m": 496.4016449274609,
+    "mean_rho_rel_part_at_stop": 0.719128224949236,
+    "mean_rho_rel_part_at_end": 0.9966165078761777,
+    "max_T_at_stop_c": 246.83132700763267,
+    "max_T_part_at_stop_c": 246.83132700763267,
+    "max_T_upto_stop_c": 246.83132700763267,
+    "over_ceiling_250c": false,
+    "frac_dT_clipped_max": 0.0,
+    "frac_temp_cap_max": 0.0,
+    "n_outer": 1500,
+    "sat_mean_in_part": 0.9679950588107441,
+    "energy_gate": {
+      "rel_residual": 0.013698570057323155,
+      "threshold": 0.05,
+      "PASS": true,
+      "rel_residual_at_index": 0.013698570057323155,
+      "rel_residual_max_upto_index": 0.013698570057323155,
+      "rel_residual_max_whole_march": 0.06426046559437311,
+      "index": 608,
+      "energy_in_J_per_m_at_index": 162159.18684253845,
+      "energy_residual_J_per_m_at_index": 2221.348981401068,
+      "PASS_max_upto_index": true
+    },
+    "wide_limb_cells": 520,
+    "narrow_limb_cells": 559,
+    "wide_melted_pct": 73.46153846153847,
+    "narrow_melted_pct": 77.4597495527728,
+    "note": "the PREVIOUS pass's best arm on record, re-run time-resolved at the 20 s cycle",
+    "schedule": "cycled",
+    "source_arm": "D_refined_4bpp_discovered_lib",
+    "stored_J": 396.2,
+    "stored_IoU": 0.6484,
+    "dwell_weights": [
+      0.0,
+      0.0,
+      0.0,
+      0.5,
+      0.0,
+      0.0,
+      0.0,
+      0.5
+    ],
+    "n_moves": 75,
+    "arm": "S_prior_best_on_record",
+    "reproduction_delta_J_pct": 0.00011872495198661554
+  },
+  "deliverable_arm": "S_seq_cosolved_4bpp_interior_switch",
+  "finalize_wall_s": 26.951587332994677
+}

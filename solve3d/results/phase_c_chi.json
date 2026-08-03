@@ -1,0 +1,10 @@
+{
+ "what": "chi from the shared fill contract vs the conforming-mesh indicator",
+ "n_cells": 16549,
+ "n_quadrature_points": 56,
+ "mesh_conformed": true,
+ "n_partial_cells": 0,
+ "max_abs_diff_vs_doped_indicator": 0.0,
+ "quadrature": "symmetric barycentric lattice (documented deviation from the contract's rectangular n_sub grid, which has no tetrahedral analogue)",
+ "contract": "fgm_solve_campaign/adjoint2d/tests/fill_contract.py (their d881455), run verbatim in solve3d/tests/test_fill_contract.py"
+}

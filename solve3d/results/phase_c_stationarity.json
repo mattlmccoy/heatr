@@ -1,0 +1,121 @@
+{
+ "what": "cold-start stationarity diagnostic at uniform saturation 1.0",
+ "arms": {
+  "symmetric": {
+   "objective": "symmetric",
+   "beta": 0.0,
+   "w_ratio": null,
+   "J_at_v1": 9.855033669884776e-08,
+   "argmin_step": 7279,
+   "grad_norm": 1.688696607389328e-09,
+   "projected_grad_norm": 1.203025391916237e-09,
+   "projected_over_full": 0.7123987734990932,
+   "n_design": 105191,
+   "n_components_wanting_decrease": 49449,
+   "n_components_wanting_increase_blocked": 55742,
+   "frac_feasible": 0.47008774514929985,
+   "line_probe": [
+    {
+     "t": 0.5,
+     "J": 9.79798903392282e-08,
+     "rel_change_vs_v1": -0.005788375552310226,
+     "argmin_step": 7279,
+     "map_mean": 0.9990109451849261,
+     "v_min": 0.9919484225201086
+    },
+    {
+     "t": 2.0,
+     "J": 9.659491230140297e-08,
+     "rel_change_vs_v1": -0.019841884492188093,
+     "argmin_step": 7276,
+     "map_mean": 0.9960437807397047,
+     "v_min": 0.9677936900804346
+    },
+    {
+     "t": 10.0,
+     "J": 9.764495413247917e-08,
+     "rel_change_vs_v1": -0.009187006322822325,
+     "argmin_step": 7262,
+     "map_mean": 0.9802189036985232,
+     "v_min": 0.8389684504021728
+    },
+    {
+     "t": 50.0,
+     "J": 3.225806561620884e-07,
+     "rel_change_vs_v1": 2.273257778386261,
+     "argmin_step": 7117,
+     "map_mean": 0.9010945184926146,
+     "v_min": 0.1948422520108638
+    }
+   ],
+   "best_probe": {
+    "t": 2.0,
+    "J": 9.659491230140297e-08,
+    "rel_change_vs_v1": -0.019841884492188093,
+    "argmin_step": 7276,
+    "map_mean": 0.9960437807397047,
+    "v_min": 0.9677936900804346
+   },
+   "descent_direction_exists": true,
+   "verdict": "rail_stall_with_available_descent (FROZEN 1.3 upper-rail hazard: the projected gradient is nonzero AND a probe reduces J, so the stall is the optimizer's first step, not the physics)"
+  },
+  "asymmetric": {
+   "objective": "asymmetric",
+   "beta": 0.0,
+   "w_ratio": null,
+   "J_at_v1": 1.151135900564477e-07,
+   "argmin_step": 7172,
+   "grad_norm": 3.75646091110831e-09,
+   "projected_grad_norm": 2.7185137000082866e-09,
+   "projected_over_full": 0.7236901339687344,
+   "n_design": 105191,
+   "n_components_wanting_decrease": 49187,
+   "n_components_wanting_increase_blocked": 56004,
+   "frac_feasible": 0.46759703776939093,
+   "line_probe": [
+    {
+     "t": 0.5,
+     "J": 1.1381750035277977e-07,
+     "rel_change_vs_v1": -0.011259224067569877,
+     "argmin_step": 7172,
+     "map_mean": 0.9990116696924025,
+     "v_min": 0.9920501504563315
+    },
+    {
+     "t": 2.0,
+     "J": 1.1068379848725263e-07,
+     "rel_change_vs_v1": -0.03848191657494872,
+     "argmin_step": 7171,
+     "map_mean": 0.9960466787696101,
+     "v_min": 0.9682006018253262
+    },
+    {
+     "t": 10.0,
+     "J": 1.1363840020067518e-07,
+     "rel_change_vs_v1": -0.01281507991410167,
+     "argmin_step": 7155,
+     "map_mean": 0.9802333938480501,
+     "v_min": 0.841003009126631
+    },
+    {
+     "t": 50.0,
+     "J": 3.6087790310283616e-07,
+     "rel_change_vs_v1": 2.134972186393233,
+     "argmin_step": 6873,
+     "map_mean": 0.9011669692402502,
+     "v_min": 0.20501504563315442
+    }
+   ],
+   "best_probe": {
+    "t": 2.0,
+    "J": 1.1068379848725263e-07,
+    "rel_change_vs_v1": -0.03848191657494872,
+    "argmin_step": 7171,
+    "map_mean": 0.9960466787696101,
+    "v_min": 0.9682006018253262
+   },
+   "descent_direction_exists": true,
+   "verdict": "rail_stall_with_available_descent (FROZEN 1.3 upper-rail hazard: the projected gradient is nonzero AND a probe reduces J, so the stall is the optimizer's first step, not the physics)"
+  }
+ }
+}

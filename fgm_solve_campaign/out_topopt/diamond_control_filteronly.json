@@ -1,0 +1,463 @@
+{
+  "shape": "diamond",
+  "config": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/outputs_eqs/fgm_calibrated_control/configs/diamond_m0p0500.yaml",
+  "mode": "filteronly",
+  "voltage_v": 2475.4001004308884,
+  "enforce_generator_power": false,
+  "actuator": "conductivity only (eps_covary=False)",
+  "n_part_cells": 1624,
+  "n_grid": 120,
+  "dx_m": 0.0005042016806722678,
+  "filter_radius_m": 0.001,
+  "sigma_cells": 1.9833333333333376,
+  "eta": 0.5,
+  "beta_schedule": [
+    0.0
+  ],
+  "budget_forward_equivalents_total": 40.0,
+  "box": [
+    0.0,
+    1.0
+  ],
+  "chi": {
+    "n_sub": 32,
+    "n_polys": 1,
+    "area_m2": 0.000399951561506954,
+    "construction": "sub-cell area fill by rfam_eqs_coupled._subpixel_fill_fraction, union by np.maximum"
+  },
+  "chi_vs_raster": {
+    "area_raster_m2": 0.00041285219970340904,
+    "area_chi_m2": 0.000399951561506954,
+    "area_rel_delta": 0.03225550151085166,
+    "n_cells_differing_gt_0p01": 112,
+    "max_abs_cell_delta": 0.4541015625,
+    "sum_abs_cell_delta": 50.97265625
+  },
+  "stop_convention": "t_stop = argmin over the arm's own trajectory of J against the area-fill chi; at_horizon flagged; the melted region for IoU is phi >= 0.5",
+  "arms": {
+    "U_uniform": {
+      "t_stop_index": 894,
+      "t_stop_s": 447.5,
+      "t_stop_at_horizon": false,
+      "J": 742.995273510046,
+      "J_per_part_cell": 0.45750940487071795,
+      "J_at_first_step": 1545.3766822814941,
+      "IoU": 0.5780933062880325,
+      "IoU_area": 0.5720371899790075,
+      "bed_melt_pct_of_part": 21.428571428571427,
+      "part_under_melt_pct": 29.80295566502463,
+      "melted_cells": 1488,
+      "part_cells": 1624,
+      "mean_phi_part": 0.7004846907478449,
+      "mean_phi_bed": 0.027329944350933423,
+      "sigma_T_at_stop_c": 28.030797920543044,
+      "mean_T_part_c": 192.88665720323772,
+      "P_abs_W_per_m": 500.00000000000426,
+      "mean_rho_rel_part_at_stop": 0.730850264730591,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "frac_qrf_cap": 0.0,
+      "n_outer": 1197,
+      "sat_mean_in_part": 1.0,
+      "sat_std_in_part": 0.0,
+      "sat_min_in_part": 1.0,
+      "sat_max_in_part": 1.0,
+      "non_discreteness": 0.0,
+      "energy_gate": {
+        "rel_residual": 0.019112474531628718,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.019112474531628718,
+        "rel_residual_max_upto_index": 0.019112474531628718,
+        "rel_residual_max_whole_march": 0.02860468817327813,
+        "index": 894,
+        "energy_in_J_per_m_at_index": 223070.99119249271,
+        "energy_residual_J_per_m_at_index": 4263.438637911691,
+        "PASS_max_upto_index": true
+      },
+      "J_raster_chi": 768.1094184968974,
+      "wall_s": 15.37999616691377,
+      "arm": "U_uniform"
+    },
+    "TO_cont": {
+      "t_stop_index": 1499,
+      "t_stop_s": 750.0,
+      "t_stop_at_horizon": true,
+      "J": 187.94266448278583,
+      "J_per_part_cell": 0.11572824167659226,
+      "J_at_first_step": 1545.3766822814941,
+      "IoU": 0.8499399759903962,
+      "IoU_area": 0.8446585005324534,
+      "bed_melt_pct_of_part": 2.586206896551724,
+      "part_under_melt_pct": 12.807881773399014,
+      "melted_cells": 1458,
+      "part_cells": 1624,
+      "mean_phi_part": 0.8651092534177515,
+      "mean_phi_bed": 0.003924500847483249,
+      "sigma_T_at_stop_c": 10.12388968641946,
+      "mean_T_part_c": 190.0026083605265,
+      "P_abs_W_per_m": 321.47447273107565,
+      "mean_rho_rel_part_at_stop": 0.7969019105641163,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "frac_qrf_cap": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 0.6354303988449329,
+      "sat_std_in_part": 0.3352423043574086,
+      "sat_min_in_part": 0.017632759685647953,
+      "sat_max_in_part": 0.9999621004110382,
+      "non_discreteness": 0.47708481775134814,
+      "energy_gate": {
+        "rel_residual": 0.002633365433936518,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.002633365433936518,
+        "rel_residual_max_upto_index": 0.002633365433936518,
+        "rel_residual_max_whole_march": 0.002633365433936518,
+        "index": 1499,
+        "energy_in_J_per_m_at_index": 240798.17074113578,
+        "energy_residual_J_per_m_at_index": 634.1095793848508,
+        "PASS_max_upto_index": true
+      },
+      "J_raster_chi": 215.73089029803063,
+      "wall_s": 9.762777541996911,
+      "arm": "TO_cont",
+      "beta": 0.0
+    },
+    "TO_4bpp": {
+      "t_stop_index": 1499,
+      "t_stop_s": 750.0,
+      "t_stop_at_horizon": true,
+      "J": 187.52709487752048,
+      "J_per_part_cell": 0.11547234906251261,
+      "J_at_first_step": 1545.3766822814941,
+      "IoU": 0.8501199040767387,
+      "IoU_area": 0.8447697034648475,
+      "bed_melt_pct_of_part": 2.70935960591133,
+      "part_under_melt_pct": 12.68472906403941,
+      "melted_cells": 1462,
+      "part_cells": 1624,
+      "mean_phi_part": 0.8655353858121428,
+      "mean_phi_bed": 0.003965100428562647,
+      "sigma_T_at_stop_c": 10.071964168886625,
+      "mean_T_part_c": 189.91928724279379,
+      "P_abs_W_per_m": 321.5251034846127,
+      "mean_rho_rel_part_at_stop": 0.7961963058708115,
+      "frac_dT_clipped_max": 0.0,
+      "frac_temp_cap_max": 0.0,
+      "frac_qrf_cap": 0.0,
+      "n_outer": 1500,
+      "sat_mean_in_part": 0.6359605911330047,
+      "sat_std_in_part": 0.33935238006504126,
+      "sat_min_in_part": 0.0,
+      "sat_max_in_part": 1.0,
+      "non_discreteness": 0.4654187192118227,
+      "energy_gate": {
+        "rel_residual": 0.002660402029531309,
+        "threshold": 0.05,
+        "PASS": true,
+        "rel_residual_at_index": 0.002660402029531309,
+        "rel_residual_max_upto_index": 0.002660402029531309,
+        "rel_residual_max_whole_march": 0.002660402029531309,
+        "index": 1499,
+        "energy_in_J_per_m_at_index": 240833.92732629867,
+        "energy_residual_J_per_m_at_index": 640.7150690388808,
+        "PASS_max_upto_index": true
+      },
+      "J_raster_chi": 214.8354778593061,
+      "wall_s": 8.761839292012155,
+      "arm": "TO_4bpp",
+      "beta": 0.0,
+      "census_n_levels_used": 16,
+      "census_level_min": 0,
+      "census_level_max": 15,
+      "census_frac_above_single_pass": 0.0
+    }
+  },
+  "cost": {
+    "forward_s": 15.948784708045423,
+    "adjoint_s": 24.54445895901881,
+    "ratio": 1.5277285789018045,
+    "ratio_info": {
+      "source": "out_lib cost.ratio",
+      "value": 1.5277285789018045,
+      "measured_here": 1.5389548111861633
+    },
+    "pool_gradient_evals": 15,
+    "stage_split": [
+      15
+    ]
+  },
+  "stages": [
+    {
+      "beta": 0.0,
+      "n_new_allowed": 15,
+      "stopped_reason": "budget",
+      "n_new_used": 15,
+      "wall_s": 770.3388301250525,
+      "best_J": 187.94266448278583,
+      "best_eval_index": 15,
+      "first_J": 742.995273510046,
+      "best_IoU": 0.8499399759903962,
+      "best_non_discreteness": 0.47708481775134814
+    }
+  ],
+  "rows": [
+    {
+      "eval_index": 1,
+      "beta": 0.0,
+      "J": 742.995273510046,
+      "t_stop_index": 894,
+      "t_stop_s": 447.5,
+      "t_stop_at_horizon": false,
+      "grad_norm": 33.95782317424416,
+      "grad_max_abs": 8.566650410915312,
+      "non_discreteness": 0.0,
+      "IoU": 0.5780933062880325
+    },
+    {
+      "eval_index": 2,
+      "beta": 0.0,
+      "J": 285.46931242116455,
+      "t_stop_index": 1314,
+      "t_stop_s": 657.5,
+      "t_stop_at_horizon": false,
+      "grad_norm": 23.359458748569573,
+      "grad_max_abs": 4.357591879531517,
+      "non_discreteness": 0.4433891898750507,
+      "IoU": 0.7972027972027972
+    },
+    {
+      "eval_index": 3,
+      "beta": 0.0,
+      "J": 236.6278484328316,
+      "t_stop_index": 1489,
+      "t_stop_s": 745.0,
+      "t_stop_at_horizon": false,
+      "grad_norm": 17.66083788786182,
+      "grad_max_abs": 4.204017956259209,
+      "non_discreteness": 0.48566651409675365,
+      "IoU": 0.8221436984687868
+    },
+    {
+      "eval_index": 4,
+      "beta": 0.0,
+      "J": 233.53020777095722,
+      "t_stop_index": 1482,
+      "t_stop_s": 741.5,
+      "t_stop_at_horizon": false,
+      "grad_norm": 18.794975729447156,
+      "grad_max_abs": 4.298628042382841,
+      "non_discreteness": 0.48971125056631093,
+      "IoU": 0.8223529411764706
+    },
+    {
+      "eval_index": 5,
+      "beta": 0.0,
+      "J": 232.31604720267148,
+      "t_stop_index": 1439,
+      "t_stop_s": 720.0,
+      "t_stop_at_horizon": false,
+      "grad_norm": 15.135381445054115,
+      "grad_max_abs": 3.26495769584825,
+      "non_discreteness": 0.493654841104277,
+      "IoU": 0.8229043683589138
+    },
+    {
+      "eval_index": 6,
+      "beta": 0.0,
+      "J": 377.1139917497277,
+      "t_stop_index": 1188,
+      "t_stop_s": 594.5,
+      "t_stop_at_horizon": false,
+      "grad_norm": 43.61276987009601,
+      "grad_max_abs": 8.257290089166323,
+      "non_discreteness": 0.5160993465167221,
+      "IoU": 0.7531003382187148
+    },
+    {
+      "eval_index": 7,
+      "beta": 0.0,
+      "J": 232.4864918797841,
+      "t_stop_index": 1423,
+      "t_stop_s": 712.0,
+      "t_stop_at_horizon": false,
+      "grad_norm": 26.54072143086204,
+      "grad_max_abs": 6.4894084860757175,
+      "non_discreteness": 0.4963608660437437,
+      "IoU": 0.8254716981132075
+    },
+    {
+      "eval_index": 8,
+      "beta": 0.0,
+      "J": 232.2975493697462,
+      "t_stop_index": 1436,
+      "t_stop_s": 718.5,
+      "t_stop_at_horizon": false,
+      "grad_norm": 14.412887433291319,
+      "grad_max_abs": 2.422348521020802,
+      "non_discreteness": 0.4941312535124423,
+      "IoU": 0.8252656434474617
+    },
+    {
+      "eval_index": 9,
+      "beta": 0.0,
+      "J": 228.89706351673343,
+      "t_stop_index": 1437,
+      "t_stop_s": 719.0,
+      "t_stop_at_horizon": false,
+      "grad_norm": 18.960599821989,
+      "grad_max_abs": 5.0033881307504275,
+      "non_discreteness": 0.4952715382725312,
+      "IoU": 0.8266509433962265
+    },
+    {
+      "eval_index": 10,
+      "beta": 0.0,
+      "J": 225.56663554668327,
+      "t_stop_index": 1428,
+      "t_stop_s": 714.5,
+      "t_stop_at_horizon": false,
+      "grad_norm": 13.33171440954424,
+      "grad_max_abs": 3.0508798637590075,
+      "non_discreteness": 0.4970880702105198,
+      "IoU": 0.8276269185360094
+    },
+    {
+      "eval_index": 11,
+      "beta": 0.0,
+      "J": 238.99476861415667,
+      "t_stop_index": 1335,
+      "t_stop_s": 668.0,
+      "t_stop_at_horizon": false,
+      "grad_norm": 53.214893472760416,
+      "grad_max_abs": 12.357994664555164,
+      "non_discreteness": 0.49046231161570125,
+      "IoU": 0.8273381294964028
+    },
+    {
+      "eval_index": 12,
+      "beta": 0.0,
+      "J": 220.86230886455746,
+      "t_stop_index": 1369,
+      "t_stop_s": 685.0,
+      "t_stop_at_horizon": false,
+      "grad_norm": 26.9437711372705,
+      "grad_max_abs": 5.062091672675594,
+      "non_discreteness": 0.5016731837716454,
+      "IoU": 0.8333333333333334
+    },
+    {
+      "eval_index": 13,
+      "beta": 0.0,
+      "J": 216.1495869596643,
+      "t_stop_index": 1386,
+      "t_stop_s": 693.5,
+      "t_stop_at_horizon": false,
+      "grad_norm": 20.013510370442887,
+      "grad_max_abs": 3.1698454372767038,
+      "non_discreteness": 0.49762299431619367,
+      "IoU": 0.8309352517985612
+    },
+    {
+      "eval_index": 14,
+      "beta": 0.0,
+      "J": 193.8803084374961,
+      "t_stop_index": 1487,
+      "t_stop_s": 744.0,
+      "t_stop_at_horizon": false,
+      "grad_norm": 15.438636746261167,
+      "grad_max_abs": 3.4045419143255984,
+      "non_discreteness": 0.4790424324899646,
+      "IoU": 0.8448687350835322
+    },
+    {
+      "eval_index": 15,
+      "beta": 0.0,
+      "J": 187.94266448278583,
+      "t_stop_index": 1499,
+      "t_stop_s": 750.0,
+      "t_stop_at_horizon": true,
+      "grad_norm": 15.715337937523953,
+      "grad_max_abs": 3.7357514960527287,
+      "non_discreteness": 0.47708481775134814,
+      "IoU": 0.8499399759903962
+    }
+  ],
+  "n_evals_used_total": 15,
+  "spent_forward_equivalents": 37.91592868352707,
+  "best_any_stage": {
+    "eval_index": 15,
+    "beta": 0.0,
+    "J": 187.94266448278583,
+    "IoU": 0.8499399759903962,
+    "is_final_stage": true
+  },
+  "reference_note": "Reference J values were computed against the BINARY RASTER target and are NOT comparable to this pass's J. Compare on IoU, and on this pass's J_raster_chi, which is the same map scored under the old target.",
+  "references": {
+    "library": {
+      "source": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_lib/diamond.json",
+      "arms": {
+        "U_uniform": {
+          "J": 768.1094184968974,
+          "IoU": 0.5903257650542941,
+          "P_abs_W_per_m": 500.00000000000426,
+          "t_stop_s": 473.5
+        },
+        "HIST_best": {
+          "J": 355.07007624538176,
+          "IoU": 0.7792792792792793,
+          "P_abs_W_per_m": 433.10266177424734,
+          "t_stop_s": 537.0
+        },
+        "A1_cont": {
+          "J": 211.79365526207604,
+          "IoU": 0.8535414165666266,
+          "P_abs_W_per_m": 319.4493344452653,
+          "t_stop_s": 750.0
+        },
+        "A1_4bpp": {
+          "J": 211.15549680949186,
+          "IoU": 0.851985559566787,
+          "P_abs_W_per_m": 318.52139953155495,
+          "t_stop_s": 750.0
+        },
+        "A1_2bpp": {
+          "J": 226.66861206352422,
+          "IoU": 0.8405797101449275,
+          "P_abs_W_per_m": 312.992121792085,
+          "t_stop_s": 750.0
+        }
+      }
+    },
+    "multistart": {
+      "source": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_ms/diamond.json",
+      "arms": {
+        "U_uniform": {
+          "J": 768.1094184968974,
+          "IoU": 0.5903257650542941,
+          "P_abs_W_per_m": 500.00000000000426,
+          "t_stop_s": 473.5
+        },
+        "MS_cont": {
+          "J": 266.8208727379423,
+          "IoU": 0.8177399756986634,
+          "P_abs_W_per_m": 312.9480290789018,
+          "t_stop_s": 750.0
+        },
+        "MS_4bpp": {
+          "J": 272.1060827290481,
+          "IoU": 0.8160779537149817,
+          "P_abs_W_per_m": 311.17918876112776,
+          "t_stop_s": 750.0
+        }
+      }
+    }
+  },
+  "energy_gate_violations": [],
+  "stop_at_horizon_arms": [
+    "TO_cont",
+    "TO_4bpp"
+  ],
+  "wall_s": 845.154670916032
+}

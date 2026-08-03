@@ -1,0 +1,175 @@
+{
+ "generated": "2026-08-01",
+ "engine_version_floor": "2.0.0",
+ "sources": {
+  "v_cal": "outputs_eqs/geometry_dual_readstate/<shape>.json",
+  "quick_look": "FGM_WINDOW_RESELECTION.md winners table",
+  "solve_census": "fgm_solve_campaign/out_lib/<shape>.json",
+  "upgrades": [
+   "fgm_solve_campaign/out_dwell/cross_deliverable_moves_engine_program_gate.json",
+   "fgm_solve_campaign/out_rot/star_headline.json"
+  ]
+ },
+ "standard_parameters": {
+  "grid_nx": 120,
+  "grid_ny": 120,
+  "enforce_generator_power": false,
+  "proxy_field": "T_phi90",
+  "bpp": 4,
+  "note": "HEATR_STANDARD_PARAMETERS.md section 4: voltage drive for FGM comparisons, grid 120, T_phi90 proxy, 4 bpp."
+ },
+ "shapes": {
+  "square": {
+   "v_cal_v": 2428.1732217858744,
+   "quick_look_gain": 0.9033,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "MATCHED",
+   "solve_iou_4bpp": 0.9815950920245399,
+   "actuator_note": null
+  },
+  "circle": {
+   "v_cal_v": 3399.6347837415706,
+   "quick_look_gain": 0.6402,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "SOLVED",
+   "solve_iou_4bpp": 0.9903846153846154,
+   "actuator_note": null
+  },
+  "ellipse": {
+   "v_cal_v": 4900.005354090797,
+   "quick_look_gain": 0.6713,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "SOLVED",
+   "solve_iou_4bpp": 0.9787234042553191,
+   "actuator_note": null
+  },
+  "rectangle": {
+   "v_cal_v": 3316.222846710766,
+   "quick_look_gain": 0.85,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "NOT-RESCUED",
+   "solve_iou_4bpp": 0.8424242424242424,
+   "actuator_note": "Solve stall is actuator-limited in the deployable conductivity channel; the permittivity channel fixes it but is model-only pending the material measurement (EPS_CHANNEL_REPORT)."
+  },
+  "rounded_rect": {
+   "v_cal_v": 2876.6942287638985,
+   "quick_look_gain": 0.7,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "MATCHED",
+   "solve_iou_4bpp": 0.9973958333333334,
+   "actuator_note": null
+  },
+  "diamond": {
+   "v_cal_v": 2475.4001004308884,
+   "quick_look_gain": 2.1208,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "IMPROVED",
+   "solve_iou_4bpp": 0.851985559566787,
+   "actuator_note": null
+  },
+  "hexagon": {
+   "v_cal_v": 3688.206059132116,
+   "quick_look_gain": 0.8327,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "SOLVED",
+   "solve_iou_4bpp": 0.9766536964980544,
+   "actuator_note": null
+  },
+  "octagon": {
+   "v_cal_v": 4233.541982837034,
+   "quick_look_gain": 0.4513,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "SOLVED",
+   "solve_iou_4bpp": 0.9944237918215614,
+   "actuator_note": null
+  },
+  "pentagon": {
+   "v_cal_v": 3669.744606838706,
+   "quick_look_gain": 0.3424,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "IMPROVED",
+   "solve_iou_4bpp": 0.9386892177589852,
+   "actuator_note": null
+  },
+  "triangle": {
+   "v_cal_v": 3005.544909894063,
+   "quick_look_gain": 1.2164,
+   "quick_look_verdict": "neutral",
+   "solve_class": "IMPROVED",
+   "solve_iou_4bpp": 0.8578088578088578,
+   "actuator_note": null
+  },
+  "equilateral_triangle": {
+   "v_cal_v": 3891.438334040551,
+   "quick_look_gain": 1.2164,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "IMPROVED",
+   "solve_iou_4bpp": 0.8128342245989305,
+   "actuator_note": null
+  },
+  "trapezoid": {
+   "v_cal_v": 2635.8294144288316,
+   "quick_look_gain": 0.2045,
+   "quick_look_verdict": "HARMFUL",
+   "solve_class": "SOLVED",
+   "solve_iou_4bpp": 0.9717842323651452,
+   "actuator_note": null
+  },
+  "cross": {
+   "v_cal_v": 2815.3798396110424,
+   "quick_look_gain": 1.1855,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "NOT-RESCUED",
+   "solve_iou_4bpp": 0.6754966887417219,
+   "actuator_note": "Turntable dwell upgrade: solved map + dwell program reaches IoU 0.9829 at grid 120, engine-verified (program JSON fgm_solve_campaign/out_dwell/cross_turntable_deliverable.json, commits 2cc1548 + 2408329)."
+  },
+  "star": {
+   "v_cal_v": 3223.45363052456,
+   "quick_look_gain": 0.85,
+   "quick_look_verdict": "neutral",
+   "solve_class": "IMPROVED",
+   "solve_iou_4bpp": 0.7031802120141343,
+   "actuator_note": "Rotation upgrade: turntable rotation alone reaches IoU 0.953 at grid 120; the dopant map is inert for this shape (CONTINUOUS_ROTATION_REPORT, commit b1cb582)."
+  },
+  "star6": {
+   "v_cal_v": 3468.0906581066424,
+   "quick_look_gain": 0.9089,
+   "quick_look_verdict": "BETTER",
+   "solve_class": "NOT-RESCUED",
+   "solve_iou_4bpp": 0.8407643312101911,
+   "actuator_note": null
+  },
+  "H_shape": {
+   "v_cal_v": 2329.588297275719,
+   "quick_look_gain": 0.5,
+   "quick_look_verdict": "HARMFUL",
+   "solve_class": "IMPROVED",
+   "solve_iou_4bpp": 0.8422712933753943,
+   "actuator_note": null
+  },
+  "L_shape": {
+   "v_cal_v": 1804.2151285366901,
+   "quick_look_gain": 0.111,
+   "quick_look_verdict": "HARMFUL",
+   "solve_class": "IMPROVED",
+   "solve_iou_4bpp": 0.5209059233449478,
+   "actuator_note": "Geometry-limited: rotational actuation exhausted; best is a static 135-degree orientation (DWELL_SCHEDULE_REPORT)."
+  },
+  "T_shape": {
+   "v_cal_v": 1718.975593945065,
+   "quick_look_gain": 0.111,
+   "quick_look_verdict": "HARMFUL",
+   "solve_class": "IMPROVED",
+   "solve_iou_4bpp": 0.4444444444444444,
+   "actuator_note": "Geometry-limited: best known IoU 0.644 via an unequal dwell program (DWELL_SCHEDULE_REPORT); honest partial, no full rescue."
+  },
+  "gt_logo": {
+   "v_cal_v": 3717.1521089101984,
+   "quick_look_gain": null,
+   "quick_look_verdict": null,
+   "solve_class": null,
+   "solve_iou_4bpp": null,
+   "actuator_note": null
+  }
+ }
+}

@@ -1,0 +1,6 @@
+# The spike environment is machine-local and ~GB-scale; never committed.
+env/
+mm/
+__pycache__/
+*.npz
+setup_env.log

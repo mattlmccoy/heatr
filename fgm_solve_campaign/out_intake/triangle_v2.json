@@ -1,0 +1,95 @@
+{
+  "shape": "triangle",
+  "grid": 120,
+  "is_novel": false,
+  "voltage_v": 3005.544909894248,
+  "n_part_cells": 800,
+  "symmetry": {
+    "rotational_order": 1,
+    "continuous_rotational": false,
+    "mirror_axes_deg": [
+      90.0
+    ],
+    "point_group": "C1v",
+    "centroid_row_col": [
+      52.88628929257859,
+      59.5
+    ],
+    "diagnostics": {
+      "tested_orders": {
+        "2": 0.33253751569074225,
+        "3": 0.10417469722911878,
+        "4": 0.33253751569074225,
+        "5": 0.32713053253352725,
+        "6": 0.3363143253369089,
+        "7": 0.33038906376938276,
+        "8": 0.33253751569074225,
+        "9": 0.3099369394286549,
+        "10": 0.33253751569074225,
+        "11": 0.33459232928463656,
+        "12": 0.3363143253369089
+      },
+      "tested_orders_generator_only": {
+        "2": 0.33253751569074225,
+        "3": 0.1041746972291186,
+        "4": 0.2736316460318704,
+        "5": 0.32713053253352725,
+        "6": 0.3363143253369089,
+        "7": 0.3303890637689254,
+        "8": 0.3203954776190917,
+        "9": 0.30766822155614054,
+        "10": 0.2946967874633829,
+        "11": 0.2822287960384145,
+        "12": 0.26985633170920964
+      },
+      "acceptance_rule": "whole cyclic group: max over k = 1 .. N-1 of mismatch(k * 360 / N) < tol",
+      "generic_angle_mismatch": {
+        "17.0": 0.18983295460824126,
+        "23.0": 0.23159995796408428,
+        "41.0": 0.3106090066633472
+      },
+      "mirror_min_mismatch": 1.8136923821218505e-16,
+      "tol": 0.03
+    }
+  },
+  "modes": [
+    "static",
+    "continuous"
+  ],
+  "residual": {
+    "uniform": {
+      "static": 0.6691318557395489,
+      "continuous": 0.6240851964358823
+    },
+    "prop_inverse": {
+      "static": 0.5713129304249238,
+      "continuous": 0.5809727790624177
+    },
+    "solved": {
+      "static": 0.6632797353862684,
+      "continuous": 0.608148218876789
+    }
+  },
+  "prop_inverse_magnitude": 1.0,
+  "prop_inverse_magnitude_sensitivity": {
+    "0.50": {
+      "static": 0.5859596767121537,
+      "continuous": 0.5838071154595794
+    },
+    "1.00": {
+      "static": 0.5713129304249238,
+      "continuous": 0.5809727790624177
+    },
+    "1.50": {
+      "static": 0.5856931393363525,
+      "continuous": 0.5900810005233584
+    }
+  },
+  "solved_map_provenance": {
+    "path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_lib/triangle_maps.npz",
+    "key": "A1_cont",
+    "note": "the shape-fidelity campaign's solved static map, solved against the BINARY RASTER target, not the area fill"
+  },
+  "ground_truth": null,
+  "wall_s": 32.18545591714792
+}

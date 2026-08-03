@@ -1,0 +1,1150 @@
+"""S1 numerical-integrity tests for heatr3d (spec: docs/superpowers/specs/
+2026-07-30-heatr3d-graduation-design.md, Gate S1)."""
+import dataclasses
+
+import numpy as np
+import pytest
+
+from heatr3d import Grid, Params, make_geometry, run
+
+
+def small_sphere_case(n=32):
+    grid = Grid(n=n, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = Params()
+    return grid, part, p
+
+
+def test_energy_audit_fields_present_and_small_on_benign_run():
+    grid, part, p = small_sphere_case()
+    res = run(grid, part, p, max_time_s=30.0, verbose=False)
+    # new provenance fields
+    assert hasattr(res, "energy_in_j")
+    assert hasattr(res, "energy_stored_j")
+    assert hasattr(res, "energy_loss_j")
+    assert hasattr(res, "energy_residual_frac")
+    assert res.energy_in_j > 0
+    # benign pre-melt run must conserve energy to a few percent
+    assert abs(res.energy_residual_frac) < 0.05
+
+
+def spike_case(n=32, spike_mult=400.0):
+    """Uniform mild heating plus one interior hot column whose raw per-step dT
+    exceeds the full melt window (dt_pc_c), forcing a window-crossing step."""
+    grid, part, p = small_sphere_case(n)
+    q = np.zeros((n, n, n))
+    q[part] = p.power_density_w_per_m3
+    ii = np.argwhere(part)
+    c = ii[len(ii) // 2]
+    q[c[0], c[1], c[2]] *= spike_mult
+    return grid, part, p, q
+
+
+def test_legacy_phase_update_skips_latent_on_window_crossing():
+    """Legacy failure signature, calibrated at spike_mult=400.0 (n=32, 120 s).
+
+    Measured (2026-07-30, ./.venv312): clamp_bound=True,
+    energy_in=1287.9 J, stored=899.3 J, loss=0.023 J,
+    energy_residual_frac=+0.3017. The spiked voxel (16, 11, 13) jumps
+    phi 0.0000 -> 0.8000 in ONE step (T 173.00 -> 183.00 C) with
+    dphi/dT = 0.0000 1/C at the step start: the pointwise apparent-cp latent
+    sink is entirely absent for the window-crossing step. Sweep for context:
+    mult=1 resid=+0.0000 clamp=False; 50 +0.0051 False; 100 +0.0213 True;
+    200 +0.1333 True; 400 +0.3017 True; 1000 +0.5598 True.
+
+    HONESTY NOTE (see docs/superpowers/plans/s1-findings.md): the latent skip
+    itself is worth only ~0.3 J here (one voxel: rho*L*dV); the ~389 J surplus
+    is dominated by the spiked voxel saturating at temp_max=600 C while RF keeps
+    depositing. So the residual assertion pins "the run went non-physical", and
+    the phi-jump measurement above is what pins the latent-skip mechanism.
+    This test is inverted into the regression test once the enthalpy update lands.
+    """
+    grid, part, p, q = spike_case()
+    res = run(grid, part, p, qrf_override=q, max_time_s=120.0)
+    assert res.clamp_bound is True
+    assert res.energy_residual_frac > 0.10
+
+
+def test_enthalpy_roundtrip_and_window_crossing():
+    from heatr3d import enthalpy_from_T, T_from_enthalpy
+    p = Params()
+    rho_cp = p.rho_solid * p.cp_solid          # J/(m^3 K), sensible slope
+    rho_L = p.rho_solid * p.latent_j_per_kg    # J/m^3, latent plateau
+    Ts = np.array([25.0, 175.0, 180.0, 185.0, 190.0, 250.0])
+    H = enthalpy_from_T(Ts, rho_cp, rho_L, p)
+    Tb = T_from_enthalpy(H, rho_cp, rho_L, p)
+    assert np.allclose(Tb, Ts, atol=1e-9)
+    # depositing exactly the latent plateau plus 20 C sensible from the window
+    # start lands 20 C above the window end, never skipping the latent barrier
+    H0 = enthalpy_from_T(np.array([p.t_pc_c - p.dt_pc_c / 2]), rho_cp, rho_L, p)
+    H1 = H0 + rho_L + rho_cp * (p.dt_pc_c + 20.0)
+    T1 = T_from_enthalpy(H1, rho_cp, rho_L, p)
+    assert np.allclose(T1, p.t_pc_c + p.dt_pc_c / 2 + 20.0, atol=1e-9)
+
+
+def bulk_crossing_case(n=32, mult=130.0):
+    """Uniform heating of the WHOLE part, sized so every part voxel takes a
+    melt-window-crossing step, with no numerical limiter binding.
+
+    raw source dT/step = mult * 0.06920 C = 9.00 C at mult=130: below
+    max_dt_step_c = 10.0 (so THM-01 never binds) yet large enough that a voxel
+    sitting below the window start (175 C) lands well inside the window in one
+    step with dphi/dT = 0 at the step start -- the exact mechanism traced in
+    docs/superpowers/plans/s1-findings.md section 2 (173.00 -> 183.00 C).
+
+    Applying it to all 624 part voxels (instead of the single spiked voxel of
+    spike_case) makes the skipped latent heat GLOBALLY measurable: the part's
+    full latent budget is rho_s_eff * L * V_part = 188.3 J against ~851 J of
+    RF input over 1.0 s. In spike_case the skipped latent is ~0.3 J and is
+    invisible next to clamp artifacts (Task-3 honesty note).
+    """
+    grid, part, p = small_sphere_case(n)
+    q = np.zeros((n, n, n))
+    q[part] = p.power_density_w_per_m3 * mult
+    return grid, part, p, q
+
+
+def test_enthalpy_update_conserves_energy_on_window_crossing():
+    """The S1 fix heals the latent-skip energy error on a window-crossing run.
+
+    DEVIATION from the plan's spike_case(200)/60 s version, with measurements
+    (2026-07-30, ./.venv312, n=32): that case cannot isolate the phase
+    mechanism at ANY (spike_mult, max_time_s). A single spiked voxel needs
+    mult >= ~145 to cross the window, and its steady state sits
+    mult*q1/(6*k_s_eff/h^2) = 974 C (mult=150) above its neighbours, so it
+    always drives into the temp_max_c = 600 C clamp; and below saturation the
+    skipped latent (~0.3 J) is far smaller than the clamp/audit error.
+    Measured spike sweep (resid apparent_cp -> enthalpy): mult=100 t=3 s
+    +0.0268 -> +0.0240; mult=150 t=10 s +0.0617 -> +0.0620; mult=200 t=60 s
+    +0.1258 -> +0.1239 (T_max=600 C, clamp_bound both). The residual there is
+    dominated by the clamps, not by latent, so it cannot show the fix.
+
+    bulk_crossing_case makes the same mechanism global and limiter-free.
+    Measured at mult=130, t_end=1.0 s: apparent_cp residual = -0.0711 (the
+    latent-skip signature: the audit books 126 J of latent from the phi jump
+    that the solver never paid, so stored > in), enthalpy = +0.0045, both with
+    clamp_bound False and T_max ~180 C. That is the fix, isolated.
+    """
+    grid, part, p0, q = bulk_crossing_case()
+    p = dataclasses.replace(p0, phase_update="enthalpy")   # Params is frozen
+    res = run(grid, part, p, qrf_override=q, max_time_s=1.0, phi_target=2.0)
+    assert res.clamp_bound is False             # no limiter is hiding anything
+    assert res.T_max_c < p.temp_max_c - 1.0     # no temp-clamp saturation
+    assert abs(res.energy_residual_frac) < 0.05
+    # the part really did cross into the melt window; it pays the latent toll
+    # now, so it sits mid-window instead of being snapped past it
+    assert res.phi_final.max() > 0.4
+    assert 175.0 < res.T_max_c < 185.0
+
+    # differential control: the legacy scheme on the IDENTICAL case books the
+    # latent-skip surplus the fix removes (this is what makes the assertion
+    # above discriminating rather than vacuous).
+    res_legacy = run(grid, part, p0, qrf_override=q, max_time_s=1.0,
+                     phi_target=2.0)
+    assert res_legacy.energy_residual_frac < -0.05
+    assert res_legacy.phi_final.max() > res.phi_final.max()
+
+
+def test_audit_stays_tight_through_melt_both_schemes():
+    """Healthy uniform molten run: the audit must stay tight ABOVE the window.
+
+    Task-4 finding 2: the v1 audit booked the whole run with initial-state
+    solid properties (cp_solid, rho_s_eff at t=0) while the solver blends to
+    cp_liquid=3279 / rho_liquid=1010, so it drifted to +0.3795 (both schemes)
+    at t_end=3.0 s on this healthy, limiter-free case -- the standing gate was
+    unusable exactly where the instability lives.
+
+    Measured after the v2 per-step banking (2026-07-30, ./.venv312, n=32,
+    bulk_crossing_case mult=130, phi_target=2.0, clamp_bound False both arms):
+        t=3.0 s  apparent_cp  in=2553.131 stored=2553.246 resid=-4.5e-05
+        t=3.0 s  enthalpy     in=2553.131 stored=2553.131 resid=-1.5e-16
+    The enthalpy arm is exact by construction: its update deposits num*dt into
+    the SAME H(T) the audit books (rho*cp sensible slope + rho_s_eff*L across
+    the window, and phase_fraction's phi IS the enthalpy ramp fraction).
+
+    This upgrade does NOT mask the legacy scheme defect: on the same case at
+    t=1.0 s (mid-window, phi_mean 0.669) the legacy arm still books
+    resid=-0.0802 (stored 919.3 > in 851.0) against the enthalpy arm's
+    +2e-16 -- see test_enthalpy_update_conserves_energy_on_window_crossing,
+    whose differential control asserts exactly that. The legacy residual
+    happens to cancel to ~1e-4 once the part is FULLY molten (its skipped
+    latent is offset by paying the resolved part of the latent at the blended
+    liquid density rho ~ 740-1010 instead of rho_s_eff = 473.5), which is why
+    this test's window-crossing sibling is the discriminating one.
+    """
+    grid, part, p, q = bulk_crossing_case()
+    for scheme in ("apparent_cp", "enthalpy"):
+        pp = dataclasses.replace(p, phase_update=scheme)
+        res = run(grid, part, pp, qrf_override=q, max_time_s=3.0,
+                  phi_target=2.0)
+        assert abs(res.energy_residual_frac) < 0.02, scheme
+
+
+def test_adiabatic_uniform_heating_matches_analytic_plateau():
+    """Whole domain = part, uniform q, conv off: T(t) is analytic including
+    the latent plateau. Exact for the enthalpy scheme by construction; this
+    pins the wiring (property maps, dt, source bookkeeping).
+
+    Sizing (deviation from the plan's q=2.0e5 / t_end=200 s, which deposits
+    only 4.0e7 J/m^3 and lands at 56.8 C -- entirely BELOW the melt window, so
+    it would never touch the latent plateau it is named for): q=2.0e6 W/m^3 for
+    100.0 s deposits 2.0e8 J/m^3 and lands MID-PLATEAU at T_exact = 178.48 C
+    (phi ~ 0.35), which is what the plan's step-3 note asks for.
+
+    Two arms, both measured 2026-07-30 (./.venv312, n=16, dt=0.05, 2000 steps,
+    clamp_bound False, energy residual ~1e-14 in both):
+      * default property blending: T_num = 178.312174 vs T_exact = 178.482866,
+        err = 1.71e-01 C  (< the plan's 0.5 C bound). The gap is NOT a wiring
+        error: once phi > 0 the solver blends rho -> rho_liquid and
+        cp -> cp_liquid, while the closed-form H(T) above assumes the fixed
+        solid slope rho_s*cp_solid. That is a property-model difference and it
+        is what this arm measures.
+      * constant properties (cp_liquid=cp_solid, k_liquid=k_solid,
+        rho_liquid=rho_s -- the plan's step-3 escape hatch, and exactly the
+        assumption the analytic solution makes): T_num = T_exact to
+        err = 3.13e-13 C, i.e. machine precision. This is the real wiring gate.
+    """
+    from heatr3d import T_from_enthalpy, enthalpy_from_T
+    n = 16
+    grid = Grid(n=n, L=0.060)
+    part = np.ones((n, n, n), dtype=bool)
+    p = dataclasses.replace(Params(), phase_update="enthalpy", conv_h=0.0)
+    q_val = 2.0e6                                # W/m^3, uniform
+    q = np.full((n, n, n), q_val)
+    t_end = 100.0                                # lands mid-plateau (see above)
+    # analytic: uniform state, no gradients -> pure source integration
+    rho_s = p.rho_powder + p.rho_rel * (p.rho_solid - p.rho_powder)
+    rho_cp = rho_s * p.cp_solid
+    rho_L = rho_s * p.latent_j_per_kg
+    H_end = enthalpy_from_T(np.array([p.preheat_c]), rho_cp, rho_L, p) \
+        + q_val * t_end
+    T_exact = float(T_from_enthalpy(H_end, rho_cp, rho_L, p)[0])
+    assert p.t_pc_c - p.dt_pc_c / 2 < T_exact < p.t_pc_c + p.dt_pc_c / 2
+
+    res = run(grid, part, p, qrf_override=q, max_time_s=t_end,
+              phi_target=2.0)                    # never stop early
+    assert abs(float(res.T_final.mean()) - T_exact) < 0.5
+    assert float(res.T_final.std()) < 1e-6
+
+    # constant-property arm: the analytic solution's own assumptions
+    p_const = dataclasses.replace(p, cp_liquid=p.cp_solid, k_liquid=p.k_solid,
+                                  rho_liquid=rho_s)
+    res_c = run(grid, part, p_const, qrf_override=q, max_time_s=t_end,
+                phi_target=2.0)
+    assert abs(float(res_c.T_final.mean()) - T_exact) < 0.05
+    assert float(res_c.T_final.std()) < 1e-6
+    assert res_c.clamp_bound is False
+    assert abs(res_c.energy_residual_frac) < 1e-9
+
+
+def test_conduction_decay_matches_fourier_mode():
+    """No source, no convection, uniform powder medium, initial condition =
+    lowest cosine Fourier mode compatible with Neumann walls. The mode decays
+    as exp(-alpha k^2 t) exactly; second-order spatial accuracy expected.
+
+    Three nested references, all measured 2026-07-30 (./.venv312, n=24,
+    L=0.060, t_end=400 s, 8000 forward-Euler steps of dt=0.05,
+    alpha = k_powder/(rho_powder*cp_powder) = 3.7504e-07 m^2/s):
+
+      continuous  amp_exact = 5 exp(-alpha k^2 t)      rel err -1.566e-03
+      semi-disc.  amp0 exp(-lambda_d t)                rel err -1.054e-05
+      fully disc. amp0 (1 - lambda_d dt)^nsteps        rel err +2.741e-13
+
+    with the discrete decay rate lambda_d = alpha (2/h^2)(1 - cos(k h)) (the
+    plan's step-4 documented form) and amp0 = 5 cos(pi/2n): the cell-centred
+    grid never samples the mode's true peak, so the observed (max-min)/2 starts
+    at 5 cos(pi/48) = 4.98929, not 5. That sampling factor (-2.14e-03) is why
+    the raw discrete-rate comparison looks WORSE than the continuous one --
+    the two errors partially cancel in the continuous form. Once both discrete
+    effects are accounted for, the solver reproduces the analytic mode to
+    2.7e-13: the discrete Laplacian eigenvalue, the zero-flux (Neumann) wall
+    treatment, the harmonic face averaging on a uniform k, the uniform property
+    maps and the explicit time integrator are all exactly as intended.
+
+    Spatial convergence (documented, not asserted -- n=48 doubles runtime):
+    the continuous-reference error is -1.566e-03 at n=24 and -3.992e-04 at
+    n=48, ratio 3.92 ~ 4, i.e. second order in h as expected.
+    """
+    n = 24
+    grid = Grid(n=n, L=0.060)
+    part = np.zeros((n, n, n), dtype=bool)     # all powder, no part
+    p = dataclasses.replace(Params(), conv_h=0.0)
+    q = np.zeros((n, n, n))
+    kx = np.pi / grid.L
+    x = grid.x.reshape(-1, 1, 1)
+    T0 = p.preheat_c + 5.0 * np.cos(kx * (x + grid.L / 2.0)) * np.ones((n, n, n))
+    t_end = 400.0
+    res = run(grid, part, p, qrf_override=q, max_time_s=t_end, phi_target=2.0,
+              T0_override=T0)
+    alpha = p.k_powder / (p.rho_powder * p.cp_powder)
+    decay = np.exp(-alpha * kx ** 2 * t_end)
+    amp_num = float((res.T_final.max() - res.T_final.min()) / 2.0)
+    amp_exact = 5.0 * decay
+    assert abs(amp_num - amp_exact) / amp_exact < 0.05
+    # discrete references (see docstring): grid sampling factor + discrete rate
+    amp0 = 5.0 * np.cos(np.pi / (2 * n))
+    lam_d = alpha * (2.0 / grid.h ** 2) * (1.0 - np.cos(kx * grid.h))
+    amp_semi = amp0 * np.exp(-lam_d * t_end)
+    assert abs(amp_num - amp_semi) / amp_semi < 1e-4
+    amp_full = amp0 * (1.0 - lam_d * p.dt_s) ** int(t_end / p.dt_s)
+    assert abs(amp_num - amp_full) / amp_full < 1e-9
+    # the mean is conserved exactly: zero-flux walls, no source, no sinks
+    assert abs(float(res.T_final.mean()) - p.preheat_c) < 1e-9
+
+
+def test_eqs_uniform_medium_is_parallel_plate():
+    """Characterization: on a uniform medium the EQS solve must reproduce the
+    parallel-plate field exactly (V linear in y, constant in x and z).
+
+    Result: PASS on BOTH solver paths (measured 2026-07-30, ./.venv312):
+      n=24 (N=13824 <= 50000 -> direct spsolve)
+          max|V(y) - linspace(v_lo, v_hi, n)| = 1.25e-11 V (1.4e-14 relative)
+          max transverse std = 9.46e-13 V,  max|Im V| = 8.3e-17 V
+      n=40 (N=64000  > 50000 -> ILU-preconditioned BiCGSTAB)
+          max|V(y) - linear| = 3.14e-06 V (3.7e-09 relative)
+          max transverse std = 4.84e-06 V,  max|Im V| = 2.0e-16 V
+    The n=40 arm matters because every production grid n >= 37 takes the
+    iterative branch; its error floor is set by the solver's own rtol=1e-8, so
+    it is asserted at 1e-6 relative, not at the direct path's 1e-9.
+
+    FINDING (documented, not a failure -- see docs/superpowers/plans/
+    s1-findings.md section 6): the Dirichlet rows sit at the CELL CENTRES of
+    the first/last y layers, so the effective plate gap is (n-1)h, not L. The
+    measured uniform field is |E_y| = v_lo/((n-1)h) = 14956.521739 V/m at n=24
+    (ptp 2.6e-09), matching that to 13 digits and exceeding the nominal
+    v_lo/L = 14333.33 V/m by L/(L-h) = 4.3%. The bias is grid dependent
+    (0.5% at n=200), but it is a UNIFORM scale factor on E, and
+    compute_qrf_3d renormalizes Q to a fixed total absorbed power, so it
+    cancels out of Qrf on a uniform medium. It is not corrected here.
+    """
+    from heatr3d import build_gamma, solve_eqs_3d
+    for n, tol_lin, tol_std in ((24, 1e-6, 1e-9), (40, 1e-6, 1e-7)):
+        grid = Grid(n=n, L=0.060)
+        part = np.zeros((n, n, n), dtype=bool)      # uniform virgin bed
+        p = Params()
+        gamma = build_gamma(part, p, None, h=grid.h)
+        V = solve_eqs_3d(gamma, grid, p)
+        Vr = np.real(V)
+        # linear in y between the plates, uniform in x and z
+        y_prof = Vr.mean(axis=(0, 2))
+        y_lin = np.linspace(p.v_lo, p.v_hi, n)
+        assert np.max(np.abs(y_prof - y_lin)) < tol_lin * abs(p.v_lo), n
+        assert float(Vr.std(axis=(0, 2)).max()) < tol_std * abs(p.v_lo), n
+        # uniform medium -> no phase lag anywhere
+        assert float(np.max(np.abs(np.imag(V)))) < 1e-12 * abs(p.v_lo), n
+        # uniform E_y at the cell-centre plate gap (n-1)h (see FINDING above)
+        Ey = -np.gradient(Vr, grid.h, edge_order=1)[1]
+        assert abs(float(Ey.mean()) - p.v_lo / ((n - 1) * grid.h)) < 1e-6, n
+        assert float(np.ptp(Ey)) < 1e-2, n
+
+
+def test_legacy_default_is_unchanged():
+    """Default Params must still take the legacy apparent_cp path.
+
+    DEVIATION from the plan's `np.array_equal` form, with evidence: heatr3d's
+    default path is NOT bit-reproducible run-to-run. Repeating this identical
+    n=32 / 20 s solve in one process, run 3 of 7 differed from runs 1-2 by
+    max|dT| = 7.1e-15 C (2026-07-30, ./.venv312: numpy 1.26.4, scipy 1.13.1,
+    OpenBLAS MAX_THREADS=3). The EQS solve is exactly reproducible (6/6
+    np.array_equal on V), so the drift is inside the thermal loop; root-causing
+    it is a separate S1 item, not this task. Asserting array_equal here would
+    commit a known-flaky gate, so the tolerance is 1e-12 C -- still ~1e12 x
+    tighter than any real scheme change (the enthalpy branch moves T by O(1) C).
+
+    The bit-for-bit constraint itself was verified out-of-band across the
+    Task-4 commit boundary: HEAD (5ae12e5..c4bd6b8 state) vs this working tree,
+    default Params, n=32 sphere, 30 s -> np.array_equal True on T_phi90, Qrf,
+    phi_final and an identical sigma_T = 21.19205274948017.
+    """
+    grid, part, p = small_sphere_case()
+    r1 = run(grid, part, p, max_time_s=20.0)
+    r2 = run(grid, part, p, max_time_s=20.0)
+    a = r1.T_phi90 if r1.T_phi90 is not None else np.zeros(1)
+    b = r2.T_phi90 if r2.T_phi90 is not None else np.zeros(1)
+    assert np.allclose(a, b, rtol=0.0, atol=1e-12)
+    assert Params().phase_update == "apparent_cp"
+
+
+@pytest.mark.slow
+def test_full_scale_n200_melt_onset_clean_with_enthalpy():
+    """The documented trigger (grid >= 200 melt-onset blow-up), run with the
+    S1 fix: must stay clean. Deselected by default (pytest.ini addopts
+    -m "not slow"); run explicitly with `-m slow`.
+
+    STATUS 2026-07-31 (S1b): this test still does NOT pass, and it is committed
+    in that state deliberately (the plan forbids weakening the assertions). It
+    is the open S1 target. It now has exactly ONE remaining blocker.
+
+    SOLE REMAINING BLOCKER - EQS-01, deferred to D1. The n=200 EQS solve is
+        infeasible on this machine: at N = 8.0e6 complex unknowns
+        spilu(drop_tol=1e-4, fill_factor=12) cannot allocate and a direct
+        complex LU needs ~29.8 GB. As of commit 22122da this no longer
+        SIGSEGVs (it used to: Fatal Python error after 17 s inside scipy
+        spsolve at heatr3d.py:265, reproduced 3/3 on a 34 GB machine); the
+        direct fallback is armed only below EQS_DIRECT_MAX_UNKNOWNS = 2e6 and
+        solve_eqs_3d raises an informative MemoryError above it. The size
+        ceiling itself is unchanged and measured: n=64 (N=2.6e5) 97.7 s /
+        0.81 GB; n=96 (N=8.8e5) 322.1 s / 2.21 GB; n=128 (N=2.10e6) did not
+        finish in 30 min. The MemoryError quotes the supported grids as n=96
+        full pipeline / n=128 EQS-only. A SCALABLE LARGE-N EQS PATH IS
+        DEFERRED TO THE D1 DOLFINX FEM SPIKE; nothing else blocks this test.
+
+    CLEARED 2026-07-31 - THM-03 (was blocker 2): the explicit conduction update
+        is CFL-unstable at n=200 (alpha_max is the POWDER value 3.7504e-07
+        m^2/s, 4.78x the liquid value the Task-3 note used, so
+        dt < h^2/(6 alpha) fails for n > 178.9 at dt_s = 0.05 s, L = 0.060 m;
+        measured checkerboard growth 1.1162 vs predicted 1.1162 at n=184).
+        Params.enforce_cfl (default True) now auto-substeps: n_sub = 2 at
+        n=200. Evidenced at full scale by
+        test_n200_thermal_march_clean_with_qrf_override -- 12780 steps at
+        n=200, clamp_bound False, residual -3.2933e-13, melt onset reached
+        (findings 13.8). So `clamp_bound is False` is no longer expected to
+        fail here; only the EQS solve is.
+
+    Runtime estimate for when EQS-01 is cleared: the thermal march at n=200
+    with the CFL guard engaged is MEASURED at 0.806 s/step (n_sub=2), i.e.
+    2:51:43 to the phi=0.90 crossing at t90 = 638.975 s under a uniform drive;
+    the EQS-driven crossing will differ (the n=96 full-physics t90 is 802.6 s),
+    plus the EQS solve itself.
+
+    Margin note on `reached`: 900 s is close to melt onset. At n=32 mean phi
+    only gets to 0.8787 by 900 s (run()'s own default is max_time_s=1500), but
+    the melt time shrinks with grid: the n=96 full-physics run reaches
+    phi_target at t90 = 802.6 s. Left at 900 s as the plan specifies.
+
+    Best available substitute while this is blocked (findings 13.5): the same
+    physics at n=96 (8.85e5 voxels, full EQS + thermal, enthalpy scheme,
+    max_time_s=1500) is CLEAN -- reached=True, t90=802.6 s, clamp_bound=False,
+    energy residual +1.33e-13, sigma_T=19.278, in=5381.5 J, wall 1049 s.
+    """
+    grid = Grid(n=200, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = dataclasses.replace(Params(), phase_update="enthalpy")
+    res = run(grid, part, p, max_time_s=900.0)
+    assert res.reached is True
+    assert abs(res.energy_residual_frac) < 0.05
+    assert res.clamp_bound is False
+
+
+# --------------------------------------------------------------------------- #
+# S1b / EQS-01: the direct-solve fallback must not be armed at large N
+# (docs/superpowers/plans/s1-findings.md section 13.2)
+# --------------------------------------------------------------------------- #
+def test_eqs_large_system_raises_memoryerror_instead_of_segfaulting(monkeypatch):
+    """EQS-01 RED: at N = 8.0e6 complex unknowns spilu cannot allocate
+    ("malloc fails for local dworkptr[]", SuperLU zgstrf) and solve_eqs_3d
+    swallowed it with a bare `except Exception: V = None`, falling through to
+    spla.spsolve -- a direct complex LU of an 8-million-unknown 3-D Laplacian,
+    which SIGSEGVs (reproduced 3/3, findings 13.2). A caller cannot handle a
+    segfault; a batch campaign loses the whole process.
+
+    The guard is tested CHEAPLY: a 16^3 system (N=4096) with spilu monkeypatched
+    to raise the real SuperLU allocation failure and the direct-solve size limit
+    monkeypatched down to 1000, so N > limit exactly as it is at n=200. spsolve
+    is monkeypatched to a tripwire: reaching it at all is the defect."""
+    import heatr3d
+
+    n = 16
+    grid = Grid(n=n, L=0.060)
+    part = np.zeros((n, n, n), dtype=bool)
+    p = Params()
+    gamma = heatr3d.build_gamma(part, p, None, h=grid.h)
+    N = n ** 3
+
+    def _spilu_out_of_memory(*a, **k):
+        raise MemoryError("malloc fails for local dworkptr[]. zgstrf info 2082443264")
+
+    def _spsolve_tripwire(*a, **k):
+        raise AssertionError(
+            "direct spsolve was entered above the direct-solve size limit: "
+            "this is the armed-but-unusable fallback that segfaults at n=200")
+
+    # raising=False so the PRE-FIX run reaches the tripwire (the actual defect)
+    # instead of dying on a missing attribute; the attribute is asserted below.
+    monkeypatch.setattr(heatr3d, "EQS_DIRECT_MAX_UNKNOWNS", 1000, raising=False)
+    monkeypatch.setattr(heatr3d.spla, "spilu", _spilu_out_of_memory)
+    monkeypatch.setattr(heatr3d.spla, "spsolve", _spsolve_tripwire)
+
+    with pytest.raises(MemoryError) as exc:
+        heatr3d.solve_eqs_3d(gamma, grid, p, iterative=True)
+    msg = str(exc.value)
+    assert str(N) in msg, msg                 # the system size
+    assert "GB" in msg, msg                   # the memory estimate
+    assert "96" in msg and "128" in msg, msg  # max supported grids
+    assert hasattr(heatr3d, "EQS_DIRECT_MAX_UNKNOWNS")
+    assert heatr3d.EQS_DIRECT_MAX_UNKNOWNS == 1000   # the monkeypatched value
+
+
+def test_eqs_small_system_still_uses_direct_fallback_when_ilu_fails(monkeypatch):
+    """The guard must NOT disarm the direct fallback for small systems: with the
+    REAL limit (2e6 unknowns) an 8^3 system (N=512) whose ILU fails must still be
+    solved directly and reproduce the parallel-plate field.
+
+    n=8 deliberately: this test pins the BRANCH (small N still reaches spsolve),
+    not the accuracy -- test_eqs_uniform_medium_is_parallel_plate already pins
+    the accuracy at n=24/40. Direct complex LU on this matrix is superlinear in
+    N here (measured on this machine: N=512 0.0 s, N=1728 18 s, N=4096 231 s,
+    under heavy background load), so the fast suite must not pay for a larger
+    direct solve than it needs."""
+    import heatr3d
+
+    n = 8
+    grid = Grid(n=n, L=0.060)
+    part = np.zeros((n, n, n), dtype=bool)
+    p = Params()
+    gamma = heatr3d.build_gamma(part, p, None, h=grid.h)
+
+    def _spilu_fails(*a, **k):
+        raise RuntimeError("Factor is exactly singular")
+
+    monkeypatch.setattr(heatr3d.spla, "spilu", _spilu_fails)
+    V = heatr3d.solve_eqs_3d(gamma, grid, p, iterative=True)
+    y_prof = np.real(V).mean(axis=(0, 2))
+    y_lin = np.linspace(p.v_lo, p.v_hi, n)
+    assert np.max(np.abs(y_prof - y_lin)) < 1e-6 * abs(p.v_lo)
+
+
+# --------------------------------------------------------------------------- #
+# S1b / THM-03: explicit-conduction CFL guard + auto-substepping
+# (docs/superpowers/plans/s1-findings.md section 13.3)
+# --------------------------------------------------------------------------- #
+def test_cfl_stability_criterion_and_substep_count():
+    """The binding diffusivity is the POWDER BED, not the liquid: alpha_powder =
+    0.197/(490*1072) = 3.750381e-07 m^2/s, 4.78x the liquid value the Task-3 note
+    used. dt_stable = h^2/(6 alpha_max); with the 0.9 safety factor the explicit
+    update needs substepping above n = 169 at dt_s = 0.05 s, L = 0.060 m.
+
+    Expected counts (arithmetic, findings 13.3 + this task): n=32 -> 1 (default
+    working grid, unchanged), n=96 -> 1 (largest full-physics grid today),
+    n=169 -> 1 / n=170 -> 2 (the 0.9-factor threshold), n=184 -> 2, n=200 -> 2
+    (dt_stable = 0.0400 s, 0.9*dt_stable = 0.0360 s, ceil(0.05/0.0360) = 2)."""
+    from heatr3d import (CFL_SAFETY, alpha_max_thermal, cfl_substeps,
+                         dt_stable_thermal)
+    p = Params()
+    assert CFL_SAFETY == 0.9
+    assert abs(alpha_max_thermal(p) - 3.750381e-07) < 1e-12
+    for n, expect in ((32, 1), (96, 1), (160, 1), (169, 1),
+                      (170, 2), (184, 2), (200, 2)):
+        assert cfl_substeps(Grid(n=n, L=0.060), p) == expect, n
+    assert abs(dt_stable_thermal(Grid(n=200, L=0.060), p) - 0.0400) < 1e-4
+    assert abs(dt_stable_thermal(Grid(n=32, L=0.060), p) - 1.5623) < 1e-3
+
+
+def _checkerboard_cfl_case(cfl_ratio=1.25, nsteps=20, n=32, amp0=1e-3):
+    """The n=200 CFL ratio (1.25) reproduced on a CHEAP n=32 grid by raising
+    dt_s instead of refining h -- the instability depends only on
+    dt/(h^2/(6 alpha)), so this is the same discrete mode with the same
+    amplification factor at 1/244 of the voxel count. All powder, no source, no
+    convection, 3-D checkerboard initial perturbation (the fastest discrete
+    mode), exactly like scripts/analysis/s1_cfl_powder_mode.py."""
+    from heatr3d import dt_stable_thermal
+    grid = Grid(n=n, L=0.060)
+    p0 = dataclasses.replace(Params(), conv_h=0.0)
+    dt = cfl_ratio * dt_stable_thermal(grid, p0)
+    p = dataclasses.replace(p0, dt_s=dt)
+    part = np.zeros((n, n, n), dtype=bool)
+    i, j, k = np.indices((n, n, n))
+    T0 = p.preheat_c + amp0 * ((-1.0) ** (i + j + k))
+    q = np.zeros((n, n, n))
+    return grid, part, p, q, T0, (nsteps + 0.5) * dt
+
+
+def test_cfl_substepping_bounds_the_checkerboard_mode_legacy_grows():
+    """THM-03 RED/GREEN pair on one case, CFL ratio 1.25 (= n=200 at dt 0.05 s).
+
+    enforce_cfl=False (legacy single step): predicted per-step amplification
+    |1 - 12 alpha dt/h^2| = 1.5003 -> the checkerboard GROWS ~3.3e3x in 20 steps.
+    enforce_cfl=True: n_sub = ceil(1.25/0.9) = 2, so dt_sub gives ratio 0.625 and
+    amplification 0.25 -> the mode DECAYS. Both arms are source-free with
+    zero-flux walls, so the domain mean temperature is conserved exactly; that is
+    the energy-clean check here (no RF input means residual_frac has no
+    meaningful denominator)."""
+    grid, part, p, q, T0, tmax = _checkerboard_cfl_case()
+    nsteps = 20
+    amp0 = 1e-3
+
+    p_legacy = dataclasses.replace(p, enforce_cfl=False)
+    r_legacy = run(grid, part, p_legacy, qrf_override=q, max_time_s=tmax,
+                   phi_target=2.0, T0_override=T0)
+    amp_legacy = float(np.abs(r_legacy.T_final - p.preheat_c).max())
+    growth_legacy = (amp_legacy / amp0) ** (1.0 / nsteps)
+    assert r_legacy.n_substeps_used == 1
+    assert r_legacy.cfl_violated is True
+    assert r_legacy.clamp_bound is False          # growth is genuine, not clipped
+    assert amp_legacy > 100 * amp0                # it blows up
+    assert abs(growth_legacy - 1.5003) < 1e-3     # at the closed-form rate
+
+    r_fixed = run(grid, part, p, qrf_override=q, max_time_s=tmax,
+                  phi_target=2.0, T0_override=T0)
+    amp_fixed = float(np.abs(r_fixed.T_final - p.preheat_c).max())
+    assert r_fixed.n_substeps_used == 2
+    assert r_fixed.cfl_violated is False
+    assert r_fixed.clamp_bound is False
+    assert amp_fixed < amp0                       # bounded (in fact decaying)
+    assert abs(float(r_fixed.T_final.mean()) - p.preheat_c) < 1e-9   # energy-clean
+    assert abs(float(r_legacy.T_final.mean()) - p.preheat_c) < 1e-9
+
+
+def test_energy_gate_stays_exact_under_substepping():
+    """The standing [s1-energy] gate must remain meaningful when the thermal
+    update is substepped: the audit banks in and stored PER SUBSTEP with dt_sub,
+    so an n_sub=2 run on the enthalpy scheme must still book machine-precision
+    conservation. RED demonstrated by reverting the audit's dt_sub back to
+    p.dt_s: residual_frac = +0.5000 measured (the audit then books 2x the
+    energy actually deposited, so half of `in` is unaccounted). GREEN with
+    dt_sub: residual_frac = -1.09e-15 measured (in = stored = 255.7 J)."""
+    from heatr3d import cfl_substeps, dt_stable_thermal
+    grid, part, p0 = small_sphere_case()
+    p = dataclasses.replace(p0, phase_update="enthalpy",
+                            dt_s=1.25 * dt_stable_thermal(grid, p0))
+    assert cfl_substeps(grid, p) == 2
+    q = np.zeros(part.shape)
+    q[part] = p.power_density_w_per_m3
+    res = run(grid, part, p, qrf_override=q, max_time_s=20.5 * p.dt_s,
+              phi_target=2.0)
+    assert res.n_substeps_used == 2
+    assert res.clamp_bound is False
+    assert res.energy_in_j > 0.0
+    assert abs(res.energy_residual_frac) < 1e-9
+
+
+def test_cfl_guard_is_inert_at_the_default_working_grid():
+    """DEFAULT MUST PRESERVE HISTORICAL RESULTS. At n=32, dt_s=0.05 the CFL ratio
+    is 0.032, so n_sub=1 and enforce_cfl=True must be arithmetically identical to
+    the legacy single-step path. Compared at rtol=1e-12 (not array_equal) because
+    heatr3d is not bit-reproducible run-to-run at the 1e-15 level; see
+    test_legacy_default_is_unchanged.
+
+    qrf_override (a fixed uniform part source) instead of the EQS path so the
+    comparison isolates the thermal loop -- the only thing THM-03 touches -- and
+    stays cheap."""
+    grid, part, p = small_sphere_case()
+    q = np.zeros(part.shape)
+    q[part] = p.power_density_w_per_m3
+    assert Params().enforce_cfl is True
+    r_on = run(grid, part, p, qrf_override=q, max_time_s=60.0)
+    r_off = run(grid, part, dataclasses.replace(p, enforce_cfl=False),
+                qrf_override=q, max_time_s=60.0)
+    assert r_on.n_substeps_used == 1
+    assert r_on.cfl_violated is False
+    assert r_off.cfl_violated is False           # not violated at n=32 either way
+    assert np.allclose(r_on.T_final, r_off.T_final, rtol=1e-12, atol=0.0)
+    assert np.allclose(r_on.T_phi90, r_off.T_phi90, rtol=1e-12, atol=0.0)
+    assert abs(r_on.energy_in_j - r_off.energy_in_j) <= 1e-12 * abs(r_off.energy_in_j)
+    assert abs(r_on.sigma_T - r_off.sigma_T) <= 1e-12 * abs(r_off.sigma_T)
+
+
+@pytest.mark.slow
+def test_n200_thermal_march_clean_with_qrf_override():
+    """S1b THM-03 full-scale EVIDENCE: the n=200 THERMAL/PHASE march, run to melt
+    onset with the CFL guard engaged, is clean.
+
+    SCOPE - READ THIS BEFORE QUOTING THE RESULT. This is thermal/phase evidence
+    ONLY. The RF drive is a uniform `qrf_override` over the part
+    (p.power_density_w_per_m3), which deliberately BYPASSES the EQS solve. The
+    n=200 EQS solve remains INFEASIBLE (EQS-01, findings 13.2): at N = 8.0e6
+    complex unknowns spilu cannot allocate and the direct LU needs ~29.8 GB, so
+    solve_eqs_3d now raises MemoryError (commit 22122da) instead of segfaulting.
+    A scalable large-N EQS path is deferred to the D1 dolfinx spike. THEREFORE
+    THIS RUN DOES NOT CONSTITUTE A FULL-PHYSICS n=200 PASS -- see
+    test_full_scale_n200_melt_onset_clean_with_enthalpy, which is still blocked
+    on exactly that.
+
+    What it DOES prove: at n=200 (8.0e6 voxels, h = 0.300 mm), where the legacy
+    explicit conduction update is CFL-unstable (dt_s/dt_stable = 1.250,
+    checkerboard amplification 1.5003 per step, findings 13.3), the THM-03 guard
+    auto-substeps (n_sub = 2, dt_sub = 0.025 s), the march reaches the phi = 0.90
+    melt onset, no limiter binds, and the standing energy gate stays exact.
+
+    Runtime estimated BEFORE launching (as the plan requires): 20-step probe at
+    n=200 with n_sub=2 measured 0.758 s/step; t90 under the uniform qrf_override
+    is nearly grid-independent (645.6 s at n=32, 651.2 s at n=64, 639.9 s at
+    n=96), so ~640 s / 0.05 s = ~12800 steps -> ~2.7 h, under the 3 h stop line.
+
+    MEASURED 2026-07-31 (recorded with the full log in
+    docs/superpowers/plans/s1-findings.md 13.8): PASSED in 10303.51 s = 2:51:43.
+      [s1-energy] in=4257.3 J stored=4219.8 J loss=37.5 J residual_frac=-0.0000
+      reached=True nsub=2 t90=638.975 sigma_T=22.843 Tmax=260.6 clamp=False
+      cfl_violated=False resid=-3.2933e-13 phi_mean=0.9000
+    No clamp bound in 12780 steps at the grid where the unguarded scheme is
+    CFL-unstable (ratio 1.250, checkerboard amplification 1.5003/step).
+    """
+    grid = Grid(n=200, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = dataclasses.replace(Params(), phase_update="enthalpy")
+    assert p.enforce_cfl is True                 # the layer under test
+    q = np.zeros(part.shape)
+    q[part] = p.power_density_w_per_m3
+    # default max_time_s / phi_target; verbose so a ~2.7 h run shows progress
+    res = run(grid, part, p, qrf_override=q, verbose=True)
+    print(f"\nN200-THERMAL: reached={res.reached} nsub={res.n_substeps_used} "
+          f"t90={res.t_phi90_s} sigma_T={res.sigma_T:.3f} Tmax={res.T_max_c:.1f} "
+          f"clamp={res.clamp_bound} cfl_violated={res.cfl_violated} "
+          f"resid={res.energy_residual_frac:.4e} "
+          f"phi_mean={float(res.phi_final[part].mean()):.4f}")
+    assert res.reached is True
+    assert res.n_substeps_used == 2
+    assert res.clamp_bound is False
+    assert res.cfl_violated is False
+    assert abs(res.energy_residual_frac) < 0.05
+
+
+# --------------------------------------------------------------------------- #
+# EQS-02: the part-confined Q_rf gradient (compute_qrf_3d default flip)
+#
+# Defect (D1 spike, heatr3d_d1_spike/EQS02_IMPACT.md): compute_qrf_3d formed
+# E = -np.gradient(V) over the WHOLE domain and only afterwards zeroed Q outside
+# the part, so the outermost in-part voxel was differenced ACROSS the material
+# interface (sigma contrast 4e6). Q ~ |E|^2 squares that jump, and the fixed-power
+# renormalization then moved absorbed power from the interior into the surface
+# skin: 73.7 % of the power in a 31-33 % volume band (results.json["eqs02_impact"]).
+#
+# Fix: qrf_gradient="masked" (NEW DEFAULT) uses a stencil confined to the doped
+# region (port of heatr3d_d1_spike/metrics.masked_grad_3d); qrf_gradient="legacy"
+# retains the pre-fix whole-domain np.gradient verbatim for historical runs.
+# --------------------------------------------------------------------------- #
+import importlib.util                                                # noqa: E402
+import subprocess                                                    # noqa: E402
+import sys                                                           # noqa: E402
+from pathlib import Path                                             # noqa: E402
+
+from scipy.ndimage import distance_transform_edt                     # noqa: E402
+
+_REPO_ROOT = Path(__file__).resolve().parent
+_SPIKE_DIR = _REPO_ROOT / "heatr3d_d1_spike"
+
+# The commit whose heatr3d.py is the PRE-EQS-02-fix implementation. The legacy
+# flag is asserted bit-for-bit against THIS source, not against HEAD, because
+# HEAD stops being pre-fix the moment the fix lands.
+PRE_EQS02_FIX_SHA = "4fe5afc3eb79cf1cee1842fb694ae82cdb9b6150"
+
+EQS02_SURFACE_BAND_H = 1.5   # "surface" = within 1.5 voxels of the part boundary
+                             # (the D1 Task-2 / eqs02_impact rule)
+EQS02_SKIN_BAND_H = 0.5      # the single outermost voxel layer -- the layer that
+                             # actually touches the interface, so the layer the
+                             # cross-interface stencil corrupts
+
+_EQS02_SOLVE_CACHE: dict = {}
+
+
+def _eqs02_bands(part, h, width=EQS02_SURFACE_BAND_H):
+    """(interior, surface_band) masks; width in voxels (eqs02_impact uses 1.5)."""
+    depth = (distance_transform_edt(part) - 0.5) * h      # >0 inside the part
+    interior = part & (depth > width * h)
+    return interior, part & ~interior
+
+
+def _eqs02_case(shape="cylinder", n=32, uniform=False):
+    """Cached (grid, part, p, gamma, V) for an EQS-02 test case.
+
+    iterative=True is passed EXPLICITLY: these tests exercise compute_qrf_3d's
+    post-processing, which does not care which linear solver produced V, and at
+    n=32 the direct complex LU that run() would auto-select takes >3.5 min
+    (measured 2026-07-31, ./.venv312: 3:39 wall) against ~62 s for the
+    ILU-BiCGSTAB path. The cache makes the whole EQS-02 block pay for one solve
+    per case rather than one per test.
+    """
+    key = (shape, n, uniform)
+    if key not in _EQS02_SOLVE_CACHE:
+        import heatr3d
+        grid = Grid(n=n, L=0.060)
+        if uniform:
+            part = np.ones((n, n, n), dtype=bool)
+        else:
+            part = make_geometry(grid, shape, diam=0.020)
+        p = Params()
+        gamma = heatr3d.build_gamma(part, p, None, h=grid.h)
+        V = heatr3d.solve_eqs_3d(gamma, grid, p, iterative=True)
+        _EQS02_SOLVE_CACHE[key] = (grid, part, p, gamma, V)
+    return _EQS02_SOLVE_CACHE[key]
+
+
+def _reference_masked_qrf(V, gamma, grid, p, part):
+    """The D1 reference post-processing, verbatim from
+    heatr3d_d1_spike/run_eqs02_impact.py:corrected_qrf -- the SAME V and gamma,
+    metrics.masked_grad_3d for E, and every other step of compute_qrf_3d's Q
+    definition unchanged (clip, zero outside, renormalize to the same
+    p_target = power_density_w_per_m3 * doped_volume)."""
+    if str(_SPIKE_DIR) not in sys.path:
+        sys.path.insert(0, str(_SPIKE_DIR))
+    import metrics as M
+    Ex, Ey, Ez = M.masked_grad_3d(V, part, grid.h)
+    e2 = np.real(Ex * np.conj(Ex) + Ey * np.conj(Ey) + Ez * np.conj(Ez))
+    Q = 0.5 * np.real(gamma * e2)
+    Q = np.clip(np.nan_to_num(Q), 0.0, None)
+    Q[~part] = 0.0
+    p_target = p.power_density_w_per_m3 * (int(part.sum()) * grid.dV)
+    p_now = Q.sum() * grid.dV
+    if p_now > 1e-18:
+        Q *= p_target / p_now
+    return Q
+
+
+def test_qrf_default_is_the_part_confined_gradient_and_splits_power_by_volume():
+    """EQS-02 RED: the DEFAULT Q_rf must be the part-confined-gradient field.
+
+    Two independent assertions, both failing before the fix:
+      (a) EXACTNESS -- the shipped default must equal the D1 reference
+          post-processing (metrics.masked_grad_3d + the unchanged compute_qrf_3d
+          Q definition), so "corrected" means exactly what the D1 study measured,
+          not something near it. Asserted at rtol 1e-13, not bit-for-bit: the two
+          routes are the same operations on the same V, but the renormalization
+          divisor Q.sum() is a pairwise reduction whose last ulp depends on the
+          buffer alignment, and a 5.9e-16 relative difference in that single
+          scale factor was observed once at n=32 (identical, array_equal, on
+          repeat and at n=48/64). The legacy field differs by ~10^0, not 10^-13.
+      (b) PHYSICAL SPLIT -- the fraction of absorbed power landing in the
+          outermost voxel layer (the layer that touches the interface) must be
+          within 1.5x of that layer's VOLUME fraction. Measured here (n=32
+          extruded circle, 2816 part voxels): corrected 0.3210 power in 0.3182
+          volume = 1.009x; legacy 0.8369 in 0.3182 = 2.630x. The D1 1.5-voxel
+          band rule is also checked, at 1.25x: at n=32 that band is 59 % of the
+          part (the part is only ~5 voxels in radius), so it cannot discriminate
+          at 1.5x -- corrected 1.007x, legacy 1.528x.
+
+    Cross-check of the port against the published D1 table (measured 2026-07-31,
+    same script, n=64 extruded circle): surface-band (1.5 voxel) power fraction
+    0.7366 legacy / 0.3186 corrected against EQS02_IMPACT.md's 0.737 / 0.319, and
+    max/mean 12.255 / 1.857 against its 12.25 / 1.86.
+
+    Total absorbed power is IDENTICAL in both (the renormalization is unchanged),
+    so this test pins redistribution, not magnitude.
+    """
+    import heatr3d
+    grid, part, p, gamma, V = _eqs02_case("cylinder", n=32)
+    Q = heatr3d.compute_qrf_3d(V, gamma, grid, p, part)
+    Q_ref = _reference_masked_qrf(V, gamma, grid, p, part)
+    assert np.allclose(Q, Q_ref, rtol=1e-13, atol=0.0)
+
+    for width, gate in ((EQS02_SKIN_BAND_H, 1.5), (EQS02_SURFACE_BAND_H, 1.25)):
+        interior, band = _eqs02_bands(part, grid.h, width)
+        vol_frac = band.sum() / part.sum()
+        pow_frac = float(Q[band].sum() / Q[part].sum())
+        print(f"\nEQS02 default, {width}-voxel band: power frac={pow_frac:.4f} "
+              f"volume frac={vol_frac:.4f} ratio={pow_frac / vol_frac:.3f} "
+              f"(gate {gate})")
+        assert pow_frac < gate * vol_frac
+    # the total power target is untouched by the gradient choice
+    p_target = p.power_density_w_per_m3 * (int(part.sum()) * grid.dV)
+    assert abs(float(Q.sum() * grid.dV) - p_target) <= 1e-12 * p_target
+
+
+def _load_pre_fix_heatr3d(tmp_path):
+    """Import the PRE_EQS02_FIX_SHA heatr3d.py as a separate module."""
+    src = subprocess.run(["git", "show", f"{PRE_EQS02_FIX_SHA}:heatr3d.py"],
+                         cwd=str(_REPO_ROOT), capture_output=True)
+    if src.returncode != 0:
+        pytest.skip(f"pre-fix source {PRE_EQS02_FIX_SHA} not available: "
+                    f"{src.stderr.decode()[:200]}")
+    path = tmp_path / "heatr3d_pre_eqs02.py"
+    path.write_bytes(src.stdout)
+    spec = importlib.util.spec_from_file_location("heatr3d_pre_eqs02", path)
+    mod = importlib.util.module_from_spec(spec)
+    # registered BEFORE exec: @dataclass(frozen=True) resolves annotations via
+    # sys.modules[cls.__module__] and raises AttributeError on None otherwise.
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_qrf_legacy_flag_reproduces_the_pre_fix_field_to_the_ulp(tmp_path):
+    """qrf_gradient="legacy" must reproduce the PRE-FIX Q_rf, so every historical
+    heatr3d number stays reproducible after the default flip.
+
+    The reference is the actual pre-fix source (git show
+    PRE_EQS02_FIX_SHA:heatr3d.py, imported in-process), not a re-derivation, and
+    it is fed the SAME V and gamma, so any difference is the post-processing.
+
+    DEVIATION from a plain np.array_equal, with evidence (measured 2026-07-31,
+    ./.venv312, n=32 extruded circle, the SAME V and gamma passed to both
+    modules, 30 paired evaluations in one process): 18/30 pairs were exactly
+    equal and 12/30 differed in at most 27 of 32768 voxels by at most 4.44e-16
+    relative (2 ulp), with the total absorbed power identical (one distinct value
+    of Q.sum() across all 60 evaluations). Repeating the SAME function twice is
+    array_equal; the ulp noise appears only across the two module objects, i.e.
+    it is numpy elementwise-kernel/alignment noise on freshly allocated
+    temporaries, not a behavioral difference -- the same non-bit-reproducibility
+    already documented in test_legacy_default_is_unchanged (7.1e-15 there).
+    Asserting array_equal here would commit a known-flaky gate; 1e-14 relative is
+    ~14 orders tighter than the stencil change this test must catch (the default
+    field differs from legacy by O(1), asserted below).
+    """
+    import heatr3d
+    grid, part, p, gamma, V = _eqs02_case("cylinder", n=32)
+    pre = _load_pre_fix_heatr3d(tmp_path)
+    assert "qrf_gradient" not in pre.compute_qrf_3d.__code__.co_varnames  # is pre-fix
+    Q_pre = pre.compute_qrf_3d(V, gamma, grid, p, part, premix=False)
+    Q_legacy = heatr3d.compute_qrf_3d(V, gamma, grid, p, part,
+                                      qrf_gradient="legacy")
+    assert np.allclose(Q_legacy, Q_pre, rtol=1e-14, atol=0.0)
+    assert float(Q_legacy.sum()) == float(Q_pre.sum())      # same total power
+
+    Q_default = heatr3d.compute_qrf_3d(V, gamma, grid, p, part)
+    assert not np.allclose(Q_default, Q_legacy, rtol=1e-3, atol=0.0)
+    interior, band = _eqs02_bands(part, grid.h, EQS02_SKIN_BAND_H)
+    vol_frac = band.sum() / part.sum()
+    legacy_frac = float(Q_legacy[band].sum() / Q_legacy[part].sum())
+    print(f"\nEQS02 legacy: outermost-layer power frac={legacy_frac:.4f} "
+          f"volume frac={vol_frac:.4f} ratio={legacy_frac / vol_frac:.3f}")
+    # the artifact itself, still present in the legacy mode (2.630x measured)
+    assert legacy_frac > 2.0 * vol_frac
+    # ... and identical total power in both modes: only the distribution moves
+    assert abs(float(Q_legacy.sum()) - float(Q_default.sum())) \
+        <= 1e-12 * float(Q_default.sum())
+
+
+def test_qrf_masked_equals_legacy_on_a_fully_doped_uniform_chamber():
+    """No interface inside the domain -> the two stencils must agree.
+
+    The whole chamber is doped, so the mask-confined stencil never has a missing
+    neighbour anywhere np.gradient has one, and both reduce to the same
+    second-order-interior / one-sided-edge differences of the same linear V.
+    Agreement is asserted at rtol 1e-12 rather than bit-for-bit because the two
+    forms of the interior central difference -- 0.5*((V[i+1]-V[i]) + (V[i]-V[i-1]))/h
+    (metrics port) and (V[i+1]-V[i-1])/(2h) (np.gradient) -- are algebraically
+    identical but not floating-point associative.
+    """
+    import heatr3d
+    grid, part, p, gamma, V = _eqs02_case(n=16, uniform=True)
+    Q_masked = heatr3d.compute_qrf_3d(V, gamma, grid, p, part)
+    Q_legacy = heatr3d.compute_qrf_3d(V, gamma, grid, p, part,
+                                      qrf_gradient="legacy")
+    rel = float(np.abs(Q_masked - Q_legacy).max() / Q_legacy.max())
+    print(f"\nEQS02 uniform chamber: max rel |masked-legacy| = {rel:.3e}")
+    assert rel < 1e-12
+
+
+def test_qrf_masked_gradient_keeps_the_premix_bed_absorbing():
+    """In premix mode the conductive BED absorbs too, so confining the stencil to
+    the part alone would silently kill premix. The masked mode therefore applies
+    the same non-crossing rule to the bed (the doped region and its complement,
+    each differenced only within itself).
+
+    RED evidence for this branch (measured 2026-07-31, ./.venv312, n=16 sphere,
+    premix_frac=0.5): with the complement term omitted -- i.e. a stencil confined
+    to the part only -- the bed's share of absorbed power is 0.0000, and the
+    renormalization then dumps the entire generator power into the part. With it,
+    the bed carries 0.9742 (legacy: 0.9668) and the fixed total power target is
+    hit to 1 ulp in both modes.
+    """
+    import heatr3d
+    n = 16
+    grid = Grid(n=n, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = Params()
+    gamma = heatr3d.build_gamma(part, p, None, h=grid.h, premix_frac=0.5)
+    V = heatr3d.solve_eqs_3d(gamma, grid, p, iterative=True)
+    p_target = p.power_density_w_per_m3 * (int(part.sum()) * grid.dV)
+    fracs = {}
+    for mode in ("masked", "legacy"):
+        Q = heatr3d.compute_qrf_3d(V, gamma, grid, p, part, premix=True,
+                                   qrf_gradient=mode)
+        assert abs(float(Q.sum() * grid.dV) - p_target) <= 1e-12 * p_target
+        fracs[mode] = float(Q[~part].sum() / Q.sum())
+    print(f"\nEQS02 premix bed power fraction: masked={fracs['masked']:.4f} "
+          f"legacy={fracs['legacy']:.4f}")
+    assert fracs["masked"] > 0.5          # the bed still absorbs (0.9742 measured)
+    assert abs(fracs["masked"] - fracs["legacy"]) < 0.05
+
+
+def test_qrf_gradient_rejects_an_unknown_mode():
+    """A typo must fail loudly rather than silently picking a stencil."""
+    import heatr3d
+    grid, part, p, gamma, V = _eqs02_case(n=16, uniform=True)
+    with pytest.raises(ValueError) as exc:
+        heatr3d.compute_qrf_3d(V, gamma, grid, p, part, qrf_gradient="mask")
+    assert "qrf_gradient" in str(exc.value)
+
+
+def test_run_threads_the_qrf_gradient_choice_through_to_the_drive():
+    """run(qrf_gradient=...) must reach compute_qrf_3d, and the default must be
+    the corrected stencil. Checked on the CHEAP uniform chamber (n=16) where the
+    two stencils agree, by spying on the call rather than by comparing thermal
+    output -- this pins the wiring, not the physics. n=8 keeps run()'s
+    auto-selected DIRECT EQS solve cheap (N=512)."""
+    import heatr3d
+    seen = []
+    real = heatr3d.compute_qrf_3d
+
+    def _spy(*a, **k):
+        seen.append(k.get("qrf_gradient", "MISSING"))
+        return real(*a, **k)
+
+    n = 8
+    grid = Grid(n=n, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = Params()
+    heatr3d.compute_qrf_3d = _spy
+    try:
+        heatr3d.run(grid, part, p, max_time_s=2 * p.dt_s, phi_target=2.0)
+        heatr3d.run(grid, part, p, max_time_s=2 * p.dt_s, phi_target=2.0,
+                    qrf_gradient="legacy")
+    finally:
+        heatr3d.compute_qrf_3d = real
+    assert seen == ["masked", "legacy"]
+
+
+def test_s1_closeout_criterion_pins():
+    """S1 close-out (s1-gate-report.md): the validity-domain constants and
+    the D1 cross-check evidence this closure cites must keep existing."""
+    import json
+    from pathlib import Path
+
+    import heatr3d as h3
+    assert h3.EQS_MAX_GRID_FULL_PHYSICS == 96
+    assert h3.EQS_MAX_GRID_EQS_ONLY == 128
+    d1 = json.loads((Path(__file__).parent / "heatr3d_d1_spike"
+                     / "results.json").read_text())
+    gate = d1["task4"]["gate"]
+    assert gate["gate_ok"] is True
+    assert gate["qrf_pattern_rel_l2_all"] < 0.05
+
+
+# --------------------------------------------------------------------------- #
+# S4-COUPLING (2026-08-01): in-march EQS re-solve with sigma(T, rho_rel)
+# feedback. Motivated by heatr3d_s4_flir/S4_GATE_REPORT.md sec 4.2 candidate
+# mechanisms 1-3 (frozen Q_rf; no sigma(T)/sigma(rho) feedback; no densification
+# coupling into the EQS). The law and the clip bounds are ported from the 2-D
+# solver rfam_eqs_coupled.py (_FGMFeedback.sigma_at_mask, lines 418-449, and its
+# call site at lines 3031-3105). DEFAULT IS OFF and must stay bit-for-bit.
+# --------------------------------------------------------------------------- #
+def _coupling_case(n=24):
+    grid = Grid(n=n, L=0.060)
+    part = make_geometry(grid, "sphere", diam=0.020)
+    p = Params(phase_update="enthalpy")
+    return grid, part, p
+
+
+def test_coupling_params_default_off_and_result_reports_solve_counts():
+    """The three new knobs default to the legacy (never-re-solve) values and the
+    Result carries an EQS re-solve census."""
+    p = Params()
+    assert p.eqs_update_interval_s == 0.0
+    assert p.sigma_temp_coeff_per_K == 0.0
+    assert p.sigma_density_coeff == 0.0
+    assert p.eqs_resolve_drift_rtol == 0.0
+    grid, part, p = _coupling_case()
+    res = run(grid, part, p, max_time_s=1.0, phi_target=2.0)
+    assert res.n_eqs_solves == 1            # the single pre-loop solve
+    assert res.n_eqs_resolves_skipped == 0
+
+
+def test_coupling_defaults_are_bit_for_bit_legacy():
+    """eqs_update_interval_s == 0 (the default) is the master switch: nonzero
+    sigma coefficients must then be COMPLETELY inert, so every legacy result is
+    reproduced. Tolerance 1e-12 C, not array_equal, for the known thermal-loop
+    nondeterminism documented in test_legacy_default_is_unchanged."""
+    grid, part, p = _coupling_case()
+    base = run(grid, part, p, max_time_s=20.0, phi_target=2.0)
+    coeffed = dataclasses.replace(p, sigma_temp_coeff_per_K=0.01,
+                                  sigma_density_coeff=2.0)
+    off = run(grid, part, coeffed, max_time_s=20.0, phi_target=2.0)
+    assert np.allclose(base.T_final, off.T_final, rtol=0.0, atol=1e-12)
+    assert np.array_equal(base.Qrf, off.Qrf)
+    assert off.n_eqs_solves == 1
+
+
+def test_zero_coefficient_resolves_reproduce_the_frozen_field():
+    """With re-solving ON but both coefficients zero, every re-solve rebuilds the
+    SAME gamma, so the drive must be unchanged -- this isolates the re-solve
+    plumbing from the physics."""
+    grid, part, p = _coupling_case()
+    base = run(grid, part, p, max_time_s=20.0, phi_target=2.0)
+    p_re = dataclasses.replace(p, eqs_update_interval_s=5.0)
+    res = run(grid, part, p_re, max_time_s=20.0, phi_target=2.0)
+    assert res.n_eqs_solves == 1 + 3        # t = 5, 10, 15 s (20 s is the exit)
+    assert np.allclose(base.Qrf, res.Qrf, rtol=1e-10, atol=0.0)
+    assert np.allclose(base.T_final, res.T_final, rtol=0.0, atol=1e-9)
+
+
+def test_sigma_coupling_law_matches_the_2d_solver_and_clips():
+    """The ported law, elementwise:
+        sigma_eff = sigma_local * (1 + a (T - T_ref)) * (1 + b (rho - rho_ref))
+    clipped to [1e-4, 25] x sigma_doped inside the part, untouched outside, and
+    the displacement (imaginary) part of gamma is NOT coupled."""
+    import heatr3d as h3
+    grid, part, p = _coupling_case(n=16)
+    p = dataclasses.replace(p, sigma_temp_coeff_per_K=0.002,
+                            sigma_density_coeff=0.6, sigma_ref_temp_c=23.0)
+    g0 = h3.build_gamma(part, p)
+    T = np.full(part.shape, 123.0)
+    rho = np.full(part.shape, 0.75)
+    g1 = h3.apply_sigma_coupling(g0, part, T, rho, p)
+    f = (1.0 + 0.002 * (123.0 - 23.0)) * (1.0 + 0.6 * (0.75 - p.rho_rel))
+    assert np.allclose(g1.real[part], g0.real[part] * f, rtol=1e-12, atol=0.0)
+    assert np.array_equal(g1.real[~part], g0.real[~part])
+    assert np.array_equal(g1.imag, g0.imag)
+    # clipping: a runaway factor is bounded at 25 x sigma_doped, a collapsing
+    # one at 1e-4 x sigma_doped (the 2-D bounds)
+    hot = h3.apply_sigma_coupling(g0, part, np.full(part.shape, 1e5), rho, p)
+    assert np.allclose(hot.real[part], 25.0 * p.sigma_doped)
+    cold = h3.apply_sigma_coupling(g0, part, np.full(part.shape, -1e5), rho, p)
+    assert np.allclose(cold.real[part], 1e-4 * p.sigma_doped)
+
+
+def test_coupling_moves_the_qrf_field_between_early_and_late_in_a_melt_case():
+    """The S4 question: does re-solving with sigma(T) feedback let the drive
+    RE-CONCENTRATE as the part heats? Compare the drive at 5 s against the drive
+    at 60 s of the same coupled march (positive sigma(T): hot voxels get more
+    conductive, so the field should redistribute measurably)."""
+    grid, part, p = _coupling_case()
+    p = dataclasses.replace(p, eqs_update_interval_s=5.0,
+                            sigma_temp_coeff_per_K=0.01,
+                            sigma_density_coeff=0.0,
+                            sigma_ref_temp_c=23.0)
+    early = run(grid, part, p, max_time_s=5.0, phi_target=2.0)
+    late = run(grid, part, p, max_time_s=60.0, phi_target=2.0)
+    q0 = early.Qrf[part]
+    q1 = late.Qrf[part]
+    # same total absorbed power (the renormalization is preserved)
+    assert abs(q1.sum() - q0.sum()) / q0.sum() < 1e-9
+    # but a DIFFERENT pattern
+    rel = float(np.linalg.norm(q1 - q0) / np.linalg.norm(q0))
+    assert rel > 1e-3, rel
+    # re-concentration metric: peak-to-mean must MOVE
+    pm0 = float(q0.max() / q0.mean())
+    pm1 = float(q1.max() / q1.mean())
+    assert abs(pm1 - pm0) / pm0 > 1e-3, (pm0, pm1)
+
+
+def test_energy_audit_stays_clean_under_resolves():
+    """Standing S1 gate must survive a drive that changes mid-march."""
+    grid, part, p = _coupling_case()
+    p = dataclasses.replace(p, eqs_update_interval_s=5.0,
+                            sigma_temp_coeff_per_K=0.01,
+                            sigma_density_coeff=0.6, sigma_ref_temp_c=23.0)
+    res = run(grid, part, p, max_time_s=60.0, phi_target=2.0, densify=True)
+    assert res.n_eqs_solves > 1
+    assert abs(res.energy_residual_frac) < 1e-2
+    assert not res.clamp_bound
+
+
+def test_drift_tolerance_skips_resolves_and_reports_the_census():
+    """D1 lesson (EQS-01: each re-solve is a full solve at the certified grid
+    ceiling): when the max sigma drift since the last solve is below
+    eqs_resolve_drift_rtol the solve is skipped and the drive is updated
+    pointwise instead. A huge tolerance must skip EVERY re-solve."""
+    grid, part, p = _coupling_case()
+    p = dataclasses.replace(p, eqs_update_interval_s=5.0,
+                            sigma_temp_coeff_per_K=0.01,
+                            sigma_ref_temp_c=23.0,
+                            eqs_resolve_drift_rtol=1e9)
+    res = run(grid, part, p, max_time_s=20.0, phi_target=2.0)
+    assert res.n_eqs_solves == 1
+    assert res.n_eqs_resolves_skipped == 3
+    # the pointwise fallback still preserves the fixed absorbed power
+    p_tgt = p.power_density_w_per_m3 * (int(part.sum()) * grid.dV)
+    assert abs(res.Qrf.sum() * grid.dV - p_tgt) / p_tgt < 1e-9
+
+
+def test_resolve_schedule_is_absolute_time_aware_for_chained_segments():
+    """t_start_s (default 0.0, inert) lets a chained march keep ONE global
+    re-solve schedule, so segment boundaries do not shift the physics."""
+    grid, part, p = _coupling_case()
+    p = dataclasses.replace(p, eqs_update_interval_s=5.0)
+    # a 4 s segment starting at t=3 s must contain exactly one trigger (t=5 s)
+    res = run(grid, part, p, max_time_s=4.0, phi_target=2.0, t_start_s=3.0)
+    assert res.n_eqs_solves == 2
+    # the same segment at t=0 contains none
+    res0 = run(grid, part, p, max_time_s=4.0, phi_target=2.0)
+    assert res0.n_eqs_solves == 1

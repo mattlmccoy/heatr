@@ -1,0 +1,1542 @@
+{
+ "what": "heatr3d shape rankings under qrf_gradient='legacy' vs the corrected 'masked' default (EQS-02, commit 76eb22e). Both arms are post-processings of the SAME solve_eqs_3d V per shape, renormalized to the same total absorbed power, each driving run(qrf_override=...).",
+ "heatr3d_edited": false,
+ "n": 64,
+ "sigma_T_basis": "3-D: std of T_phi90 over part voxels (heatr3d.Result.sigma_T). NOT comparable to any 2-D/2.5-D ui_rms*(T_bar-23) number.",
+ "phase_update": "enthalpy",
+ "phi_target": 0.9,
+ "max_time_s": 1500.0,
+ "shapes": {
+  "cone": {
+   "shape": "cone",
+   "n": 64,
+   "h_m": 0.0009375,
+   "L_m": 0.06,
+   "geometry": {
+    "diam": 0.024,
+    "zspan": 0.03,
+    "src": "run_3d_study.py"
+   },
+   "shape_class": "solid",
+   "n_voxels_in_part": 5492,
+   "n_voxels_interior": 2704,
+   "n_voxels_surface_band": 2788,
+   "surface_band_volume_fraction": 0.507647487254188,
+   "surface_band_rule": "within 1.5 voxels of the part boundary",
+   "wall_eqs_s": 134.4604538329877,
+   "power_identity": {
+    "p_legacy_w": 7.202188592968324,
+    "p_masked_w": 7.202188592968324,
+    "rel_diff": 0.0
+   },
+   "qrf": {
+    "legacy": {
+     "mean_w_per_m3": 1591549.4309189534,
+     "max_over_mean": 31.418136615833976,
+     "p99_over_mean": 9.379507807842971,
+     "cv": 2.0815252855406006,
+     "interior_mean_w_per_m3": 647424.775974535,
+     "surface_mean_w_per_m3": 2507228.436288289,
+     "power_fraction_in_surface_band": 0.7997164215748515
+    },
+    "masked": {
+     "mean_w_per_m3": 1591549.4309189534,
+     "max_over_mean": 8.54921388679618,
+     "p99_over_mean": 3.091383105950267,
+     "cv": 0.6566196438914734,
+     "interior_mean_w_per_m3": 1351852.9042170336,
+     "surface_mean_w_per_m3": 1824024.1110487923,
+     "power_fraction_in_surface_band": 0.5817986162894906
+    }
+   },
+   "thermal": {
+    "legacy": {
+     "sigma_T_c": 32.90391945574475,
+     "t_phi90_s": 1182.8,
+     "T_max_c": 311.6879822223973,
+     "T_mean_c": 223.37092788539138,
+     "T_min_c": 101.0416353772941,
+     "interior_mean_c": 228.10853697718392,
+     "interior_std_c": 25.63054675832659,
+     "surface_mean_c": 218.77605880927692,
+     "surface_std_c": 38.11432965424779,
+     "surface_minus_interior_mean_c": -9.332478167906999,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -4.0245313665928487e-13,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 1022.3530054580187
+    },
+    "masked": {
+     "sigma_T_c": 43.123428678091436,
+     "t_phi90_s": 1153.8,
+     "T_max_c": 306.5479600893633,
+     "T_mean_c": 239.6204236669632,
+     "T_min_c": 82.6837551924422,
+     "interior_mean_c": 254.38126777619624,
+     "interior_std_c": 37.080063113794104,
+     "surface_mean_c": 225.30431087235556,
+     "surface_std_c": 43.74307453002777,
+     "surface_minus_interior_mean_c": -29.07695690384068,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -4.0827272262362874e-13,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 431.8606944580097
+    }
+   },
+   "phase_update": "enthalpy",
+   "phi_target": 0.9,
+   "max_time_s": 1500.0,
+   "peak_rss_gb": 0.6654205322265625,
+   "wall_total_s": 1588.9299235000508,
+   "python": "3.12.7",
+   "heatr3d_default_qrf_gradient": "masked"
+  },
+  "cross": {
+   "shape": "cross",
+   "n": 64,
+   "h_m": 0.0009375,
+   "L_m": 0.06,
+   "geometry": {
+    "diam": 0.02,
+    "zspan": "L",
+    "src": "layerC prism family"
+   },
+   "shape_class": "prism_full_height",
+   "n_voxels_in_part": 21760,
+   "n_voxels_interior": 12288,
+   "n_voxels_surface_band": 9472,
+   "surface_band_volume_fraction": 0.43529411764705883,
+   "surface_band_rule": "within 1.5 voxels of the part boundary",
+   "wall_eqs_s": 68.54540575004648,
+   "power_identity": {
+    "p_legacy_w": 28.53598393717966,
+    "p_masked_w": 28.53598393717966,
+    "rel_diff": 0.0
+   },
+   "qrf": {
+    "legacy": {
+     "mean_w_per_m3": 1591549.430918953,
+     "max_over_mean": 16.891476529071404,
+     "p99_over_mean": 16.89147524813737,
+     "cv": 2.1666669736523647,
+     "interior_mean_w_per_m3": 617326.3037902309,
+     "surface_mean_w_per_m3": 2855406.4607075662,
+     "power_fraction_in_surface_band": 0.7809632623975384
+    },
+    "masked": {
+     "mean_w_per_m3": 1591549.4309189534,
+     "max_over_mean": 2.2012187619943853,
+     "p99_over_mean": 2.201218602185358,
+     "cv": 0.4818791469239615,
+     "interior_mean_w_per_m3": 1551288.2372948688,
+     "surface_mean_w_per_m3": 1643780.168593441,
+     "power_fraction_in_surface_band": 0.4495793999187779
+    }
+   },
+   "thermal": {
+    "legacy": {
+     "sigma_T_c": 29.82313848559928,
+     "t_phi90_s": 457.25,
+     "T_max_c": 281.792343015127,
+     "T_mean_c": 218.11537262046022,
+     "T_min_c": 165.8608031680942,
+     "interior_mean_c": 215.90627802578055,
+     "interior_std_c": 20.727751619474116,
+     "surface_mean_c": 220.9812250676123,
+     "surface_std_c": 38.35813816989867,
+     "surface_minus_interior_mean_c": 5.074947041831763,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": 5.598703202132231e-14,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 259.70471733401064
+    },
+    "masked": {
+     "sigma_T_c": 28.95810170156158,
+     "t_phi90_s": 401.5,
+     "T_max_c": 262.6670546638092,
+     "T_mean_c": 224.68641597981795,
+     "T_min_c": 157.76743694167436,
+     "interior_mean_c": 240.361741405663,
+     "interior_std_c": 20.746785420146285,
+     "surface_mean_c": 204.35085867061355,
+     "surface_std_c": 25.214133142531097,
+     "surface_minus_interior_mean_c": -36.01088273504945,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": 4.999140420948355e-14,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 152.50992174993735
+    }
+   },
+   "phase_update": "enthalpy",
+   "phi_target": 0.9,
+   "max_time_s": 1500.0,
+   "peak_rss_gb": 0.7225799560546875,
+   "wall_total_s": 480.894513834035,
+   "python": "3.12.7",
+   "heatr3d_default_qrf_gradient": "masked"
+  },
+  "cylinder": {
+   "shape": "cylinder",
+   "n": 64,
+   "h_m": 0.0009375,
+   "L_m": 0.06,
+   "geometry": {
+    "diam": 0.02,
+    "zspan": null,
+    "src": "run_3d_study.py"
+   },
+   "shape_class": "prism_full_height",
+   "n_voxels_in_part": 23040,
+   "n_voxels_interior": 15872,
+   "n_voxels_surface_band": 7168,
+   "surface_band_volume_fraction": 0.3111111111111111,
+   "surface_band_rule": "within 1.5 voxels of the part boundary",
+   "wall_eqs_s": 53.8813169170171,
+   "power_identity": {
+    "p_legacy_w": 30.214571227602004,
+    "p_masked_w": 30.214571227602004,
+    "rel_diff": 0.0
+   },
+   "qrf": {
+    "legacy": {
+     "mean_w_per_m3": 1591549.4309189531,
+     "max_over_mean": 12.25493303782372,
+     "p99_over_mean": 12.254930427927528,
+     "cv": 2.115571006819856,
+     "interior_mean_w_per_m3": 608567.6709140749,
+     "surface_mean_w_per_m3": 3768151.8995011845,
+     "power_fraction_in_surface_band": 0.7365865624496305
+    },
+    "masked": {
+     "mean_w_per_m3": 1591549.4309189534,
+     "max_over_mean": 1.857307742257783,
+     "p99_over_mean": 1.8573072230691619,
+     "cv": 0.18032886484116506,
+     "interior_mean_w_per_m3": 1574255.4085973462,
+     "surface_mean_w_per_m3": 1629843.3374882261,
+     "power_fraction_in_surface_band": 0.3185966843456619
+    }
+   },
+   "thermal": {
+    "legacy": {
+     "sigma_T_c": 26.130549178929297,
+     "t_phi90_s": 397.0,
+     "T_max_c": 284.2700300306542,
+     "T_mean_c": 210.98205483836813,
+     "T_min_c": 159.95392857198635,
+     "interior_mean_c": 208.3229583123411,
+     "interior_std_c": 17.32960792231677,
+     "surface_mean_c": 216.87005428885655,
+     "surface_std_c": 38.46326933851496,
+     "surface_minus_interior_mean_c": 8.547095976515465,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -9.98411194096001e-14,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 195.31379133404698
+    },
+    "masked": {
+     "sigma_T_c": 20.103142032804296,
+     "t_phi90_s": 323.35,
+     "T_max_c": 240.02615087825984,
+     "T_mean_c": 208.65400048532732,
+     "T_min_c": 165.49665636237233,
+     "interior_mean_c": 219.62131844212362,
+     "interior_std_c": 12.741589999438913,
+     "surface_mean_c": 184.3692250095642,
+     "surface_std_c": 9.134293145015885,
+     "surface_minus_interior_mean_c": -35.252093432559434,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -2.3746560537317798e-14,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 167.856840500026
+    }
+   },
+   "phase_update": "enthalpy",
+   "phi_target": 0.9,
+   "max_time_s": 1500.0,
+   "peak_rss_gb": 0.6385498046875,
+   "wall_total_s": 417.1317639169283,
+   "python": "3.12.7",
+   "heatr3d_default_qrf_gradient": "masked"
+  },
+  "diamond": {
+   "shape": "diamond",
+   "n": 64,
+   "h_m": 0.0009375,
+   "L_m": 0.06,
+   "geometry": {
+    "diam": 0.02,
+    "zspan": "L",
+    "src": "local mask, 2-D-published cross-section"
+   },
+   "shape_class": "prism_full_height",
+   "n_voxels_in_part": 14080,
+   "n_voxels_interior": 9216,
+   "n_voxels_surface_band": 4864,
+   "surface_band_volume_fraction": 0.34545454545454546,
+   "surface_band_rule": "within 1.5 voxels of the part boundary",
+   "wall_eqs_s": 86.58952537504956,
+   "power_identity": {
+    "p_legacy_w": 18.464460194645664,
+    "p_masked_w": 18.464460194645664,
+    "rel_diff": 0.0
+   },
+   "qrf": {
+    "legacy": {
+     "mean_w_per_m3": 1591549.4309189531,
+     "max_over_mean": 17.054699911241578,
+     "p99_over_mean": 17.054693430619608,
+     "cv": 2.385309004603502,
+     "interior_mean_w_per_m3": 591586.0341512128,
+     "surface_mean_w_per_m3": 3486216.919531514,
+     "power_fraction_in_surface_band": 0.7567025301861537
+    },
+    "masked": {
+     "mean_w_per_m3": 1591549.4309189531,
+     "max_over_mean": 3.2185185903612386,
+     "p99_over_mean": 3.218517265574028,
+     "cv": 0.5376784020027287,
+     "interior_mean_w_per_m3": 1500755.2511114457,
+     "surface_mean_w_per_m3": 1763580.508448967,
+     "power_fraction_in_surface_band": 0.38279483570105866
+    }
+   },
+   "thermal": {
+    "legacy": {
+     "sigma_T_c": 26.213959702140748,
+     "t_phi90_s": 531.4,
+     "T_max_c": 292.4239607323629,
+     "T_mean_c": 212.84184816940788,
+     "T_min_c": 156.15349840329213,
+     "interior_mean_c": 212.68294821903916,
+     "interior_std_c": 17.242239300370453,
+     "surface_mean_c": 213.14292175958016,
+     "surface_std_c": 37.7590685994742,
+     "surface_minus_interior_mean_c": 0.45997354054100015,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": 1.6816781435006212e-13,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 285.0593514160719
+    },
+    "masked": {
+     "sigma_T_c": 21.141717646084242,
+     "t_phi90_s": 439.65000000000003,
+     "T_max_c": 237.22719513173647,
+     "T_mean_c": 211.90107499747353,
+     "T_min_c": 147.3572684976446,
+     "interior_mean_c": 221.27390403116664,
+     "interior_std_c": 14.498259017019034,
+     "surface_mean_c": 194.14203051258121,
+     "surface_std_c": 20.34104358299536,
+     "surface_minus_interior_mean_c": -27.131873518585422,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -1.8730970677814073e-15,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 146.88240537501406
+    }
+   },
+   "phase_update": "enthalpy",
+   "phi_target": 0.9,
+   "max_time_s": 1500.0,
+   "peak_rss_gb": 0.6947021484375,
+   "wall_total_s": 518.6041364159901,
+   "python": "3.12.7",
+   "heatr3d_default_qrf_gradient": "masked"
+  },
+  "dumbbell": {
+   "shape": "dumbbell",
+   "n": 64,
+   "h_m": 0.0009375,
+   "L_m": 0.06,
+   "geometry": {
+    "diam": 0.018,
+    "zspan": 0.034,
+    "src": "run_3d_study.py"
+   },
+   "shape_class": "solid",
+   "n_voxels_in_part": 8328,
+   "n_voxels_interior": 4336,
+   "n_voxels_surface_band": 3992,
+   "surface_band_volume_fraction": 0.4793467819404419,
+   "surface_band_rule": "within 1.5 voxels of the part boundary",
+   "wall_eqs_s": 80.58034783299081,
+   "power_identity": {
+    "p_legacy_w": 10.921308558310308,
+    "p_masked_w": 10.921308558310308,
+    "rel_diff": 0.0
+   },
+   "qrf": {
+    "legacy": {
+     "mean_w_per_m3": 1591549.4309189534,
+     "max_over_mean": 18.010472153413897,
+     "p99_over_mean": 10.018794589355247,
+     "cv": 1.9424970157888082,
+     "interior_mean_w_per_m3": 610353.3736314113,
+     "surface_mean_w_per_m3": 2657297.4530629367,
+     "power_fraction_in_surface_band": 0.8003313991000479
+    },
+    "masked": {
+     "mean_w_per_m3": 1591549.4309189531,
+     "max_over_mean": 4.224309959957321,
+     "p99_over_mean": 1.785257749452882,
+     "cv": 0.3239034582808161,
+     "interior_mean_w_per_m3": 1608872.0613553484,
+     "surface_mean_w_per_m3": 1572734.0688016668,
+     "power_fraction_in_surface_band": 0.4736799247842945
+    }
+   },
+   "thermal": {
+    "legacy": {
+     "sigma_T_c": 20.00690927318565,
+     "t_phi90_s": 797.3000000000001,
+     "T_max_c": 268.51106412151614,
+     "T_mean_c": 207.8629311259085,
+     "T_min_c": 162.15930974993194,
+     "interior_mean_c": 212.64941085206053,
+     "interior_std_c": 14.499050047968254,
+     "surface_mean_c": 202.66398921894574,
+     "surface_std_c": 23.554068734513233,
+     "surface_minus_interior_mean_c": -9.985421633114782,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": 3.170480067266268e-13,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 766.7091912920587
+    },
+    "masked": {
+     "sigma_T_c": 26.006175448240686,
+     "t_phi90_s": 688.3000000000001,
+     "T_max_c": 261.02225495991723,
+     "T_mean_c": 212.04101889607506,
+     "T_min_c": 139.64028767189345,
+     "interior_mean_c": 228.093870488726,
+     "interior_std_c": 20.97654236438437,
+     "surface_mean_c": 194.6048554427347,
+     "surface_std_c": 18.68341726473308,
+     "surface_minus_interior_mean_c": -33.489015045991295,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": 2.613467991277199e-13,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 426.976348749944
+    }
+   },
+   "phase_update": "enthalpy",
+   "phi_target": 0.9,
+   "max_time_s": 1500.0,
+   "peak_rss_gb": 0.6511993408203125,
+   "wall_total_s": 1274.7478890829952,
+   "python": "3.12.7",
+   "heatr3d_default_qrf_gradient": "masked"
+  },
+  "lshape": {
+   "shape": "lshape",
+   "n": 64,
+   "h_m": 0.0009375,
+   "L_m": 0.06,
+   "geometry": {
+    "diam": 0.02,
+    "zspan": "L",
+    "src": "layerC prism family"
+   },
+   "shape_class": "prism_full_height",
+   "n_voxels_in_part": 20160,
+   "n_voxels_interior": 10112,
+   "n_voxels_surface_band": 10048,
+   "surface_band_volume_fraction": 0.4984126984126984,
+   "surface_band_rule": "within 1.5 voxels of the part boundary",
+   "wall_eqs_s": 49.803324667038396,
+   "power_identity": {
+    "p_legacy_w": 26.43774982415176,
+    "p_masked_w": 26.437749824151748,
+    "rel_diff": 4.0314100508905406e-16
+   },
+   "qrf": {
+    "legacy": {
+     "mean_w_per_m3": 1591549.4309189538,
+     "max_over_mean": 16.44954956784861,
+     "p99_over_mean": 9.746313722543189,
+     "cv": 1.7690584792659791,
+     "interior_mean_w_per_m3": 740489.0550579904,
+     "surface_mean_w_per_m3": 2448030.5735051455,
+     "power_fraction_in_surface_band": 0.7666299897660028
+    },
+    "masked": {
+     "mean_w_per_m3": 1591549.4309189531,
+     "max_over_mean": 3.378832652017081,
+     "p99_over_mean": 2.352111620370246,
+     "cv": 0.6246631972776292,
+     "interior_mean_w_per_m3": 1582642.0255763195,
+     "surface_mean_w_per_m3": 1600513.5713274633,
+     "power_fraction_in_surface_band": 0.5012199259628827
+    }
+   },
+   "thermal": {
+    "legacy": {
+     "sigma_T_c": 33.20424714585243,
+     "t_phi90_s": 532.5500000000001,
+     "T_max_c": 298.57847138649583,
+     "T_mean_c": 225.66173633785323,
+     "T_min_c": 155.19645646730677,
+     "interior_mean_c": 226.41046371843734,
+     "interior_std_c": 29.631863770610718,
+     "surface_mean_c": 224.9082399930615,
+     "surface_std_c": 36.43205403842422,
+     "surface_minus_interior_mean_c": -1.502223725375842,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -1.756596121069963e-13,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 264.72986158309504
+    },
+    "masked": {
+     "sigma_T_c": 66.42014014478445,
+     "t_phi90_s": 680.9000000000001,
+     "T_max_c": 379.34898872720527,
+     "T_mean_c": 275.82251507268825,
+     "T_min_c": 144.2566596857433,
+     "interior_mean_c": 292.003848967501,
+     "interior_std_c": 63.735351954510946,
+     "surface_mean_c": 259.53811535688936,
+     "surface_std_c": 65.07392483771378,
+     "surface_minus_interior_mean_c": -32.465733610611665,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -6.688347484244854e-14,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 354.77853041596245
+    }
+   },
+   "phase_update": "enthalpy",
+   "phi_target": 0.9,
+   "max_time_s": 1500.0,
+   "peak_rss_gb": 0.6492156982421875,
+   "wall_total_s": 669.3914381660288,
+   "python": "3.12.7",
+   "heatr3d_default_qrf_gradient": "masked"
+  },
+  "sphere": {
+   "shape": "sphere",
+   "n": 64,
+   "h_m": 0.0009375,
+   "L_m": 0.06,
+   "geometry": {
+    "diam": 0.028,
+    "zspan": null,
+    "src": "run_3d_study.py"
+   },
+   "shape_class": "solid",
+   "n_voxels_in_part": 13992,
+   "n_voxels_interior": 9640,
+   "n_voxels_surface_band": 4352,
+   "surface_band_volume_fraction": 0.3110348770726129,
+   "surface_band_rule": "within 1.5 voxels of the part boundary",
+   "wall_eqs_s": 68.77690904203337,
+   "power_identity": {
+    "p_legacy_w": 18.349057318429136,
+    "p_masked_w": 18.349057318429132,
+    "rel_diff": 1.9361832148359375e-16
+   },
+   "qrf": {
+    "legacy": {
+     "mean_w_per_m3": 1591549.4309189536,
+     "max_over_mean": 20.27292343309329,
+     "p99_over_mean": 11.532282114789156,
+     "cv": 2.028895011671673,
+     "interior_mean_w_per_m3": 783705.3369682884,
+     "surface_mean_w_per_m3": 3380983.499320703,
+     "power_fraction_in_surface_band": 0.6607421464054409
+    },
+    "masked": {
+     "mean_w_per_m3": 1591549.4309189536,
+     "max_over_mean": 2.6246460218205216,
+     "p99_over_mean": 1.6168105078245494,
+     "cv": 0.14725835977022467,
+     "interior_mean_w_per_m3": 1579172.353619133,
+     "surface_mean_w_per_m3": 1618965.5672172694,
+     "power_fraction_in_surface_band": 0.3163927845417067
+    }
+   },
+   "thermal": {
+    "legacy": {
+     "sigma_T_c": 32.40264372391805,
+     "t_phi90_s": 496.25,
+     "T_max_c": 330.6967607065354,
+     "T_mean_c": 220.12965628991716,
+     "T_min_c": 155.2137422562465,
+     "interior_mean_c": 223.13770064426706,
+     "interior_std_c": 23.93851864714926,
+     "surface_mean_c": 213.4666168653002,
+     "surface_std_c": 45.18643349171243,
+     "surface_minus_interior_mean_c": -9.671083778966846,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": 4.916520287514254e-14,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 524.4380134580424
+    },
+    "masked": {
+     "sigma_T_c": 27.103127477948576,
+     "t_phi90_s": 390.75,
+     "T_max_c": 271.1818460303493,
+     "T_mean_c": 216.39687955325232,
+     "T_min_c": 164.42186589916182,
+     "interior_mean_c": 230.48193098352613,
+     "interior_std_c": 19.69586552723818,
+     "surface_mean_c": 185.19745496964947,
+     "surface_std_c": 9.465224800019916,
+     "surface_minus_interior_mean_c": -45.284476013876656,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -5.004692951116304e-14,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 340.00630929192994
+    }
+   },
+   "phase_update": "enthalpy",
+   "phi_target": 0.9,
+   "max_time_s": 1500.0,
+   "peak_rss_gb": 0.687255859375,
+   "wall_total_s": 933.5213527500164,
+   "python": "3.12.7",
+   "heatr3d_default_qrf_gradient": "masked"
+  },
+  "square": {
+   "shape": "square",
+   "n": 64,
+   "h_m": 0.0009375,
+   "L_m": 0.06,
+   "geometry": {
+    "diam": 0.02,
+    "zspan": "L",
+    "src": "EQS02_IMPACT.md"
+   },
+   "shape_class": "prism_full_height",
+   "n_voxels_in_part": 30976,
+   "n_voxels_interior": 20736,
+   "n_voxels_surface_band": 10240,
+   "surface_band_volume_fraction": 0.3305785123966942,
+   "surface_band_rule": "within 1.5 voxels of the part boundary",
+   "wall_eqs_s": 59.819837124901824,
+   "power_identity": {
+    "p_legacy_w": 40.62181242822047,
+    "p_masked_w": 40.62181242822046,
+    "rel_diff": 3.498331035896751e-16
+   },
+   "qrf": {
+    "legacy": {
+     "mean_w_per_m3": 1591549.4309189534,
+     "max_over_mean": 19.154676717105826,
+     "p99_over_mean": 7.488729733070596,
+     "cv": 2.108182070527277,
+     "interior_mean_w_per_m3": 626214.5463191769,
+     "surface_mean_w_per_m3": 3546352.572233501,
+     "power_fraction_in_surface_band": 0.736607946311936
+    },
+    "masked": {
+     "mean_w_per_m3": 1591549.430918953,
+     "max_over_mean": 2.198335863744568,
+     "p99_over_mean": 1.8855763422296432,
+     "cv": 0.2901614160876311,
+     "interior_mean_w_per_m3": 1494385.0909988305,
+     "surface_mean_w_per_m3": 1788307.2192572015,
+     "power_fraction_in_surface_band": 0.3714467981738855
+    }
+   },
+   "thermal": {
+    "legacy": {
+     "sigma_T_c": 17.89741487156853,
+     "t_phi90_s": 327.70000000000005,
+     "T_max_c": 254.24997704571962,
+     "T_mean_c": 198.33056499238583,
+     "T_min_c": 172.05308229664365,
+     "interior_mean_c": 192.37514005421394,
+     "interior_std_c": 10.127593692398412,
+     "surface_mean_c": 210.39030049218383,
+     "surface_std_c": 23.323844709167,
+     "surface_minus_interior_mean_c": 18.015160437969882,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -7.519757039016949e-14,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 162.78016379103065
+    },
+    "masked": {
+     "sigma_T_c": 19.85577084524189,
+     "t_phi90_s": 316.05,
+     "T_max_c": 238.099815199894,
+     "T_mean_c": 211.42061786291336,
+     "T_min_c": 162.74623202815613,
+     "interior_mean_c": 221.51100960932538,
+     "interior_std_c": 13.01830096999824,
+     "surface_mean_c": 190.987574576429,
+     "surface_std_c": 15.02449017101175,
+     "surface_minus_interior_mean_c": -30.523435032896373,
+     "gates": {
+      "reached_phi90": true,
+      "energy_residual_frac": -7.63005314188298e-14,
+      "clamp_bound": false,
+      "cfl_violated": false,
+      "n_substeps_used": 1
+     },
+     "wall_thermal_s": 166.36330758302938
+    }
+   },
+   "phase_update": "enthalpy",
+   "phi_target": 0.9,
+   "max_time_s": 1500.0,
+   "peak_rss_gb": 0.6708984375,
+   "wall_total_s": 389.0620946249692,
+   "python": "3.12.7",
+   "heatr3d_default_qrf_gradient": "masked"
+  }
+ },
+ "rankings": {
+  "sigma_T_c": {
+   "rank_legacy": [
+    "square",
+    "dumbbell",
+    "cylinder",
+    "diamond",
+    "cross",
+    "sphere",
+    "cone",
+    "lshape"
+   ],
+   "rank_masked": [
+    "square",
+    "cylinder",
+    "diamond",
+    "dumbbell",
+    "sphere",
+    "cross",
+    "cone",
+    "lshape"
+   ],
+   "inversions": [
+    [
+     "dumbbell",
+     "cylinder"
+    ],
+    [
+     "dumbbell",
+     "diamond"
+    ],
+    [
+     "cross",
+     "sphere"
+    ]
+   ],
+   "flipped": true,
+   "spearman": 0.9047619047619048,
+   "skipped": [],
+   "ascending": true,
+   "values": {
+    "cone": {
+     "legacy": 32.90391945574475,
+     "masked": 43.123428678091436,
+     "delta": 10.219509222346687,
+     "rel": 0.3105863797196491
+    },
+    "cross": {
+     "legacy": 29.82313848559928,
+     "masked": 28.95810170156158,
+     "delta": -0.8650367840376987,
+     "rel": -0.029005558367218784
+    },
+    "cylinder": {
+     "legacy": 26.130549178929297,
+     "masked": 20.103142032804296,
+     "delta": -6.027407146125,
+     "rel": -0.23066515383401423
+    },
+    "diamond": {
+     "legacy": 26.213959702140748,
+     "masked": 21.141717646084242,
+     "delta": -5.072242056056506,
+     "rel": -0.19349392894818115
+    },
+    "dumbbell": {
+     "legacy": 20.00690927318565,
+     "masked": 26.006175448240686,
+     "delta": 5.999266175055038,
+     "rel": 0.2998597181172597
+    },
+    "lshape": {
+     "legacy": 33.20424714585243,
+     "masked": 66.42014014478445,
+     "delta": 33.21589299893203,
+     "rel": 1.0003507338392117
+    },
+    "sphere": {
+     "legacy": 32.40264372391805,
+     "masked": 27.103127477948576,
+     "delta": -5.299516245969471,
+     "rel": -0.16355197097876392
+    },
+    "square": {
+     "legacy": 17.89741487156853,
+     "masked": 19.85577084524189,
+     "delta": 1.9583559736733598,
+     "rel": 0.10942116432604826
+    }
+   },
+   "label": "sigma_T (3-D: std of T_phi90 over part voxels)",
+   "unit": "C"
+  },
+  "t_phi90_s": {
+   "rank_legacy": [
+    "square",
+    "cylinder",
+    "cross",
+    "sphere",
+    "diamond",
+    "lshape",
+    "dumbbell",
+    "cone"
+   ],
+   "rank_masked": [
+    "square",
+    "cylinder",
+    "sphere",
+    "cross",
+    "diamond",
+    "lshape",
+    "dumbbell",
+    "cone"
+   ],
+   "inversions": [
+    [
+     "cross",
+     "sphere"
+    ]
+   ],
+   "flipped": true,
+   "spearman": 0.9761904761904762,
+   "skipped": [],
+   "ascending": true,
+   "values": {
+    "cone": {
+     "legacy": 1182.8,
+     "masked": 1153.8,
+     "delta": -29.0,
+     "rel": -0.024518092661481233
+    },
+    "cross": {
+     "legacy": 457.25,
+     "masked": 401.5,
+     "delta": -55.75,
+     "rel": -0.12192454893384364
+    },
+    "cylinder": {
+     "legacy": 397.0,
+     "masked": 323.35,
+     "delta": -73.64999999999998,
+     "rel": -0.18551637279596972
+    },
+    "diamond": {
+     "legacy": 531.4,
+     "masked": 439.65000000000003,
+     "delta": -91.74999999999994,
+     "rel": -0.17265713210387645
+    },
+    "dumbbell": {
+     "legacy": 797.3000000000001,
+     "masked": 688.3000000000001,
+     "delta": -109.0,
+     "rel": -0.13671140097830176
+    },
+    "lshape": {
+     "legacy": 532.5500000000001,
+     "masked": 680.9000000000001,
+     "delta": 148.35000000000002,
+     "rel": 0.27856539292085253
+    },
+    "sphere": {
+     "legacy": 496.25,
+     "masked": 390.75,
+     "delta": -105.5,
+     "rel": -0.21259445843828714
+    },
+    "square": {
+     "legacy": 327.70000000000005,
+     "masked": 316.05,
+     "delta": -11.650000000000034,
+     "rel": -0.035550808666463325
+    }
+   },
+   "label": "t90",
+   "unit": "s"
+  },
+  "T_max_c": {
+   "rank_legacy": [
+    "square",
+    "dumbbell",
+    "cross",
+    "cylinder",
+    "diamond",
+    "lshape",
+    "cone",
+    "sphere"
+   ],
+   "rank_masked": [
+    "diamond",
+    "square",
+    "cylinder",
+    "dumbbell",
+    "cross",
+    "sphere",
+    "cone",
+    "lshape"
+   ],
+   "inversions": [
+    [
+     "square",
+     "diamond"
+    ],
+    [
+     "dumbbell",
+     "cylinder"
+    ],
+    [
+     "dumbbell",
+     "diamond"
+    ],
+    [
+     "cross",
+     "cylinder"
+    ],
+    [
+     "cross",
+     "diamond"
+    ],
+    [
+     "cylinder",
+     "diamond"
+    ],
+    [
+     "lshape",
+     "cone"
+    ],
+    [
+     "lshape",
+     "sphere"
+    ],
+    [
+     "cone",
+     "sphere"
+    ]
+   ],
+   "flipped": true,
+   "spearman": 0.5952380952380952,
+   "skipped": [],
+   "ascending": true,
+   "values": {
+    "cone": {
+     "legacy": 311.6879822223973,
+     "masked": 306.5479600893633,
+     "delta": -5.140022133033995,
+     "rel": -0.016490921774989894
+    },
+    "cross": {
+     "legacy": 281.792343015127,
+     "masked": 262.6670546638092,
+     "delta": -19.125288351317806,
+     "rel": -0.06787014915551177
+    },
+    "cylinder": {
+     "legacy": 284.2700300306542,
+     "masked": 240.02615087825984,
+     "delta": -44.243879152394356,
+     "rel": -0.15564032250470908
+    },
+    "diamond": {
+     "legacy": 292.4239607323629,
+     "masked": 237.22719513173647,
+     "delta": -55.196765600626435,
+     "rel": -0.18875596056625651
+    },
+    "dumbbell": {
+     "legacy": 268.51106412151614,
+     "masked": 261.02225495991723,
+     "delta": -7.488809161598908,
+     "rel": -0.027890132520609307
+    },
+    "lshape": {
+     "legacy": 298.57847138649583,
+     "masked": 379.34898872720527,
+     "delta": 80.77051734070943,
+     "rel": 0.27051688276666064
+    },
+    "sphere": {
+     "legacy": 330.6967607065354,
+     "masked": 271.1818460303493,
+     "delta": -59.514914676186095,
+     "rel": -0.17996824205060905
+    },
+    "square": {
+     "legacy": 254.24997704571962,
+     "masked": 238.099815199894,
+     "delta": -16.150161845825608,
+     "rel": -0.06352079962202499
+    }
+   },
+   "label": "T_max",
+   "unit": "C"
+  },
+  "surface_minus_interior_mean_c": {
+   "rank_legacy": [
+    "dumbbell",
+    "sphere",
+    "cone",
+    "lshape",
+    "diamond",
+    "cross",
+    "cylinder",
+    "square"
+   ],
+   "rank_masked": [
+    "sphere",
+    "cross",
+    "cylinder",
+    "dumbbell",
+    "lshape",
+    "square",
+    "cone",
+    "diamond"
+   ],
+   "inversions": [
+    [
+     "dumbbell",
+     "sphere"
+    ],
+    [
+     "dumbbell",
+     "cross"
+    ],
+    [
+     "dumbbell",
+     "cylinder"
+    ],
+    [
+     "cone",
+     "lshape"
+    ],
+    [
+     "cone",
+     "cross"
+    ],
+    [
+     "cone",
+     "cylinder"
+    ],
+    [
+     "cone",
+     "square"
+    ],
+    [
+     "lshape",
+     "cross"
+    ],
+    [
+     "lshape",
+     "cylinder"
+    ],
+    [
+     "diamond",
+     "cross"
+    ],
+    [
+     "diamond",
+     "cylinder"
+    ],
+    [
+     "diamond",
+     "square"
+    ]
+   ],
+   "flipped": true,
+   "spearman": 0.1428571428571429,
+   "skipped": [],
+   "ascending": true,
+   "values": {
+    "cone": {
+     "legacy": -9.332478167906999,
+     "masked": -29.07695690384068,
+     "delta": -19.744478735933683,
+     "rel": 2.115673712887109
+    },
+    "cross": {
+     "legacy": 5.074947041831763,
+     "masked": -36.01088273504945,
+     "delta": -41.08582977688121,
+     "rel": -8.095814485987542
+    },
+    "cylinder": {
+     "legacy": 8.547095976515465,
+     "masked": -35.252093432559434,
+     "delta": -43.7991894090749,
+     "rel": -5.124452741541723
+    },
+    "diamond": {
+     "legacy": 0.45997354054100015,
+     "masked": -27.131873518585422,
+     "delta": -27.591847059126422,
+     "rel": -59.985726628262434
+    },
+    "dumbbell": {
+     "legacy": -9.985421633114782,
+     "masked": -33.489015045991295,
+     "delta": -23.503593412876512,
+     "rel": 2.353790783849451
+    },
+    "lshape": {
+     "legacy": -1.502223725375842,
+     "masked": -32.465733610611665,
+     "delta": -30.963509885235823,
+     "rel": 20.6117832931237
+    },
+    "sphere": {
+     "legacy": -9.671083778966846,
+     "masked": -45.284476013876656,
+     "delta": -35.61339223490981,
+     "rel": 3.6824613506465105
+    },
+    "square": {
+     "legacy": 18.015160437969882,
+     "masked": -30.523435032896373,
+     "delta": -48.538595470866255,
+     "rel": -2.6943193560776324
+    }
+   },
+   "label": "surface minus interior mean T",
+   "unit": "C"
+  },
+  "power_fraction_in_surface_band": {
+   "rank_legacy": [
+    "sphere",
+    "cylinder",
+    "square",
+    "diamond",
+    "lshape",
+    "cross",
+    "cone",
+    "dumbbell"
+   ],
+   "rank_masked": [
+    "sphere",
+    "cylinder",
+    "square",
+    "diamond",
+    "cross",
+    "dumbbell",
+    "lshape",
+    "cone"
+   ],
+   "inversions": [
+    [
+     "lshape",
+     "cross"
+    ],
+    [
+     "lshape",
+     "dumbbell"
+    ],
+    [
+     "cone",
+     "dumbbell"
+    ]
+   ],
+   "flipped": true,
+   "spearman": 0.8809523809523809,
+   "skipped": [],
+   "ascending": true,
+   "values": {
+    "cone": {
+     "legacy": 0.7997164215748515,
+     "masked": 0.5817986162894906,
+     "delta": -0.21791780528536087,
+     "rel": -0.27249384832716517
+    },
+    "cross": {
+     "legacy": 0.7809632623975384,
+     "masked": 0.4495793999187779,
+     "delta": -0.33138386247876056,
+     "rel": -0.4243270822515006
+    },
+    "cylinder": {
+     "legacy": 0.7365865624496305,
+     "masked": 0.3185966843456619,
+     "delta": -0.4179898781039686,
+     "rel": -0.5674687801985957
+    },
+    "diamond": {
+     "legacy": 0.7567025301861537,
+     "masked": 0.38279483570105866,
+     "delta": -0.3739076944850951,
+     "rel": -0.49412771805204797
+    },
+    "dumbbell": {
+     "legacy": 0.8003313991000479,
+     "masked": 0.4736799247842945,
+     "delta": -0.3266514743157534,
+     "rel": -0.4081452691760746
+    },
+    "lshape": {
+     "legacy": 0.7666299897660028,
+     "masked": 0.5012199259628827,
+     "delta": -0.26541006380312016,
+     "rel": -0.34620360192813593
+    },
+    "sphere": {
+     "legacy": 0.6607421464054409,
+     "masked": 0.3163927845417067,
+     "delta": -0.3443493618637342,
+     "rel": -0.5211554367116706
+    },
+    "square": {
+     "legacy": 0.736607946311936,
+     "masked": 0.3714467981738855,
+     "delta": -0.36516114813805056,
+     "rel": -0.4957333815991899
+    }
+   },
+   "label": "Q_rf power fraction in the surface band",
+   "unit": "-"
+  },
+  "qrf_max_over_mean": {
+   "rank_legacy": [
+    "cylinder",
+    "lshape",
+    "cross",
+    "diamond",
+    "dumbbell",
+    "square",
+    "sphere",
+    "cone"
+   ],
+   "rank_masked": [
+    "cylinder",
+    "square",
+    "cross",
+    "sphere",
+    "diamond",
+    "lshape",
+    "dumbbell",
+    "cone"
+   ],
+   "inversions": [
+    [
+     "lshape",
+     "cross"
+    ],
+    [
+     "lshape",
+     "diamond"
+    ],
+    [
+     "lshape",
+     "square"
+    ],
+    [
+     "lshape",
+     "sphere"
+    ],
+    [
+     "cross",
+     "square"
+    ],
+    [
+     "diamond",
+     "square"
+    ],
+    [
+     "diamond",
+     "sphere"
+    ],
+    [
+     "dumbbell",
+     "square"
+    ],
+    [
+     "dumbbell",
+     "sphere"
+    ]
+   ],
+   "flipped": true,
+   "spearman": 0.45238095238095233,
+   "skipped": [],
+   "ascending": true,
+   "values": {
+    "cone": {
+     "legacy": 31.418136615833976,
+     "masked": 8.54921388679618,
+     "delta": -22.8689227290378,
+     "rel": -0.7278892128030412
+    },
+    "cross": {
+     "legacy": 16.891476529071404,
+     "masked": 2.2012187619943853,
+     "delta": -14.69025776707702,
+     "rel": -0.8696846449032484
+    },
+    "cylinder": {
+     "legacy": 12.25493303782372,
+     "masked": 1.857307742257783,
+     "delta": -10.397625295565938,
+     "rel": -0.8484440725603826
+    },
+    "diamond": {
+     "legacy": 17.054699911241578,
+     "masked": 3.2185185903612386,
+     "delta": -13.836181320880339,
+     "rel": -0.8112826020327829
+    },
+    "dumbbell": {
+     "legacy": 18.010472153413897,
+     "masked": 4.224309959957321,
+     "delta": -13.786162193456576,
+     "rel": -0.7654525698174659
+    },
+    "lshape": {
+     "legacy": 16.44954956784861,
+     "masked": 3.378832652017081,
+     "delta": -13.070716915831529,
+     "rel": -0.7945942143837688
+    },
+    "sphere": {
+     "legacy": 20.27292343309329,
+     "masked": 2.6246460218205216,
+     "delta": -17.64827741127277,
+     "rel": -0.8705344085926907
+    },
+    "square": {
+     "legacy": 19.154676717105826,
+     "masked": 2.198335863744568,
+     "delta": -16.956340853361258,
+     "rel": -0.8852324215014616
+    }
+   },
+   "label": "Q_rf max/mean",
+   "unit": "-"
+  }
+ },
+ "gates": [
+  {
+   "shape": "cone",
+   "arm": "legacy",
+   "reached_phi90": true,
+   "energy_residual_frac": -4.0245313665928487e-13,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "cone",
+   "arm": "masked",
+   "reached_phi90": true,
+   "energy_residual_frac": -4.0827272262362874e-13,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "cross",
+   "arm": "legacy",
+   "reached_phi90": true,
+   "energy_residual_frac": 5.598703202132231e-14,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "cross",
+   "arm": "masked",
+   "reached_phi90": true,
+   "energy_residual_frac": 4.999140420948355e-14,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "cylinder",
+   "arm": "legacy",
+   "reached_phi90": true,
+   "energy_residual_frac": -9.98411194096001e-14,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "cylinder",
+   "arm": "masked",
+   "reached_phi90": true,
+   "energy_residual_frac": -2.3746560537317798e-14,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "diamond",
+   "arm": "legacy",
+   "reached_phi90": true,
+   "energy_residual_frac": 1.6816781435006212e-13,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "diamond",
+   "arm": "masked",
+   "reached_phi90": true,
+   "energy_residual_frac": -1.8730970677814073e-15,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "dumbbell",
+   "arm": "legacy",
+   "reached_phi90": true,
+   "energy_residual_frac": 3.170480067266268e-13,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "dumbbell",
+   "arm": "masked",
+   "reached_phi90": true,
+   "energy_residual_frac": 2.613467991277199e-13,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "lshape",
+   "arm": "legacy",
+   "reached_phi90": true,
+   "energy_residual_frac": -1.756596121069963e-13,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "lshape",
+   "arm": "masked",
+   "reached_phi90": true,
+   "energy_residual_frac": -6.688347484244854e-14,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "sphere",
+   "arm": "legacy",
+   "reached_phi90": true,
+   "energy_residual_frac": 4.916520287514254e-14,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "sphere",
+   "arm": "masked",
+   "reached_phi90": true,
+   "energy_residual_frac": -5.004692951116304e-14,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "square",
+   "arm": "legacy",
+   "reached_phi90": true,
+   "energy_residual_frac": -7.519757039016949e-14,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  },
+  {
+   "shape": "square",
+   "arm": "masked",
+   "reached_phi90": true,
+   "energy_residual_frac": -7.63005314188298e-14,
+   "clamp_bound": false,
+   "cfl_violated": false,
+   "n_substeps_used": 1,
+   "pass": true
+  }
+ ],
+ "gates_all_pass": true,
+ "power_identity_max_rel_diff": 4.0314100508905406e-16,
+ "wall_total_s": 6272.283112291014
+}

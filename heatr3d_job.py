@@ -445,7 +445,12 @@ def main(argv: list[str]) -> None:
     print("PROGRESS 90  # post-processing")
 
     results = {"sigma_T": round(r.sigma_T, 3), "t_phi90_s": round(r.t_phi90_s, 1),
-               "reached_phi90": bool(r.reached), "T_max_C": round(r.T_max_c, 1),
+               "reached_phi90": bool(r.reached),
+               # P0b loud flag: when True, sigma_T / T_max_C / t_phi90_s are
+               # FINAL-TIMESTEP reads (phi_bar never crossed 0.90), not
+               # melt-onset reads. Instrumentation only; numbers unchanged.
+               "MELT_ONSET_FALLBACK": (not bool(r.reached)),
+               "T_max_C": round(r.T_max_c, 1),
                "fgm": fgm, "densify": densify, "grid_n": grid.n, "solve_s": round(time.time() - t0, 1)}
     results.update({k: v for k, v in H.sinter_metrics(r).items()})
     if densify and r.rho_final is not None:

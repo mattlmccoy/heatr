@@ -1,0 +1,109 @@
+{
+  "shape": "T_shape",
+  "intake": {
+    "name": "T_shape",
+    "source": "polygon",
+    "grid": 120,
+    "chamber_m": 0.06,
+    "dx_m": 0.0005042016806722678,
+    "n_sub": 32,
+    "n_vertices": 8,
+    "area_chi_m2": 0.0002759431713862004,
+    "area_raster_m2": 0.00028065814561118444,
+    "n_part_cells": 1104,
+    "voltage_v": 1718.9755939450517,
+    "voltage_is_calibrated": true,
+    "closed_ring_trimmed": true,
+    "calibration": {
+      "voltage_v": 1718.9755939450517,
+      "start_voltage_v": 2428.1732217858744,
+      "p_at_start_w_per_m": 997.6768931956638,
+      "p_target_w_per_m": 500.0,
+      "p_verified_w_per_m": 499.9999999999995,
+      "n_electro_quasi_static_solves": 2,
+      "electrical_state": "B",
+      "convention": "uniform dopant arm absorbs the target power, state B, summed over the doped mask (FROZEN_CONVENTIONS_2D section 3)"
+    }
+  },
+  "raster_vs_area": {
+    "area_raster_m2": 0.00028065814561118444,
+    "area_chi_m2": 0.0002759431713862004,
+    "area_rel_delta": 0.017086758122327832,
+    "n_cells_differing_gt_0p01": 204,
+    "max_abs_cell_delta": 0.365234375,
+    "sum_abs_cell_delta": 27.453125
+  },
+  "part_mask_matches_stored_config": true,
+  "n_cells_differing": 0,
+  "voltage_stored_v": 1718.975593945065,
+  "voltage_calibrated_v": 1718.9755939450517,
+  "voltage_rel_error": 7.67182106724484e-15,
+  "symmetry": {
+    "rotational_order": 1,
+    "continuous_rotational": false,
+    "mirror_axes_deg": [
+      90.0
+    ],
+    "point_group": "C1v",
+    "centroid_row_col": [
+      50.93932905324677,
+      59.5
+    ],
+    "diagnostics": {
+      "tested_orders": {
+        "2": 0.5792338021447664,
+        "3": 0.5189515917412164,
+        "4": 0.7387851450167906,
+        "5": 0.7259259525111359,
+        "6": 0.7033182225102027,
+        "7": 0.6773313655852756,
+        "8": 0.6494982775869949,
+        "9": 0.6208914651364632,
+        "10": 0.5918435501044454,
+        "11": 0.5627596423501128,
+        "12": 0.5349570801853876
+      },
+      "generic_angle_mismatch": {
+        "17.0": 0.34623543403843493,
+        "23.0": 0.44835730354503445,
+        "41.0": 0.6273308645768286
+      },
+      "mirror_min_mismatch": 2.0221468468787669e-16,
+      "tol": 0.03
+    }
+  },
+  "expected_order": 1,
+  "anisotropy": {
+    "static": 0.8041175915956722,
+    "continuous": 0.8366141701018698
+  },
+  "recommendation": {
+    "mode": "static",
+    "actuator_class": "PHYSICAL_LIMIT",
+    "residual_anisotropy": 0.8041175915956722,
+    "static_residual_anisotropy": 0.8041175915956722,
+    "reduction_factor": 1.0,
+    "rotation_recommended": false,
+    "advice": "No rotation mode reduces the anisotropy by the 1.15 factor that makes a turntable worth its cost here, so the static arm is kept. The residual anisotropy is in the band of the two shapes rotation did NOT rescue (T_shape 0.837, L_shape 1.098). Expect a physical limit: a radial kernel melts a rounded blob and this part is not close to radially symmetric. The best results on record for that class came from SEQUENTIAL DWELL, an ordered hold that melts one limb and then the other (SEQUENTIAL_DWELL_REPORT: L_shape 396.20 -> 276.39 J, IoU 0.6484 -> 0.7161; T_shape 422.28 -> 343.02 J). Neither reached the SOLVED class, so this is a partial rescue, not a fix.",
+    "candidate_angles_deg": [
+      0.0,
+      15.0,
+      30.0,
+      45.0,
+      60.0,
+      75.0,
+      90.0,
+      105.0,
+      120.0,
+      135.0,
+      150.0,
+      165.0
+    ],
+    "spectrum": {
+      "static": 0.8041175915956722,
+      "continuous": 0.8366141701018698
+    }
+  },
+  "known_rotation_outcome": "rotation_fails",
+  "wall_s": 3.8690720420563594
+}

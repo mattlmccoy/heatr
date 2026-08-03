@@ -1,0 +1,454 @@
+{
+ "actuator": "indexed turntable, constant radio-frequency power",
+ "cycle_time_s": 20.0,
+ "total_exposure_s": 750.0,
+ "control_step_s": 0.5,
+ "n_cycles": 37.5,
+ "positions_deg": [
+  135.0,
+  315.0
+ ],
+ "steps_per_position_per_cycle": [
+  20,
+  20
+ ],
+ "realized_dwell_fraction": [
+  0.5,
+  0.5
+ ],
+ "requested_dwell_fraction": [
+  0.0,
+  0.0,
+  0.0,
+  0.5,
+  0.0,
+  0.0,
+  0.0,
+  0.5
+ ],
+ "total_dwell_s_per_position": [
+  375.0,
+  375.0
+ ],
+ "n_moves": 75,
+ "moves": [
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 0.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 10.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 20.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 30.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 40.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 50.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 60.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 70.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 80.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 90.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 100.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 110.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 120.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 130.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 140.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 150.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 160.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 170.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 180.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 190.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 200.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 210.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 220.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 230.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 240.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 250.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 260.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 270.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 280.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 290.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 300.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 310.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 320.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 330.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 340.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 350.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 360.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 370.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 380.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 390.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 400.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 410.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 420.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 430.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 440.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 450.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 460.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 470.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 480.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 490.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 500.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 510.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 520.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 530.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 540.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 550.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 560.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 570.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 580.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 590.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 600.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 610.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 620.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 630.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 640.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 650.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 660.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 670.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 680.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 690.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 700.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 710.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 720.0
+  },
+  {
+   "position_deg": 315.0,
+   "dwell_s": 10.0,
+   "move_at_s": 730.0
+  },
+  {
+   "position_deg": 135.0,
+   "dwell_s": 10.0,
+   "move_at_s": 740.0
+  }
+ ],
+ "shape": "L_shape",
+ "arm": "deliverable",
+ "scored_arm_name": "D_refined_4bpp_discovered_lib",
+ "candidate_positions_deg": [
+  0.0,
+  45.0,
+  90.0,
+  135.0,
+  180.0,
+  225.0,
+  270.0,
+  315.0
+ ],
+ "recommended_stop_s": 304.5,
+ "dopant_map_npz": "L_shape_dwell_maps.npz",
+ "dopant_map_key": "sat_D_refined_4bpp_discovered_lib",
+ "dopant_bits_per_pixel": 4,
+ "rf_program": {
+  "mode": "constant",
+  "relative_power": 1.0,
+  "voltage_v": 1804.2151285366901
+ },
+ "half_turn_redundancy": "the part-frame heating at theta and theta + 180 degrees is the same field to 4e-13 relative, so the reduced program below is physically equivalent to the literal one and asks for half as many moves",
+ "reduced_program": {
+  "positions_deg": [
+   135.0
+  ],
+  "dwell_fraction": [
+   1.0
+  ],
+  "steps_per_position_per_cycle": [
+   40
+  ],
+  "cycle_time_s": 20.0,
+  "n_moves": 1,
+  "moves": [
+   {
+    "position_deg": 135.0,
+    "dwell_s": 750.0,
+    "move_at_s": 0.0
+   }
+  ]
+ }
+}

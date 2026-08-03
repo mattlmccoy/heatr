@@ -1,0 +1,145 @@
+{
+  "shape": "T_shape",
+  "n_seg": 16,
+  "horizon_steps": 1500,
+  "schedule_window_steps": 700,
+  "note": "structure_gain is the optimized schedule minus its own constant-at-duty control; dose_gain is that control minus constant nominal power on the same map",
+  "rows": [
+    {
+      "arm": "SCHED_only",
+      "duty_cycle": 1.3442857142857143,
+      "scheduled": {
+        "J": 580.9454665138368,
+        "IoU": 0.46619217081850534,
+        "t_stop_s": 131.5,
+        "mean_rho_part_at_stop": 0.5964549890201133,
+        "structure": "FLAT",
+        "n_switches": 1
+      },
+      "constant_at_duty": {
+        "J": 587.2750955345922,
+        "IoU": 0.46017699115044247,
+        "t_stop_s": 150.0,
+        "mean_rho_part_at_stop": 0.5994775395605304
+      },
+      "constant_at_one": {
+        "J": 614.2556849934671,
+        "IoU": 0.4573913043478261,
+        "t_stop_s": 230.5,
+        "mean_rho_part_at_stop": 0.623192621273457
+      },
+      "structure_gain_dJ": 6.329629020755419,
+      "structure_gain_dIoU": 0.006015179668062864,
+      "dose_gain_dIoU_over_p1": 0.0027856868026163717
+    },
+    {
+      "arm": "CO_cont",
+      "duty_cycle": 1.3442857142857143,
+      "scheduled": {
+        "J": 575.3360208716114,
+        "IoU": 0.4679715302491103,
+        "t_stop_s": 133.0,
+        "mean_rho_part_at_stop": 0.5963275241445342,
+        "structure": "FLAT",
+        "n_switches": 1
+      },
+      "constant_at_duty": {
+        "J": 581.3339189587075,
+        "IoU": 0.46631205673758863,
+        "t_stop_s": 152.0,
+        "mean_rho_part_at_stop": 0.5996829517629758
+      },
+      "constant_at_one": {
+        "J": 609.2330553975698,
+        "IoU": 0.4591304347826087,
+        "t_stop_s": 232.5,
+        "mean_rho_part_at_stop": 0.6221549452041825
+      },
+      "structure_gain_dJ": 5.997898087096132,
+      "structure_gain_dIoU": 0.0016594735115216808,
+      "dose_gain_dIoU_over_p1": 0.007181621954979955
+    },
+    {
+      "arm": "CO_4bpp",
+      "duty_cycle": 1.3442857142857143,
+      "scheduled": {
+        "J": 575.3898154159189,
+        "IoU": 0.4679715302491103,
+        "t_stop_s": 133.0,
+        "mean_rho_part_at_stop": 0.596332403707034,
+        "structure": "FLAT",
+        "n_switches": 1
+      },
+      "constant_at_duty": {
+        "J": 581.3835111733941,
+        "IoU": 0.4654867256637168,
+        "t_stop_s": 152.0,
+        "mean_rho_part_at_stop": 0.5996755894936028
+      },
+      "constant_at_one": {
+        "J": 609.3541771974719,
+        "IoU": 0.4591304347826087,
+        "t_stop_s": 232.5,
+        "mean_rho_part_at_stop": 0.6221615220990229
+      },
+      "structure_gain_dJ": 5.99369575747528,
+      "structure_gain_dIoU": 0.0024848045853935186,
+      "dose_gain_dIoU_over_p1": 0.006356290881108118
+    },
+    {
+      "arm": "BIN_relax",
+      "duty_cycle": 1.0,
+      "scheduled": {
+        "J": 609.3541771974719,
+        "IoU": 0.4591304347826087,
+        "t_stop_s": 232.5,
+        "mean_rho_part_at_stop": 0.6221615220990229,
+        "structure": "FLAT",
+        "n_switches": 0
+      },
+      "constant_at_duty": {
+        "J": 609.3541771974719,
+        "IoU": 0.4591304347826087,
+        "t_stop_s": 232.5,
+        "mean_rho_part_at_stop": 0.6221615220990229
+      },
+      "constant_at_one": {
+        "J": 609.3541771974719,
+        "IoU": 0.4591304347826087,
+        "t_stop_s": 232.5,
+        "mean_rho_part_at_stop": 0.6221615220990229
+      },
+      "structure_gain_dJ": 0.0,
+      "structure_gain_dIoU": 0.0,
+      "dose_gain_dIoU_over_p1": 0.0
+    },
+    {
+      "arm": "BIN_round",
+      "duty_cycle": 1.0,
+      "scheduled": {
+        "J": 609.3541771974719,
+        "IoU": 0.4591304347826087,
+        "t_stop_s": 232.5,
+        "mean_rho_part_at_stop": 0.6221615220990229,
+        "structure": "FLAT",
+        "n_switches": 0
+      },
+      "constant_at_duty": {
+        "J": 609.3541771974719,
+        "IoU": 0.4591304347826087,
+        "t_stop_s": 232.5,
+        "mean_rho_part_at_stop": 0.6221615220990229
+      },
+      "constant_at_one": {
+        "J": 609.3541771974719,
+        "IoU": 0.4591304347826087,
+        "t_stop_s": 232.5,
+        "mean_rho_part_at_stop": 0.6221615220990229
+      },
+      "structure_gain_dJ": 0.0,
+      "structure_gain_dIoU": 0.0,
+      "dose_gain_dIoU_over_p1": 0.0
+    }
+  ],
+  "wall_s": 75.6079338749405
+}

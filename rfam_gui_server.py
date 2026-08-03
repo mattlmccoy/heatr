@@ -17,12 +17,13 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import yaml
 import numpy as np
 from shapes import make_shape_from_svg
+import gui_cache
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "webui" / "static"
@@ -1034,6 +1035,32 @@ def _configure_placement_optimizer(cfg: dict[str, Any], payload: dict[str, Any])
 
 
 def _configure_turntable(cfg: dict[str, Any], payload: dict[str, Any]) -> None:
+    # Dwell PROGRAM mode (engine v2, rfam_eqs_coupled.parse_turntable_program):
+    # an ordered (angle, duration) hold program read from a JSON file. Both
+    # co-rotation flags default ON here: dopant co-rotation is the engine's own
+    # program-mode default, and eps_r co-rotation closes the measured
+    # dielectric ghost (8 to 21 percentage points of J on asymmetric parts,
+    # ENGINE_DWELL_SUPPORT_NOTES.md section 5.2).
+    program_json = str(payload.get("turntable_program_json", "") or "").strip()
+    if program_json:
+        prog_path = (ROOT / program_json).resolve()
+        try:
+            prog_path.relative_to(ROOT.resolve())
+        except ValueError:
+            raise ValueError("turntable_program_json must stay inside the repo")
+        if not prog_path.exists():
+            raise ValueError(f"turntable program JSON not found: {program_json}")
+        cfg["turntable"] = {
+            "enabled": True,
+            "program_json": str(prog_path),
+            "corotate_dopant": bool(payload.get("turntable_corotate_dopant", True)),
+            "corotate_eps_geometry": bool(payload.get("turntable_corotate_eps", True)),
+        }
+        cfg.pop("optimizer", None)
+        cfg.pop("orientation_optimizer", None)
+        cfg.pop("placement_optimizer", None)
+        return
+
     rot_deg = float(payload.get("turntable_rotation_deg", 90.0))
     total_rot = int(payload.get("turntable_total_rotations", 1))
     if total_rot < 1:
@@ -1457,6 +1484,34 @@ def _collect_images_recursive(root: Path) -> list[dict[str, str]]:
     return images
 
 
+def _scan_run_files(root: Path) -> tuple[int, list[dict[str, str]]]:
+    """Single os.walk over a run dir returning (disk_bytes, image_list).
+
+    Replaces the per-card pair of full walks (a `rglob("*")` for disk_bytes AND
+    `_collect_images_recursive`'s three `rglob` passes) with one traversal. Output is identical:
+    disk_bytes is the sum of every file's size; image_list matches _collect_images_recursive
+    (png/gif/svg, {path, url}, sorted by path). Halving the per-run traversals is the main
+    cold-cache win on the results run-view.
+    """
+    disk_bytes = 0
+    images: list[dict[str, str]] = []
+    exts = (".png", ".gif", ".svg")
+    for dirpath, _dirnames, filenames in os.walk(root):
+        d = Path(dirpath)
+        for fn in filenames:
+            fp = d / fn
+            try:
+                disk_bytes += fp.stat().st_size
+            except OSError:
+                continue
+            if fn.lower().endswith(exts):
+                rel_to_root = fp.relative_to(root).as_posix()
+                rel_to_outputs = fp.relative_to(OUTPUTS_DIR).as_posix()
+                images.append({"path": rel_to_root, "url": _url_for_output_rel(rel_to_outputs)})
+    images.sort(key=lambda it: it["path"])
+    return disk_bytes, images
+
+
 def _build_artifact(output_dir: Path) -> dict[str, Any]:
     rel = output_dir.relative_to(OUTPUTS_DIR).as_posix()
     summary = {}
@@ -1561,8 +1616,35 @@ def _parse_heatr_progress(line: str, job_id: str) -> None:
             }
 
 
-def _run_command(cmd: list[str], log_path: Path, job_id: str | None = None) -> int:
+def _run_command(cmd: list[str], log_path: Path, job_id: str | None = None,
+                 line_cb: "Callable[[str], None] | None" = None) -> int:
+    """Run a subprocess with its output appended to the job log.
+
+    ``line_cb``, when given, is called once for every NEW line appended to the
+    log while the process runs (a simple log tail read in the existing 0.2 s
+    poll loop). Used by the fgm_solve mode to surface SOLVE_PROGRESS lines as
+    job-card progress; all other callers are unchanged (default None).
+    """
     _write_job_log(log_path, f"$ {' '.join(cmd)}")
+    _tail_pos = log_path.stat().st_size if log_path.exists() else 0
+
+    def _drain_tail() -> None:
+        nonlocal _tail_pos
+        if line_cb is None:
+            return
+        try:
+            with log_path.open("r", encoding="utf-8", errors="replace") as fh:
+                fh.seek(_tail_pos)
+                chunk = fh.read()
+                _tail_pos = fh.tell()
+        except OSError:
+            return
+        for ln in chunk.splitlines():
+            try:
+                line_cb(ln)
+            except Exception:
+                pass
+
     with log_path.open("a", encoding="utf-8") as logf:
         proc = subprocess.Popen(cmd, cwd=ROOT, stdout=logf, stderr=subprocess.STDOUT)
         if job_id is not None:
@@ -1571,6 +1653,7 @@ def _run_command(cmd: list[str], log_path: Path, job_id: str | None = None) -> i
         try:
             while True:
                 rc = proc.poll()
+                _drain_tail()
                 if rc is not None:
                     return int(rc)
                 if job_id is not None and _is_cancel_requested(job_id):
@@ -1998,6 +2081,107 @@ def _launch_fgm_resimulate_mode(payload: dict[str, Any], job: dict[str, Any]) ->
         _set_job_progress(job_id, progress_label="Re-simulation failed")
         raise RuntimeError(f"FGM re-simulation exited with code {rc}")
     _set_job_progress(job_id, completed_runs=1, progress_pct=100.0, progress_label="Re-simulation complete")
+
+
+def _launch_fgm_solve_mode(payload: dict[str, Any], job: dict[str, Any]) -> None:
+    """Shape-fidelity SOLVE: gradient-solved 4 bits per pixel dopant map.
+
+    Shells scripts/solve_fgm.py as a job (the fgm_iterate job pattern; see
+    _launch_fgm_resimulate_mode above for the config-patch-then-_run_command
+    shape this reuses). The solve uses the per-shape calibrated configuration
+    from outputs_eqs/fgm_calibrated_control/configs (first name in sorted
+    order, the deterministic library_solve.shape_config convention: within a
+    shape those configs differ only in a stored-map path the solve never
+    reads), patched with an fgm_solve block built from the payload.
+
+    Payload keys:
+        shape             : geometry shape (must have a calibrated config)
+        output_name       : run directory name
+        budget            : forward-equivalents (default 40, campaign standard)
+        filter_radius_mm  : physical filter radius (default 1.0, frozen)
+        warm_start        : "auto" (default) or "cold"
+    Progress: the entry point prints SOLVE_PROGRESS lines; a log tail turns
+    them into job-card progress denominated in forward-solve equivalents.
+    """
+    job_id = str(job["id"])
+    output_name = str(payload.get("output_name", "")).strip()
+    shape = str(payload.get("shape", "")).strip()
+    if not _is_valid_output_name(output_name):
+        raise ValueError("output_name must use only letters, numbers, '_' or '-'")
+    if not shape or shape not in SUPPORTED_SHAPES:
+        raise ValueError(f"invalid shape: {shape!r}")
+
+    budget = float(payload.get("budget", 40.0))
+    if budget <= 0:
+        raise ValueError("budget must be > 0")
+    filter_radius_mm = float(payload.get("filter_radius_mm", 1.0))
+    if filter_radius_mm <= 0:
+        raise ValueError("filter_radius_mm must be > 0")
+    warm_start = str(payload.get("warm_start", "auto")).strip() or "auto"
+    if warm_start not in ("auto", "cold"):
+        raise ValueError("warm_start must be 'auto' or 'cold'")
+
+    cal_cfg_dir = OUTPUTS_DIR / "fgm_calibrated_control" / "configs"
+    candidates = sorted(cal_cfg_dir.glob(f"{shape}_m*.yaml"))
+    if not candidates:
+        raise FileNotFoundError(
+            f"no calibrated configuration for shape {shape!r} in "
+            f"{cal_cfg_dir.relative_to(ROOT)}; the solve mode requires the "
+            f"per-shape calibrated voltage drive")
+    base_cfg_path = candidates[0]
+    with open(base_cfg_path, "r", encoding="utf-8") as fh:
+        base_cfg = yaml.safe_load(fh) or {}
+    base_cfg["fgm_solve"] = {
+        "budget_forward_equivalents": budget,
+        "filter_radius_mm": filter_radius_mm,
+        "warm_start": warm_start,
+        # conductivity only; the permittivity channel stays model-only and off
+        "eps_channel_model_only": False,
+    }
+    GUI_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    cfg_path = GUI_CONFIG_DIR / f"fgm_solve_{job_id}.yaml"
+    with open(cfg_path, "w", encoding="utf-8") as fh:
+        yaml.dump(base_cfg, fh, default_flow_style=False, allow_unicode=True)
+
+    out_dir = OUTPUTS_DIR / "runs" / shape / "fgm_solve" / output_name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _register_job_output(job, out_dir)
+
+    smoke = " (reduced budget: smoke class, not a quality solve)" if budget < 20 else ""
+    _set_job_progress(job_id, total_runs=1, completed_runs=0, progress_pct=3.0,
+                      progress_label=f"Shape-fidelity solve starting, budget "
+                                     f"{budget:g} forward-equivalents{smoke}")
+
+    def _solve_progress(line: str) -> None:
+        if not line.startswith("SOLVE_PROGRESS"):
+            return
+        kv: dict[str, str] = {}
+        for tok in line.split()[1:]:
+            k, _, v = tok.partition("=")
+            kv[k] = v
+        try:
+            ev = int(kv["eval"]); pool = max(int(kv["pool"]), 1)
+            fe = float(kv["fe_spent"]); fe_b = float(kv["fe_budget"])
+            j_val = float(kv["J"]); iou = float(kv["IoU"])
+        except (KeyError, ValueError):
+            return
+        pct = min(95.0, 5.0 + 90.0 * ev / pool)
+        _set_job_progress(
+            job_id, progress_pct=pct,
+            progress_label=(f"Solve {ev}/{pool} gradient evals "
+                            f"• {fe:.1f}/{fe_b:g} forward-equivalents "
+                            f"• J={j_val:.1f} • IoU={iou:.4f}"))
+
+    cmd = [sys.executable, "scripts/solve_fgm.py",
+           "--config", str(cfg_path), "--output-dir", str(out_dir)]
+    rc = _run_command(cmd, Path(job["log_path"]), job_id=job_id,
+                      line_cb=_solve_progress)
+    if rc != 0:
+        _set_job_progress(job_id, progress_label="Shape-fidelity solve failed")
+        raise RuntimeError(f"fgm_solve exited with code {rc}")
+    _set_job_progress(job_id, completed_runs=1, progress_pct=100.0,
+                      progress_label="Shape-fidelity solve complete "
+                                     "(map + results.json in the run folder)")
 
 
 def _fgm_iter_extract_optimal_time(log_path: Path, fallback_s: float, target_phi: float = 0.90) -> tuple[float, str, str]:
@@ -4163,6 +4347,8 @@ def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
             _launch_fgm_resimulate_mode(payload, job)
         elif mode == "fgm_iterate":
             _launch_fgm_iterate_mode(payload, job)
+        elif mode == "fgm_solve":
+            _launch_fgm_solve_mode(payload, job)
         elif mode == "fgm_gradient_descent":
             _launch_fgm_gradient_descent(payload, job)
         elif mode == "prewarp":
@@ -4179,11 +4365,33 @@ def _job_worker(job_id: str, payload: dict[str, Any]) -> None:
         _finish_job(job_id, "failed", str(exc))
 
 
+def _candidate_result_dirs() -> list["Path"]:
+    """All directories under OUTPUTS_DIR that could back a result card, newest-mtime first.
+
+    Prunes `_archive*` subtrees at the os.walk level (which `rglob("*")` cannot), so archived
+    runs are never descended into. Behavior-preserving: `_archive` is already dropped by
+    `_should_skip_result_path`, so the resulting card set is identical — this only avoids the
+    cost of traversing the archive (the main cold-cache win once runs have been archived).
+    """
+    out: list[tuple[float, Path]] = []
+    root = OUTPUTS_DIR
+    for dirpath, dirnames, _files in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not d.lower().startswith("_archive")]
+        d = Path(dirpath)
+        if d == root:
+            continue
+        try:
+            mt = d.stat().st_mtime
+        except OSError:
+            mt = 0.0
+        out.append((mt, d))
+    out.sort(key=lambda t: t[0], reverse=True)
+    return [p for _mt, p in out]
+
+
 def _collect_results() -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    for p in sorted(OUTPUTS_DIR.rglob("*"), key=lambda q: q.stat().st_mtime, reverse=True):
-        if not p.is_dir():
-            continue
+    for p in _candidate_result_dirs():
         if _should_skip_result_path(p):
             continue
         has_summary = (p / "summary.json").exists()
@@ -4526,6 +4734,26 @@ def _load_or_build_manifest(run_dir: Path) -> dict[str, Any]:
     if (not manifest_path.exists()) or (prev_raw != next_raw):
         manifest_path.write_text(json.dumps(manifest, indent=2))
     return manifest
+
+
+def _manifest_for_listing(run_dir: Path) -> dict[str, Any]:
+    """Fast manifest read for LIST views (the run-view grid).
+
+    Returns the cached report_manifest.json as-is when present, WITHOUT re-walking every file in
+    the run (the expensive _iter_rel_files + capability re-resolve). Only when no valid cached
+    manifest exists does it fall back to a full build. Detail/backfill/action paths still call
+    _load_or_build_manifest so a guaranteed-fresh manifest is produced where correctness matters;
+    a list badge that is momentarily stale self-heals the next time the run is opened.
+    """
+    manifest_path = run_dir / "report_manifest.json"
+    if manifest_path.exists():
+        try:
+            raw = json.loads(manifest_path.read_text())
+            if isinstance(raw, dict):
+                return raw
+        except Exception:
+            pass
+    return _load_or_build_manifest(run_dir)
 
 
 def _iso_from_epoch(epoch: float | int | None) -> str:
@@ -4979,6 +5207,38 @@ def _result_detail(name: str) -> dict[str, Any]:
     }
 
 
+# Server/page API-generation handshake. Bump this integer whenever a route
+# or launch-payload shape changes. The front end (webui/static/app.js,
+# EXPECTED_API_GENERATION) pins the generation it was written against and
+# shows a loud stale-server banner on mismatch or absence, because the
+# project's known failure mode is a long-running server process serving
+# stale python routes underneath new static files (test_api_generation.py).
+API_GENERATION = 20260801
+
+_ENGINE_VERSION_CACHE: dict[str, str | int] | None = None
+
+
+def _engine_version_info() -> dict[str, str | int]:
+    """Engine version, read once from rfam_eqs_coupled (single source of
+    truth; no hardcoded duplicate in the GUI)."""
+    global _ENGINE_VERSION_CACHE
+    if _ENGINE_VERSION_CACHE is None:
+        try:
+            from rfam_eqs_coupled import ENGINE_VERSION, ENGINE_VERSION_NAME
+            _ENGINE_VERSION_CACHE = {
+                "engine_version": str(ENGINE_VERSION),
+                "engine_version_name": str(ENGINE_VERSION_NAME),
+                "api_generation": API_GENERATION,
+            }
+        except Exception:
+            _ENGINE_VERSION_CACHE = {
+                "engine_version": "unknown",
+                "engine_version_name": "unknown",
+                "api_generation": API_GENERATION,
+            }
+    return _ENGINE_VERSION_CACHE
+
+
 def _summary_excerpt(summary: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
 
@@ -5011,6 +5271,27 @@ def _summary_excerpt(summary: dict[str, Any]) -> dict[str, Any]:
     ab = summary.get("ab_bucket_id", None)
     if ab is not None:
         out["ab_bucket_id"] = str(ab)
+
+    # v2 promotion pass: engine version (absent = pre-v2, rendered as such by
+    # the front end), dual read-state sigma_T, and the energy-residual gate.
+    ev = summary.get("engine_version", None)
+    if ev is not None:
+        out["engine_version"] = str(ev)
+    if (v := _pick("sigma_T_heating_peak_c")) is not None:
+        out["sigma_T_heating_peak_c"] = v
+    if (v := _pick("sigma_T_melt_onset_c")) is not None:
+        out["sigma_T_melt_onset_c"] = v
+    if "sigma_T_melt_reached" in summary:
+        out["sigma_T_melt_reached"] = bool(summary["sigma_T_melt_reached"])
+    # Energy residual as a percent of integrated dose. v2 summaries carry the
+    # fraction directly; pre-v2 summaries carry the raw J-per-m pair.
+    if (v := _pick("energy_residual_frac_final")) is not None:
+        out["energy_err_pct"] = abs(v) * 100.0
+    else:
+        res = _pick("energy_balance_residual_final_J_per_m")
+        dose = _pick("energy_doped_total_J_per_m")
+        if res is not None and dose:
+            out["energy_err_pct"] = abs(res) / abs(dose) * 100.0
 
     return out
 
@@ -5055,9 +5336,7 @@ def _preferred_images(root: Path, limit: int = 3) -> list[dict[str, str]]:
 def _collect_run_cards() -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     stars = _load_run_stars()
-    for p in sorted(OUTPUTS_DIR.rglob("*"), key=lambda q: q.stat().st_mtime, reverse=True):
-        if not p.is_dir():
-            continue
+    for p in _candidate_result_dirs():
         if _should_skip_result_path(p):
             continue
         has_summary = (p / "summary.json").exists()
@@ -5073,19 +5352,19 @@ def _collect_run_cards() -> list[dict[str, Any]]:
                 summary = json.loads((p / "summary.json").read_text())
             except Exception:
                 summary = {}
-        images = _collect_images_recursive(p)
         try:
-            disk_bytes = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+            disk_bytes, images = _scan_run_files(p)   # one walk for size + image list
         except Exception:
-            disk_bytes = 0
+            disk_bytes, images = 0, []
         hero = _preferred_images(p, limit=3)
         if rel.startswith("runs/"):
             toks = rel.split("/")
             group = toks[1] if len(toks) > 1 else "runs"
         else:
             group = rel.split("/")[0] if "/" in rel else "runs"
-        manifest = _load_or_build_manifest(p)
-        run_type = str(manifest.get("run_type", _get_run_type(p)))
+        manifest = _manifest_for_listing(p)
+        # `or _get_run_type(p)` is lazy: only reads run files when the cached manifest lacks a type.
+        run_type = str(manifest.get("run_type") or _get_run_type(p))
         caps = [str(v) for v in manifest.get("backfill_capabilities", []) if str(v)]
 
         # For fgm_iterate runs, attach best-iteration metrics for richer card display.
@@ -5127,11 +5406,47 @@ def _collect_run_cards() -> list[dict[str, Any]]:
             "starred": bool(stars.get(rel, False)),
             "hero_images": hero,
             "image_count": len(images),
-            "images": images,
+            # Full image list is deferred: fetched per-run via /api/results-images/<name> when the
+            # card's "All images" section is expanded. Shipping all ~28k refs inflated the run-view
+            # payload to ~6 MB and slowed the browser render.
             "fgm_best": fgm_best,
             "disk_bytes": disk_bytes,
         })
     return cards
+
+
+# Stale-while-revalidate cache: the run-view endpoint returns instantly from memory and rebuilds in
+# the background, instead of re-walking the (slow, Dropbox-backed) outputs tree on every request.
+_CARDS_CACHE = gui_cache.BackgroundValue(lambda: _collect_run_cards(), ttl_s=45.0)
+
+
+def _hero_image_paths_for_prewarm(cards: list, limit: int = 400) -> list:
+    """Disk paths of the newest cards' hero images, for thumbnail prewarming."""
+    paths = []
+    for c in cards:
+        for h in c.get("hero_images", []):
+            url = h.get("url", "")
+            if url.startswith("/files/"):
+                p = ROOT / url[len("/files/"):]
+                paths.append(p)
+    return paths[:limit]
+
+
+def _run_image_list(name: str) -> list[dict[str, str]]:
+    """Full image list for a single run, resolved on demand for the deferred "All images" panel.
+
+    Rejects any path that escapes OUTPUTS_DIR (returns []). Reuses the single-walk _scan_run_files.
+    """
+    try:
+        base = OUTPUTS_DIR.resolve()
+        target = (OUTPUTS_DIR / name).resolve()
+        target.relative_to(base)
+    except (ValueError, OSError):
+        return []
+    if not target.is_dir():
+        return []
+    _disk_bytes, images = _scan_run_files(target)
+    return images
 
 
 def _pick_preview_image(folder: Path, preferred: list[str]) -> str | None:
@@ -5449,6 +5764,20 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_static(path[len("/static/"):])
         if path == "/api/ping":
             return self._json({"ok": True, "ts": time.time()})
+        if path == "/api/engine-version":
+            return self._json(_engine_version_info())
+        if path == "/api/turntable-programs":
+            # Machine-readable dwell programs emitted by the dwell campaign
+            # (fgm_solve_campaign/out_dwell/*_turntable_*.json). Gate-result
+            # files are excluded; only executable programs are listed.
+            prog_dir = ROOT / "fgm_solve_campaign" / "out_dwell"
+            progs: list[str] = []
+            if prog_dir.exists():
+                for p in sorted(prog_dir.glob("*_turntable_*.json")):
+                    if "engine_program_gate" in p.name:
+                        continue
+                    progs.append(p.relative_to(ROOT).as_posix())
+            return self._json({"programs": progs})
 
         if path == "/api/heatr3d/status":
             query = urlparse(self.path).query
@@ -5490,6 +5819,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/meta":
             model_info = _experimental_model_info()
             return self._json({
+                **_engine_version_info(),
                 "shape_options": SUPPORTED_SHAPES,
                 "base_configs": _list_base_configs(),
                 "model_families": ["baseline", "experimental_pa12_hybrid"],
@@ -5563,7 +5893,10 @@ class Handler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 return self._json({"error": "path not found"}, status=404)
         if path == "/api/results-runview":
-            return self._json(_collect_run_cards())
+            return self._json(_CARDS_CACHE.get())
+        if path.startswith("/api/results-images/"):
+            name = unquote(path[len("/api/results-images/"):])
+            return self._json({"images": _run_image_list(name)})
         if path == "/api/examples":
             return self._json(_examples_payload())
         if path.startswith("/api/convergence/"):
@@ -5820,6 +6153,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_result_detail(name))
             except FileNotFoundError:
                 return self._json({"error": "not found"}, status=404)
+        if path.startswith("/thumb/"):
+            # small local-cached JPEG thumbnail (keeps the hot path off Dropbox); falls back to the
+            # full-res original if the source can't be thumbnailed.
+            rel = path[len("/thumb/"):]
+            safe = _safe_rel_path(rel)
+            if safe is None or not safe.exists() or not safe.is_file():
+                return self._text("not found", status=404)
+            data = gui_cache.get_or_make_thumb(safe, max_px=320)
+            if data is None:
+                return self._serve_file(safe)
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
+            return None
+
         if path.startswith("/files/"):
             rel = path[len("/files/"):]
             safe = _safe_rel_path(rel)
@@ -5861,6 +6212,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/tools/fgm-resimulate",
             "/api/tools/fgm-to-rip",
             "/api/tools/fgm-iterate",
+            "/api/tools/fgm-solve",
             "/api/tools/fgm-continue",
             "/api/tools/fgm-gradient-descent",
             "/api/tools/prewarp",
@@ -6077,10 +6429,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/tools/generate-fgm":
             # Payload keys (all optional except output_dir):
             #   output_dir         — relative path under ROOT (e.g. "outputs_eqs/runs/.../my_run")
-            #   bpp                — 2 or 4 (default 2)
-            #   proxy_field        — "Qrf" | "T" | "rho_rel" (default "Qrf")
+            #   bpp                — 2 or 4 (default 4, the campaign standard)
+            #   proxy_field        — "T_phi90" | "Qrf" | "T" | "rho_rel" (default "T_phi90")
             #   invert             — bool (default true)
-            #   magnitude          — float 0–2 (default 1.0)
+            #   magnitude          — float 0–2 (default 0.7; per-shape tuned 0.3–0.85,
+            #                        see HEATR_STANDARD_PARAMETERS.md section 4)
             #   baseline_saturation— float 0–1 (default 0.5)
             #   dpi                — int (default 720)
             #   smoothing_sigma    — float (default 1.5)
@@ -6118,10 +6471,10 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 from fgm_generator import generate_fgm  # local import for fast server startup
                 import base64 as _b64
-                bpp               = int(payload.get("bpp", 2))
-                proxy_field       = str(payload.get("proxy_field", "Qrf")).strip()
+                bpp               = int(payload.get("bpp", 4))
+                proxy_field       = str(payload.get("proxy_field", "T_phi90")).strip()
                 invert            = bool(payload.get("invert", True))
-                magnitude         = float(payload.get("magnitude", 1.0))
+                magnitude         = float(payload.get("magnitude", 0.7))
                 baseline          = float(payload.get("baseline_saturation", 0.5))
                 dpi               = int(payload.get("dpi", 720))
                 sigma             = float(payload.get("smoothing_sigma", 1.5))
@@ -6336,6 +6689,34 @@ class Handler(BaseHTTPRequestHandler):
             job_payload["mode"]        = "fgm_iterate"
             job_payload["output_name"] = output_name
             job = _make_job(mode="fgm_iterate", output_name=output_name)
+            with JOBS_LOCK:
+                JOBS[job["id"]]["_payload"] = job_payload
+            _enqueue_job(job["id"])
+            _maybe_start_next_job()
+            with JOBS_LOCK:
+                status = str(JOBS[job["id"]]["status"])
+                qpos   = JOBS[job["id"]].get("queue_position", None)
+            return self._json({
+                "ok": True, "job_id": job["id"], "status": status,
+                "queue_position": qpos, "output_name": output_name,
+            }, status=202)
+
+        if path == "/api/tools/fgm-solve":
+            # Shape-fidelity SOLVE: gradient-solved 4 bits per pixel dopant map
+            # (production recipe; see _launch_fgm_solve_mode). Payload keys:
+            #   shape, output_name, budget, filter_radius_mm, warm_start
+            shape       = str(payload.get("shape", "")).strip()
+            output_name = str(payload.get("output_name", "")).strip()
+            if not shape or shape not in SUPPORTED_SHAPES:
+                return self._json({"error": f"invalid shape: {shape!r}"}, status=400)
+            if not output_name:
+                output_name = f"{shape}_fgmsolve"
+            if not _is_valid_output_name(output_name):
+                return self._json({"error": "output_name contains invalid characters"}, status=400)
+            job_payload = dict(payload)
+            job_payload["mode"]        = "fgm_solve"
+            job_payload["output_name"] = output_name
+            job = _make_job(mode="fgm_solve", output_name=output_name)
             with JOBS_LOCK:
                 JOBS[job["id"]]["_payload"] = job_payload
             _enqueue_job(job["id"])
@@ -6905,8 +7286,18 @@ def main() -> None:
     server.timeout = None
     _SERVER_REF = server
     print(f"RFAM GUI running at http://{host}:{port}")
-    print("Prewarp flows are disabled in this interface.")
     print("Stop via the ⏻ Quit button in the UI or Ctrl-C.")
+
+    def _prewarm():
+        # Build the card cache and pre-generate hero thumbnails so the first browse is already warm.
+        try:
+            cards = _CARDS_CACHE.get()
+            n = gui_cache.prewarm_thumbs(_hero_image_paths_for_prewarm(cards), max_px=320)
+            print(f"[prewarm] card cache built ({len(cards)} cards); {n} hero thumbnails cached")
+        except Exception as exc:  # never let prewarm crash the server
+            print(f"[prewarm] skipped: {exc}")
+
+    threading.Thread(target=_prewarm, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

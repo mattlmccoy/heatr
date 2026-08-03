@@ -1,0 +1,50 @@
+{
+ "what": "Phase C environment deviation: scipy added to the dolfinx spike env",
+ "why": "the explicit neighbour-weight filter needs a neighbour search and Task 3 needs L-BFGS-B; both are scipy. Coordinator decision 2026-08-02.",
+ "installed": {
+  "scipy": "1.17.1",
+  "numpy": "2.4.6"
+ },
+ "incident": "pip install scipy==1.14.1 SILENTLY DOWNGRADED numpy 2.4.6 -> 2.2.6, which is the numpy 2.2.x line the project handoff flags for a buffer-elision bug. Caught immediately, reverted, and scipy>=1.16 installed instead so numpy stays at 2.4.6. Recorded because a successor pinning scipy 1.14 would hit the same trap.",
+ "regression_check": {
+  "gate": "Phase B layer B2 FD gate, re-run after the change",
+  "probes": {
+   "max_sensitivity_cell": {
+    "before": 1.2326511054200018e-10,
+    "after": 1.2326511054200018e-10,
+    "bit_identical": true,
+    "rel_move": 0.0,
+    "verdict_before": true,
+    "verdict_after": true
+   },
+   "random_cell": {
+    "before": 3.786061055641351e-09,
+    "after": 3.786061055641351e-09,
+    "bit_identical": true,
+    "rel_move": 0.0,
+    "verdict_before": true,
+    "verdict_after": true
+   },
+   "random_direction": {
+    "before": 3.4346550563482964e-07,
+    "after": 3.434655058349074e-07,
+    "bit_identical": false,
+    "rel_move": 5.825264984914616e-10,
+    "verdict_before": true,
+    "verdict_after": true
+   },
+   "gradient_direction": {
+    "before": 1.7938131580356196e-10,
+    "after": 1.7938071397603078e-10,
+    "bit_identical": false,
+    "rel_move": 3.3550179319986785e-06,
+    "verdict_before": true,
+    "verdict_after": true
+   }
+  },
+  "single_cell_probes_bit_identical": true,
+  "max_rel_move": 3.3550179319986785e-06,
+  "all_verdicts_unchanged": true,
+  "interpretation": "the two DIRECTION probes reduce over ~10k entries, so summation order can differ across a rebuilt numpy; the two SINGLE-CELL probes are bit-identical. The moved quantities are themselves ~1e-7 and ~1e-10, orders below the 1e-6 gate, and every verdict is unchanged. This is the BLAS-noise class S1 recorded, which is why reproducibility here is relative and never array_equal."
+ }
+}

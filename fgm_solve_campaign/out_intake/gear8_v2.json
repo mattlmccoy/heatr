@@ -1,0 +1,126 @@
+{
+  "shape": "gear8",
+  "grid": 120,
+  "is_novel": true,
+  "voltage_v": 3098.691275302746,
+  "n_part_cells": 1144,
+  "symmetry": {
+    "rotational_order": 8,
+    "continuous_rotational": false,
+    "mirror_axes_deg": [
+      0.0,
+      22.0,
+      45.0,
+      67.0,
+      90.0,
+      112.0,
+      135.0,
+      157.0
+    ],
+    "point_group": "C8v",
+    "centroid_row_col": [
+      59.5,
+      59.5
+    ],
+    "diagnostics": {
+      "tested_orders": {
+        "2": 0.0,
+        "3": 0.19206544370213352,
+        "4": 0.0,
+        "5": 0.2230987315305102,
+        "6": 0.19206544370213377,
+        "7": 0.23322630942109954,
+        "8": 0.013373770599846482,
+        "9": 0.23827564856640354,
+        "10": 0.2230987315305103,
+        "11": 0.24130938055983325,
+        "12": 0.19206544370213385
+      },
+      "tested_orders_generator_only": {
+        "2": 0.0,
+        "3": 0.19182099001440464,
+        "4": 0.0,
+        "5": 0.22224658639482917,
+        "6": 0.19206544370213377,
+        "7": 0.08953061200892418,
+        "8": 0.013373770599846473,
+        "9": 0.07152929310990308,
+        "10": 0.1217849345431095,
+        "11": 0.16191369025890184,
+        "12": 0.19182099001440453
+      },
+      "acceptance_rule": "whole cyclic group: max over k = 1 .. N-1 of mismatch(k * 360 / N) < tol",
+      "generic_angle_mismatch": {
+        "17.0": 0.21350397587217904,
+        "23.0": 0.2471442378839678,
+        "41.0": 0.05793945756359466
+      },
+      "mirror_min_mismatch": 0.006828927807998047,
+      "tol": 0.03
+    }
+  },
+  "modes": [
+    "static",
+    "continuous",
+    "index2",
+    "index4",
+    "index8"
+  ],
+  "residual": {
+    "uniform": {
+      "static": 0.4439633728150895,
+      "continuous": 0.22798535368617004,
+      "index2": 0.4439633728150895,
+      "index4": 0.2887885028857996,
+      "index8": 0.24106236272246753
+    },
+    "prop_inverse": {
+      "static": 0.31491400786657325,
+      "continuous": 0.28233961166407395,
+      "index2": 0.31491400786655666,
+      "index4": 0.3241612999498226,
+      "index8": 0.2956052708062551
+    },
+    "solved": {
+      "static": 0.705944218808183,
+      "continuous": 0.5172280832295522,
+      "index2": 0.7059442188081846,
+      "index4": 0.5929323949925652,
+      "index8": 0.5428664475906929
+    }
+  },
+  "prop_inverse_magnitude": 1.0,
+  "prop_inverse_magnitude_sensitivity": {
+    "0.50": {
+      "static": 0.34160885211190933,
+      "continuous": 0.24131447086791882,
+      "index2": 0.34160885211190306,
+      "index4": 0.2764129129709055,
+      "index8": 0.24989980338837697
+    },
+    "1.00": {
+      "static": 0.31491400786657325,
+      "continuous": 0.28233961166407395,
+      "index2": 0.31491400786655666,
+      "index4": 0.3241612999498226,
+      "index8": 0.2956052708062551
+    },
+    "1.50": {
+      "static": 0.31879884169393213,
+      "continuous": 0.3153373704026908,
+      "index2": 0.3187988416939317,
+      "index4": 0.3641106057946663,
+      "index8": 0.33182238479731835
+    }
+  },
+  "solved_map_provenance": {
+    "path": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_intake/gear8_maps.npz",
+    "key": "static_cont",
+    "note": "solved in the generalization pass against the sub-cell area-fill target"
+  },
+  "ground_truth": {
+    "outcome": "rotation_fails",
+    "source": "GEOMETRY_GENERALIZATION_REPORT S6.2: solved static 4 bpp 132.36 / 0.8458 BEATS solved continuous 4 bpp 138.59 / 0.8273; rotation improved the heating and still lost to the map"
+  },
+  "wall_s": 45.06765787501354
+}

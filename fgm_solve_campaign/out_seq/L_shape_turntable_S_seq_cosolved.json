@@ -1,0 +1,36 @@
+{
+  "actuator": "indexed turntable, SEQUENTIAL holds, constant radio-frequency power",
+  "schedule_kind": "sequential",
+  "control_step_s": 0.5,
+  "horizon_s": 750.0,
+  "positions_deg": [
+    90.0,
+    0.0
+  ],
+  "durations_s": [
+    450.0,
+    300.0
+  ],
+  "n_moves": 2,
+  "moves": [
+    {
+      "position_deg": 90.0,
+      "dwell_s": 450.0,
+      "move_at_s": 0.0
+    },
+    {
+      "position_deg": 0.0,
+      "dwell_s": 300.0,
+      "move_at_s": 450.0
+    }
+  ],
+  "shape": "L_shape",
+  "arm": "S_seq_cosolved",
+  "grid": 120,
+  "recommended_stop_s": 583.5,
+  "J_phi_at_stop": 280.7610403225674,
+  "IoU_at_stop": 0.7153589315525877,
+  "dopant_map": "L_shape_seq_maps.npz::sat_S_seq_cosolved",
+  "radio_frequency_program": "constant, calibrated drive voltage",
+  "caveat": "grid 120 only; not verified on the production engine, which cannot express an unequal dwell"
+}
