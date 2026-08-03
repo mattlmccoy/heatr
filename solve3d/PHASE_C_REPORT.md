@@ -221,10 +221,12 @@ is a weaker comparison than the plan intended and it is stated as such.
 * **Two pre-registered arms were NOT RUN** -- the projection/beta-continuation
   robustness arm and the 3x weight sensitivity arm -- because session compute
   ran out. The pre-registered `unrun_arms_policy` applies: recorded as
-  NOT_RUN, never back-filled with an estimate. The consequence is real: with
-  the sensitivity arm unrun, **it is not known whether the ranking depends on
-  the 10x weight ratio**, and the pre-registration says that if it flips, that
-  is the finding. Treat the weight choice as unvalidated.
+  NOT_RUN, never back-filled with an estimate. The consequence is real, and it
+  is PARTIALLY CLOSED by the post-hoc re-read in section 8: at the READ stage
+  the solved-vs-uniform ranking does not depend on the 10x ratio (it survives
+  3x and the symmetric control at both meshes). What remains open is whether a
+  3x-weighted SOLVE converges to a different map. Treat the weight choice as
+  validated for ranking-at-read and unvalidated for the solve trajectory.
 * **One shape.** The extruded circle only; the library campaign is Phase E. A
   single shape cannot establish that the method generalizes, and the cylinder
   was chosen precisely because it is the HARDEST case for a heuristic, not a
@@ -260,3 +262,87 @@ is a weaker comparison than the plan intended and it is stated as such.
     #   run_solve_arm(..., scale_first_step=True), run_acceptance(...)
 
     ./.venv312/bin/python -m solve3d.make_phase_c_tables
+
+---
+
+## 8. POST-HOC RE-READ (NOT part of the pre-registered protocol)
+
+Added after the campaign at the coordinator's request, motivated by the 2-D
+lane's `DENSE_IFF_INBOUNDS_REPORT.md` (their 2050561), which found that the
+asymmetric objective changes the STOP far more than it changes the MAP.
+
+**No new compute.** Both items are read out of `phase_c_baselines.json`,
+`phase_c_solves.json` and `phase_c_gate.json`; no march and no solve was re-run.
+Because this section was written after the results existed, it is labelled
+post-hoc and is kept separate from the pre-registered protocol above.
+
+#### Item 1 -- stop-state re-read
+
+| state | argmin (symmetric) | argmin (asymmetric) | shift [steps] | shift [s] | at_horizon |
+|---|---|---|---|---|---|
+| uniform_at_solve_mesh | 7279 | 7172 | -107 | -5.3500000000000005 | false |
+| solved_at_solve_mesh | 7273 | 7170 | -103 | -5.15 | false |
+| uniform_at_score_mesh | 7205 | 7108 | -97 | -4.8500000000000005 | false |
+| solved_at_score_mesh | 7198 | 7102 | -96 | -4.800000000000001 | false |
+
+`already_scored_at_asymmetric_argmin` = `true`, `bound_tightens_via_read_state` = `false`.
+
+Objective moves the stop **107 steps**; the map moves it **2 steps**.
+
+#### Item 2 -- weight sensitivity by re-scoring
+
+| mesh | weighting | uniform | solved | margin (+ = solved wins) | solved wins |
+|---|---|---|---|---|---|
+| solve_mesh | w10 | 1.1511359005643762e-07 | 1.0283280687027586e-07 | +10.67 % | true |
+| solve_mesh | w3 | 9.591990279568858e-08 | 8.79470139269614e-08 | +8.31 % | true |
+| solve_mesh | symmetric | 9.855033669884453e-08 | 9.491814369786978e-08 | +3.69 % | true |
+| score_mesh | w10 | 8.27324795501214e-08 | 7.982756092861049e-08 | +3.51 % | true |
+| score_mesh | w3 | 6.798405238592719e-08 | 6.569574871822942e-08 | +3.37 % | true |
+| score_mesh | symmetric | 6.652594080223178e-08 | 6.511879792414871e-08 | +2.12 % | true |
+
+`ranking_preserved_across_weightings` = `true`.
+
+### What the re-read changes
+
+**Item 1 is a no-op, and that is the useful answer.** `score_arm` already read
+every primary score at the asymmetric objective's OWN argmin (with the
+symmetric control separately at its own), and no arm's stop sat at the horizon.
+So the "still descending at the budget limit" caveat does **not** tighten via
+the read state -- the remaining headroom is in ITERATIONS, not in the stop.
+That caveat stands exactly as written.
+
+**The 2-D lane's mechanism does reproduce in 3-D, with one difference worth
+stating.** Switching the objective from symmetric to asymmetric moves the stop
+by 107 steps (5.35 s), consistently EARLIER -- the asymmetric form stops before
+the bed starts growing, which is precisely what its out-of-bounds term is for.
+Switching the map from uniform to solved moves the stop by only 2 steps. The
+objective moves the stop ~50x more than the map does.
+
+The difference from 2-D: here that stop shift is **not** where the reported
+gain comes from. Both arms were already read at their own asymmetric argmin, so
+the 10.67 % margin is a MAP effect measured at a matched read convention, not a
+stop effect. The 2-D observation is about how much of the gain a re-read
+captures; in this campaign that re-read was already applied to every arm before
+any margin was quoted.
+
+**Item 2 substantially closes the weight-ratio risk, at the read stage only.**
+The solved-vs-uniform ranking is preserved under every weighting tested, at
+both meshes: 10x, 3x, and the symmetric control all put the solved map ahead.
+The margin softens as the ratio falls (10.67 % -> 8.31 % at the solve mesh,
+3.51 % -> 3.37 % at the score mesh), which is the expected direction -- a
+smaller out/in ratio discounts the bed-melt term, and the bed-melt term is
+where the solve won most (-22.4 %).
+
+**LIMIT, and it is not a small one:** this re-scores EXISTING fields. It does
+not establish what a 3x-weighted SOLVE would find, because a different
+weighting changes the gradient and could steer to a different map. The
+pre-registered 3x sensitivity ARM remains NOT_RUN.
+
+### Consequent update to the qualifications
+
+Qualification (d) in section 6 -- "it is not known whether the ranking depends
+on the 10x weight ratio" -- is now **partially closed**: at the read stage the
+ranking does not depend on it, measured at two meshes and three weightings.
+What remains open is narrower and should be stated that way: whether a
+3x-weighted SOLVE converges to a different map. No other qualification moves;
+in particular the still-descending-at-budget bound is unchanged (item 1).

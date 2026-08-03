@@ -1,0 +1,96 @@
+{
+ "what": "Phase C POST-HOC RE-READ. NOT part of the pre-registered protocol; added after the fact at the coordinator's request, motivated by the 2-D lane's DENSE_IFF_INBOUNDS_REPORT.md.",
+ "no_new_compute": "no marches, no solves; every number is read from phase_c_baselines.json, phase_c_solves.json and phase_c_gate.json",
+ "item_1_stop_state_reread": {
+  "already_scored_at_asymmetric_argmin": true,
+  "evidence": "score_arm reads the PRIMARY state at ka = argmin of the asymmetric trajectory and every downstream diagnostic uses that state; the symmetric control is separately read at its OWN argmin. Both argmins are recorded per arm.",
+  "no_op": true,
+  "bound_tightens_via_read_state": false,
+  "bound_statement": "the 'still descending at the budget limit' caveat stands unchanged: the read state was already optimal for the primary objective, so the remaining headroom is in ITERATIONS, not in the stop.",
+  "stops": {
+   "uniform_at_solve_mesh": {
+    "argmin_symmetric": 7279,
+    "argmin_asymmetric": 7172,
+    "t_stop_s_asymmetric": 358.6,
+    "stop_shift_steps_asym_minus_sym": -107,
+    "stop_shift_s": -5.3500000000000005,
+    "at_horizon_asymmetric": false
+   },
+   "solved_at_solve_mesh": {
+    "argmin_symmetric": 7273,
+    "argmin_asymmetric": 7170,
+    "t_stop_s_asymmetric": 358.5,
+    "stop_shift_steps_asym_minus_sym": -103,
+    "stop_shift_s": -5.15,
+    "at_horizon_asymmetric": false
+   },
+   "uniform_at_score_mesh": {
+    "argmin_symmetric": 7205,
+    "argmin_asymmetric": 7108,
+    "t_stop_s_asymmetric": 355.40000000000003,
+    "stop_shift_steps_asym_minus_sym": -97,
+    "stop_shift_s": -4.8500000000000005,
+    "at_horizon_asymmetric": false
+   },
+   "solved_at_score_mesh": {
+    "argmin_symmetric": 7198,
+    "argmin_asymmetric": 7102,
+    "t_stop_s_asymmetric": 355.1,
+    "stop_shift_steps_asym_minus_sym": -96,
+    "stop_shift_s": -4.800000000000001,
+    "at_horizon_asymmetric": false
+   }
+  },
+  "objective_moves_the_stop_steps": 107,
+  "map_moves_the_stop_steps": 2,
+  "cross_lane_echo": "the 2-D lane's finding reproduces in 3-D: switching the OBJECTIVE from symmetric to asymmetric moves the stop by 107 steps (5.35 s, consistently EARLIER -- it stops before the bed grows), while switching the MAP from uniform to solved moves it by only 2 steps (0.10 s). The objective moves the stop ~54x more than the map does. NOTE the 3-D difference: here that stop shift is NOT where the gain comes from, because both arms were already read at their own asymmetric argmin, so the 10.67 % margin is a MAP effect measured at a matched read convention."
+ },
+ "item_2_weight_sensitivity_by_rescoring": {
+  "read_stage_only": true,
+  "rows": {
+   "solve_mesh": {
+    "w10": {
+     "uniform": 1.1511359005643762e-07,
+     "solved": 1.0283280687027586e-07,
+     "margin": 0.1066840429539272,
+     "solved_wins": true
+    },
+    "w3": {
+     "uniform": 9.591990279568858e-08,
+     "solved": 8.79470139269614e-08,
+     "margin": 0.0831202767762348,
+     "solved_wins": true
+    },
+    "symmetric": {
+     "uniform": 9.855033669884453e-08,
+     "solved": 9.491814369786978e-08,
+     "margin": 0.03685622112153917,
+     "solved_wins": true
+    }
+   },
+   "score_mesh": {
+    "w10": {
+     "uniform": 8.27324795501214e-08,
+     "solved": 7.982756092861049e-08,
+     "margin": 0.03511219097151603,
+     "solved_wins": true
+    },
+    "w3": {
+     "uniform": 6.798405238592719e-08,
+     "solved": 6.569574871822942e-08,
+     "margin": 0.03365941845754773,
+     "solved_wins": true
+    },
+    "symmetric": {
+     "uniform": 6.652594080223178e-08,
+     "solved": 6.511879792414871e-08,
+     "margin": 0.021151792234945104,
+     "solved_wins": true
+    }
+   }
+  },
+  "ranking_preserved_across_weightings": true,
+  "limit": "This re-scores EXISTING fields under the 3x ratio. It does NOT establish what a 3x-weighted SOLVE would find: a different weighting changes the gradient and could steer to a different map. The pre-registered 3x sensitivity ARM remains NOT_RUN.",
+  "conclusion": "the solved-vs-uniform ranking does NOT depend on the out/in weight ratio at the read stage -- solved wins under 10x, under 3x, and under the symmetric control, at BOTH meshes."
+ }
+}

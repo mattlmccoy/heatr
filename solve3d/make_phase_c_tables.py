@@ -145,3 +145,34 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def reread_table() -> str:
+    d = _l("phase_c_reread.json")
+    i1, i2 = d["item_1_stop_state_reread"], d["item_2_weight_sensitivity_by_rescoring"]
+    o = ["#### Item 1 -- stop-state re-read", "",
+         "| state | argmin (symmetric) | argmin (asymmetric) | shift [steps] | "
+         "shift [s] | at_horizon |", "|---|---|---|---|---|---|"]
+    for k, s in i1["stops"].items():
+        o.append(f"| {k} | {s['argmin_symmetric']!r} | {s['argmin_asymmetric']!r} | "
+                 f"{s['stop_shift_steps_asym_minus_sym']!r} | "
+                 f"{s['stop_shift_s']!r} | "
+                 f"{str(s['at_horizon_asymmetric']).lower()} |")
+    o += ["",
+          f"`already_scored_at_asymmetric_argmin` = "
+          f"`{str(i1['already_scored_at_asymmetric_argmin']).lower()}`, "
+          f"`bound_tightens_via_read_state` = "
+          f"`{str(i1['bound_tightens_via_read_state']).lower()}`.", "",
+          f"Objective moves the stop **{i1['objective_moves_the_stop_steps']} "
+          f"steps**; the map moves it **{i1['map_moves_the_stop_steps']} steps**.",
+          "", "#### Item 2 -- weight sensitivity by re-scoring", "",
+          "| mesh | weighting | uniform | solved | margin (+ = solved wins) | "
+          "solved wins |", "|---|---|---|---|---|---|"]
+    for mesh, r in i2["rows"].items():
+        for w in ("w10", "w3", "symmetric"):
+            o.append(f"| {mesh} | {w} | {r[w]['uniform']!r} | {r[w]['solved']!r} | "
+                     f"{100*r[w]['margin']:+.2f} % | "
+                     f"{str(r[w]['solved_wins']).lower()} |")
+    o += ["", f"`ranking_preserved_across_weightings` = "
+              f"`{str(i2['ranking_preserved_across_weightings']).lower()}`."]
+    return "\n".join(o)
