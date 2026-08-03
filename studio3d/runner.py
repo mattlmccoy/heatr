@@ -214,3 +214,20 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def export_part(mesh_path: str, out_npz: str | Path, n: int = 64) -> None:
+    """Write the voxelized part npz the solve service consumes."""
+    part = voxelize_stl(mesh_path, n)
+    np.savez_compressed(out_npz, part=part, n=n, h=CHAMBER_M / n)
+
+
+def _export_main() -> int:
+    ap = argparse.ArgumentParser(description="export part voxel npz")
+    ap.add_argument("mesh")
+    ap.add_argument("out")
+    ap.add_argument("--n", type=int, default=64)
+    a = ap.parse_args()
+    export_part(a.mesh, a.out, a.n)
+    print("EXPORTED")
+    return 0

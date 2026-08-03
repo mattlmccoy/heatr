@@ -247,3 +247,48 @@ def test_failed_25d_transfer_records_and_falls_through(tmp_path):
     assert prov["engine"] == "heatr3d_native_inversion"
     assert prov["fallback_from_25d"]["state"] == "measured_and_failed"
     assert "2 %" in prov["fallback_from_25d"]["error"]
+
+
+def _fake_solve_artifact(gd, part, value, solved_label):
+    out = gd / "heatr3d" / "solve"
+    out.mkdir(parents=True, exist_ok=True)
+    n = part.shape[0]
+    h = 0.060 / n
+    idx = np.argwhere(part)
+    cents = (idx + 0.5) * h - 0.030
+    np.savez(out / "studio_solve_map.npz", centroids=cents,
+             s_map=np.full(len(cents), value),
+             volumes=np.full(len(cents), h ** 3),
+             v_raw=np.full(len(cents), value))
+    (out / "studio_solve_results.json").write_text(json.dumps(
+        {"solved_label": solved_label, "improvement_pct": 8.2,
+         "gates": {"holdout": solved_label, "smoothing": solved_label}}))
+
+
+def test_fresh_solve_artifact_ranks_first(box_stl, tmp_path):
+    """The direct solve is the standard (spec 7e): when a fresh solve
+    artifact exists it wins over every other source."""
+    from studio3d.runner import voxelize_stl
+    n = 16
+    gd = tmp_path / "grade"
+    part = voxelize_stl(str(box_stl), n)
+    _fake_before_arm(gd, part, n)          # inversion would be available
+    _fake_solve_artifact(gd, part, 0.75, solved_label=True)
+    prov = build_correction(gd, str(box_stl), n,
+                            registry_path=tmp_path / "missing.json")
+    assert prov["engine"] == "solve3d_solved"
+    assert "solved_label true" in prov["trust_badge"]
+    with np.load(gd / "heatr3d" / "correction_sat.npz") as d:
+        assert np.allclose(d["sat"][part], 0.75, atol=1e-6)
+
+
+def test_ungated_solve_is_badged_not_solved(box_stl, tmp_path):
+    from studio3d.runner import voxelize_stl
+    n = 16
+    gd = tmp_path / "grade"
+    part = voxelize_stl(str(box_stl), n)
+    _fake_solve_artifact(gd, part, 0.7, solved_label=False)
+    prov = build_correction(gd, str(box_stl), n,
+                            registry_path=tmp_path / "missing.json")
+    assert prov["engine"] == "solve3d_unlabeled"
+    assert "gates not passed" in prov["trust_badge"]

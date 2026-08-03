@@ -115,6 +115,29 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
     grade_dir = Path(grade_dir)
     part = voxelize_stl(mesh_path, n)
 
+    # spec 7e: a FRESH direct-solve artifact for this job ranks first
+    fresh = grade_dir / "heatr3d" / "solve" / "studio_solve_map.npz"
+    if fresh.exists():
+        sr = json.loads(
+            (fresh.parent / "studio_solve_results.json").read_text())
+        with np.load(fresh) as d:
+            rec = dg0_to_voxel(d["centroids"], d["s_map"], d["volumes"],
+                               part, chamber_m=0.060)
+        solved = bool(sr.get("solved_label"))
+        prov: Dict[str, Any] = {
+            "engine": "solve3d_solved" if solved else "solve3d_unlabeled",
+            "trust_badge": ("solve3d direct solve | solved_label true "
+                            "(hold-out + smoothing gates) | sim-only"
+                            if solved else
+                            "solve3d direct solve | gates not passed | "
+                            "sim-only"),
+            "artifact": str(fresh),
+            "solve_results": {k: sr.get(k) for k in
+                              ("solved_label", "improvement_pct", "gates",
+                               "warm_start")},
+        }
+        return _finish(grade_dir, n, part, rec, prov)
+
     entry = reg.find_solved_map(part, registry_path=registry_path)
     if entry is not None:
         art = Path(entry["artifact"])
@@ -133,6 +156,11 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
     else:
         rec, prov = _fallback_chain(grade_dir, part)
 
+    return _finish(grade_dir, n, part, rec, prov)
+
+
+def _finish(grade_dir: Path, n: int, part: np.ndarray, rec: Dict[str, Any],
+            prov: Dict[str, Any]) -> Dict[str, Any]:
     prov["transfer"] = {k: v for k, v in rec.items() if k != "sat"}
     prov["grid_n"] = int(n)
     # A map that never deviates from 1.0 in-part modulates nothing; the
