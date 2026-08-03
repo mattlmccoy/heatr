@@ -143,3 +143,43 @@ def decide(grids=(48, 64, 96), shape: str = "circle") -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(doc, indent=1))
     return doc
+
+
+def renormalized_inertness(n: int = 64, shape: str = "circle",
+                           p: heatr3d.Params | None = None) -> dict:
+    """Is the gauge visible in any quantity heatr3d actually reports?
+
+    The two arms differ by a UNIFORM factor ((n-1)/n)^2 on the raw field
+    energy. compute_qrf_3d then renormalizes Q to
+    power_density_w_per_m3 * V_doped, and a uniform factor divides straight out
+    of that. So the prediction is that the RENORMALIZED drive -- and therefore
+    every thermal output downstream of it -- is identical under both gauges.
+
+    Measured, not assumed, because it decides how much the default flip is
+    worth: if it holds, the gauge is a REPORTING convention for
+    pre-renormalization quantities (|E|, raw power) and flipping it changes no
+    published thermal number.
+    """
+    from heatr3d_s2 import harness
+    p = p or heatr3d.Params(phase_update="enthalpy")
+    grid = heatr3d.Grid(n=n)
+    part = harness.make_part(grid, shape)
+    out = {}
+    for arm in ARMS:
+        q = gauge_params(p, n, arm)
+        gam = heatr3d.build_gamma(part, q)
+        V = heatr3d.solve_eqs_3d(gam, grid, q)
+        out[arm] = heatr3d.compute_qrf_3d(V, gam, grid, q, doped=part,
+                                          premix=False, qrf_gradient="masked")
+    a, b = out["cell_centred_current"], out["face_gauge"]
+    den = float(np.max(np.abs(a))) or 1.0
+    return {"n": n, "shape": shape,
+            "max_abs_diff_over_max_q": float(np.max(np.abs(a - b))) / den,
+            "total_power_rel_diff":
+                abs(float(a.sum()) - float(b.sum())) / float(a.sum()),
+            "interpretation":
+                "the renormalized drive is identical under both gauges to the "
+                "iterative solver's own tolerance (solve_eqs_3d uses BiCGSTAB "
+                "at rtol 1e-8, which |E|^2 squares), so the gauge is INERT for "
+                "every heatr3d thermal output and is a reporting convention for "
+                "pre-renormalization quantities only"}

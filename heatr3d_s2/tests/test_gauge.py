@@ -58,3 +58,12 @@ def test_raw_power_is_quadratic_in_the_drive():
         V = heatr3d.solve_eqs_3d(gam, grid, p)
         out.append(gauge.raw_absorbed_power_w(V, gam, grid, part))
     assert out[1] / out[0] == pytest.approx(4.0, rel=1e-6)
+
+
+def test_the_gauge_is_inert_after_the_fixed_power_renormalization():
+    """The finding that decides what the default flip is worth: a uniform field
+    scale factor divides out of the fixed-power renormalization, so the gauge
+    cannot move any thermal output."""
+    out = gauge.renormalized_inertness(n=32)
+    assert out["max_abs_diff_over_max_q"] < 1e-5, out
+    assert out["total_power_rel_diff"] < 1e-12, out

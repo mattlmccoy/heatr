@@ -1,0 +1,168 @@
+{
+ "what": "S2 Task 2 electrode-gauge decision",
+ "shape": "circle",
+ "grids": [
+  48,
+  64,
+  96
+ ],
+ "eqs_only": true,
+ "observable": "raw absorbed power density BEFORE heatr3d's fixed-power renormalization",
+ "why_not_total_power": "compute_qrf_3d pins the total by construction, so it is identical under both arms and cannot discriminate",
+ "decision_rule": "smallest grid drift of the observable wins",
+ "runs": {
+  "cell_centred_current": [
+   {
+    "arm": "cell_centred_current",
+    "n": 48,
+    "h_m": 0.00125,
+    "v_lo_applied": 860.0,
+    "gap_m": 0.058750000000000004,
+    "imposed_field_v_per_m": 14638.297872340425,
+    "raw_absorbed_power_w": 1.4426243906858918,
+    "raw_power_density_w_per_m3": 73980.73798389187,
+    "part_volume_m3": 1.9500000000000003e-05,
+    "n_voxels_in_part": 9984,
+    "wall_eqs_s": 8.42740441695787
+   },
+   {
+    "arm": "cell_centred_current",
+    "n": 64,
+    "h_m": 0.0009375,
+    "v_lo_applied": 860.0,
+    "gap_m": 0.0590625,
+    "imposed_field_v_per_m": 14560.846560846561,
+    "raw_absorbed_power_w": 1.4015063778700596,
+    "raw_power_density_w_per_m3": 73824.20426640645,
+    "part_volume_m3": 1.8984374999999996e-05,
+    "n_voxels_in_part": 23040,
+    "wall_eqs_s": 30.922490290831774
+   },
+   {
+    "arm": "cell_centred_current",
+    "n": 96,
+    "h_m": 0.000625,
+    "v_lo_applied": 860.0,
+    "gap_m": 0.059375000000000004,
+    "imposed_field_v_per_m": 14484.210526315788,
+    "raw_absorbed_power_w": 1.3305081893226292,
+    "raw_power_density_w_per_m3": 69911.7603584961,
+    "part_volume_m3": 1.9031250000000002e-05,
+    "n_voxels_in_part": 77952,
+    "wall_eqs_s": 172.34856541687623
+   }
+  ],
+  "face_gauge": [
+   {
+    "arm": "face_gauge",
+    "n": 48,
+    "h_m": 0.00125,
+    "v_lo_applied": 842.0833333333334,
+    "gap_m": 0.058750000000000004,
+    "imposed_field_v_per_m": 14333.333333333334,
+    "raw_absorbed_power_w": 1.3831411554764441,
+    "raw_power_density_w_per_m3": 70930.31566545866,
+    "part_volume_m3": 1.9500000000000003e-05,
+    "n_voxels_in_part": 9984,
+    "wall_eqs_s": 8.719466042006388
+   },
+   {
+    "arm": "face_gauge",
+    "n": 64,
+    "h_m": 0.0009375,
+    "v_lo_applied": 846.5625,
+    "gap_m": 0.0590625,
+    "imposed_field_v_per_m": 14333.333333333334,
+    "raw_absorbed_power_w": 1.3580515933607749,
+    "raw_power_density_w_per_m3": 71535.22796303671,
+    "part_volume_m3": 1.8984374999999996e-05,
+    "n_voxels_in_part": 23040,
+    "wall_eqs_s": 32.27871941705234
+   },
+   {
+    "arm": "face_gauge",
+    "n": 96,
+    "h_m": 0.000625,
+    "v_lo_applied": 851.0416666666666,
+    "gap_m": 0.059375000000000004,
+    "imposed_field_v_per_m": 14333.333333333332,
+    "raw_absorbed_power_w": 1.3029338224601943,
+    "raw_power_density_w_per_m3": 68462.86095028935,
+    "part_volume_m3": 1.9031250000000002e-05,
+    "n_voxels_in_part": 77952,
+    "wall_eqs_s": 176.19339141598903
+   }
+  ]
+ },
+ "summary": {
+  "cell_centred_current": {
+   "raw_power_density_w_per_m3": [
+    73980.73798389187,
+    73824.20426640645,
+    69911.7603584961
+   ],
+   "total_drift_rel": 0.058201618791040514,
+   "successive_rel_changes": [
+    0.0021158712625914053,
+    0.052996763687308664
+   ],
+   "finest_pair_rel_change": 0.052996763687308664
+  },
+  "face_gauge": {
+   "raw_power_density_w_per_m3": [
+    70930.31566545866,
+    71535.22796303671,
+    68462.86095028935
+   ],
+   "total_drift_rel": 0.04487640408393384,
+   "successive_rel_changes": [
+    0.008528261743978477,
+    0.042949007086898444
+   ],
+   "finest_pair_rel_change": 0.042949007086898444
+  }
+ },
+ "winner": "face_gauge",
+ "shipped_arm": "cell_centred_current",
+ "winner_is_the_shipped_arm": false,
+ "predicted_cell_centred_drift_rel": 0.021389769126301268,
+ "predicted_from": "(n/(n-1))^2, the ratio of the imposed field squared at the cell-centred gap (n-1)h against the face gap L",
+ "default_flip": "NOT PERFORMED. If the winner is not the shipped arm, the flag-gated option and the default flip go to Matt with this evidence -- the EQS-02 precedent. The executing agent never flips a default.",
+ "renormalized_inertness": {
+  "n": 64,
+  "shape": "circle",
+  "max_abs_diff_over_max_q": 3.522595538290857e-07,
+  "total_power_rel_diff": 0.0,
+  "interpretation": "the renormalized drive is identical under both gauges to the iterative solver's own tolerance (solve_eqs_3d uses BiCGSTAB at rtol 1e-8, which |E|^2 squares), so the gauge is INERT for every heatr3d thermal output and is a reporting convention for pre-renormalization quantities only"
+ },
+ "ratio_check": {
+  "what": "cell/face raw power must equal (n/(n-1))^2 exactly if the arms differ ONLY by the gauge",
+  "per_grid": [
+   {
+    "n": 48,
+    "measured": 1.0430059036085566,
+    "predicted": 1.0430058850158441,
+    "abs_diff": 1.8592712480725027e-08
+   },
+   {
+    "n": 64,
+    "measured": 1.0319978892714579,
+    "predicted": 1.0319979843789366,
+    "abs_diff": 9.510747878138659e-08
+   },
+   {
+    "n": 96,
+    "measured": 1.021163290404396,
+    "predicted": 1.0211634349030472,
+    "abs_diff": 1.4449865126664463e-07
+   }
+  ]
+ },
+ "recommendation": {
+  "winner_by_preregistered_rule": "face_gauge",
+  "margin_is_weak": "both arms retain 4.5-5.8 % drift, so the observable is dominated by the discretization of the geometry factor K(n), NOT by the gauge; the gauge contributes 1.33 of the 5.82 percentage points",
+  "stronger_argument": "independent of the numerical margin, the cell-centred gauge imposes a field v_lo*n/((n-1)L) that provably drifts with n at fixed physical geometry and only reaches v_lo/L in the limit, while the face gauge imposes exactly v_lo/L on EVERY grid. That is exact, not measured.",
+  "but_it_is_inert": "the fixed-power renormalization divides the uniform factor out, so flipping the default changes NO published thermal number (measured above). The flip is therefore low-risk and low-urgency: it corrects reported FIELD quantities (|E|, raw power) only.",
+  "action": "RECOMMEND the face gauge as the correct convention for reported field quantities. NOT implemented and NOT flipped: per the EQS-02 precedent this goes to Matt with the evidence. Given the measured inertness, the recommendation is to flip only if/when a downstream consumer quotes a pre-renormalization field quantity."
+ }
+}
