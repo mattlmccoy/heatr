@@ -74,18 +74,34 @@ def _native_inversion(grade_dir: Path, part: np.ndarray):
 
 
 def _fallback_chain(grade_dir: Path, part: np.ndarray):
-    """2.5-D per-slice if it modulates; else the native inversion."""
+    """2.5-D per-slice if it modulates AND transfers within the gate; else
+    the native inversion, with any 2.5-D gate failure RECORDED
+    (measured_and_failed, never a silent or fatal drop)."""
+    from studio3d.transfer import TransferError
+
+    failed_25d = None
     dop = grade_dir / "heatr" / "dopant_volume.npz"
     if dop.exists():
-        with np.load(dop) as d:
-            rec = stack_to_voxel(d["sat"], d["part_mask"].astype(bool),
-                                 d["z_mm"], part,
-                                 chamber_m=float(d["chamber_m"])
-                                 if "chamber_m" in d.files else 0.060)
-        if not _is_null_map(rec["sat"], part):
-            return rec, {"engine": "heatr_25d_perslice",
-                         "trust_badge": BADGE_25D, "artifact": str(dop)}
-    return _native_inversion(grade_dir, part)
+        try:
+            with np.load(dop) as d:
+                rec = stack_to_voxel(d["sat"], d["part_mask"].astype(bool),
+                                     d["z_mm"], part,
+                                     chamber_m=float(d["chamber_m"])
+                                     if "chamber_m" in d.files else 0.060)
+            if not _is_null_map(rec["sat"], part):
+                return rec, {"engine": "heatr_25d_perslice",
+                             "trust_badge": BADGE_25D, "artifact": str(dop)}
+        except TransferError as e:
+            # e.g. holed parts: the 2.5-D map is built on FILLED slices,
+            # so its support is the wrong geometry for the true part
+            failed_25d = {"state": "measured_and_failed", "error": str(e),
+                          "artifact": str(dop)}
+            logger.warning("2.5-D transfer failed the gate, falling "
+                           "through to the native inversion: %s", e)
+    rec, prov = _native_inversion(grade_dir, part)
+    if failed_25d is not None:
+        prov["fallback_from_25d"] = failed_25d
+    return rec, prov
 
 
 def build_correction(grade_dir: str | Path, mesh_path: str, n: int,

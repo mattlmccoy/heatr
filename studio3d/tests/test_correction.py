@@ -212,3 +212,38 @@ def test_correction_also_emits_the_meteor_stack(box_stl, tmp_path):
     assert mask.dtype == bool
     assert z[0] > 0 and np.all(np.diff(z) > 0)
     assert sat[~mask].min() == 1.0          # unmodulated outside the part
+
+
+def test_failed_25d_transfer_records_and_falls_through(tmp_path):
+    """Found live on a holed tube: the 2.5-D map is built on FILLED slices,
+    so its transfer onto the true annulus moves dopant past the 2 percent
+    gate. The gate must be RECORDED (measured_and_failed) and the chain
+    must fall through to the native inversion, not hard-fail the arm."""
+    import trimesh as tm
+    from studio3d.runner import voxelize_stl
+    mesh = tmp_path / "tube.stl"
+    outer = tm.creation.cylinder(radius=12.0, height=20.0, sections=64)
+    inner = tm.creation.cylinder(radius=5.0, height=22.0, sections=64)
+    outer.difference(inner).export(mesh)
+    n = 16
+    part = voxelize_stl(str(mesh), n)
+    gd = tmp_path / "grade"
+    (gd / "heatr").mkdir(parents=True)
+    # a 2.5-D map on the FILLED disc with a strong radial gradient
+    ng, nz = 60, 10
+    yy, xx = np.meshgrid(np.arange(ng), np.arange(ng), indexing="ij")
+    r = np.sqrt((xx - ng / 2) ** 2 + (yy - ng / 2) ** 2)
+    disc = r < ng * 0.21
+    sat2 = np.where(disc, np.clip(1.0 - r / (ng * 0.21), 0.08, 1.0), 1.0)
+    np.savez(gd / "heatr" / "dopant_volume.npz",
+             sat=sat2[None].repeat(nz, 0).astype(np.float32),
+             part_mask=disc[None].repeat(nz, 0),
+             z_mm=(np.arange(nz) + 0.5) * 2.0,
+             area_mm2=np.full(nz, 100.0), method=np.array(["m"] * nz),
+             gain=np.ones(nz), chamber_m=0.060)
+    _fake_before_arm(gd, part, n)
+    prov = build_correction(gd, str(mesh), n,
+                            registry_path=tmp_path / "missing.json")
+    assert prov["engine"] == "heatr3d_native_inversion"
+    assert prov["fallback_from_25d"]["state"] == "measured_and_failed"
+    assert "2 %" in prov["fallback_from_25d"]["error"]
