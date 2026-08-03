@@ -116,7 +116,8 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                 max_time_s: float = 1500.0,
                 stop_mean_rho: Optional[float] = 0.98,
                 power_density_w_per_m3: Optional[float] = None,
-                correction_engine: Optional[str] = None) -> Dict[str, Any]:
+                correction_engine: Optional[str] = None,
+                fast_march: bool = False) -> Dict[str, Any]:
     """One densify=True heatr3d march + the standard artifact set.
 
     sat_path: optional npz with a (n, n, n) ``sat`` array (the corrected
@@ -147,9 +148,24 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                              f"grid {part.shape}")
 
     t0 = time.time()
-    # verbose march lines feed the Studio's live progress bars
-    r = H.run(grid, part, p, sat=sat, max_time_s=float(max_time_s),
-              densify=True, stop_mean_rho=stop_mean_rho, verbose=True)
+    env_provenance = None
+    engine_march = "heatr3d"
+    if fast_march:
+        # engine-lane blessed opt-in (2026-08-03): bit-identical by gate,
+        # so results carry no caveat; env pins recorded (the
+        # scipy-downgrade lesson)
+        import llvmlite
+        import numba
+        from engine_speed.march_fast import march_fast as _march
+        engine_march = "march_fast"
+        env_provenance = {"numba": numba.__version__,
+                          "llvmlite": llvmlite.__version__}
+        r = _march(grid, part, p, sat=sat, max_time_s=float(max_time_s),
+                   densify=True, stop_mean_rho=stop_mean_rho, verbose=True)
+    else:
+        # verbose march lines feed the Studio's live progress bars
+        r = H.run(grid, part, p, sat=sat, max_time_s=float(max_time_s),
+                  densify=True, stop_mean_rho=stop_mean_rho, verbose=True)
     wall_s = time.time() - t0
 
     gates = {
@@ -164,6 +180,8 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
     }
     results: Dict[str, Any] = {
         "engine": ENGINE_LABEL,
+        "engine_march": engine_march,
+        "env_provenance": env_provenance,
         "trust_badge": TRUST_BADGE,
         "arm": str(arm),
         "correction_engine": correction_engine,

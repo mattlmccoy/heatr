@@ -127,3 +127,19 @@ def test_voxelize_is_fast_on_real_size_meshes(tmp_path):
     dt = time.time() - t0
     assert part.sum() > 1000
     assert dt < 20.0, f"voxelize took {dt:.1f} s"
+
+
+def test_fast_march_optin_is_bit_identical_and_labeled(box20_stl, tmp_path):
+    """march_fast opt-in (engine-lane blessing, adoption terms 2026-08-03):
+    results must be BIT-IDENTICAL to the reference march, and the run must
+    record the numba env provenance (the scipy-downgrade lesson)."""
+    ref = run_densify(str(box20_stl), tmp_path / "ref", n=16, max_time_s=2.0)
+    fast = run_densify(str(box20_stl), tmp_path / "fast", n=16,
+                       max_time_s=2.0, fast_march=True)
+    with np.load(tmp_path / "ref" / "fields.npz") as a, \
+         np.load(tmp_path / "fast" / "fields.npz") as b:
+        for key in ("T_phi90", "phi_final", "rho_final"):
+            assert np.array_equal(a[key], b[key]), key
+    assert fast["engine_march"] == "march_fast"
+    assert "numba" in fast["env_provenance"]
+    assert ref.get("engine_march", "heatr3d") == "heatr3d"
