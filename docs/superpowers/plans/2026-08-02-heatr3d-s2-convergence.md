@@ -31,7 +31,7 @@
 
 ### Task 0: Pre-registration
 
-- [ ] `heatr3d_s2/results/s2_preregistration.json`, committed before any run: shapes = extruded circle, extruded square (the Phase A anchors), L-shape extrusion (the re-rank outlier); grids = 48/64/80/96 full physics (and 96/112/128 EQS-only for the EQS-only convergence check); quantities with hierarchy as in the ground rules; band rule (e.g. max successive-pair relative change over the finest pair, x1.5 - state and freeze it); gauge arms (Task 2); PASS criteria: per quantity, monotone or bounded oscillatory approach with the finest-pair spread below the frozen threshold per quantity class (state numbers now); densify-march registration (Task 4: case, coefficients incl. 0 control, validity bound |a| < 0.0044/K carried from S4, gates). Commit.
+- [x] `heatr3d_s2/results/s2_preregistration.json`, committed before any run: shapes = extruded circle, extruded square (the Phase A anchors), L-shape extrusion (the re-rank outlier); grids = 48/64/80/96 full physics (and 96/112/128 EQS-only for the EQS-only convergence check); quantities with hierarchy as in the ground rules; band rule (e.g. max successive-pair relative change over the finest pair, x1.5 - state and freeze it); gauge arms (Task 2); PASS criteria: per quantity, monotone or bounded oscillatory approach with the finest-pair spread below the frozen threshold per quantity class (state numbers now); densify-march registration (Task 4: case, coefficients incl. 0 control, validity bound |a| < 0.0044/K carried from S4, gates). Commit.
 
 ### Task 1: Harness + band machinery (TDD)
 

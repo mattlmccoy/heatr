@@ -1,0 +1,284 @@
+"""S2 Task 0: PRE-REGISTER the convergence campaign.
+
+    ./.venv312/bin/python -m heatr3d_s2.prereg
+
+Emits heatr3d_s2/results/s2_preregistration.json BEFORE any campaign run, so
+the grid ladder, band rule, PASS thresholds, gauge decision rule and densify
+registration cannot be chosen after seeing a convergence curve.
+
+Every PASS ceiling below is anchored on an ALREADY-MEASURED precedent, cited
+inline, rather than invented: solve3d/results/phase_a_shape_gate.json recorded
+heatr3d's OWN n=64-vs-n=96 spread on the extruded circle under exactly these
+corrected defaults (masked Q, enthalpy). The S2 ceilings are set at roughly
+1.4-2x those measured values, so a quantity that is genuinely converging at the
+finest pair clears them comfortably while one that is not, fails.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+RESULTS = HERE / "results"
+OUT = RESULTS / "s2_preregistration.json"
+PHASE_A = HERE.parent / "solve3d" / "results" / "phase_a_shape_gate.json"
+
+
+def _phase_a(metric: str) -> float:
+    d = json.loads(PHASE_A.read_text())
+    return float(d["self_spread_detail"]["circle"]["heatr3d_n64_vs_n96"][metric])
+
+
+def build() -> dict:
+    pa = {k: _phase_a(k) for k in
+          ("jaccard_dist_phi0p8", "jaccard_dist_phi0p9", "front_ssd_mm",
+           "in_part_absdiff_phi0p9", "bed_melt_absdiff_phi0p9")}
+    doc = {
+        "what": "heatr3d S2 convergence campaign pre-registration. Frozen "
+                "BEFORE any campaign run.",
+        "engine": "heatr3d.py UNCHANGED, corrected defaults "
+                  "(qrf_gradient='masked', phase_update='enthalpy'), coupling "
+                  "OFF and densify OFF for the baseline ladder (Task 3); "
+                  "Task 4 turns densify and the in-march re-solve ON.",
+        "shapes": ["circle", "square", "lshape"],
+        "shape_rationale": {
+            "circle": "Phase A anchor; the cylinder-null case",
+            "square": "Phase A anchor; the shape whose EQS-02 sigma_T delta went "
+                      "the OTHER way (+10.9 %)",
+            "lshape": "the re-rank OUTLIER: sigma_T 33.204 -> 66.420 (+100.0 %) "
+                      "under the corrected default "
+                      "(heatr3d_eqs02_rerank/RERANK_REPORT.md). A convergence "
+                      "study that skipped it would skip the one shape most "
+                      "likely to fail."},
+        "grids": {
+            "full_physics": [48, 64, 80, 96],
+            "eqs_only": [96, 112, 128],
+            "run_order": [48, 64, 80, 96],
+            "run_order_why": "48/64/80 first so that partial completion still "
+                             "yields a 3-grid band per quantity; 96 last "
+                             "because it is the most expensive and the least "
+                             "likely to finish.",
+            "ceilings": {"full_physics_max": 96, "eqs_only_max": 128,
+                         "never_at_or_above": 200,
+                         "citation": "heatr3d.EQS_MAX_GRID_FULL_PHYSICS / "
+                                     "EQS_MAX_GRID_EQS_ONLY; n>=200 melt-state "
+                                     "work is a known instability and is "
+                                     "forbidden here"}},
+        "read_states": {
+            "melt_onset": {
+                "definition": "the first step at which the part-mean melt "
+                              "fraction reaches phi_target = 0.90; heatr3d's "
+                              "native stop, giving t_phi90 and T_phi90",
+                "role": "the historical read; t90 and the melt-state shape "
+                        "metrics come from here"},
+            "heating_fixed_time": {
+                "definition": "a march to a FIXED absolute time t_ref, common "
+                              "to every grid of a shape, read at the horizon",
+                "why": "separates 'does the FIELD converge' from 'does the STOP "
+                       "TIME converge'. At the melt-onset read those two are "
+                       "entangled, because a grid that reaches phi=0.9 earlier "
+                       "is read at a different physical state.",
+                "must_precede_melt_onset": True,
+                "t_ref_s": {"circle": 320.0, "square": 315.0, "lshape": 675.0},
+                "t_ref_source": "just below the n=64 masked-default t90 of each "
+                                "shape so the read is in the heating phase on "
+                                "EVERY grid: circle 323.4 and lshape 680.9 from "
+                                "RERANK_REPORT.md, square 316.05 from "
+                                "solve3d/results/anchor_heatr3d_square_n64.npz",
+                "cost_note": "one shared EQS solve drives BOTH marches per "
+                             "(shape, grid) via run(qrf_override=...), so the "
+                             "second read costs a march, not a solve"}},
+        "quantities": {
+            "iou_phi0p9": {
+                "role": "verdict",
+                "what": "IoU of the phi>=0.9 melt region against the ANALYTIC "
+                        "nominal shape, scored as Jaccard distance 1-IoU",
+                "pass_ceiling": 0.05,
+                "pass_ceiling_precedent":
+                    f"heatr3d's own n=64-vs-n=96 spread measured "
+                    f"{pa['jaccard_dist_phi0p9']:.4f} (phase_a_shape_gate.json, "
+                    f"self_spread_detail.circle.heatr3d_n64_vs_n96); the S2 "
+                    f"ceiling is ~1.45x that, and the FINEST pair (80->96) "
+                    f"should be better than 64->96, not worse"},
+            "iou_phi0p8": {
+                "role": "verdict", "what": "same at the phi>=0.8 threshold",
+                "pass_ceiling": 0.05,
+                "pass_ceiling_precedent":
+                    f"measured {pa['jaccard_dist_phi0p8']:.4f} at 64-vs-96"},
+            "out_of_part_melt_fraction": {
+                "role": "verdict",
+                "what": "melted volume OUTSIDE the nominal part, as a fraction "
+                        "of nominal part volume -- the hard side of the "
+                        "recorded objective",
+                "pass_ceiling": 0.02,
+                "pass_ceiling_precedent":
+                    f"measured {pa['bed_melt_absdiff_phi0p9']:.4f} at 64-vs-96 "
+                    f"on the circle (identically zero there); 0.02 is an "
+                    f"absolute-fraction ceiling for the shapes that DO spill"},
+            "front_position_mm": {
+                "role": "verdict",
+                "what": "symmetric surface distance between successive grids' "
+                        "phi=0.9 fronts, in millimetres",
+                "pass_ceiling": 0.25,
+                "pass_ceiling_precedent":
+                    f"measured {pa['front_ssd_mm']:.4f} mm at 64-vs-96"},
+            "in_part_melt_fraction": {
+                "role": "verdict",
+                "what": "fraction of the nominal part that reached phi>=0.9",
+                "pass_ceiling": 0.02,
+                "pass_ceiling_precedent":
+                    f"measured {pa['in_part_absdiff_phi0p9']:.4f} at 64-vs-96"},
+            "t90": {
+                "role": "co-primary",
+                "what": "melt-onset time, relative successive-pair change",
+                "pass_ceiling": 0.01,
+                "pass_ceiling_precedent":
+                    "heatr3d's own n=64-vs-n=96 t90 spread measured 0.001859 "
+                    "(solve3d/results/parity_tolerances.json raw_spread); the "
+                    "ceiling is ~5x that, deliberately loose because t90 is "
+                    "co-primary rather than verdict-carrying"},
+            "sigma_T": {
+                "role": "diagnostic",
+                "what": "std(T) over the part at the read state",
+                "pass_ceiling": None,
+                "pass_ceiling_precedent": None,
+                "note": "REPORTED WITH ITS BAND, NEVER VERDICT-CARRYING. This "
+                        "is the metric S2 exists to replace as the headline; "
+                        "gating on it would re-enshrine it."}},
+        "band_rule": {
+            "safety_factor": 1.5,
+            "statement": "band(quantity, shape) = 1.5 x the FINEST successive-"
+                         "pair change of that quantity (relative change for "
+                         "t90 and sigma_T, absolute for the shape metrics, "
+                         "which are already fractions or millimetres). The rule "
+                         "is fixed here, before any number exists; 1.5 is the "
+                         "same safety factor Phase A and its close-out used.",
+            "not_richardson": "bands are MEASURED spreads. A Richardson "
+                              "extrapolation and an observed order p are "
+                              "reported alongside as diagnostics and are never "
+                              "presented as the converged truth."},
+        "convergence": {
+            "min_grids_for_a_claim": 3,
+            "observed_order": "p = log(|q1-q2| / |q2-q3|) / log(r) over "
+                              "consecutive grid triples, r the refinement "
+                              "ratio; reported per quantity per shape"},
+        "pass_criteria": {
+            "requires_non_increasing_successive_changes": True,
+            "tolerance_on_non_increase": 1.10,
+            "tolerance_why": "a successive change may exceed its predecessor by "
+                             "up to 10 % and still count as bounded-oscillatory "
+                             "rather than diverging; beyond that it is a FAIL",
+            "diverging_is_FAIL": True,
+            "diverging_definition": "successive-pair changes growing beyond the "
+                                    "10 % tolerance -- reported as FAIL, never "
+                                    "converted into a band",
+            "finest_pair_below_ceiling": True,
+            "richardson_is_reported_not_truth": True,
+            "verdict_rule": "S2 PASSES for a (shape, quantity) iff BOTH the "
+                            "non-increase criterion and the finest-pair ceiling "
+                            "hold. The S2 gate PASSES overall iff every "
+                            "VERDICT-CARRYING quantity passes on every shape "
+                            "that completed; t90 failures are reported as "
+                            "PARTIAL; sigma_T never affects the verdict."},
+        "gauge": {
+            "question": "heatr3d's Dirichlet rows sit at the CELL CENTRES of "
+                        "the first and last y layers, so the imposed potential "
+                        "drop spans (n-1)h, not L. Is that the right gauge?",
+            "arms": {
+                "cell_centred_current": "the shipped convention: v_lo is "
+                                        "imposed across a gap of (n-1)h, which "
+                                        "is n-DEPENDENT at fixed physical "
+                                        "chamber size",
+                "face_gauge": "the applied voltage is rescaled by (n-1)/n so "
+                              "the imposed FIELD is v_lo/L, i.e. the electrodes "
+                              "behave as if they sat on the true domain faces"},
+            "observable": "raw_absorbed_power_pre_renormalization",
+            "why_not_total_absorbed_power":
+                "compute_qrf_3d RENORMALIZES Q to power_density * V_doped, so "
+                "the TOTAL absorbed power is pinned by construction and is "
+                "identical under both gauges -- it cannot discriminate. The RAW "
+                "integral 0.5*sigma*|E|^2 dV BEFORE that renormalization is the "
+                "observable the gauge actually moves: it scales as (v/gap)^2, "
+                "so the cell-centred gauge should drift like (n/(n-1))^2 (about "
+                "+4.3 % at n=48 falling to +2.1 % at n=96) while the face gauge "
+                "should be grid-invariant.",
+            "decision_rule": "the gauge whose raw pre-renormalization absorbed "
+                             "power is GRID-INVARIANT (smallest relative drift "
+                             "across the tested grids at fixed geometry and "
+                             "drive) is the correct one",
+            "grids": [48, 64, 96],
+            "shape": "circle",
+            "eqs_only": True,
+            "default_flip_requires_matt": True,
+            "default_flip_precedent": "EQS-02: a default flip that changes "
+                                      "published numbers goes to Matt with the "
+                                      "evidence; the executing agent implements "
+                                      "it flag-gated and bit-identical when off, "
+                                      "and never flips it"},
+        "densify_march": {
+            "assignment": "Matt's explicit S2 assignment: sigma_density_coeff "
+                          "has been provably INERT in every prior study "
+                          "(densify=False made it unreachable). This exercises "
+                          "it for the first time.",
+            "shape": "circle", "grid": 64,
+            "densify": True,
+            "eqs_update_interval_s": 60.0,
+            "sigma_temp_coeff_per_K": -0.002,
+            "sigma_density_coeff_arms": [0.0, 0.3, 0.6, -0.3],
+            "arms_why": "0.0 is the CONTROL and must reproduce the densify-only "
+                        "march; 0.6 is the only value with any provenance in "
+                        "this repo (configs/_archive_old/"
+                        "rfam_eqs_comsol_mimic.yaml l.83-85), 0.3 is half of "
+                        "it, and -0.3 tests the sign. All are EXPLORATORY: "
+                        "there is NO validated nonzero value anywhere in this "
+                        "repo and none is claimed.",
+            "validity_bound_abs_a_per_K": 0.0044,
+            "validity_bound_note": "carried from S4: |sigma_temp_coeff_per_K| "
+                                   "must stay well inside 1/(T_max - T_ref) so "
+                                   "the (1 + a dT) factor never changes sign. "
+                                   "-0.002 is inside it.",
+            "zero_control_must_reproduce": "the sigma_density_coeff = 0 arm must "
+                                           "reproduce the densify-only march to "
+                                           "the reproducibility tolerance class "
+                                           "(relative ~1e-12, never array_equal)",
+            "standing_gates": ["energy_audit", "clamp_bound", "cfl"],
+            "questions": {
+                "a": "does density coupling move late-time surface topology in "
+                     "the FLIR-observed direction (S4 mechanism 3)?",
+                "b": "do the Task-3 convergence bands hold with densification "
+                     "on? ONE shape, TWO grids -- a spot check, labelled as "
+                     "such, NOT a convergence claim"},
+            "anti_circularity": "the S4 rule stands: nothing here is fitted to "
+                                "scored FLIR frames. The coefficient arms are "
+                                "pre-registered above and are not tuned to "
+                                "match any observation."},
+        "partial_completion_policy": {
+            "unrun": "any (shape, grid) not reached is recorded NOT_RUN with "
+                     "its reason; never back-filled, never extrapolated",
+            "min_grids_reported": 3,
+            "rule": "bands are reported only from shapes with at least 3 "
+                    "completed grids; a shape with fewer is reported as "
+                    "INSUFFICIENT_GRIDS, not as a band with a caveat"},
+        "out_of_scope": [
+            "the Phase A cross-family circle t90 offset (~1.6 s): S3's COMSOL "
+            "anchor adjudicates it, not S2",
+            "COMSOL and 2.5-D anchors (S3)",
+            "densification-law literature consistency (S3)",
+            "any default flip without Matt's sign-off",
+            "Studio badge changes, dissertation edits, solve3d changes"],
+    }
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps(doc, indent=1))
+    return doc
+
+
+def main() -> int:
+    d = build()
+    print(json.dumps({"shapes": d["shapes"], "run_order": d["grids"]["run_order"],
+                      "ceilings": {k: v["pass_ceiling"]
+                                   for k, v in d["quantities"].items()}}, indent=1))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
