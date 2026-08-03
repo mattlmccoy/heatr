@@ -62,13 +62,29 @@ def build_densified_meshes(part: np.ndarray, rho_final: np.ndarray,
     cy = float(yc[part].mean())
     wx = cx + (xc - cx) * lam_xy
     wy = cy + (yc - cy) * lam_xy
-    # settle: per column, stack SINTERED voxels only, anchored at the
-    # column's first part voxel's nominal bottom face
+    # BED-SUSPENDED z (Matt 2026-08-03): the part is never anchored to a
+    # substrate; it sinters suspended in the nylon powder bed, so
+    # contraction is about the sintered material's own z-centroid. Per
+    # column: settle sintered voxels into a contiguous stack (internal
+    # offsets from the local shrink law), then place the stack so its
+    # column center maps to the column's nominal sintered center shrunk
+    # toward the global sintered z-centroid. Same shrink-law magnitudes;
+    # only the anchoring gauge changes.
     hz = np.where(sintered, h * lam_z, 0.0)
-    cfb = np.cumsum(hz, axis=2) - 0.5 * hz
-    first = np.argmax(part, axis=2)
-    anchor = first * h - L / 2.0
-    wz = anchor[:, :, None] + cfb
+    cfb = np.cumsum(hz, axis=2) - 0.5 * hz          # offsets within stack
+    col_h = hz.sum(axis=2)                          # compacted stack height
+    ns = sintered.sum(axis=2)
+    with np.errstate(invalid="ignore"):
+        col_znom = np.where(ns > 0,
+                            (zc * sintered).sum(axis=2) / np.maximum(ns, 1),
+                            0.0)                    # nominal sintered center
+        col_lam = np.where(ns > 0,
+                           (lam_z * sintered).sum(axis=2)
+                           / np.maximum(ns, 1), 1.0)
+    cz = float(zc[sintered].mean()) if sintered.any() else 0.0
+    col_center = cz + (col_znom - cz) * col_lam     # suspended contraction
+    stack_bottom = col_center - col_h / 2.0
+    wz = stack_bottom[:, :, None] + cfb
 
     si = np.argwhere(sintered)
     sx, sy, sz = si[:, 0], si[:, 1], si[:, 2]
@@ -84,23 +100,27 @@ def build_densified_meshes(part: np.ndarray, rho_final: np.ndarray,
                  axis=1) * 1e3,
         np.full(len(ui), h * 1e3), np.full(len(ui), h * 1e3))
 
-    # rest the assembly on the build plate: the viewer's frame is plate
-    # z = 0, matching every other mesh it shows
-    if len(solid.vertices):
-        shift = -float(solid.bounds[0][2])
-        solid.apply_translation((0.0, 0.0, shift))
-        if len(powder.vertices):
-            powder.apply_translation((0.0, 0.0, shift))
+    # display frame: the NOMINAL part bottom face maps to z = 0 (the same
+    # frame the imported view uses), so the suspended lift of the bottom
+    # is visible against the imported reference; no plate anchoring
+    if part.any():
+        zs = np.where(part.any(axis=(0, 1)))[0]
+        nominal_bottom = zs[0] * h - L / 2.0
+        shift = -nominal_bottom * 1e3
+        for mesh_ in (solid, powder):
+            if len(mesh_.vertices):
+                mesh_.apply_translation((0.0, 0.0, shift))
 
     info = {"n_sintered": int(sintered.sum()),
             "n_unsintered": int(unsintered.sum()),
             "sinter_phi_threshold": SINTER_PHI,
             "solid_top_mm": (float(solid.bounds[1][2])
                              if len(solid.vertices) else None),
-            "statement": ("sintered material only, settled per column by "
-                          "the solver's shrink law; unsintered in-part "
-                          "voxels are loose powder, shown separately, "
-                          "never as solid part")}
+            "statement": ("sintered material only, bed-suspended (no plate "
+                          "anchor): contraction about the sintered mass's "
+                          "own center per the solver's shrink law, columns "
+                          "settled; unsintered in-part voxels are loose "
+                          "powder, shown separately, never as solid part")}
     return solid, powder, info
 
 
