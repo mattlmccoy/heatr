@@ -31,10 +31,14 @@ def test_unsintered_voxels_are_powder_not_part():
     solid, powder, info = build_densified_meshes(part, rho, phi, p, grid)
     assert info["n_sintered"] == 2 * 2 * 4
     assert info["n_unsintered"] == 2 * 2 * 4
-    # the solid part must NOT reach the unsintered region's nominal height:
-    # dense voxels compact, powder is excluded, nothing rides on top
-    nominal_top_mm = 12 * grid.h * 1e3 - 30.0
-    assert solid.bounds[1][2] < nominal_top_mm - 1.0
+    # the solid rests on the plate (z = 0) and must NOT reach the
+    # unsintered region's nominal height: dense voxels compact, powder is
+    # excluded, nothing rides on top
+    assert abs(solid.bounds[0][2]) < 1e-6
+    lam_z_dense = H.shrinkage_factors(np.array([p.rho_rel]))[1][0]
+    assert solid.bounds[1][2] < 8 * grid.h * 1e3   # far below nominal stack
+    assert abs((solid.bounds[1][2] - solid.bounds[0][2])
+               - 4 * grid.h * 1e3 * lam_z_dense) < grid.h * 1e3 * 0.6
     assert len(powder.vertices) > 0
 
 

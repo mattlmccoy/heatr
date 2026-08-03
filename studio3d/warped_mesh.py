@@ -84,6 +84,14 @@ def build_densified_meshes(part: np.ndarray, rho_final: np.ndarray,
                  axis=1) * 1e3,
         np.full(len(ui), h * 1e3), np.full(len(ui), h * 1e3))
 
+    # rest the assembly on the build plate: the viewer's frame is plate
+    # z = 0, matching every other mesh it shows
+    if len(solid.vertices):
+        shift = -float(solid.bounds[0][2])
+        solid.apply_translation((0.0, 0.0, shift))
+        if len(powder.vertices):
+            powder.apply_translation((0.0, 0.0, shift))
+
     info = {"n_sintered": int(sintered.sum()),
             "n_unsintered": int(unsintered.sum()),
             "sinter_phi_threshold": SINTER_PHI,
