@@ -1,0 +1,27 @@
+[cross@180] drive 2815.4 V gives 520.3 W/m at this grid; recalibrated to 2759.8 V, verified 500.00 W/m
+[cross@180] part cells 2420, chi area 2.688206e-04 m2, raster minus area +1.146 %, thermal substeps per outer step 10
+[cross@180] ROT_uniform                J    298.94  IoU 0.8566  IoUa 0.8232  grow  10.08  under   5.70  stop  641 ( 321.0 s)  P  500.0  Eres 0.96%  Jrast    318.53  19.4 s
+[cross@180] STATIC_uniform             J   1038.99  IoU 0.5575  IoUa 0.5476  grow   3.47  under  42.31  stop  457 ( 229.0 s)  P  500.0  Eres 0.50%  Jrast   1063.27  14.4 s
+[cross@180] QS_uniform                 J    303.21  IoU 0.8498  IoUa 0.8210  grow  10.08  under   6.45  stop  641 ( 321.0 s)  P  500.0  Eres 0.87%  Jrast    322.87  19.8 s
+[cross@180] ROT_transfer               J    106.66  IoU 0.9446  IoUa 0.8853  grow   4.46  under   1.32  stop  864 ( 432.5 s)  P  386.7  Eres 0.57%  Jrast    120.82  22.5 s
+[cross] grid 180 done in 77.2 s. remaining projection (fourth-power cost model): n=240 ~244 s, n=360 ~1235 s; projected total remaining ~24.7 min
+[cross@240] drive 2815.4 V gives 483.4 W/m at this grid; recalibrated to 2863.3 V, verified 500.00 W/m
+[cross@240] part cells 4380, chi area 2.686843e-04 m2, raster minus area +2.740 %, thermal substeps per outer step 17
+[cross@240] ROT_uniform                J    741.59  IoU 0.7982  IoUa 0.7935  grow  13.15  under   9.68  stop  676 ( 338.5 s)  P  500.0  Eres 1.14%  Jrast    768.52  55.2 s
+[cross@240] STATIC_uniform             J   1703.50  IoU 0.5774  IoUa 0.5737  grow   2.01  under  41.10  stop  455 ( 228.0 s)  P  500.0  Eres 0.26%  Jrast   1786.78  43.0 s
+[cross@240] QS_uniform                 J    748.57  IoU 0.7960  IoUa 0.7937  grow  13.70  under   9.50  stop  680 ( 340.5 s)  P  500.0  Eres 1.10%  Jrast    773.87  60.9 s
+[cross@240] ROT_transfer               J    409.92  IoU 0.8484  IoUa 0.8422  grow   6.30  under   9.82  stop  853 ( 427.0 s)  P  390.6  Eres 0.62%  Jrast    451.87  68.8 s
+[cross] grid 240 done in 229.7 s. remaining projection (fourth-power cost model): n=360 ~1163 s; projected total remaining ~19.4 min
+[cross@360] drive 2815.4 V gives 435.8 W/m at this grid; recalibrated to 3015.6 V, verified 500.00 W/m
+[cross@360] part cells 9680, chi area 2.688548e-04 m2, raster minus area +0.571 %, thermal substeps per outer step 37
+[cross@360] ROT_uniform                J   2188.23  IoU 0.7745  IoUa 0.7741  grow  19.38  under   7.54  stop  715 ( 358.0 s)  P  500.0  Eres 1.47%  Jrast   2248.90  296.9 s
+[cross@360] STATIC_uniform             J   3790.84  IoU 0.6067  IoUa 0.5999  grow   4.34  under  36.69  stop  483 ( 242.0 s)  P  500.0  Eres 0.57%  Jrast   3845.60  201.0 s
+[cross@360] QS_uniform                 J   2197.68  IoU 0.7760  IoUa 0.7754  grow  20.08  under   6.82  stop  724 ( 362.5 s)  P  500.0  Eres 1.48%  Jrast   2258.13  560.4 s
+[cross@360] ROT_transfer               J   1384.23  IoU 0.8213  IoUa 0.8185  grow   9.71  under   9.90  stop  915 ( 458.0 s)  P  375.3  Eres 0.80%  Jrast   1451.41  720.7 s
+[cross] grid 360 done in 1785.5 s. remaining projection (fourth-power cost model): ; projected total remaining ~0.0 min
+[cross] REPRODUCTION GATE NOT CHECKED, no overlap between this ladder and the stored grids (0 comparisons)
+[cross] ROT_uniform    IoU 0.8566 -> 0.7982 -> 0.7745  last step 0.0237  asymptotic True
+[cross] STATIC_uniform IoU 0.5575 -> 0.5774 -> 0.6067  last step 0.0293  asymptotic False
+[cross] QS_uniform     IoU 0.8498 -> 0.7960 -> 0.7760  last step 0.0200  asymptotic True
+[cross] ROT_transfer   IoU 0.9446 -> 0.8484 -> 0.8213  last step 0.0271  asymptotic True
+[cross] energy gate violations []; wall 2092.4 s

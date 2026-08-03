@@ -1,0 +1,959 @@
+{
+  "arm": "cross",
+  "label": "cross, 90-degree indexing at 2.0 s, uniform dopant",
+  "shape": "cross",
+  "task": "ROTATING FORWARD GRID LADDER: forward runs only, no solve, uniform dopant on the primary arm",
+  "ladder": [
+    180,
+    240,
+    360
+  ],
+  "with_transferred_map": true,
+  "objective": "J = sum over the whole domain of (phi - chi_area)^2; J is a sum over cells and is NOT comparable between grids; J_per_part_cell is emitted as a normalization and is not itself a convergence proof",
+  "stop": "argmin of J over the arm's own trajectory; horizon flagged",
+  "execution": "part-frame march of the stored program; no field interpolation, so no rotation remap error",
+  "drive": "recalibrated at EACH grid so the uniform STATIC arm absorbs 500.0 W/m in state B; rotating arms not dose matched",
+  "channel": "conductivity only; the transferred map is 4 bits per pixel in part, nominal 1 outside",
+  "grids": {
+    "180": {
+      "n_grid": 180,
+      "n_part_cells": 2420,
+      "dx_m": 0.000335195530726258,
+      "dy_m": 0.000335195530726258,
+      "dt_s": 0.5,
+      "n_steps": 1500,
+      "n_substeps": 10,
+      "calibration": {
+        "voltage_v": 2759.809328177054,
+        "start_voltage_v": 2815.3798396110424,
+        "p_at_start_w_per_m": 520.3383562080207,
+        "p_target_w_per_m": 500.0,
+        "p_verified_w_per_m": 500.0000000000031,
+        "n_electro_quasi_static_solves": 2,
+        "electrical_state": "B",
+        "convention": "uniform dopant arm absorbs the target power, state B, summed over the doped mask (FROZEN_CONVENTIONS_2D section 3)",
+        "n_grid": 180,
+        "voltage_v_pinned": 2815.3798396110424,
+        "p_at_pinned_v_w_per_m": 520.3383562080207
+      },
+      "chi": {
+        "n_sub": 32,
+        "n_polys": 1,
+        "area_m2": 0.0002688206126525406,
+        "construction": "sub-cell area fill by rfam_eqs_coupled._subpixel_fill_fraction, union by np.maximum"
+      },
+      "raster_vs_area": {
+        "area_raster_m2": 0.00027190162604163586,
+        "area_chi_m2": 0.0002688206126525406,
+        "area_rel_delta": 0.011461224489796036,
+        "n_cells_differing_gt_0p01": 256,
+        "max_abs_cell_delta": 0.23828125,
+        "sum_abs_cell_delta": 27.421875
+      },
+      "program": {
+        "kind": "fixed-interval indexing",
+        "interval_s": 2.0,
+        "positions_deg": [
+          0.0,
+          90.0,
+          180.0,
+          270.0
+        ],
+        "n_moves": 375
+      },
+      "angles_deg": [
+        0.0,
+        90.0,
+        180.0,
+        270.0
+      ],
+      "executed_position_histogram": [
+        376,
+        376,
+        376,
+        372
+      ],
+      "executed_dwell_fraction": [
+        0.25066666666666665,
+        0.25066666666666665,
+        0.25066666666666665,
+        0.248
+      ],
+      "arms": {
+        "ROT_uniform": {
+          "t_stop_index": 641,
+          "t_stop_s": 321.0,
+          "t_stop_at_horizon": false,
+          "J": 298.93991646476786,
+          "J_per_part_cell": 0.12352889110114375,
+          "IoU": 0.8566066066066066,
+          "IoU_area": 0.8232292121345653,
+          "bed_melt_pct_of_part": 10.082644628099173,
+          "part_under_melt_pct": 5.702479338842975,
+          "melted_cells": 2526,
+          "part_cells": 2420,
+          "mean_phi_part": 0.9049973306884751,
+          "mean_phi_bed": 0.008499432433852367,
+          "sigma_T_at_stop_c": 12.188052262541177,
+          "mean_T_part_c": 196.5721397232206,
+          "J_raster_chi": 318.52978994257705,
+          "IoU_at_raster_stop": 0.8566066066066066,
+          "P_abs_W_per_m": 500.0000000000031,
+          "P_abs_A_W_per_m": 487.10944447283777,
+          "energy_gate": {
+            "rel_residual": 0.009566430563144511,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.009566430563144511,
+            "rel_residual_max_upto_index": 0.009566430563144511,
+            "rel_residual_max_whole_march": 0.029705860730136834,
+            "index": 641,
+            "energy_in_J_per_m_at_index": 160371.0944447285,
+            "energy_residual_J_per_m_at_index": 1534.1789393409854,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 216.4514515800109,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 892,
+          "sat_mean_in_part": 1.0,
+          "sat_min_in_part": 1.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 19.433143791975453,
+          "executed_dwell_fraction": [
+            0.25112107623318386,
+            0.25112107623318386,
+            0.25112107623318386,
+            0.24663677130044842
+          ],
+          "execution": "time-resolved program, part frame, no field interpolation"
+        },
+        "STATIC_uniform": {
+          "t_stop_index": 457,
+          "t_stop_s": 229.0,
+          "t_stop_at_horizon": false,
+          "J": 1038.9901761494787,
+          "J_per_part_cell": 0.42933478353284243,
+          "IoU": 0.5575079872204473,
+          "IoU_area": 0.5475886707893348,
+          "bed_melt_pct_of_part": 3.4710743801652892,
+          "part_under_melt_pct": 42.31404958677686,
+          "melted_cells": 1480,
+          "part_cells": 2420,
+          "mean_phi_part": 0.56998915388569,
+          "mean_phi_bed": 0.003295427041492018,
+          "sigma_T_at_stop_c": 29.477624000540377,
+          "mean_T_part_c": 171.8258964071631,
+          "J_raster_chi": 1063.2696044968748,
+          "IoU_at_raster_stop": 0.5577689243027888,
+          "P_abs_W_per_m": 500.0000000000031,
+          "P_abs_A_W_per_m": 487.10944447283765,
+          "energy_gate": {
+            "rel_residual": 0.004976894513323129,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.004976894513323129,
+            "rel_residual_max_upto_index": 0.004976894513323129,
+            "rel_residual_max_whole_march": 0.025096573033725426,
+            "index": 457,
+            "energy_in_J_per_m_at_index": 114371.09444472847,
+            "energy_residual_J_per_m_at_index": 569.2128724247304,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 203.19771986802098,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 710,
+          "sat_mean_in_part": 1.0,
+          "sat_min_in_part": 1.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 14.438176125055179,
+          "execution": "static, part at 0 degrees, no rotation",
+          "eps_covary": false
+        },
+        "QS_uniform": {
+          "t_stop_index": 641,
+          "t_stop_s": 321.0,
+          "t_stop_at_horizon": false,
+          "J": 303.2109407558846,
+          "J_per_part_cell": 0.12529377717185314,
+          "IoU": 0.8498498498498499,
+          "IoU_area": 0.8209947921961123,
+          "bed_melt_pct_of_part": 10.082644628099173,
+          "part_under_melt_pct": 6.446280991735537,
+          "melted_cells": 2508,
+          "part_cells": 2420,
+          "mean_phi_part": 0.9019711742841042,
+          "mean_phi_bed": 0.008453125626974778,
+          "sigma_T_at_stop_c": 12.22505458220984,
+          "mean_T_part_c": 196.51678079723033,
+          "J_raster_chi": 322.87398555170194,
+          "IoU_at_raster_stop": 0.8547904191616766,
+          "P_abs_W_per_m": 500.0000000000031,
+          "P_abs_A_W_per_m": 487.10944447283765,
+          "energy_gate": {
+            "rel_residual": 0.008725571297818271,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.008725571297818271,
+            "rel_residual_max_upto_index": 0.008725571297818271,
+            "rel_residual_max_whole_march": 0.028849978674369975,
+            "index": 641,
+            "energy_in_J_per_m_at_index": 160371.0944447285,
+            "energy_residual_J_per_m_at_index": 1399.329418686626,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 216.43787534496383,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 897,
+          "sat_mean_in_part": 1.0,
+          "sat_min_in_part": 1.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 19.83118062489666,
+          "execution": "quasi-static angle average (infinitely fast cycle)"
+        },
+        "ROT_transfer": {
+          "t_stop_index": 864,
+          "t_stop_s": 432.5,
+          "t_stop_at_horizon": false,
+          "J": 106.65870648150702,
+          "J_per_part_cell": 0.0440738456535153,
+          "IoU": 0.944620253164557,
+          "IoU_area": 0.8853328157964813,
+          "bed_melt_pct_of_part": 4.462809917355372,
+          "part_under_melt_pct": 1.322314049586777,
+          "melted_cells": 2496,
+          "part_cells": 2420,
+          "mean_phi_part": 0.9290910679030481,
+          "mean_phi_bed": 0.004781720992128774,
+          "sigma_T_at_stop_c": 3.586130991917956,
+          "mean_T_part_c": 186.65637382413848,
+          "J_raster_chi": 120.82153692734978,
+          "IoU_at_raster_stop": 0.9410840534171249,
+          "P_abs_W_per_m": 386.6830483727196,
+          "P_abs_A_W_per_m": 375.1021410080764,
+          "energy_gate": {
+            "rel_residual": 0.005660444798890605,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.005660444798890605,
+            "rel_residual_max_upto_index": 0.005660444798890605,
+            "rel_residual_max_whole_march": 0.025492203149128506,
+            "index": 864,
+            "energy_in_J_per_m_at_index": 167126.1950983202,
+            "energy_residual_J_per_m_at_index": 946.0086018026632,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 195.04266624715262,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 1120,
+          "sat_mean_in_part": 0.6314600550964187,
+          "sat_min_in_part": 0.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 22.519120292039588,
+          "executed_dwell_fraction": [
+            0.25,
+            0.25,
+            0.25,
+            0.25
+          ],
+          "execution": "time-resolved program, part frame, no field interpolation"
+        }
+      },
+      "wall_s": 77.19999033398926
+    },
+    "240": {
+      "n_grid": 240,
+      "n_part_cells": 4380,
+      "dx_m": 0.0002510460251046037,
+      "dy_m": 0.0002510460251046037,
+      "dt_s": 0.5,
+      "n_steps": 1500,
+      "n_substeps": 17,
+      "calibration": {
+        "voltage_v": 2863.2807731680964,
+        "start_voltage_v": 2815.3798396110424,
+        "p_at_start_w_per_m": 483.4105487094413,
+        "p_target_w_per_m": 500.0,
+        "p_verified_w_per_m": 499.9999999999982,
+        "n_electro_quasi_static_solves": 2,
+        "electrical_state": "B",
+        "convention": "uniform dopant arm absorbs the target power, state B, summed over the doped mask (FROZEN_CONVENTIONS_2D section 3)",
+        "n_grid": 240,
+        "voltage_v_pinned": 2815.3798396110424,
+        "p_at_pinned_v_w_per_m": 483.4105487094413
+      },
+      "chi": {
+        "n_sub": 32,
+        "n_polys": 1,
+        "area_m2": 0.00026868432253462205,
+        "construction": "sub-cell area fill by rfam_eqs_coupled._subpixel_fill_fraction, union by np.maximum"
+      },
+      "raster_vs_area": {
+        "area_raster_m2": 0.00027604558743719735,
+        "area_chi_m2": 0.00026868432253462205,
+        "area_rel_delta": 0.027397448549037477,
+        "n_cells_differing_gt_0p01": 348,
+        "max_abs_cell_delta": 0.517578125,
+        "sum_abs_cell_delta": 116.80078125
+      },
+      "program": {
+        "kind": "fixed-interval indexing",
+        "interval_s": 2.0,
+        "positions_deg": [
+          0.0,
+          90.0,
+          180.0,
+          270.0
+        ],
+        "n_moves": 375
+      },
+      "angles_deg": [
+        0.0,
+        90.0,
+        180.0,
+        270.0
+      ],
+      "executed_position_histogram": [
+        376,
+        376,
+        376,
+        372
+      ],
+      "executed_dwell_fraction": [
+        0.25066666666666665,
+        0.25066666666666665,
+        0.25066666666666665,
+        0.248
+      ],
+      "arms": {
+        "ROT_uniform": {
+          "t_stop_index": 676,
+          "t_stop_s": 338.5,
+          "t_stop_at_horizon": false,
+          "J": 741.5929585085548,
+          "J_per_part_cell": 0.169313460846702,
+          "IoU": 0.7982243744955609,
+          "IoU_area": 0.7935302019950311,
+          "bed_melt_pct_of_part": 13.150684931506849,
+          "part_under_melt_pct": 9.680365296803654,
+          "melted_cells": 4532,
+          "part_cells": 4380,
+          "mean_phi_part": 0.9046946210726275,
+          "mean_phi_bed": 0.011128079403204493,
+          "sigma_T_at_stop_c": 15.559237027301121,
+          "mean_T_part_c": 201.95180772368874,
+          "J_raster_chi": 768.5169450660229,
+          "IoU_at_raster_stop": 0.8167330677290837,
+          "P_abs_W_per_m": 499.9999999999982,
+          "P_abs_A_W_per_m": 469.25863617301786,
+          "energy_gate": {
+            "rel_residual": 0.011394600728807488,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.011394600728807488,
+            "rel_residual_max_upto_index": 0.011394600728807488,
+            "rel_residual_max_whole_march": 0.030166901173878397,
+            "index": 676,
+            "energy_in_J_per_m_at_index": 168942.58636173015,
+            "energy_residual_J_per_m_at_index": 1925.0333176839922,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 226.36976473736487,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 944,
+          "sat_mean_in_part": 1.0,
+          "sat_min_in_part": 1.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 55.20196329220198,
+          "executed_dwell_fraction": [
+            0.25,
+            0.25,
+            0.25,
+            0.25
+          ],
+          "execution": "time-resolved program, part frame, no field interpolation"
+        },
+        "STATIC_uniform": {
+          "t_stop_index": 455,
+          "t_stop_s": 228.0,
+          "t_stop_at_horizon": false,
+          "J": 1703.4959392903831,
+          "J_per_part_cell": 0.38892601353661715,
+          "IoU": 0.5774395702775291,
+          "IoU_area": 0.5737002049779844,
+          "bed_melt_pct_of_part": 2.009132420091324,
+          "part_under_melt_pct": 41.0958904109589,
+          "melted_cells": 2668,
+          "part_cells": 4380,
+          "mean_phi_part": 0.583007148968734,
+          "mean_phi_bed": 0.0015681591430197234,
+          "sigma_T_at_stop_c": 29.908181508835455,
+          "mean_T_part_c": 172.08815497465167,
+          "J_raster_chi": 1786.7833841661106,
+          "IoU_at_raster_stop": 0.5807314897413024,
+          "P_abs_W_per_m": 499.9999999999982,
+          "P_abs_A_W_per_m": 469.25863617301786,
+          "energy_gate": {
+            "rel_residual": 0.0026339932517168603,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.0026339932517168603,
+            "rel_residual_max_upto_index": 0.0026339932517168603,
+            "rel_residual_max_whole_march": 0.02301457339531102,
+            "index": 455,
+            "energy_in_J_per_m_at_index": 113692.58636173011,
+            "energy_residual_J_per_m_at_index": 299.46550524703343,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 205.96070600445438,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 713,
+          "sat_mean_in_part": 1.0,
+          "sat_min_in_part": 1.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 42.951155125163496,
+          "execution": "static, part at 0 degrees, no rotation",
+          "eps_covary": false
+        },
+        "QS_uniform": {
+          "t_stop_index": 680,
+          "t_stop_s": 340.5,
+          "t_stop_at_horizon": false,
+          "J": 748.5741011930272,
+          "J_per_part_cell": 0.17090732903950392,
+          "IoU": 0.7959839357429719,
+          "IoU_area": 0.7937039257688292,
+          "bed_melt_pct_of_part": 13.698630136986301,
+          "part_under_melt_pct": 9.497716894977168,
+          "melted_cells": 4564,
+          "part_cells": 4380,
+          "mean_phi_part": 0.9078666956468455,
+          "mean_phi_bed": 0.01140567358514775,
+          "sigma_T_at_stop_c": 15.689625156569058,
+          "mean_T_part_c": 202.35571752096484,
+          "J_raster_chi": 773.8720147708316,
+          "IoU_at_raster_stop": 0.8149324861000794,
+          "P_abs_W_per_m": 499.9999999999982,
+          "P_abs_A_W_per_m": 469.25863617301786,
+          "energy_gate": {
+            "rel_residual": 0.011018418694440296,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.011018418694440296,
+            "rel_residual_max_upto_index": 0.011018418694440296,
+            "rel_residual_max_whole_march": 0.029324711476281455,
+            "index": 680,
+            "energy_in_J_per_m_at_index": 169942.58636173015,
+            "energy_residual_J_per_m_at_index": 1872.498570549622,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 226.92827051657667,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 946,
+          "sat_mean_in_part": 1.0,
+          "sat_min_in_part": 1.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 60.913509791949764,
+          "execution": "quasi-static angle average (infinitely fast cycle)"
+        },
+        "ROT_transfer": {
+          "t_stop_index": 853,
+          "t_stop_s": 427.0,
+          "t_stop_at_horizon": false,
+          "J": 409.92121659001936,
+          "J_per_part_cell": 0.09358931885616881,
+          "IoU": 0.8483676975945017,
+          "IoU_area": 0.8422321151697663,
+          "bed_melt_pct_of_part": 6.301369863013699,
+          "part_under_melt_pct": 9.817351598173516,
+          "melted_cells": 4226,
+          "part_cells": 4380,
+          "mean_phi_part": 0.8958329017128047,
+          "mean_phi_bed": 0.005633831407970552,
+          "sigma_T_at_stop_c": 5.123152088825685,
+          "mean_T_part_c": 188.34241527857554,
+          "J_raster_chi": 451.8697788123369,
+          "IoU_at_raster_stop": 0.8631534211644709,
+          "P_abs_W_per_m": 390.5921290601125,
+          "P_abs_A_W_per_m": 357.4662089748097,
+          "energy_gate": {
+            "rel_residual": 0.006177438675245542,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.006177438675245542,
+            "rel_residual_max_upto_index": 0.006177438675245542,
+            "rel_residual_max_whole_march": 0.023937315125140864,
+            "index": 853,
+            "energy_in_J_per_m_at_index": 166454.64031768194,
+            "energy_residual_J_per_m_at_index": 1028.2633327725343,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 197.91856149203468,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 1120,
+          "sat_mean_in_part": 0.6376864535768645,
+          "sat_min_in_part": 0.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 68.75220695813186,
+          "executed_dwell_fraction": [
+            0.25,
+            0.25,
+            0.25,
+            0.25
+          ],
+          "execution": "time-resolved program, part frame, no field interpolation"
+        }
+      },
+      "wall_s": 229.73243041709065
+    },
+    "360": {
+      "n_grid": 360,
+      "n_part_cells": 9680,
+      "dx_m": 0.00016713091922005568,
+      "dy_m": 0.00016713091922005568,
+      "dt_s": 0.5,
+      "n_steps": 1500,
+      "n_substeps": 37,
+      "calibration": {
+        "voltage_v": 3015.564014108433,
+        "start_voltage_v": 2815.3798396110424,
+        "p_at_start_w_per_m": 435.81973569106685,
+        "p_target_w_per_m": 500.0,
+        "p_verified_w_per_m": 499.999999999998,
+        "n_electro_quasi_static_solves": 2,
+        "electrical_state": "B",
+        "convention": "uniform dopant arm absorbs the target power, state B, summed over the doped mask (FROZEN_CONVENTIONS_2D section 3)",
+        "n_grid": 360,
+        "voltage_v_pinned": 2815.3798396110424,
+        "p_at_pinned_v_w_per_m": 435.81973569106685
+      },
+      "chi": {
+        "n_sub": 32,
+        "n_polys": 1,
+        "area_m2": 0.00026885484477929243,
+        "construction": "sub-cell area fill by rfam_eqs_coupled._subpixel_fill_fraction, union by np.maximum"
+      },
+      "raster_vs_area": {
+        "area_raster_m2": 0.0002703889634624187,
+        "area_chi_m2": 0.00026885484477929243,
+        "area_rel_delta": 0.0057061225152393105,
+        "n_cells_differing_gt_0p01": 520,
+        "max_abs_cell_delta": 0.23828125,
+        "sum_abs_cell_delta": 54.921875
+      },
+      "program": {
+        "kind": "fixed-interval indexing",
+        "interval_s": 2.0,
+        "positions_deg": [
+          0.0,
+          90.0,
+          180.0,
+          270.0
+        ],
+        "n_moves": 375
+      },
+      "angles_deg": [
+        0.0,
+        90.0,
+        180.0,
+        270.0
+      ],
+      "executed_position_histogram": [
+        376,
+        376,
+        376,
+        372
+      ],
+      "executed_dwell_fraction": [
+        0.25066666666666665,
+        0.25066666666666665,
+        0.25066666666666665,
+        0.248
+      ],
+      "arms": {
+        "ROT_uniform": {
+          "t_stop_index": 715,
+          "t_stop_s": 358.0,
+          "t_stop_at_horizon": false,
+          "J": 2188.2255411713672,
+          "J_per_part_cell": 0.22605635755902553,
+          "IoU": 0.7744894427137418,
+          "IoU_area": 0.7740576306370519,
+          "bed_melt_pct_of_part": 19.380165289256198,
+          "part_under_melt_pct": 7.541322314049586,
+          "melted_cells": 10826,
+          "part_cells": 9680,
+          "mean_phi_part": 0.9232746049522077,
+          "mean_phi_bed": 0.015722138813247098,
+          "sigma_T_at_stop_c": 20.42074071623762,
+          "mean_T_part_c": 210.9738659601625,
+          "J_raster_chi": 2248.8955876979085,
+          "IoU_at_raster_stop": 0.775094860296654,
+          "P_abs_W_per_m": 499.9999999999981,
+          "P_abs_A_W_per_m": 492.53020770066155,
+          "energy_gate": {
+            "rel_residual": 0.01471185130109109,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.01471185130109109,
+            "rel_residual_max_upto_index": 0.01471185130109109,
+            "rel_residual_max_whole_march": 0.030675324158548546,
+            "index": 715,
+            "energy_in_J_per_m_at_index": 178925.30207700652,
+            "energy_residual_J_per_m_at_index": 2632.3224381597247,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 242.3988276727177,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 970,
+          "sat_mean_in_part": 1.0,
+          "sat_min_in_part": 1.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 296.8645245002117,
+          "executed_dwell_fraction": [
+            0.2515463917525773,
+            0.2515463917525773,
+            0.24948453608247423,
+            0.24742268041237114
+          ],
+          "execution": "time-resolved program, part frame, no field interpolation"
+        },
+        "STATIC_uniform": {
+          "t_stop_index": 483,
+          "t_stop_s": 242.0,
+          "t_stop_at_horizon": false,
+          "J": 3790.8375704897385,
+          "J_per_part_cell": 0.3916154514968738,
+          "IoU": 0.6067326732673267,
+          "IoU_area": 0.5998570125863364,
+          "bed_melt_pct_of_part": 4.338842975206612,
+          "part_under_melt_pct": 36.69421487603306,
+          "melted_cells": 6548,
+          "part_cells": 9680,
+          "mean_phi_part": 0.6269828359678629,
+          "mean_phi_bed": 0.003921909886109815,
+          "sigma_T_at_stop_c": 32.09275416709377,
+          "mean_T_part_c": 179.2893752511014,
+          "J_raster_chi": 3845.5959803091187,
+          "IoU_at_raster_stop": 0.6063955783655745,
+          "P_abs_W_per_m": 499.999999999998,
+          "P_abs_A_W_per_m": 492.53020770066144,
+          "energy_gate": {
+            "rel_residual": 0.005665558637938343,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.005665558637938343,
+            "rel_residual_max_upto_index": 0.005665558637938343,
+            "rel_residual_max_whole_march": 0.023525266399331727,
+            "index": 483,
+            "energy_in_J_per_m_at_index": 120925.30207700653,
+            "energy_residual_J_per_m_at_index": 685.1093897276878,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 217.51128012274933,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 736,
+          "sat_mean_in_part": 1.0,
+          "sat_min_in_part": 1.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 201.0395812499337,
+          "execution": "static, part at 0 degrees, no rotation",
+          "eps_covary": false
+        },
+        "QS_uniform": {
+          "t_stop_index": 724,
+          "t_stop_s": 362.5,
+          "t_stop_at_horizon": false,
+          "J": 2197.682600008492,
+          "J_per_part_cell": 0.22703332644715826,
+          "IoU": 0.7759807295251204,
+          "IoU_area": 0.7753837518217837,
+          "bed_melt_pct_of_part": 20.082644628099175,
+          "part_under_melt_pct": 6.818181818181818,
+          "melted_cells": 10964,
+          "part_cells": 9680,
+          "mean_phi_part": 0.9315814828104793,
+          "mean_phi_bed": 0.016413712561621,
+          "sigma_T_at_stop_c": 20.592983628512755,
+          "mean_T_part_c": 212.02532733940944,
+          "J_raster_chi": 2258.129787631734,
+          "IoU_at_raster_stop": 0.7751884852638794,
+          "P_abs_W_per_m": 499.9999999999981,
+          "P_abs_A_W_per_m": 492.53020770066144,
+          "energy_gate": {
+            "rel_residual": 0.014774552332796285,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.014774552332796285,
+            "rel_residual_max_upto_index": 0.014774552332796285,
+            "rel_residual_max_whole_march": 0.030545569990699486,
+            "index": 724,
+            "energy_in_J_per_m_at_index": 181175.30207700652,
+            "energy_residual_J_per_m_at_index": 2676.783981946908,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 243.7036134565243,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 979,
+          "sat_mean_in_part": 1.0,
+          "sat_min_in_part": 1.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 560.3729027919471,
+          "execution": "quasi-static angle average (infinitely fast cycle)"
+        },
+        "ROT_transfer": {
+          "t_stop_index": 915,
+          "t_stop_s": 458.0,
+          "t_stop_at_horizon": false,
+          "J": 1384.231625370702,
+          "J_per_part_cell": 0.14299913485234525,
+          "IoU": 0.8212806026365348,
+          "IoU_area": 0.8184759292374306,
+          "bed_melt_pct_of_part": 9.710743801652892,
+          "part_under_melt_pct": 9.896694214876034,
+          "melted_cells": 9662,
+          "part_cells": 9680,
+          "mean_phi_part": 0.8981483451440172,
+          "mean_phi_bed": 0.00811122141829146,
+          "sigma_T_at_stop_c": 7.5976681829182935,
+          "mean_T_part_c": 192.3290328712132,
+          "J_raster_chi": 1451.4081451052775,
+          "IoU_at_raster_stop": 0.8212806026365348,
+          "P_abs_W_per_m": 375.3240234275386,
+          "P_abs_A_W_per_m": 368.5714090256603,
+          "energy_gate": {
+            "rel_residual": 0.008026199579853443,
+            "threshold": 0.05,
+            "PASS": true,
+            "rel_residual_at_index": 0.008026199579853443,
+            "rel_residual_max_upto_index": 0.008026199579853443,
+            "rel_residual_max_whole_march": 0.022731079846690923,
+            "index": 915,
+            "energy_in_J_per_m_at_index": 171834.9525870353,
+            "energy_residual_J_per_m_at_index": 1379.181624258199,
+            "PASS_max_upto_index": true
+          },
+          "max_T_at_stop_c": 204.13013428345602,
+          "over_ceiling_250c": false,
+          "frac_dT_clipped_max": 0.0,
+          "frac_temp_cap_max": 0.0,
+          "n_outer": 1166,
+          "sat_mean_in_part": 0.6304269972451791,
+          "sat_min_in_part": 0.0,
+          "sat_max_in_part": 1.0,
+          "wall_s": 720.6740773750935,
+          "executed_dwell_fraction": [
+            0.2504288164665523,
+            0.2504288164665523,
+            0.2504288164665523,
+            0.24871355060034306
+          ],
+          "execution": "time-resolved program, part frame, no field interpolation"
+        }
+      },
+      "wall_s": 1785.4754402078688
+    }
+  },
+  "wall_by_grid_s": {
+    "180": 77.19999033398926,
+    "240": 229.73243041709065,
+    "360": 1785.4754402078688
+  },
+  "projection_after_this_grid_s": {},
+  "reproduction_gate": {
+    "source": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/code/geo-prewarp/fgm_solve_campaign/out_rot_holdout/cross_index90.json",
+    "report": "ROTATING_HOLDOUT_REPORT.md Section 4.1",
+    "rows": [
+      {
+        "grid": 120,
+        "status": "NOT CHECKED"
+      },
+      {
+        "grid": 160,
+        "status": "NOT CHECKED"
+      }
+    ],
+    "n_comparisons_actually_made": 0,
+    "ALL_PASS": null,
+    "status": "NOT CHECKED, no overlap between this ladder and the stored grids",
+    "tolerance": {
+      "rel_J": 0.005,
+      "abs_IoU": 0.0005
+    }
+  },
+  "convergence": {
+    "ROT_uniform": {
+      "grids": [
+        180,
+        240,
+        360
+      ],
+      "IoU": [
+        0.8566066066066066,
+        0.7982243744955609,
+        0.7744894427137418
+      ],
+      "J_per_part_cell": [
+        0.12352889110114375,
+        0.169313460846702,
+        0.22605635755902553
+      ],
+      "successive": [
+        {
+          "from": 180,
+          "to": 240,
+          "dIoU": -0.05838223211104565,
+          "abs_dIoU": 0.05838223211104565
+        },
+        {
+          "from": 240,
+          "to": 360,
+          "dIoU": -0.02373493178181918,
+          "abs_dIoU": 0.02373493178181918
+        }
+      ],
+      "differences_shrink_monotonically": true,
+      "differences_all_one_sign": true,
+      "asymptotic_range": true,
+      "observed_order_p": 4.314482188636403,
+      "observed_order_note": "fitted on the error against the FINEST grid, which biases the order low; it is an indication, not a proof",
+      "last_step_abs_dIoU": 0.02373493178181918,
+      "first_step_abs_dIoU": 0.05838223211104565
+    },
+    "STATIC_uniform": {
+      "grids": [
+        180,
+        240,
+        360
+      ],
+      "IoU": [
+        0.5575079872204473,
+        0.5774395702775291,
+        0.6067326732673267
+      ],
+      "J_per_part_cell": [
+        0.42933478353284243,
+        0.38892601353661715,
+        0.3916154514968738
+      ],
+      "successive": [
+        {
+          "from": 180,
+          "to": 240,
+          "dIoU": 0.01993158305708187,
+          "abs_dIoU": 0.01993158305708187
+        },
+        {
+          "from": 240,
+          "to": 360,
+          "dIoU": 0.029293102989797593,
+          "abs_dIoU": 0.029293102989797593
+        }
+      ],
+      "differences_shrink_monotonically": false,
+      "differences_all_one_sign": true,
+      "asymptotic_range": false,
+      "last_step_abs_dIoU": 0.029293102989797593,
+      "first_step_abs_dIoU": 0.01993158305708187
+    },
+    "QS_uniform": {
+      "grids": [
+        180,
+        240,
+        360
+      ],
+      "IoU": [
+        0.8498498498498499,
+        0.7959839357429719,
+        0.7759807295251204
+      ],
+      "J_per_part_cell": [
+        0.12529377717185314,
+        0.17090732903950392,
+        0.22703332644715826
+      ],
+      "successive": [
+        {
+          "from": 180,
+          "to": 240,
+          "dIoU": -0.05386591410687802,
+          "abs_dIoU": 0.05386591410687802
+        },
+        {
+          "from": 240,
+          "to": 360,
+          "dIoU": -0.020003206217851455,
+          "abs_dIoU": 0.020003206217851455
+        }
+      ],
+      "differences_shrink_monotonically": true,
+      "differences_all_one_sign": true,
+      "asymptotic_range": true,
+      "observed_order_p": 4.541132161326146,
+      "observed_order_note": "fitted on the error against the FINEST grid, which biases the order low; it is an indication, not a proof",
+      "last_step_abs_dIoU": 0.020003206217851455,
+      "first_step_abs_dIoU": 0.05386591410687802
+    },
+    "ROT_transfer": {
+      "grids": [
+        180,
+        240,
+        360
+      ],
+      "IoU": [
+        0.944620253164557,
+        0.8483676975945017,
+        0.8212806026365348
+      ],
+      "J_per_part_cell": [
+        0.0440738456535153,
+        0.09358931885616881,
+        0.14299913485234525
+      ],
+      "successive": [
+        {
+          "from": 180,
+          "to": 240,
+          "dIoU": -0.0962525555700553,
+          "abs_dIoU": 0.0962525555700553
+        },
+        {
+          "from": 240,
+          "to": 360,
+          "dIoU": -0.027087094957966906,
+          "abs_dIoU": 0.027087094957966906
+        }
+      ],
+      "differences_shrink_monotonically": true,
+      "differences_all_one_sign": true,
+      "asymptotic_range": true,
+      "observed_order_p": 5.269304790471399,
+      "observed_order_note": "fitted on the error against the FINEST grid, which biases the order low; it is an indication, not a proof",
+      "last_step_abs_dIoU": 0.027087094957966906,
+      "first_step_abs_dIoU": 0.0962525555700553
+    }
+  },
+  "energy_gate_violations": [],
+  "wall_s": 2092.4226928330027
+}
