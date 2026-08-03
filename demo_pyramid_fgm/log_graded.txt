@@ -1,0 +1,3 @@
+2026-08-03 09:11:27,721 arm=graded voxels=1956 h=1.250 mm
+2026-08-03 09:16:56,985 arm=graded DONE wall=329.2 s sigma_T=29.436
+  [s1-energy] in=7296.3 J stored=7054.3 J loss=242.0 J residual_frac=+0.0000

@@ -1,0 +1,3 @@
+2026-08-03 09:11:30,009 arm=uniform voxels=1956 h=1.250 mm
+2026-08-03 09:16:59,243 arm=uniform DONE wall=329.2 s sigma_T=29.234
+  [s1-energy] in=7296.3 J stored=7050.5 J loss=245.8 J residual_frac=+0.0000
