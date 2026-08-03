@@ -423,11 +423,26 @@ with it); that `stop_rule: j_phi` reproduces a stored v2.0.1 run's stop exactly.
 status of both failing tests, re-measured by reverting the one engine file this
 pass touched.
 
-**ASSUMED, and how it bites**: (1) `w_out = 2.0` is calibrated on a READ-STATE
-trade curve that re-read maps SOLVED at w_out = 1
-(DENSE_IFF_INBOUNDS_REPORT.md Section 6 caveat and Section 11 assumption 1); a
-map solved at w_out = 2 has still not been run, which is precisely why this pass
-changes the STOP and not the MAP. (2) The floor of 0.85 relative density was
+**MEASURED, and no longer assumed**: (1) `w_out = 2.0` was calibrated on a
+READ-STATE trade curve that re-read maps SOLVED at w_out = 1
+(DENSE_IFF_INBOUNDS_REPORT.md Section 6 caveat and Section 11 assumption 1).
+**A map solved AT w_out = 2 has now been run, on three shapes, at w_out = 2 and
+3, finite-difference gated at each price** (WOUT_SOLVE_AT_PRICE_REPORT.md).
+COMPUTED: solving at the price does NOT beat re-reading the shipped
+melt-region-solved map at that price on the square (-19.6 percent of J_asym) or
+the hexagon (-16.6 percent), it wins only on the triangle (+20.8 percent), and
+intersection over union at grid 120 is LOWER for the solved-at-price map on all
+three. A budget-matched warm start from the melt-solved map lands within 1.6 to
+16.1 percent of the cold solve, so this is neither a budget nor a start effect.
+The gap is a feasible-set effect: pushing the shipped map through the 1.0 mm
+design filter that every solved arm is constrained by costs 23 to 170 percent of
+J_asym, and INSIDE that filtered family the at-price solve wins by 29.3 to 61.5
+percent everywhere. **The decision this pass hedged against does not arise: the
+production price stays a read-state price, the melt objective keeps the MAP, the
+asymmetric objective keeps the STOP, and no default moves.** The named next
+experiment is to re-solve the melt objective UNDER the production filter, which
+is the only arm that makes the comparison like-for-like. (2) The floor of 0.85
+relative density was
 swept on ONE shape (the hexagon). (3) The out-of-bounds term is charged at the
 read state rather than as a running maximum over time, although bed fusing is
 irreversible; that remains the one known modelling error in the objective.
