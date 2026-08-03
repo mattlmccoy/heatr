@@ -1,0 +1,21 @@
+[cross_dwell@120] drive 2815.4 V gives 500.0 W/m at this grid; recalibrated to 2815.4 V, verified 500.00 W/m
+[cross_dwell@120] part cells 1036, chi area 2.690941e-04 m2, raster minus area -2.127 %
+[cross_dwell@120] ROT_uniform                J     98.38  IoU 0.8803  IoUa 0.8573  grow   9.65  under   3.47  stop  633 ( 317.0 s)  P  500.0  Eres 0.85%  Jrast    125.87  5.2 s
+[cross_dwell@120] ROT_solved                 J     25.16  IoU 0.9811  IoUa 0.9143  grow   1.93  under   0.00  stop  944 ( 472.5 s)  P  365.0  Eres 0.44%  Jrast     34.04  6.6 s
+[cross_dwell@120] QS_uniform                 J    100.68  IoU 0.8706  IoUa 0.8554  grow  10.42  under   3.86  stop  636 ( 318.5 s)  P  500.0  Eres 0.87%  Jrast    128.71  5.2 s
+[cross_dwell@120] QS_solved                  J     25.49  IoU 0.9737  IoUa 0.9148  grow   2.70  under   0.00  stop  950 ( 475.5 s)  P  364.9  Eres 0.43%  Jrast     34.20  6.9 s
+[cross_dwell@120] QS_solved_equalW           J     25.49  IoU 0.9737  IoUa 0.9148  grow   2.70  under   0.00  stop  950 ( 475.5 s)  P  364.9  Eres 0.43%  Jrast     34.20  6.9 s
+[cross_dwell@120] QS_uniform_equalW          J    100.68  IoU 0.8706  IoUa 0.8554  grow  10.42  under   3.86  stop  636 ( 318.5 s)  P  500.0  Eres 0.87%  Jrast    128.71  5.0 s
+[cross_dwell@120] STATIC_uniform             J    463.25  IoU 0.5515  IoUa 0.5450  grow   5.02  under  42.08  stop  452 ( 226.5 s)  P  500.0  Eres 0.74%  Jrast    471.82  3.7 s
+[cross_dwell@120] STATIC_solved              J    316.15  IoU 0.6755  IoUa 0.6906  grow  16.60  under  21.24  stop 1499 ( 750.0 s) HORIZON  P  262.6  Eres 1.10%  Jrast    360.18  7.8 s
+[cross_dwell@160] drive 2815.4 V gives 456.3 W/m at this grid; recalibrated to 2947.0 V, verified 500.00 W/m
+[cross_dwell@160] part cells 1920, chi area 2.690042e-04 m2, raster minus area +1.637 %
+[cross_dwell@160] ROT_uniform                J    442.85  IoU 0.7821  IoUa 0.7551  grow  16.67  under   8.75  stop  687 ( 344.0 s)  P  500.0  Eres 1.30%  Jrast    440.10  13.7 s
+[cross_dwell@160] ROT_solved                 J    311.15  IoU 0.8033  IoUa 0.7882  grow   7.50  under  13.65  stop  857 ( 429.0 s)  P  382.9  Eres 0.67%  Jrast    317.04  16.1 s
+[cross_dwell@160] QS_uniform                 J    444.59  IoU 0.7814  IoUa 0.7536  grow  16.25  under   9.17  stop  684 ( 342.5 s)  P  500.0  Eres 1.28%  Jrast    442.16  13.8 s
+[cross_dwell@160] QS_solved                  J    313.31  IoU 0.8000  IoUa 0.7879  grow   7.81  under  13.75  stop  860 ( 430.5 s)  P  382.8  Eres 0.68%  Jrast    319.30  16.3 s
+[cross_dwell@160] QS_solved_equalW           J    313.31  IoU 0.8000  IoUa 0.7879  grow   7.81  under  13.75  stop  860 ( 430.5 s)  P  382.8  Eres 0.68%  Jrast    319.30  15.8 s
+[cross_dwell@160] QS_uniform_equalW          J    444.59  IoU 0.7814  IoUa 0.7536  grow  16.25  under   9.17  stop  684 ( 342.5 s)  P  500.0  Eres 1.28%  Jrast    442.16  13.2 s
+[cross_dwell@160] STATIC_uniform             J    724.72  IoU 0.6152  IoUa 0.6034  grow   6.67  under  34.38  stop  516 ( 258.5 s)  P  500.0  Eres 0.70%  Jrast    746.22  10.5 s
+[cross_dwell@160] STATIC_solved              J    631.36  IoU 0.6667  IoUa 0.6609  grow  11.88  under  25.42  stop  878 ( 439.5 s)  P  372.4  Eres 1.01%  Jrast    647.39  15.5 s
+[cross_dwell] VERDICT IoU 0.9811 at 120 -> 0.8033 at 160; SOLVED class True -> False; rankings on J preserved True; wall 163.3 s

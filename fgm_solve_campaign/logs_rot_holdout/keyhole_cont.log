@@ -1,0 +1,21 @@
+[keyhole_cont@120] drive 2428.2 V gives 426.1 W/m at this grid; recalibrated to 2630.3 V, verified 500.00 W/m
+[keyhole_cont@120] part cells 1030, chi area 2.614189e-04 m2, raster minus area +0.163 %
+[keyhole_cont@120] ROT_uniform                J    191.50  IoU 0.7876  IoUa 0.7838  grow  14.27  under  10.00  stop 1120 ( 560.5 s)  P  310.5  Eres 0.98%  Jrast    211.07  8.5 s
+[keyhole_cont@120] ROT_solved                 J     12.49  IoU 0.9684  IoUa 0.9558  grow   1.46  under   1.75  stop 1436 ( 718.5 s)  P  251.7  Eres 0.14%  Jrast     24.79  9.4 s
+[keyhole_cont@120] QS_uniform                 J    196.51  IoU 0.7849  IoUa 0.7829  grow  15.53  under   9.32  stop 1134 ( 567.5 s)  P  310.2  Eres 1.06%  Jrast    216.74  8.8 s
+[keyhole_cont@120] QS_solved                  J     13.99  IoU 0.9620  IoUa 0.9533  grow   2.14  under   1.75  stop 1446 ( 723.5 s)  P  251.7  Eres 0.21%  Jrast     27.82  9.2 s
+[keyhole_cont@120] QS_solved_equalW           J      8.08  IoU 0.9753  IoUa 0.9656  grow   2.14  under   0.39  stop 1494 ( 747.5 s)  P  245.7  Eres 0.20%  Jrast     23.32  9.0 s
+[keyhole_cont@120] QS_uniform_equalW          J    176.35  IoU 0.7973  IoUa 0.7949  grow  13.01  under   9.90  stop 1145 ( 573.0 s)  P  301.3  Eres 0.89%  Jrast    196.11  8.4 s
+[keyhole_cont@120] STATIC_uniform             J    509.96  IoU 0.5750  IoUa 0.5659  grow  30.68  under  24.85  stop  671 ( 336.0 s)  P  500.0  Eres 2.27%  Jrast    524.99  4.9 s
+[keyhole_cont@120] STATIC_solved              J    168.35  IoU 0.8163  IoUa 0.8162  grow  14.17  under   6.80  stop 1002 ( 501.5 s)  P  367.2  Eres 0.98%  Jrast    191.73  6.6 s
+[keyhole_cont@160] drive 2428.2 V gives 380.3 W/m at this grid; recalibrated to 2784.0 V, verified 500.00 W/m
+[keyhole_cont@160] part cells 1844, chi area 2.613458e-04 m2, raster minus area +0.474 %
+[keyhole_cont@160] ROT_uniform                J    412.06  IoU 0.7648  IoUa 0.7638  grow  16.43  under  10.95  stop 1107 ( 554.0 s)  P  322.2  Eres 1.13%  Jrast    436.76  22.0 s
+[keyhole_cont@160] ROT_solved                 J     78.54  IoU 0.9243  IoUa 0.9202  grow   4.56  under   3.36  stop 1401 ( 701.0 s)  P  264.8  Eres 0.34%  Jrast     97.85  23.2 s
+[keyhole_cont@160] QS_uniform                 J    417.67  IoU 0.7640  IoUa 0.7598  grow  15.35  under  11.88  stop 1088 ( 544.5 s)  P  323.1  Eres 1.06%  Jrast    442.95  20.9 s
+[keyhole_cont@160] QS_solved                  J     81.39  IoU 0.9209  IoUa 0.9168  grow   4.23  under   4.01  stop 1388 ( 694.5 s)  P  264.8  Eres 0.31%  Jrast    104.23  23.4 s
+[keyhole_cont@160] QS_solved_equalW           J     63.58  IoU 0.9331  IoUa 0.9277  grow   3.80  under   3.15  stop 1433 ( 717.0 s)  P  258.5  Eres 0.28%  Jrast     87.36  19.8 s
+[keyhole_cont@160] QS_uniform_equalW          J    386.73  IoU 0.7742  IoUa 0.7699  grow  13.34  under  12.26  stop 1106 ( 553.5 s)  P  313.8  Eres 0.93%  Jrast    411.94  17.7 s
+[keyhole_cont@160] STATIC_uniform             J    759.35  IoU 0.6328  IoUa 0.6293  grow  26.14  under  20.17  stop  677 ( 339.0 s)  P  500.0  Eres 1.94%  Jrast    781.97  10.9 s
+[keyhole_cont@160] STATIC_solved              J    351.91  IoU 0.7991  IoUa 0.7945  grow  14.43  under   8.57  stop  879 ( 440.0 s)  P  404.0  Eres 1.05%  Jrast    376.13  12.8 s
+[keyhole_cont] VERDICT IoU 0.9684 at 120 -> 0.9243 at 160; SOLVED class True -> False; rankings on J preserved True; wall 224.3 s
