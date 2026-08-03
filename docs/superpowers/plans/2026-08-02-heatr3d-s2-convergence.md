@@ -35,8 +35,8 @@
 
 ### Task 1: Harness + band machinery (TDD)
 
-- [ ] Failing tests: band computation on synthetic convergence sequences (monotone, oscillatory, diverging - diverging must FAIL loudly, never produce a band); gauge-switch plumbing returns bit-identical fields when the flag is off; dual-read extraction matches the S1 test conventions.
-- [ ] Implement `harness.py`/`bands.py`. Green. Commit.
+- [x] Failing tests: band computation on synthetic convergence sequences (monotone, oscillatory, diverging - diverging must FAIL loudly, never produce a band); gauge-switch plumbing returns bit-identical fields when the flag is off; dual-read extraction matches the S1 test conventions.
+- [x] Implement `harness.py`/`bands.py`. Green. Commit. **19 passed (10 bands, 5 gauge, 4 harness).** The synthetic-sequence tests caught a real methodological bug: fitting log|successive change| vs log h inflates the observed order on a non-uniform ladder (read 2.98 on an exactly 2nd-order sequence); fitting the VALUES to q_inf + C h^p instead recovers p exactly.
 
 ### Task 2: Electrode-gauge decision ((n-1)h question)
 
