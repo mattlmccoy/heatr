@@ -1,0 +1,32 @@
+{
+  "name": "cone",
+  "tier": 1,
+  "role": "stressor",
+  "rf_characteristic": "smooth base converging to an apex singularity (field concentration at a point)",
+  "numerical_characteristic": "apex vertex singularity",
+  "target_volume_mm3": 4188.790204786391,
+  "actual_volume_mm3": 4188.790204786389,
+  "volume_err_frac": 4.3425173250915216e-16,
+  "is_watertight": true,
+  "is_winding_consistent": true,
+  "euler_number": 2,
+  "genus": 0,
+  "n_vertices": 98,
+  "n_faces": 192,
+  "facet_area_mm2": {
+    "min": 5.193521504808398,
+    "max": 11.618044283807684,
+    "mean": 8.40578289430801,
+    "std": 3.2122613894995675
+  },
+  "bbox_mm": [
+    25.204419347908864,
+    25.204419347908864,
+    25.204419347908864
+  ],
+  "realized_chamber_gap_mm": 17.397790326045566,
+  "scale_factor": 12.602209673954432,
+  "stl_path": "stl/cone.stl",
+  "sha256": "936bac8156ec8490de489568ae57d3e0917ed67339d61e9bf2d53691df779316",
+  "rejection_error": null
+}

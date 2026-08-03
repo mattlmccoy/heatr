@@ -1,0 +1,5 @@
+# Regenerable GUI intermediates from the smoke campaign (per-z-slice PNGs +
+# field metadata). The densification visuals we keep live in smoke_out/*/plots/.
+smoke_out/*/slices/
+smoke_out/*/fieldmeta.json
+smoke_out/*/preview.png

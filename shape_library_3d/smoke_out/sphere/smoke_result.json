@@ -1,0 +1,16 @@
+{
+  "shape": "sphere",
+  "n": 48,
+  "voxel_vs_Vstar_frac": 0.014612762210832742,
+  "reached_phi90": true,
+  "t_phi90_s": 645.0,
+  "sigma_T_C": 23.10628134724874,
+  "T_max_C": 260.8659541774635,
+  "mean_rho_final": 0.9000216273522106,
+  "energy_residual_frac": 6.220445137730132e-15,
+  "clamp_bound": false,
+  "energy_gate_ok": true,
+  "ceiling_250C_ok": false,
+  "wall_s": 772.6,
+  "plots_dir": "smoke_out/sphere/plots"
+}

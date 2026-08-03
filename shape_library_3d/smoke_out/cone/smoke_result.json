@@ -1,0 +1,16 @@
+{
+  "shape": "cone",
+  "n": 48,
+  "voxel_vs_Vstar_frac": 0.0034221802746838836,
+  "reached_phi90": false,
+  "t_phi90_s": NaN,
+  "sigma_T_C": 32.840327465192075,
+  "T_max_C": 265.5783493922296,
+  "mean_rho_final": 0.9000097674834208,
+  "energy_residual_frac": -2.6834742409377526e-13,
+  "clamp_bound": false,
+  "energy_gate_ok": true,
+  "ceiling_250C_ok": false,
+  "wall_s": 653.5,
+  "plots_dir": "smoke_out/cone/plots"
+}

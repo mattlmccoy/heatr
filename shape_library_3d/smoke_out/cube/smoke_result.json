@@ -1,0 +1,16 @@
+{
+  "shape": "cube",
+  "n": 48,
+  "voxel_vs_Vstar_frac": -0.1942781005972798,
+  "reached_phi90": false,
+  "t_phi90_s": NaN,
+  "sigma_T_C": 21.108247593607494,
+  "T_max_C": 247.8702726509272,
+  "mean_rho_final": 0.900000304944279,
+  "energy_residual_frac": -5.561118729145152e-14,
+  "clamp_bound": false,
+  "energy_gate_ok": true,
+  "ceiling_250C_ok": true,
+  "wall_s": 543.7,
+  "plots_dir": "smoke_out/cube/plots"
+}

@@ -1,0 +1,7 @@
+# Runtime dependencies for shape_library_3d (installed in .venv312).
+# manifold3d provides the watertight boolean-union backend used by make_lattice
+# (added 2026-08-01; trimesh.boolean.union is a no-op without it).
+numpy
+trimesh>=4.12
+manifold3d   # watertight boolean-union backend for make_lattice
+rtree        # spatial index for trimesh.contains() in voxelize.stl_to_mask
