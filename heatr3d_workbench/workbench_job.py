@@ -185,18 +185,97 @@ def build_part(grid, cfg: Dict[str, Any]) -> np.ndarray:
 
 
 # --------------------------------------------------------------------------- #
-# Rendering (all three axes, locked colormaps, phi-front contours, DPI 180)
+# Rendering (all three axes, locked colormap FAMILIES, phi-front contours,
+# DPI 180, display smoothing per the visualization standard)
 # --------------------------------------------------------------------------- #
 _AXES = {"x": 0, "y": 1, "z": 2}
 
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap  # noqa: E402
+from scipy.ndimage import gaussian_filter  # noqa: E402
+
 # Visualization standard (memory: visualization-standard): thermal = inferno,
 # dopant/sat = viridis, density = powder-gray -> melt-purple -> dense-gold.
-from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
+# DEVIATION FROM THE STANDARD, recorded (Matt, 2026-08-03): the colormap
+# FAMILIES are kept but their BOTTOMS are clipped (inferno from 0.25, viridis
+# from 0.20) because the untruncated floors are near-black and vanish on the
+# dark UI ("so hard to see with the pixels being black"). First pass at
+# 0.15/0.12 was still near-black at the cold rim voxels (checked on the cone
+# renders); raised after viewing. Outside-part (bed) voxels render as a
+# distinct muted slate via set_bad, never the colormap floor, so bed vs
+# cold-part is visually distinct.
+_BED_SLATE = (0.145, 0.165, 0.205, 1.0)
+DISPLAY_SMOOTH_SIGMA = 1.0   # standard: field sigma ~1.0-1.2, DISPLAY ONLY
 
-_DENSITY_CMAP = LinearSegmentedColormap.from_list(
-    "rfam_density", ["#8f8f8f", "#6b3fa0", "#d4a017"])
-_FIELD_CMAPS = {"T_phi90": "inferno", "rho_final": _DENSITY_CMAP,
-                "sat": "viridis", "Qrf": "viridis", "phi_final": "viridis"}
+
+def truncated_cmap(name: str, lo: float, n: int = 256) -> ListedColormap:
+    """The named colormap restricted to [lo, 1] (floor never near-black)."""
+    base = plt.get_cmap(name)
+    return ListedColormap(base(np.linspace(lo, 1.0, n)), name=f"{name}_{lo:g}")
+
+
+def _density_cmap() -> LinearSegmentedColormap:
+    return LinearSegmentedColormap.from_list(
+        "rfam_density", ["#8f8f8f", "#6b3fa0", "#d4a017"])
+
+
+def field_cmap(field: str):
+    """Per-field display colormap with the clipped floor + slate bad color."""
+    if field == "T_phi90":
+        cm = truncated_cmap("inferno", 0.25)
+    elif field == "rho_final":
+        cm = _density_cmap()
+    else:                       # sat, Qrf, phi_final
+        cm = truncated_cmap("viridis", 0.20)
+    cm.set_bad(_BED_SLATE)
+    return cm
+
+
+def display_smooth(img: np.ndarray, mask: np.ndarray,
+                   sigma: float = DISPLAY_SMOOTH_SIGMA) -> np.ndarray:
+    """Mask-aware gaussian smoothing of a DISPLAY array (never the data).
+
+    Normalized convolution: smooth field*mask and mask separately, divide,
+    keep outside-mask NaN so the slate bad color renders there."""
+    m = mask.astype(float)
+    filled = np.nan_to_num(np.where(mask, img, 0.0))
+    num = gaussian_filter(filled, sigma)
+    den = gaussian_filter(m, sigma)
+    out = np.where(den > 1e-3, num / np.maximum(den, 1e-12), np.nan)
+    return np.where(mask, out, np.nan)
+
+
+_ISO_SPECS = [("phi_final", 0.9, "melt front phi = 0.9"),
+              ("phi_final", 0.5, "melt front phi = 0.5"),
+              ("rho_final", 0.9, "density rho = 0.9")]
+
+
+def isosurfaces_for(fields: Dict[str, Any], h_mm: float,
+                    specs=None) -> List[Dict[str, Any]]:
+    """Marching-cubes isosurfaces (trilinear in-cell interpolation) of the
+    computed fields, in mm, for smooth-shaded viewer rendering. Levels outside
+    a field's range are SKIPPED, never faked. Display interpolation only -
+    the physics stays at the run grid."""
+    from skimage import measure
+    out: List[Dict[str, Any]] = []
+    for field, level, label in (specs if specs is not None else _ISO_SPECS):
+        a = fields.get(field)
+        if a is None or getattr(a, "ndim", 0) != 3:
+            continue
+        a = np.asarray(a, dtype=float)
+        if not (float(a.min()) < level < float(a.max())):
+            continue
+        try:
+            verts, faces, _, _ = measure.marching_cubes(
+                a, level=level, spacing=(h_mm, h_mm, h_mm))
+        except (ValueError, RuntimeError) as e:
+            logger.warning("marching cubes %s@%s failed: %s", field, level, e)
+            continue
+        out.append({
+            "field": field, "level": float(level), "label": label,
+            "vertices_mm": np.round(verts, 3).tolist(),
+            "faces": faces.astype(int).tolist(),
+        })
+    return out
 
 
 def _render_slices_all(out: Path, fields: Dict[str, Any], meta: Dict[str, Any]) -> None:
@@ -216,21 +295,26 @@ def _render_slices_all(out: Path, fields: Dict[str, Any], meta: Dict[str, Any]) 
         vmin, vmax = info["min"], info["max"]
         if vmax <= vmin:
             vmax = vmin + 1e-9
-        cmap = _FIELD_CMAPS.get(name, "viridis")
+        cmap = field_cmap(name)
         for ax_name, ax_idx in _AXES.items():
             nk = a.shape[ax_idx]
             for k in range(nk):
                 img = np.take(a, k, axis=ax_idx).astype(float)
                 mk = (np.take(mask3d, k, axis=ax_idx) if mask3d is not None else None)
                 if mk is not None:
-                    img = np.where(mk, img, np.nan)
+                    # display smoothing (standard: sigma ~1, DISPLAY only)
+                    img = display_smooth(img, mk)
                 fig = plt.figure(figsize=(2.6, 2.6), dpi=180)
+                fig.patch.set_alpha(0.0)
                 axp = fig.add_axes([0, 0, 1, 1]); axp.axis("off")
                 axp.imshow(img.T, origin="lower", cmap=cmap,
-                           vmin=vmin, vmax=vmax, interpolation="nearest")
+                           vmin=vmin, vmax=vmax, interpolation="bilinear")
                 if mk is not None:
-                    LJ._cad_outline(axp, mk.T)
+                    # outline from the display-smoothed mask (standard)
+                    LJ._cad_outline(axp, gaussian_filter(mk.astype(float),
+                                                         DISPLAY_SMOOTH_SIGMA).T)
                 if phi3d is not None:
+                    # melt-front contours from the ORIGINAL phi, never smoothed
                     pm = np.take(phi3d, k, axis=ax_idx).astype(float)
                     for lev, ls, lw in ((0.9, "-", 1.1), (0.5, "--", 0.7)):
                         if (pm >= lev).any() and not (pm >= lev).all():
@@ -259,16 +343,19 @@ def _write_snapshots(out: Path, snaps: List[Tuple[float, np.ndarray, np.ndarray]
     vmin = float(min(T[part].min() for T in T_stack)) if part.any() else 0.0
     vmax = float(max(T[part].max() for T in T_stack)) if part.any() else 1.0
     kmid = part.shape[2] // 2
+    snap_cmap = field_cmap("T_phi90")
     for i, (t_s, T, phi) in enumerate(snaps):
         np.savez_compressed(sdir / f"snap_{i:03d}.npz", t_s=t_s,
                             T=T.astype(np.float32), phi=phi.astype(np.float32))
-        img = np.where(part[:, :, kmid], T[:, :, kmid].astype(float), np.nan)
-        fig = plt.figure(figsize=(2.6, 2.6), dpi=150)
+        img = display_smooth(T[:, :, kmid].astype(float), part[:, :, kmid])
+        fig = plt.figure(figsize=(2.6, 2.6), dpi=180)
+        fig.patch.set_alpha(0.0)
         axp = fig.add_axes([0, 0, 1, 1]); axp.axis("off")
-        axp.imshow(img.T, origin="lower", cmap="inferno", vmin=vmin,
+        axp.imshow(img.T, origin="lower", cmap=snap_cmap, vmin=vmin,
                    vmax=(vmax if vmax > vmin else vmin + 1e-9),
-                   interpolation="nearest")
-        LJ._cad_outline(axp, part[:, :, kmid].T)
+                   interpolation="bilinear")
+        LJ._cad_outline(axp, gaussian_filter(
+            part[:, :, kmid].astype(float), DISPLAY_SMOOTH_SIGMA).T)
         # phi=0.9 front from the ORIGINAL phi, never smoothed
         pm = phi[:, :, kmid]
         if (pm >= 0.9).any() and not (pm >= 0.9).all():
@@ -285,6 +372,58 @@ def _write_snapshots(out: Path, snaps: List[Tuple[float, np.ndarray, np.ndarray]
 # --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
+def _write_isosurfaces(out: Path, fields: Dict[str, Any], h_mm: float) -> None:
+    surfs = isosurfaces_for(fields, h_mm)
+    dims = list(fields["part"].shape)
+    payload = {
+        "h_mm": h_mm, "dims": dims,
+        # vertex mm -> domain-centered mm: add offset (cell centers at
+        # (i+0.5)*h - L/2 with L = n*h; marching cubes vertices are i*h)
+        "offset_mm": [h_mm / 2.0 - d * h_mm / 2.0 for d in dims],
+        "note": ("display interpolation (marching cubes, in-cell trilinear) "
+                 "of the computed field; physics resolution is the run grid"),
+        "surfaces": surfs,
+    }
+    (out / "isosurfaces.json").write_text(json.dumps(payload))
+
+
+def render_views(out: Path, fields_for_view: Dict[str, Any], meta: Dict[str, Any],
+                 phi_hist, dt_s: float, h_m: float) -> None:
+    """All display artifacts for a run dir (slices, plots, isosurfaces)."""
+    _render_slices_all(out, fields_for_view, meta)
+    (out / "fieldmeta.json").write_text(json.dumps(meta, indent=2))
+    LJ._render_summary_plots(out, phi_hist, dt_s, fields_for_view, meta)
+    _write_isosurfaces(out, fields_for_view, h_m * 1000.0)
+
+
+def _do_rerender(cfg_path: Path) -> None:
+    """Re-render display artifacts from an existing run dir (no solving).
+    Renders into the CONFIG FILE'S OWN directory (never the recorded out_dir,
+    which may point at the original run when a dir was copied)."""
+    out = cfg_path.parent
+    z = np.load(out / "fields.npz")
+    part = z["part"].astype(bool)
+    fields_for_view = {"part": part}
+    for k in ("T_phi90", "phi_final", "Qrf", "rho_final", "sat"):
+        fields_for_view[k] = z[k]
+    h_m = float(z["h"])
+    meta = LJ._field_meta(fields_for_view, h_m)
+    meta["axes"] = {"x": int(part.shape[0]), "y": int(part.shape[1]),
+                    "z": int(part.shape[2])}
+    render_views(out, fields_for_view, meta, None, 0.05, h_m)
+    # refresh snapshot frames from their stored volumes, when present
+    sdir = out / "snapshots"
+    if (sdir / "index.json").exists():
+        snaps = []
+        for p in sorted(sdir.glob("snap_*.npz")):
+            zz = np.load(p)
+            snaps.append((float(zz["t_s"]), zz["T"].astype(float),
+                          zz["phi"].astype(float)))
+        if snaps:
+            _write_snapshots(out, snaps, part, h_m)
+    print("RERENDER_OK", flush=True)
+
+
 def _phase(name: str, prog: Optional[float] = None) -> None:
     print(f"PHASE {name}", flush=True)
     if prog is not None:
@@ -305,6 +444,9 @@ def main(argv: List[str]) -> None:
         return
 
     cfg_path = Path(argv[1])
+    if "--rerender" in argv:
+        _do_rerender(cfg_path)
+        return
     preview = "--preview" in argv
     cfg = json.loads(cfg_path.read_text())
     out = Path(cfg.get("out_dir", "job_out"))
@@ -415,10 +557,8 @@ def main(argv: List[str]) -> None:
                         or (Path(cfg["stl"]).stem if cfg.get("stl") else None)
                         or "unknown")
     LJ._write_summary(out, results, cfg)
-    _render_slices_all(out, fields_for_view, meta)   # x/y/z, locked colormaps
-    (out / "fieldmeta.json").write_text(json.dumps(meta, indent=2))  # with axes
-    LJ._render_summary_plots(out, r.phi_hist, getattr(p, "dt_s", 0.05),
-                             fields_for_view, meta)
+    render_views(out, fields_for_view, meta, r.phi_hist,
+                 getattr(p, "dt_s", 0.05), grid.h)
     if densify and r.rho_final is not None:
         LJ._write_warped_geometry(out, part, r.rho_final, p, grid)
     if snaps:

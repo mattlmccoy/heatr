@@ -5826,6 +5826,8 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._json({"error": f"workbench module error: {e}"}, status=500)
             if r is not None:
+                if r[0] == 200 and isinstance(r[1], dict) and "_serve_file" in r[1]:
+                    return self._serve_file(Path(r[1]["_serve_file"]))
                 return self._json(r[1], status=r[0])
             return self._json({"error": "not found"}, status=404)
 

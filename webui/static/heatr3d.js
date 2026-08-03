@@ -3,6 +3,7 @@
 // plus the preserved legacy /api/heatr3d/* endpoints (parity Appendix A).
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { STLLoader } from "three/addons/loaders/STLLoader.js";
 
 const $ = (id) => document.getElementById(id);
 const FILES = (id, rel) => `/files/outputs_eqs/_heatr3d/${encodeURIComponent(id)}/${rel}`;
@@ -75,10 +76,68 @@ async function loadLibrary() {
         el.classList.add("selected");
         $("srcSel").value = "library";
         srcChanged();
+        showLibPreview(s.name);
       });
     }
     g.appendChild(el);
   }
+}
+
+// ── STL preview (item 1: exact mesh, never a voxelization) ──────────────────
+let libViewer = null;
+const stlLoader = new STLLoader();
+
+async function fetchStlGeometry(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`STL fetch failed (HTTP ${r.status})`);
+  const geo = stlLoader.parse(await r.arrayBuffer());
+  geo.computeVertexNormals();
+  geo.center();
+  return geo;
+}
+
+function makeMiniViewer(el) {
+  const w = el.clientWidth || 300, h = el.clientHeight || 240;
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(devicePixelRatio);
+  renderer.setSize(w, h);
+  el.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x11151d);
+  const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 2000);
+  camera.position.set(28, 20, 34);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  const d1 = new THREE.DirectionalLight(0xffffff, 1.0); d1.position.set(40, 60, 40); scene.add(d1);
+  const d2 = new THREE.DirectionalLight(0x88aaff, 0.35); d2.position.set(-30, -20, -30); scene.add(d2);
+  const st = { renderer, scene, camera, controls, mesh: null };
+  (function anim() { requestAnimationFrame(anim); controls.update(); renderer.render(scene, camera); })();
+  st.show = (geo) => {
+    if (st.mesh) { scene.remove(st.mesh); st.mesh.geometry.dispose(); st.mesh.material.dispose(); }
+    const mat = new THREE.MeshPhongMaterial({ color: 0xe8a25c, shininess: 28,
+      specular: 0x333333, side: THREE.DoubleSide });
+    st.mesh = new THREE.Mesh(geo, mat);
+    scene.add(st.mesh);
+    geo.computeBoundingSphere();
+    const r = geo.boundingSphere.radius;
+    camera.position.setLength(r * 2.7);
+    controls.update();
+  };
+  return st;
+}
+
+async function showLibPreview(name) {
+  const box = $("libPreviewBox"), lab = $("libPreviewLabel");
+  if (!box) return;
+  box.style.display = "";
+  lab.textContent = `loading ${name}.stl...`;
+  try {
+    const geo = await fetchStlGeometry(`/api/heatr3d/wb/stl?shape=${encodeURIComponent(name)}`);
+    if (!libViewer) libViewer = makeMiniViewer($("libPreview"));
+    libViewer.show(geo);
+    lab.textContent = `${name} - exact STL geometry (drag to orbit, scroll to zoom)`;
+  } catch (e) { lab.textContent = `preview failed: ${e.message}`; }
 }
 
 function srcChanged() {
@@ -390,10 +449,15 @@ function renderStudy(d) {
         <div id="wbViewport"><div class="wb-vp-hint">drag to orbit &middot; scroll to zoom</div></div>
         <div class="wb-slice-ctrls">
           <label class="wb-check"><input type="checkbox" id="wbCut" checked> cutting plane</label>
+          <label class="wb-check" id="wbSmoothRow" style="display:none;">
+            <input type="checkbox" id="wbSmoothPart" checked> smooth part (exact STL)</label>
+          <label class="wb-check" id="wbIsoRow" style="display:none;">
+            <input type="checkbox" id="wbIso"> melt front surface (phi = 0.9)</label>
           <label class="wb-check" id="wbWarpRow" style="display:none;">
             <input type="checkbox" id="wbWarp"> post-sinter warp <span id="wbWarpMax" class="wb-note"></span></label>
           <label class="wb-check"><input type="checkbox" id="wbColorSat"> color shell by dopant</label>
         </div>
+        <div class="wb-note" id="wbResNote"></div>
         <div class="wb-time">
           <div class="wb-metric-title">Time ${d.snapshots ? "(volume snapshots)" : "(scalar series; volumes are final-state)"}</div>
           <canvas id="wbTimeChart"></canvas>
@@ -645,7 +709,10 @@ function makeViewer(vp) {
     const tex = new THREE.TextureLoader().load(imgUrl);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.NearestFilter;
-    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+    // slice PNGs carry an opaque slate bed tone; keep the plane translucent so
+    // the part remains readable behind it
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true,
+      opacity: 0.82, depthWrite: false, side: THREE.DoubleSide });
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(L, L), mat);
     // slice images are rendered as (first-axis horizontal, second-axis vertical)
     if (axis === "z") { plane.rotation.x = -Math.PI / 2; plane.rotation.z = 0; plane.position.z = pos; plane.rotation.set(0, 0, 0); plane.position.set(0, 0, pos); }
@@ -673,8 +740,61 @@ async function hydrateViewer(id, d) {
   if (!geom) { $("wbSliceNote").textContent = "no geometry.json on disk for this run"; return; }
   viewer.geom = geom;
   viewer.renderShell(geom, "geom");
-  $("wbColorSat").addEventListener("change", () =>
-    viewer.renderShell(viewer.warpOn ? viewer.warpGeom() : geom, $("wbColorSat").checked ? "sat" : "geom"));
+
+  const n = (d.fieldmeta && d.fieldmeta.dims) ? d.fieldmeta.dims[0] : "?";
+  $("wbResNote").textContent =
+    `Part surface: exact STL where available. Field surfaces, slice smoothing ` +
+    `and interpolation are DISPLAY-side only - the physics is computed at n = ${n}. ` +
+    `Bed/outside-part renders as slate, never the colormap floor.`;
+
+  // Smooth exact-STL part surface (item 1/2a): replaces the voxel shell for
+  // library/STL runs; the voxel shell remains for dopant coloring and warp.
+  const applyShellMode = () => {
+    const smooth = $("wbSmoothPart").checked && viewer.smoothMesh &&
+      !viewer.warpOn && !$("wbColorSat").checked;
+    if (viewer.smoothMesh) viewer.smoothMesh.visible = !!smooth;
+    if (viewer.shell) viewer.shell.visible = !smooth;
+  };
+  try {
+    const stlGeo = await fetchStlGeometry(`/api/heatr3d/wb/stl?run=${encodeURIComponent(id)}`);
+    const mat = new THREE.MeshPhongMaterial({ color: 0xe8a25c, shininess: 24,
+      specular: 0x222222, transparent: true, opacity: 0.92, side: THREE.DoubleSide });
+    viewer.smoothMesh = new THREE.Mesh(stlGeo, mat);
+    viewer.scene.add(viewer.smoothMesh);
+    $("wbSmoothRow").style.display = "";
+    $("wbSmoothPart").addEventListener("change", applyShellMode);
+    applyShellMode();
+  } catch (e) { /* parametric run: no STL; voxel shell stays */ }
+
+  // Melt-front isosurface (item 2b): marching-cubes display interpolation.
+  try {
+    const iso = await (await fetch(FILES(id, "isosurfaces.json"))).json();
+    const s = (iso.surfaces || []).find((x) => x.field === "phi_final" && x.level === 0.9);
+    if (s && iso.offset_mm) {
+      const pos = new Float32Array(s.vertices_mm.length * 3);
+      s.vertices_mm.forEach((v, i) => {
+        pos[3 * i] = v[0] + iso.offset_mm[0];
+        pos[3 * i + 1] = v[1] + iso.offset_mm[1];
+        pos[3 * i + 2] = v[2] + iso.offset_mm[2];
+      });
+      const g2 = new THREE.BufferGeometry();
+      g2.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      g2.setIndex(s.faces.flat());
+      g2.computeVertexNormals();
+      const m2 = new THREE.Mesh(g2, new THREE.MeshPhongMaterial({
+        color: 0xff5533, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+      m2.visible = false;
+      viewer.scene.add(m2);
+      viewer.isoMesh = m2;
+      $("wbIsoRow").style.display = "";
+      $("wbIso").addEventListener("change", () => { m2.visible = $("wbIso").checked; });
+    }
+  } catch (e) { /* no isosurfaces for this run (legacy) */ }
+
+  $("wbColorSat").addEventListener("change", () => {
+    viewer.renderShell(viewer.warpOn ? viewer.warpGeom() : geom, $("wbColorSat").checked ? "sat" : "geom");
+    applyShellMode();
+  });
   $("wbCut").addEventListener("change", () => {
     viewer.cutOn = $("wbCut").checked;
     if (!viewer.cutOn) viewer.clearCut();
@@ -696,6 +816,7 @@ async function hydrateViewer(id, d) {
           viewer.warpOn = $("wbWarp").checked;
           if (viewer.warpOn) viewer.renderShell(viewer.warpGeom(), "disp");
           else viewer.renderShell(geom, $("wbColorSat").checked ? "sat" : "geom");
+          applyShellMode();
         });
       }
     } catch (e) { /* warp unavailable */ }
@@ -856,7 +977,7 @@ async function renderCompare() {
 }
 
 function cmpSliceHtml(id, d) {
-  return `<div class="wb-slice-view" style="min-height:230px;"><img id="cmpImg_${esc(id)}" style="width:230px;height:230px;image-rendering:pixelated;" alt="slice"></div>`;
+  return `<div class="wb-slice-view" style="min-height:230px;"><img id="cmpImg_${esc(id)}" style="width:230px;height:230px;" alt="slice"></div>`;
 }
 
 function wireCompareSlices(a, da, b, db) {

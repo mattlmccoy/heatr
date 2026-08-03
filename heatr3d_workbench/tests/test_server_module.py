@@ -41,8 +41,9 @@ def test_run_detail_carries_results_flags_badges():
     assert e["state"] == "not_recorded"
     assert d["badges"]["thermal"]["label"].startswith("exploratory")
     assert d["fieldmeta"]["dims"] == [32, 32, 32]
-    # legacy run has no x/y slices: axes advertise z only
-    assert d["slice_axes"] == ["z"]
+    # this captured run was backfilled with --rerender (2026-08-03), so all
+    # three slice axes are available; a never-rerendered legacy run reads ["z"]
+    assert set(d["slice_axes"]) == {"x", "y", "z"}
 
 
 def test_run_detail_unknown_id_is_error_not_empty():
@@ -64,6 +65,20 @@ def test_solved_cards_from_real_phase_c():
     # from PHASE_C_REPORT must emerge from the served values themselves.
     margin = 1.0 - scaled["J_asymmetric"] / by["uniform_baseline"]["J_asymmetric"]
     assert margin == pytest.approx(0.1067, abs=0.001)
+
+
+def test_stl_route_serves_library_shape_and_rejects_traversal():
+    r = SM.handle_get("/api/heatr3d/wb/stl", "shape=sphere")
+    assert r[0] == 200 and r[1]["_serve_file"].endswith("shape_library_3d/stl/sphere.stl")
+    assert SM.handle_get("/api/heatr3d/wb/stl", "shape=../../etc/passwd")[0] == 404
+    assert SM.handle_get("/api/heatr3d/wb/stl", "shape=nope")[0] == 404
+
+
+@pytest.mark.skipif(not (ROOT / "outputs_eqs/_heatr3d/5a4e465fde1b").exists(),
+                    reason="cone run absent")
+def test_stl_route_resolves_run_geometry():
+    r = SM.handle_get("/api/heatr3d/wb/stl", "run=5a4e465fde1b")
+    assert r[0] == 200 and r[1]["_serve_file"].endswith("stl/cone.stl")
 
 
 def test_enqueue_validation_rejects_ceiling_and_bad_source(tmp_path):

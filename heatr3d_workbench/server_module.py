@@ -387,8 +387,47 @@ def solved_cards() -> List[Dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 # Dispatch (called from rfam_gui_server's handler)
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# STL serving (exact geometry for smooth previews; item 1/2 of the 2026-08-03
+# iteration). Returns {"_serve_file": path} - the rfam_gui_server mount hook
+# streams the file via its _serve_file helper.
+# --------------------------------------------------------------------------- #
+_LIB_STL = ROOT / "shape_library_3d" / "stl"
+
+
+def stl_path_for(query: str) -> Optional[Path]:
+    q = parse_qs(query or "")
+    shape = (q.get("shape") or [""])[0]
+    run = (q.get("run") or [""])[0]
+    if shape:
+        if not shape.replace("_", "").isalnum():
+            return None
+        p = (_LIB_STL / f"{shape}.stl").resolve()
+        try:
+            p.relative_to(_LIB_STL.resolve())
+        except ValueError:
+            return None
+        return p if p.exists() else None
+    if run:
+        if "/" in run or ".." in run:
+            return None
+        cfg = _read_json(H3D_OUT / run / "config.json") or {}
+        if cfg.get("library_shape"):
+            return stl_path_for(f"shape={cfg['library_shape']}")
+        stl = cfg.get("stl")
+        if stl:
+            p = Path(stl).resolve()
+            try:
+                p.relative_to(ROOT.resolve())
+            except ValueError:
+                return None
+            return p if p.exists() else None
+    return None
+
+
 GET_PATHS = ("/api/heatr3d/wb/library", "/api/heatr3d/wb/queue",
-             "/api/heatr3d/wb/run", "/api/heatr3d/wb/solved")
+             "/api/heatr3d/wb/run", "/api/heatr3d/wb/solved",
+             "/api/heatr3d/wb/stl")
 POST_PATHS = ("/api/heatr3d/wb/enqueue", "/api/heatr3d/wb/cancel",
               "/api/heatr3d/wb/intake")
 
@@ -404,6 +443,11 @@ def handle_get(path: str, query: str) -> Optional[Tuple[int, Dict[str, Any]]]:
         return (404 if d.get("error") and "results" not in d else 200), d
     if path == "/api/heatr3d/wb/solved":
         return 200, {"cards": solved_cards()}
+    if path == "/api/heatr3d/wb/stl":
+        p = stl_path_for(query)
+        if p is None:
+            return 404, {"error": "no STL for that shape/run"}
+        return 200, {"_serve_file": str(p)}
     return None
 
 

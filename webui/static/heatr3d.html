@@ -118,20 +118,27 @@
     .wb-slice-stage { display:flex; gap:12px; }
     .wb-slice-view { flex:1; display:flex; justify-content:center; align-items:center; background:#0b0e14;
       border:1px solid rgba(128,140,160,.22); border-radius:10px; padding:8px; min-height:280px; }
-    .wb-slice-view img { width:300px; height:300px; max-width:100%; image-rendering:pixelated; }
+    /* slice renders are display-smoothed server-side (bilinear, DPI 180) -
+       no pixelated hint; panel backdrop slightly lifted off pure black so
+       the slate bed tone and clipped colormap floors stay legible */
+    .wb-slice-view { background:#141926; }
+    .wb-slice-view img { width:300px; height:300px; max-width:100%; }
     .wb-colorbar { display:flex; flex-direction:column; align-items:center; gap:4px; width:64px;
       font-size:.68rem; font-variant-numeric:tabular-nums; }
     .wb-colorbar .cbar { flex:1; width:14px; border-radius:3px; border:1px solid rgba(128,140,160,.3); }
-    .cb-viridis { background:linear-gradient(to top,#440154,#414487,#2a788e,#22a884,#7ad151,#fde725); }
-    .cb-inferno { background:linear-gradient(to top,#000004,#420a68,#932667,#dd513a,#fca50a,#fcffa4); }
+    /* colorbars mirror the CLIPPED display floors (viridis from 0.20,
+       inferno from 0.25) - deviation from the standard recorded in
+       heatr3d_workbench/workbench_job.py */
+    .cb-viridis { background:linear-gradient(to top,#414487,#2c728e,#21a585,#42be71,#7ad151,#fde725); }
+    .cb-inferno { background:linear-gradient(to top,#57106e,#8a226a,#bc3754,#e45a31,#fb9b06,#fcffa4); }
     .cb-density { background:linear-gradient(to top,#8f8f8f,#6b3fa0,#d4a017); }
     .wb-time { margin-top:10px; }
     #wbTimeChart { width:100%; height:120px; border:1px solid rgba(128,140,160,.22); border-radius:8px;
       background:#0b0e14; }
     .wb-plots { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; margin-top:10px; }
     .wb-plots img { width:100%; border:1px solid rgba(128,140,160,.22); border-radius:8px; background:#fff; }
-    .wb-snapimg { width:150px; height:150px; image-rendering:pixelated; border-radius:6px;
-      border:1px solid rgba(128,140,160,.3); }
+    .wb-snapimg { width:150px; height:150px; border-radius:6px;
+      border:1px solid rgba(128,140,160,.3); background:#141926; }
 
     /* compare */
     .wb-cmp-pick { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
@@ -232,6 +239,11 @@
                 </select>
               </div>
               <div id="libPickNote" class="wb-note" style="margin-bottom:8px;">Pick a shape from the gallery.</div>
+              <div id="libPreviewBox" style="display:none; margin-bottom:10px;">
+                <div id="libPreview" style="width:100%; height:230px; border-radius:10px; overflow:hidden;
+                  border:1px solid rgba(128,140,160,.25); background:#11151d;"></div>
+                <div id="libPreviewLabel" class="wb-note" style="margin-top:4px;"></div>
+              </div>
               <div id="paramBlock" style="display:none;">
                 <div class="wb-field">
                   <label>Shape</label>
