@@ -82,3 +82,11 @@ Updated at every commit so a resume needs zero re-derivation.
   two solves are staggered rather than run concurrently.
   Resume with: `--shape <s> --stage cheap|solve` (arms already recorded are
   skipped; the solve resumes from its checkpoint).
+- **2026-08-03, cube cheap stages done, both solves running.** Cube mesh +
+  uniform_baseline + heuristic_grading_law COMPLETE (volume exact to 2.2e-16;
+  uniform J_asym 7.841949e-07, heuristic 1.176273e-06 i.e. 50 % WORSE -- the
+  law's apex z-taper is meaningless on a cube; transfer moved 1.59 % so the arm
+  was KEPT, inside the 2 % condition). Load dropped 394 -> ~7.3 of 12 cores as
+  other lanes finished, so the cube solve was launched in parallel. Both solves
+  checkpoint per evaluation. REMAINING: both solves -> acceptance (per shape)
+  -> rescore -> figures -> PHASE_E_OPENER_REPORT.md.

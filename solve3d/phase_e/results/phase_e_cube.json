@@ -1,0 +1,110 @@
+{
+ "shape": "cube",
+ "arms": {
+  "_mesh": {
+   "n_cells": 105853,
+   "n_nodes": 18028,
+   "n_design_cells": 24042,
+   "lc_part_m": 0.0009375,
+   "part_volume_rel_err_vs_library": -2.220446049250313e-16,
+   "kernel": {
+    "radius_m": 0.001,
+    "truncation_sigmas": 3.0,
+    "measured_std_m": 0.0009304098308656961,
+    "mean_neighbours": 493.65185924631896,
+    "min_neighbours": 131,
+    "max_neighbours": 654,
+    "n_design": 24042,
+    "mean_cell_size_m": 0.0005585207838170083,
+    "row_sum_max_dev_from_one": 4.440892098500626e-16,
+    "asymmetry_max": 0.04577343891432096
+   }
+  },
+  "uniform_baseline": {
+   "arm": "uniform_baseline",
+   "shape": "cube",
+   "wall_forward_s": 316.99375874999987,
+   "n_steps": 13000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 6.145848779574846e-07,
+   "argmin_symmetric": 13000,
+   "J_asymmetric": 7.841948711623082e-07,
+   "argmin_asymmetric": 10286,
+   "t_stop_s": 514.3000000000001,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 7.574058014507664e-07,
+   "J_out_of_bounds": 3.827009958791682e-08,
+   "J_in_bounds_deficit": 7.459247715743914e-07,
+   "out_of_part_melt_fraction_of_part": 0.0036953464218507323,
+   "in_bounds_below_floor_fraction": 0.40282045235517805,
+   "part_mean_phi": 0.6365281368874466,
+   "sigma_T_diagnostic_c": 23.366089991287854,
+   "eval_missed": 0,
+   "map_stats": {
+    "mean": 1.0,
+    "min": 1.0,
+    "max": 1.0
+   },
+   "gates": {
+    "energy_residual_frac": 1.2361639916818073e-13,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "iou_phi0p8": 0.7129629629629629,
+   "in_part_phi0p8": 0.7129629629629629,
+   "out_of_part_phi0p8": 0.0,
+   "iou_phi0p9": 0.6971879286694102,
+   "in_part_phi0p9": 0.6971879286694102,
+   "out_of_part_phi0p9": 0.0,
+   "front_ssd_mm": 1.3978463347479753
+  },
+  "heuristic_grading_law": {
+   "arm": "heuristic_grading_law",
+   "shape": "cube",
+   "wall_forward_s": 308.4820287919997,
+   "n_steps": 13000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 8.464217161543641e-07,
+   "argmin_symmetric": 13000,
+   "J_asymmetric": 1.1762732800511383e-06,
+   "argmin_asymmetric": 8780,
+   "t_stop_s": 439.0,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 1.012732099660434e-06,
+   "J_out_of_bounds": 2.336302577010059e-07,
+   "J_in_bounds_deficit": 9.426430223501323e-07,
+   "out_of_part_melt_fraction_of_part": 0.011805212874822314,
+   "in_bounds_below_floor_fraction": 0.45226685529029415,
+   "part_mean_phi": 0.5803494427360905,
+   "sigma_T_diagnostic_c": 38.62344915699702,
+   "eval_missed": 0,
+   "map_stats": {
+    "mean": 0.22812732400655378,
+    "min": 0.1,
+    "max": 0.6121797440790776
+   },
+   "gates": {
+    "energy_residual_frac": 1.2020251460852147e-13,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "iou_phi0p8": 0.7128772290809328,
+   "in_part_phi0p8": 0.7128772290809328,
+   "out_of_part_phi0p8": 0.0,
+   "iou_phi0p9": 0.7031035665294925,
+   "in_part_phi0p9": 0.7031035665294925,
+   "out_of_part_phi0p9": 0.0,
+   "front_ssd_mm": 1.365745145338271,
+   "transfer": {
+    "strong": true,
+    "mean_sat_fem": 0.22812732400655378,
+    "total_dopant_fem_m3": 9.555775002427833e-07,
+    "total_dopant_reference_m3": 9.406200149713432e-07,
+    "total_dopant_rel_move": 0.015901729745667566,
+    "drop_condition_rel": 0.02,
+    "dropped": false,
+    "method": "closed-form law evaluated at FEM centroids"
+   }
+  }
+ }
+}
