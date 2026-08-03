@@ -186,10 +186,15 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
     J._render_summary_plots(out, r.phi_hist, results["dt_s"],
                             fields_for_view, meta)
     if r.rho_final is not None:
-        from studio3d.warped_mesh import build_warped_mesh
+        from studio3d.warped_mesh import build_densified_meshes
         J._write_warped_geometry(out, part, r.rho_final, p, grid)
-        build_warped_mesh(part, r.rho_final, p, grid).export(
-            out / "warped_mesh.stl")
+        solid, powder, winfo = build_densified_meshes(
+            part, r.rho_final, r.phi_final, p, grid)
+        solid.export(out / "warped_mesh.stl")
+        if len(powder.vertices):
+            powder.export(out / "loose_powder.stl")
+        (out / "warped_info.json").write_text(
+            json.dumps(winfo, indent=2, default=float))
     logger.info("densify %s arm done in %.1f s (n=%d)", arm, wall_s, n)
     return results
 
