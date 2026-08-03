@@ -443,3 +443,24 @@ untouched as the legacy executor; new runs launch via workbench_job.py.
 Deprecated (with reason): the n=40 grid option (not in the standardized
 parameter set; historical n=40 runs still load and render); the silent
 sat-to-blue render fallback (replaced by an explicit state per the F7 intent).
+
+## Appendix B. 2-D lane server constraints (received 2026-08-02, binding)
+
+1. The heatr3d tab is self-contained: static page at /heatr3d plus
+   /api/heatr3d/{status,fields,slice,warp,runs,preview,run}. Overwriting that
+   page and those routes touches no 2-D tab code.
+2. Subprocess isolation is LOAD-BEARING: solver runs under a separate
+   interpreter resolved by _h3d_python() (numpy 2.2 buffer-elision bug).
+   workbench_job.py keeps the subprocess + interpreter-resolution pattern;
+   heatr3d is never imported into the server process.
+3. Shared helpers are use-only, never modified: _run_command (extend only via
+   defaulted params), _job_worker and its queue/registry, _summary_excerpt.
+   Any change to an /api route shape consumed by static files bumps
+   API_GENERATION and the EXPECTED_API_GENERATION pin in app.js together.
+4. Runs keep writing to outputs_eqs/_heatr3d (_H3D_OUT) so the Results tab
+   archive-pruned scanner sees them; respect the single-walk media-scan
+   performance pattern when adding per-run files.
+5. Workbench run summaries stamp heatr3d's OWN engine version string
+   (heatr3d_engine_version in summary.json); the 2-D ENGINE_VERSION constant
+   is never reused.
+6. Pull --rebase before commit batches and before pushes (shared tree).
