@@ -25,6 +25,67 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[1]
 
 BADGE_25D = ("HEATR 2.5-D per-slice | deployable grading path | sim-only")
+BADGE_INVERSION = ("heatr3d native inversion | legacy heuristic (the direct "
+                   "solve is the primary generator) | sim-only")
+
+
+def _is_null_map(sat: np.ndarray, part: np.ndarray) -> bool:
+    return bool(part.any()) and float(np.abs(sat[part] - 1.0).max()) < 1e-6
+
+
+def _native_inversion(grade_dir: Path, part: np.ndarray):
+    """Density-targeted make_fgm from the BEFORE arm's own fields.
+
+    heatr3d's proportional-inverse rule on rho_final: under-densified
+    regions get more dopant. Legacy heuristic, labeled as such; it exists
+    so every part gets a real modulated correction even when the 2.5-D
+    rulebook refuses the shape and no solved map matches."""
+    from types import SimpleNamespace
+    import heatr3d as H
+
+    before = grade_dir / "heatr3d" / "uncorrected" / "fields.npz"
+    if not before.exists():
+        raise FileNotFoundError(
+            "no correction source: no solved map matches, the 2.5-D map is "
+            "absent or null, and the BEFORE arm has not run yet (its fields "
+            "feed the native inversion). Run the BEFORE densification "
+            "first.")
+    with np.load(before) as d:
+        part_b = d["part"].astype(bool)
+        rho = np.asarray(d["rho_final"], float)
+        T = np.asarray(d["T_phi90"], float)
+    if part_b.shape != part.shape or not np.array_equal(part_b, part):
+        raise ValueError("BEFORE arm part mask does not match this "
+                         "voxelization; rerun the BEFORE arm at this grid")
+    proxy = rho if rho.ndim == 3 else T
+    res = SimpleNamespace(T_phi90=T, part=part_b)
+    sat = H.make_fgm(res, magnitude=1.0, bpp=4, proxy=proxy)
+    # in-part map; outside-part value never reaches the solver (gamma
+    # blends part * sat), transfer not applicable: same grid, no resample
+    rec = {"sat": np.where(part, sat, 0.0),
+           "state": "transfer_not_applicable",
+           "method": "native_inversion_same_grid",
+           "dopant_mass_move_rel": 0.0, "gate": None}
+    prov = {"engine": "heatr3d_native_inversion",
+            "trust_badge": BADGE_INVERSION,
+            "artifact": str(before),
+            "proxy": "rho_final" if rho.ndim == 3 else "T_phi90"}
+    return rec, prov
+
+
+def _fallback_chain(grade_dir: Path, part: np.ndarray):
+    """2.5-D per-slice if it modulates; else the native inversion."""
+    dop = grade_dir / "heatr" / "dopant_volume.npz"
+    if dop.exists():
+        with np.load(dop) as d:
+            rec = stack_to_voxel(d["sat"], d["part_mask"].astype(bool),
+                                 d["z_mm"], part,
+                                 chamber_m=float(d["chamber_m"])
+                                 if "chamber_m" in d.files else 0.060)
+        if not _is_null_map(rec["sat"], part):
+            return rec, {"engine": "heatr_25d_perslice",
+                         "trust_badge": BADGE_25D, "artifact": str(dop)}
+    return _native_inversion(grade_dir, part)
 
 
 def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
@@ -54,23 +115,7 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
             "source": entry.get("source"),
         }
     else:
-        dop = grade_dir / "heatr" / "dopant_volume.npz"
-        if not dop.exists():
-            raise FileNotFoundError(
-                "no solved 3-D map matches this geometry and no 2.5-D "
-                "dopant volume exists yet: run the HEATR 2.5-D "
-                "verification first (it produces dopant_volume.npz, the "
-                "deployable correction source)")
-        with np.load(dop) as d:
-            rec = stack_to_voxel(d["sat"], d["part_mask"].astype(bool),
-                                 d["z_mm"], part,
-                                 chamber_m=float(d["chamber_m"])
-                                 if "chamber_m" in d.files else 0.060)
-        prov = {
-            "engine": "heatr_25d_perslice",
-            "trust_badge": BADGE_25D,
-            "artifact": str(dop),
-        }
+        rec, prov = _fallback_chain(grade_dir, part)
 
     prov["transfer"] = {k: v for k, v in rec.items() if k != "sat"}
     prov["grid_n"] = int(n)

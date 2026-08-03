@@ -100,3 +100,16 @@ def test_voxelize_preserves_through_holes(tmp_path):
     assert part[:, :, mid].sum() > 0
     assert not part[c, c, mid], "bore center must be empty"
     assert not part[c - 1, c - 1, mid], "bore interior must be empty"
+
+
+def test_stop_mean_rho_is_wired_and_recorded(box20_stl, tmp_path):
+    """Studio densify runs stop at a target mean density instead of
+    over-marching to saturation (Matt 2026-08-03: the before form must be
+    a real volumetric output, not a uniform squash; a saturated field has
+    no spatial structure left)."""
+    out = tmp_path / "out"
+    res = run_densify(str(box20_stl), out, n=16, max_time_s=5.0,
+                      stop_mean_rho=0.9)
+    assert res["stop_mean_rho"] == 0.9
+    assert "sim_time_s" in res
+    assert res["sim_time_s"] <= 5.0 + 1e-9

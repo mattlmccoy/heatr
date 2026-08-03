@@ -85,6 +85,7 @@ def _finite(v: Any) -> Any:
 def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                 sat_path: Optional[str] = None, arm: str = "uncorrected",
                 max_time_s: float = 1500.0,
+                stop_mean_rho: Optional[float] = 0.98,
                 power_density_w_per_m3: Optional[float] = None,
                 correction_engine: Optional[str] = None) -> Dict[str, Any]:
     """One densify=True heatr3d march + the standard artifact set.
@@ -119,7 +120,7 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
     t0 = time.time()
     # verbose march lines feed the Studio's live progress bars
     r = H.run(grid, part, p, sat=sat, max_time_s=float(max_time_s),
-              densify=True, verbose=True)
+              densify=True, stop_mean_rho=stop_mean_rho, verbose=True)
     wall_s = time.time() - t0
 
     gates = {
@@ -141,6 +142,10 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         "sigma_T": float(round(r.sigma_T, 3)),
         "t_phi90_s": float(round(r.t_phi90_s, 1)),
         "max_time_s": float(max_time_s),
+        "stop_mean_rho": (float(stop_mean_rho)
+                          if stop_mean_rho is not None else None),
+        "sim_time_s": float(round(len(r.phi_hist)
+                                  * getattr(p, "dt_s", 0.05), 2)),
         "solve_wall_s": float(round(wall_s, 1)),
         "phi_hist_len": len(r.phi_hist),
         "dt_s": float(getattr(p, "dt_s", 0.05)),

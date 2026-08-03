@@ -22,7 +22,8 @@ ARMS = ("uncorrected", "corrected")
 
 
 def run_job(mesh_path: str, grade_dir: str | Path, arm: str = "uncorrected",
-            n: int = 64, max_time_s: float = 1500.0) -> Dict[str, Any]:
+            n: int = 64, max_time_s: float = 1500.0,
+            stop_mean_rho: float | None = 0.98) -> Dict[str, Any]:
     if arm not in ARMS:
         raise ValueError(f"unknown arm {arm!r}; expected one of {ARMS}")
     grade_dir = Path(grade_dir)
@@ -39,7 +40,7 @@ def run_job(mesh_path: str, grade_dir: str | Path, arm: str = "uncorrected",
     print("STUDIO3D_PROGRESS stage=march", flush=True)
     res = run_densify(mesh_path, out, n=n, arm=arm, sat_path=sat_path,
                       correction_engine=correction_engine,
-                      max_time_s=max_time_s)
+                      max_time_s=max_time_s, stop_mean_rho=stop_mean_rho)
     print("STUDIO3D_PROGRESS stage=done", flush=True)
     return res
 
@@ -51,10 +52,14 @@ def main() -> int:
     ap.add_argument("--arm", default="uncorrected", choices=ARMS)
     ap.add_argument("--n", type=int, default=64)
     ap.add_argument("--max-time-s", type=float, default=1500.0)
+    ap.add_argument("--stop-mean-rho", type=float, default=0.98,
+                    help="stop the march at this mean part density "
+                         "(<= 0 disables; horizon then rules)")
     args = ap.parse_args()
+    stop = args.stop_mean_rho if args.stop_mean_rho > 0 else None
     try:
         res = run_job(args.mesh, args.grade_dir, arm=args.arm, n=args.n,
-                      max_time_s=args.max_time_s)
+                      max_time_s=args.max_time_s, stop_mean_rho=stop)
     except Exception as e:
         # one clean line for the UI; the traceback stays in the log
         import traceback

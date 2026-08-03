@@ -70,17 +70,16 @@ def test_fallback_to_25d_perslice(box_stl, tmp_path):
     assert prov["transfer"]["state"] == "measured_and_passed"
 
 
-def test_no_correction_source_is_a_loud_error(box_stl, tmp_path):
-    gd = tmp_path / "grade"
-    with pytest.raises(FileNotFoundError, match="verification"):
-        build_correction(gd, str(box_stl), 16,
-                         registry_path=tmp_path / "missing.json")
+# (superseded: the no-source case now falls back to the native inversion
+# when a BEFORE arm exists; see test_error_only_when_no_source_at_all)
 
 
-def test_null_correction_is_flagged_loudly(box_stl, tmp_path):
-    """A dopant volume with sat = 1.0 everywhere corrects nothing; the
-    provenance must say so instead of letting two identical arms render
-    silently (found live on the l_extrusion stored 2.5-D result)."""
+def test_null_correction_is_flagged_when_even_the_inversion_degenerates(
+        box_stl, tmp_path):
+    """Null 2.5-D map falls through to the native inversion; when the
+    before-arm fields are UNIFORM (saturated run) the inversion itself
+    degenerates to an unmodulated map and the null flag must fire."""
+    from studio3d.runner import voxelize_stl
     n = 16
     gd = tmp_path / "grade"
     (gd / "heatr").mkdir(parents=True)
@@ -93,8 +92,18 @@ def test_null_correction_is_flagged_loudly(box_stl, tmp_path):
              z_mm=(np.arange(nz) + 0.5) * 2.5,
              area_mm2=np.full(nz, 100.0), method=np.array(["m0"] * nz),
              gain=np.ones(nz), chamber_m=0.060)
+    part = voxelize_stl(str(box_stl), n)
+    out = gd / "heatr3d" / "uncorrected"
+    out.mkdir(parents=True)
+    np.savez(out / "fields.npz", part=part,
+             T_phi90=np.where(part, 200.0, 23.0).astype(np.float32),
+             phi_final=np.where(part, 1.0, 0.0).astype(np.float32),
+             Qrf=np.zeros(part.shape, np.float32),
+             rho_final=np.where(part, 1.0, 0.0).astype(np.float32),
+             sat=np.zeros((1,), np.float32), h=0.060 / n)
     prov = build_correction(gd, str(box_stl), n,
                             registry_path=tmp_path / "missing.json")
+    assert prov["engine"] == "heatr3d_native_inversion"
     assert prov["null_correction"] is True
     assert "NULL" in prov["null_note"]
 
@@ -116,3 +125,70 @@ def test_real_correction_is_not_flagged_null(box_stl, tmp_path):
     prov_modulated = build_correction(gd, str(box_stl), n,
                                       registry_path=tmp_path / "missing.json")
     assert prov_modulated["null_correction"] is False
+
+
+def _fake_before_arm(gd, part, n):
+    """A before-arm artifact set with STRUCTURED fields (as a stop-at-target
+    run produces), for the native-inversion fallback."""
+    import numpy as np
+    out = gd / "heatr3d" / "uncorrected"
+    out.mkdir(parents=True, exist_ok=True)
+    idx = np.indices(part.shape).astype(float)
+    grad = idx[0] / part.shape[0]
+    T = np.where(part, 150.0 + 100.0 * grad, 23.0)
+    rho = np.where(part, 0.6 + 0.35 * grad, 0.0)
+    np.savez(out / "fields.npz", part=part,
+             T_phi90=T.astype(np.float32),
+             phi_final=np.where(part, 0.9, 0.0).astype(np.float32),
+             Qrf=np.zeros_like(T, np.float32),
+             rho_final=rho.astype(np.float32),
+             sat=np.zeros((1,), np.float32), h=0.060 / n)
+
+
+def test_native_inversion_fallback_when_25d_is_null(box_stl, tmp_path):
+    """When the rulebook refuses a part (null 2.5-D map) and no solved map
+    matches, the corrected arm must still get a REAL modulated FGM: the
+    native density-targeted inversion from the before arm, labeled legacy
+    (Matt 2026-08-03: 'that should be showing an FGM corrected
+    simulation')."""
+    from studio3d.runner import voxelize_stl
+    n = 16
+    gd = tmp_path / "grade"
+    (gd / "heatr").mkdir(parents=True)
+    ng, nz = 40, 8
+    yy, xx = np.meshgrid(np.arange(ng), np.arange(ng), indexing="ij")
+    mask2 = (np.abs(xx - ng / 2) < ng * 0.2) & (np.abs(yy - ng / 2) < ng * 0.2)
+    np.savez(gd / "heatr" / "dopant_volume.npz",
+             sat=np.ones((nz, ng, ng), np.float32),
+             part_mask=mask2[None].repeat(nz, 0),
+             z_mm=(np.arange(nz) + 0.5) * 2.5,
+             area_mm2=np.full(nz, 100.0), method=np.array(["m0"] * nz),
+             gain=np.ones(nz), chamber_m=0.060)
+    part = voxelize_stl(str(box_stl), n)
+    _fake_before_arm(gd, part, n)
+    prov = build_correction(gd, str(box_stl), n,
+                            registry_path=tmp_path / "missing.json")
+    assert prov["engine"] == "heatr3d_native_inversion"
+    assert "legacy" in prov["trust_badge"]
+    assert prov["null_correction"] is False
+    with np.load(gd / "heatr3d" / "correction_sat.npz") as d:
+        sat = d["sat"]
+    assert sat[part].std() > 0.05, "the map must actually be modulated"
+
+
+def test_native_inversion_fallback_without_any_25d(box_stl, tmp_path):
+    from studio3d.runner import voxelize_stl
+    n = 16
+    gd = tmp_path / "grade"
+    part = voxelize_stl(str(box_stl), n)
+    _fake_before_arm(gd, part, n)
+    prov = build_correction(gd, str(box_stl), n,
+                            registry_path=tmp_path / "missing.json")
+    assert prov["engine"] == "heatr3d_native_inversion"
+
+
+def test_error_only_when_no_source_at_all(box_stl, tmp_path):
+    gd = tmp_path / "grade"
+    with pytest.raises(FileNotFoundError, match="BEFORE"):
+        build_correction(gd, str(box_stl), 16,
+                         registry_path=tmp_path / "missing.json")
