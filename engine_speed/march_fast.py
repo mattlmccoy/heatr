@@ -32,6 +32,7 @@ import numpy as np
 
 import heatr3d as h3
 
+from .eqs_cache import solve_eqs_3d_cached
 from .kernels import (compress_part, densify_kernel, faces_kernel,
                       props_kernel, step_kernel)
 
@@ -88,8 +89,17 @@ def march_fast(grid: h3.Grid, part: np.ndarray, p: h3.Params,
                premix_budget: str = "floor_added",
                T0_override: np.ndarray | None = None,
                qrf_gradient: str = "masked",
-               t_start_s: float = 0.0) -> h3.Result:
-    """Same signature and same Result as heatr3d.run, over the supported subset."""
+               t_start_s: float = 0.0,
+               eqs_cache=None) -> h3.Result:
+    """Same signature and same Result as heatr3d.run, over the supported subset.
+
+    eqs_cache (engine_speed.eqs_cache.EqsCache or None): optional
+    content-addressed cache for the EQS solve. None (default) delegates to
+    heatr3d.solve_eqs_3d exactly as before, so this argument is inert unless
+    asked for. A cache HIT returns a copy of the stored field, so it is
+    bit-identical by construction; a MISS is the unchanged solve. See
+    eqs_cache.py for the exact enumeration of what enters the key.
+    """
     _check_supported(p, power_schedule=power_schedule,
                      heatsink_field=heatsink_field,
                      powder_loss_mode=powder_loss_mode,
@@ -110,7 +120,7 @@ def march_fast(grid: h3.Grid, part: np.ndarray, p: h3.Params,
         gamma = h3.build_gamma(part, p, sat, edge_width_m=edge_width_m, h=grid.h,
                                premix_frac=premix_frac,
                                premix_budget=premix_budget)
-        V = h3.solve_eqs_3d(gamma, grid, p)
+        V = solve_eqs_3d_cached(gamma, grid, p, cache=eqs_cache)
         n_eqs_solves = 1
         Qrf = h3.compute_qrf_3d(V, gamma, grid, p, part, premix=False,
                                 qrf_gradient=qrf_gradient)

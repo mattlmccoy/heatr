@@ -1,14 +1,15 @@
 # engine_speed — fast thermal march for heatr3d
 
-**Status: bit-identity gate PASSED (8/8 cases, exact). Speed target NOT met —
-5.9x at n=48 and 6.3x at n=96 against a 10x bar.**
+Two work items, both under the same bit-identity discipline. `heatr3d.py` is not
+modified, not monkeypatched, and not imported from `heatr3d_s2/`.
 
-PROTOTYPE for the graduation lane. `heatr3d.py` is not modified, not
-monkeypatched, and not imported from `heatr3d_s2/`. Nothing here is wired into
-the Studio.
+| item | status |
+|---|---|
+| **§2–5 numba thermal march** | bit-identity gate PASSED (8/8 exact). Speed **5.9x** at n=48 / **6.3x** at n=96, against a 10x bar — **target NOT met**. Blessed by the engine lane as an opt-in; wired into studio3d behind `fast_march=True`. |
+| **§6 EQS cache** | gate PASSED (20 tests). Saves **8.26 s** per hit at n=48 and **195.50 s** at n=96; the corrected (AFTER) arm correctly MISSES. The renorm shortcut is **rejected with measurements**. |
 
-All numbers below are quoted from recorded JSON
-(`gate_results_n32.json`, `bench_results.json`), not transcribed by hand.
+All numbers below are quoted from recorded JSON (`gate_results_n32.json`,
+`bench_results.json`, `eqs_cache_bench.json`), not transcribed by hand.
 
 ---
 
@@ -208,10 +209,8 @@ Two bit-identity-preserving optimisations WERE banked and are in the code:
   does not vectorise, float32 buys only memory traffic, and the kernel is 5x
   above its memory floor. It would additionally forfeit bit-identity by
   construction, which is the module's entire value proposition.
-* **The EQS solve is untouched.** The 6.9 s LU factorisation and 2.4 s of
-  back-solves in the quoted n=48 profile are not addressed and not claimed. On
-  a 1200-step n=48 run the march is now 2.0 s against ~10 s of EQS, so the EQS
-  is the new dominant cost and is the obvious next target.
+* **The EQS solve is not made faster**, only *avoidable* when it repeats — see
+  section 6. A cold solve costs exactly what it did before.
 * **Rolling-plane fusion of `props_kernel` + `faces_kernel` into `step_kernel`**
   (keeping k / rho_cp / rho_L / kf in L1 plane buffers) was scoped but not
   implemented; it would reclaim at most ~0.3 ms of the 1.7, i.e. ~7x not 10x.
@@ -219,15 +218,181 @@ Two bit-identity-preserving optimisations WERE banked and are in the code:
   BC, premix, edge regularisation, S4 in-march EQS re-solve) raise rather than
   approximate. Those runs must still use `heatr3d.run`.
 
-## 6. How to re-run
+## 6. EQS factorization / solution caching (`eqs_cache.py`)
+
+Second work item, assigned after the march prototype was blessed. Same
+bit-identity discipline. `heatr3d.py` still untouched.
+
+### 6.1 What actually enters the assembly (read-only enumeration)
+
+From `heatr3d.solve_eqs_3d`, the matrix **A** is a function of exactly:
+
+* `gamma` — via `_harmonic(gamma, roll(gamma))` on all six faces,
+* `grid.h` — via `h2 = grid.h**2`,
+
+plus the hard-coded electrode geometry (Dirichlet on the y_min / y_max planes)
+and the fixed `+ 1e-18*I` regularisation. The RHS **b** additionally consumes
+`p.v_lo` and `p.v_hi`.
+
+Nothing else reaches the linear system. The part mask, `sat`, sigma/eps,
+frequency, `edge_width_m` and premix all reach it **only through `gamma`**, so
+the key hashes `gamma` itself — strictly safer than hashing its inputs, because
+it cannot forget one. Hashing the mask+sat instead would have missed a change of
+`L` at fixed `n` (different `h`, same everything else); that case is pinned by
+`test_changed_grid_spacing_at_same_n_misses`.
+
+Key = blake2b(gamma bytes, shape+dtype, `h` bits, `v_lo`/`v_hi` bits, resolved
+solver path, **fingerprint of heatr3d's own EQS source**). The last term hashes
+`inspect.getsource(solve_eqs_3d)` + `_harmonic` + `EQS_DIRECT_MAX_UNKNOWNS`, so
+a future edit to heatr3d's EQS invalidates every entry instead of silently
+serving fields computed by the old code
+(`test_solver_source_change_invalidates_the_cache`).
+
+Keys are **byte**-exact, which is stronger than value equality (+0.0 and −0.0
+hash differently and would MISS). That direction wastes a solve; it can never
+return the wrong field.
+
+### 6.2 Which reuse routes are bit-identical (probed before building)
+
+| route | bit-identical vs heatr3d? |
+|---|---|
+| ported assembly + `spsolve` | **yes**, exact |
+| cached ILU + BiCGSTAB (iterative path, N > 50 000) | **yes**, exact — `spilu` is deterministic |
+| `splu(A).solve(b)` instead of `spsolve(A,b)` (direct path) | **NO** — 5.0e-15 rel |
+
+So the **iterative path is factorization-cached** (that is where the cost is:
+n ≥ 37, and the ILU build is the dominant term), and the **direct path is
+solution-cached only** — heatr3d calls `spsolve`, `splu` does not reproduce it
+bitwise, so substituting it would break the gate. The direct path is the
+small-grid path, so nothing valuable is lost.
+
+Two cache levels, both gated: SOLUTION (key = matrix key + voltages; a hit does
+no linear algebra at all) and FACTORIZATION (key = matrix key alone; serves the
+same-geometry-different-voltage case).
+
+**Memory warning, in code:** an ILU at n=48 with `fill_factor=12` is order 1e7
+complex nonzeros (~250 MB); heatr3d's own note records 2.21 GB at n=96.
+`max_factorizations` therefore defaults to **1**.
+
+### 6.3 THE RENORM QUESTION — answered NO, with numbers
+
+**The exact-arithmetic argument is valid.** Under `gamma → c·gamma` (real
+c > 0): every harmonic face conductance scales by c, since
+`harmonic(ca,cb) = 2(ca)(cb)/(ca+cb) = c·harmonic(a,b)`; Dirichlet rows are
+untouched (entry 1, RHS `v_lo`/`v_hi`); every interior row has **both** its
+matrix entries and its RHS contribution scaled by c, so **c cancels and V is
+unchanged**. `Qrf = 0.5·Re(gamma|E|²)` then scales by exactly c, and the
+fixed-power renormalisation in `compute_qrf_3d` divides that constant straight
+back out. So in exact arithmetic the renormalised drive *is* invariant.
+
+**In floating point it does not hold.** The `+1e-18·I` regularisation does not
+scale with c, and every product and sum rounds differently. Recorded survey
+(`eqs_cache_bench.json → renorm_survey`), max relative deviation of the
+renormalised Qrf:
+
+| n | c=2 | c=10 | c=1000 |
+|---|---|---|---|
+| 16 | 0.00e+00 (exact) | 5.36e-14 | 6.11e-14 |
+| 20 | 0.00e+00 (exact) | 1.18e-13 | 9.08e-14 |
+| 24 | 3.64e-16 | 1.02e-13 | 1.38e-13 |
+| 28 | 0.00e+00 (exact) | 2.47e-13 | 9.24e-14 |
+
+At c=10 and c=1000 the deviation is **1e-13 to 2.5e-13 — three orders of
+magnitude above the 1e-16 S1 floor.** Rejected.
+
+Worse than merely failing: it is **exact at some (n,c) and not others** (c=2 is
+bit-identical at n=16/20 but not n=24). A shortcut that passes a cheap
+small-grid gate and then drifts in production is the most dangerous kind, so
+this is pinned by an executable test
+(`test_scale_invariance_sometimes_IS_exact_which_is_why_it_is_a_trap`).
+
+**Separately, S4 re-solves are not scalar rescales anyway.**
+`apply_sigma_coupling` multiplies **only `Re(gamma)`**, by the *spatially
+varying* factor `(1 + a(T−T_ref))(1 + b(ρ−ρ_ref))`. The displacement part is
+left alone (verified: `np.array_equal(np.imag(gamma), np.imag(gc))`), so even a
+spatially uniform coupling does not produce `c·gamma`. Therefore:
+
+* **a = b = 0** (the engine lane's named reference case): `apply_sigma_coupling`
+  returns gamma **bit-for-bit**, so every scheduled re-solve is an **exact cache
+  HIT with no trick needed**
+  (`test_s4_zero_coefficient_resolve_is_an_exact_cache_hit`).
+* **a or b ≠ 0**: the field genuinely changes and **must** be re-solved. The
+  cache correctly misses.
+
+Conclusion as instructed: **cache exact matches only.**
+
+### 6.4 Benchmark — the Express scenario
+
+`eqs_cache_bench.json`. Single-threaded; load average 7.7–9.1 with one
+competing heavy solve (within the schedule rule).
+
+| | n=48 (N=110 592) | n=96 (N=884 736) |
+|---|---|---|
+| BEFORE arm (cold miss) | 8.75 s | 180.57 s |
+| AFTER arm, sat differs (**must miss**) | 8.21 s — **missed** | 194.20 s — **missed** |
+| package-verify, sat identical (**must hit**) | **0.0026 s** | **0.0271 s** |
+| same solve uncached | 8.26 s | 195.52 s |
+| **saved per hit** | **8.26 s** | **195.50 s** |
+| hit bit-identical to the original | **yes** | **yes** |
+| AFTER field differs from BEFORE | yes | yes |
+
+The n=48 saving (8.26 s) is above the ~7 s the engine lane estimated. Both
+sizes take the iterative ILU path.
+
+**Voltage sweep (factorization reuse), n=32, forced iterative**, `v_lo` =
+860 / 1800 / 3600 V at fixed geometry — matrix unchanged, RHS changed, so the
+solution cache must miss and the ILU must be reused:
+
+* first solve 1.298 s → reused solves 0.364 s mean (**3.6x**), 2 factorization
+  hits, 0 solution hits;
+* all three fields **bit-identical** to `heatr3d.solve_eqs_3d`.
+
+### 6.5 Gate results
+
+`engine_speed/tests/test_eqs_cache.py` — **20 passed**. Coverage weighted
+toward the catastrophic failure mode (a false hit):
+
+* assembly port reproduces heatr3d's solution exactly;
+* hits are bit-identical on both the direct and iterative paths, and return an
+  independent copy so a caller cannot poison the cache;
+* **misses**: changed `sat`, changed `n`, changed `h` at fixed `n`, changed
+  `v_lo`, changed `v_hi`;
+* **poisoned keys**: a **one-ULP** mutation of `gamma` — separately in the real
+  (sigma) and imaginary (eps_r) parts — must miss; a simulated change of
+  heatr3d's EQS source must miss;
+* factorization reuse happens for a voltage sweep and does **not** happen for
+  changed gamma;
+* the renorm findings above;
+* end-to-end: `march_fast` with the cache is bit-identical to `heatr3d.run` on
+  every field including `phi_hist` and `energy_residual_frac`, on both the miss
+  and the hit.
+
+### 6.6 What the cache does NOT do
+
+* **No cross-process persistence.** The cache is in-memory only, so a
+  package-verify in a *fresh process* still pays the full solve. SuperLU objects
+  are not picklable; a disk-backed **solution** store would work (V is 1.7 MB at
+  n=48, 14 MB at n=96) and is the obvious next increment, but it adds filesystem
+  side effects and was not built without a decision on where it should live.
+* **No direct-path factorization reuse** (see 6.2 — `splu` ≠ `spsolve` bitwise).
+* **No CG/AMG.** That is the other lane's; not prototyped here.
+* **It does not make S4 coupled re-solves cheap** when the coefficients are
+  nonzero. That is a genuine physics change, not a cache miss to be optimised
+  away.
+* **It does not make a cold solve faster.** The win is entirely in avoiding
+  repeats; a first solve costs exactly what it did before.
+
+## 7. How to re-run
 
 ```bash
 cd <repo root>
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMBA_NUM_THREADS=1
-.venv312/bin/python -m pytest engine_speed/tests -q      # the gate (12 tests, ~5 min)
+.venv312/bin/python -m pytest engine_speed/tests -q      # 32 tests (~6 min)
 .venv312/bin/python -m engine_speed.gate 32              # -> gate_results_n32.json
 .venv312/bin/python -m engine_speed.bench                # -> bench_results.json
 .venv312/bin/python -m engine_speed.profile_march 48     # per-stage profile
+# EQS cache bench: n=96 takes ~6 min of real solves. --no-n96 to skip.
+.venv312/bin/python -m engine_speed.bench_eqs_cache      # -> eqs_cache_bench.json
 ```
 
 Pinned: **numba 0.66.0, llvmlite 0.48.0** (installed into `.venv312`),
