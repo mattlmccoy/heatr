@@ -89,6 +89,58 @@ def voxel_to_voxel(sat0: np.ndarray, part0: np.ndarray, part1: np.ndarray,
             "gate": MASS_MOVE_GATE}
 
 
+def stack_to_voxel(sat_stack: np.ndarray, mask_stack: np.ndarray,
+                   z_mm: np.ndarray, part: np.ndarray,
+                   chamber_m: float) -> Dict[str, Any]:
+    """2.5-D dopant_volume stack onto an (n, n, n) voxel part.
+
+    Stack frame (stl_compensation_tool convention): sat[k, iy, ix] on a
+    centered grid with pitch chamber/(ng-1); sat = 1.0 OUTSIDE the mask
+    means unmodulated and must never be treated as data, so only in-mask
+    values are used (extension supplies the rim). z_mm are layer centers
+    relative to the part bottom; the voxel part is centered in the chamber.
+    """
+    nz_l, ng, _ = sat_stack.shape
+    n = part.shape[0]
+    h = chamber_m / n
+    zc = (np.arange(n) + 0.5) * h - chamber_m / 2.0
+    part_z = np.where(part.any(axis=(0, 1)))[0]
+    if len(part_z) == 0:
+        raise TransferError("target part is empty")
+    z_bottom = zc[part_z[0]] - h / 2.0
+    z_layers_phys = z_bottom + np.asarray(z_mm, float) * 1e-3
+
+    mean0 = float(sat_stack[mask_stack].mean())
+    if mean0 <= 0:
+        raise TransferError("source stack has no in-mask dopant")
+
+    # in-plane target sample coordinates in source index space
+    c1 = (np.arange(n) + 0.5) * h - chamber_m / 2.0
+    src_idx = (c1 + chamber_m / 2.0) * (ng - 1) / chamber_m
+    X, Y = np.meshgrid(src_idx, src_idx, indexing="ij")   # [i,j] = (x_i, y_j)
+
+    out = np.zeros((n, n, n))
+    extended_cache: Dict[int, np.ndarray] = {}
+    for k in part_z:
+        li = int(np.argmin(np.abs(z_layers_phys - zc[k])))
+        if li not in extended_cache:
+            m2 = np.asarray(mask_stack[li], bool)
+            if not m2.any():
+                raise TransferError(f"source layer {li} has an empty mask")
+            extended_cache[li] = _extend_into(
+                np.where(m2, sat_stack[li], 0.0).astype(float), m2)
+        plane = ndimage.map_coordinates(extended_cache[li], [Y, X],
+                                        order=1, mode="nearest")
+        out[:, :, k] = np.where(part[:, :, k], plane, 0.0)
+
+    move_rel = abs(_mean_sat(out, part) - mean0) / mean0
+    _gate(move_rel, "stack_to_voxel")
+    return {"sat": out, "state": "measured_and_passed",
+            "method": "per_layer_extend_before_interpolate_nearest_z",
+            "dopant_mass_move_rel": float(move_rel),
+            "gate": MASS_MOVE_GATE}
+
+
 def dg0_to_voxel(centroids: np.ndarray, values: np.ndarray,
                  volumes: np.ndarray, part: np.ndarray,
                  chamber_m: float) -> Dict[str, Any]:

@@ -89,3 +89,31 @@ def test_dg0_to_voxel_constant_field_is_exact():
     assert np.allclose(sat[part], 0.7, atol=1e-6)
     assert sat[~part].max() == 0.0
     assert rec["state"] == "measured_and_passed"
+
+
+def test_stack_to_voxel_preserves_level_and_masks():
+    """2.5-D dopant_volume stack (n_layers, ny, nx) onto an (n, n, n) part.
+
+    The 2-D pipeline stores sat = 1.0 OUTSIDE the part mask (unmodulated);
+    only in-mask values may reach the voxel part, support-aware per layer.
+    """
+    from studio3d.transfer import stack_to_voxel
+
+    nz, ng, n = 10, 40, 24
+    yy, xx = np.meshgrid(np.arange(ng), np.arange(ng), indexing="ij")
+    mask2 = (xx - ng / 2) ** 2 + (yy - ng / 2) ** 2 < (ng * 0.3) ** 2
+    sat_stack = np.where(mask2, 0.6, 1.0)[None, :, :].repeat(nz, axis=0)
+    mask_stack = mask2[None, :, :].repeat(nz, axis=0)
+    z_mm = (np.arange(nz) + 0.5) * 2.0          # a 20 mm tall part
+    part = _cyl_part(n, r_frac=0.28, h_frac=20.0 / 60.0)
+    rec = stack_to_voxel(sat_stack, mask_stack, z_mm, part, chamber_m=0.060)
+    assert rec["state"] == "measured_and_passed"
+    assert rec["sat"].shape == (n, n, n)
+    assert np.allclose(rec["sat"][part], 0.6, atol=1e-6)
+    assert rec["sat"][~part].max() == 0.0
+
+
+def _cyl_part(n: int, r_frac: float, h_frac: float) -> np.ndarray:
+    c = (np.arange(n) + 0.5) / n - 0.5
+    X, Y, Z = np.meshgrid(c, c, c, indexing="ij")
+    return ((X**2 + Y**2) < r_frac**2) & (np.abs(Z) < h_frac / 2)

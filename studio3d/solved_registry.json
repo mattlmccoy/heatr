@@ -1,0 +1,15 @@
+{
+ "what": "solved 3-D dopant artifacts matched by exact voxel part-mask hash",
+ "entries": [
+  {
+   "name": "phase_c_cylinder_n64",
+   "part_sha256": "b982be2ace04219feaa272640e38a5d304b1019c5a2bf5884164640896738436",
+   "grid_n": 64,
+   "artifact": "solve3d/results/phase_c_map_solve_filter_only_asymmetric_scaled.npz",
+   "form": "dg0",
+   "engine": "solve3d_solved",
+   "trust_badge": "solve3d solved | solved_label true (hold-out + smoothing gates) | sim-only",
+   "source": "solve3d/PHASE_C_REPORT.md"
+  }
+ ]
+}
