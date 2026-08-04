@@ -96,3 +96,16 @@ def test_oversize_part_is_refused_at_intake(tmp_path):
 def test_in_chamber_part_passes_the_fit_check():
     v = intake_verdict(_box())   # 1 mm box, far inside the chamber
     assert v["checks"]["chamber_fit"]["ok"] is True
+
+
+def test_self_intersection_check_is_fast_on_real_size_meshes():
+    """Perf gate (found live: a real STL hung intake for 20+ minutes).
+    An 82k-triangle sphere must clear the check in seconds, not minutes."""
+    import time
+    from studio3d.intake import count_self_intersections
+    m = trimesh.creation.icosphere(subdivisions=6)   # 81,920 triangles
+    t0 = time.time()
+    n = count_self_intersections(m)
+    dt = time.time() - t0
+    assert n == 0
+    assert dt < 15.0, f"self-intersection check took {dt:.1f} s"
