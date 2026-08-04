@@ -55,7 +55,14 @@ def reconstruct_sat_stack(job_dir: str | Path
         sats.append(sat)
         masks.append(mask)
     z_mm = (np.arange(len(graded)) + 0.5) * lh
-    return np.stack(sats), np.stack(masks), z_mm
+    # the canvas's PHYSICAL frame (the transfer's SOURCE chamber): pixels
+    # over dpi. Assuming 60 mm here is the same frame-bug class the Tamper
+    # exposed in the 2.5-D path (TAMPER_DIAGNOSIS.md 3f). The part is
+    # assumed centered on the canvas (the slicer's convention); the 2
+    # percent gate is the backstop if that assumption breaks.
+    dpi = float(info.get("dpi", 720))
+    canvas_m = sats[0].shape[1] / (dpi / 25.4) / 1000.0
+    return np.stack(sats), np.stack(masks), z_mm, canvas_m
 
 
 def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
@@ -80,10 +87,13 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
     pkg = Path(pkg_dir)
     rec: Dict[str, Any]
     try:
-        sat_stack, mask_stack, z_mm = reconstruct_sat_stack(tiff_job_dir)
+        sat_stack, mask_stack, z_mm, canvas_m = \
+            reconstruct_sat_stack(tiff_job_dir)
         part = voxelize_stl(mesh_path, n)
+        # source frame = the canvas's physical extent; target frame defaults
+        # to the voxel arm's 60 mm chamber (two frames, never one)
         tr = stack_to_voxel(sat_stack, mask_stack, z_mm, part,
-                            chamber_m=0.060)
+                            chamber_m=canvas_m)
         sat_path = pkg / "verify_sat.npz"
         np.savez_compressed(sat_path, sat=tr["sat"].astype(np.float32),
                             part=part)

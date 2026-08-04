@@ -91,8 +91,30 @@ def voxel_to_voxel(sat0: np.ndarray, part0: np.ndarray, part1: np.ndarray,
 
 def stack_to_voxel(sat_stack: np.ndarray, mask_stack: np.ndarray,
                    z_mm: np.ndarray, part: np.ndarray,
-                   chamber_m: float) -> Dict[str, Any]:
+                   chamber_m: float,
+                   target_chamber_m: float | None = None) -> Dict[str, Any]:
     """2.5-D dopant_volume stack onto an (n, n, n) voxel part.
+
+    TWO FRAMES, deliberately separate (TAMPER_DIAGNOSIS.md section 3f):
+
+      chamber_m         the SOURCE frame the 2.5-D stack was emitted on. The
+                        2.5-D pipeline solves per-cluster chambers -- 65 mm and
+                        85 mm were both observed in the shipped jobs -- at
+                        ng=160, dx ~ 0.5 mm.
+      target_chamber_m  the VOXEL ARM's chamber, i.e. studio3d.runner.CHAMBER_M
+                        (60 mm at n=64, dx 0.9375 mm). Defaults to it.
+
+    These used to be ONE parameter, and the caller passed the source's value,
+    so the target grid was built on the source chamber too. That does not
+    translate frames, it RESCALES the part by target/source (85/60 = 1.4167x):
+    every voxel sampled the stack at the wrong physical location. On the Tamper
+    job it moved the in-part dopant level by 37.37 %, the 2 % gate correctly
+    refused the map, and the chain fell through to the legacy inversion rung
+    that then shipped a harmful correction. With the frames separated the same
+    Tamper map measures 2.99 %.
+
+    The 2 % gate itself is UNCHANGED; this fixes the resampling, not the
+    threshold.
 
     Stack frame (stl_compensation_tool convention): sat[k, iy, ix] on a
     centered grid with pitch chamber/(ng-1); sat = 1.0 OUTSIDE the mask
@@ -100,10 +122,13 @@ def stack_to_voxel(sat_stack: np.ndarray, mask_stack: np.ndarray,
     values are used (extension supplies the rim). z_mm are layer centers
     relative to the part bottom; the voxel part is centered in the chamber.
     """
+    if target_chamber_m is None:
+        from studio3d.runner import CHAMBER_M
+        target_chamber_m = CHAMBER_M
     nz_l, ng, _ = sat_stack.shape
     n = part.shape[0]
-    h = chamber_m / n
-    zc = (np.arange(n) + 0.5) * h - chamber_m / 2.0
+    h = target_chamber_m / n
+    zc = (np.arange(n) + 0.5) * h - target_chamber_m / 2.0
     part_z = np.where(part.any(axis=(0, 1)))[0]
     if len(part_z) == 0:
         raise TransferError("target part is empty")
@@ -114,8 +139,10 @@ def stack_to_voxel(sat_stack: np.ndarray, mask_stack: np.ndarray,
     if mean0 <= 0:
         raise TransferError("source stack has no in-mask dopant")
 
-    # in-plane target sample coordinates in source index space
-    c1 = (np.arange(n) + 0.5) * h - chamber_m / 2.0
+    # in-plane target sample coordinates (TARGET frame, metres) mapped into
+    # SOURCE index space (source frame). Mixing the two frames here is exactly
+    # the Tamper bug.
+    c1 = (np.arange(n) + 0.5) * h - target_chamber_m / 2.0
     src_idx = (c1 + chamber_m / 2.0) * (ng - 1) / chamber_m
     X, Y = np.meshgrid(src_idx, src_idx, indexing="ij")   # [i,j] = (x_i, y_j)
 
@@ -138,6 +165,8 @@ def stack_to_voxel(sat_stack: np.ndarray, mask_stack: np.ndarray,
     return {"sat": out, "state": "measured_and_passed",
             "method": "per_layer_extend_before_interpolate_nearest_z",
             "dopant_mass_move_rel": float(move_rel),
+            "source_chamber_m": float(chamber_m),
+            "target_chamber_m": float(target_chamber_m),
             "gate": MASS_MOVE_GATE}
 
 

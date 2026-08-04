@@ -31,13 +31,17 @@ def test_reconstruct_recovers_the_applied_sat(tmp_path):
     base = np.where(ink, 15, 0)
     for k, s in enumerate((0.6, 1.0, 0.8)):
         _write_tiff_pair(job, k, base, s)
+    # dpi 25.4 -> exactly 1 mm/px, so the 40 px canvas is a 40 mm frame:
+    # the reconstruction must report the canvas's PHYSICAL size (the frame
+    # the transfer needs as its source chamber), never assume 60 mm
     (job / "job_info.json").write_text(json.dumps(
-        {"layer_count": 3, "dpi": 720, "bpp": 4, "layer_height_mm": 0.5}))
-    sat, mask, z_mm = reconstruct_sat_stack(job)
+        {"layer_count": 3, "dpi": 25.4, "bpp": 4, "layer_height_mm": 0.5}))
+    sat, mask, z_mm, canvas_m = reconstruct_sat_stack(job)
     assert sat.shape == (3, ny, nx)
     assert np.allclose(sat[0][mask[0]].mean(), 0.6, atol=0.04)
     assert np.allclose(sat[1][mask[1]].mean(), 1.0, atol=0.04)
     assert list(np.round(z_mm, 2)) == [0.25, 0.75, 1.25]
+    assert canvas_m == pytest.approx(0.040, rel=1e-6)
 
 
 def test_verify_package_runs_the_march_and_records_gates(tmp_path):
@@ -52,8 +56,11 @@ def test_verify_package_runs_the_march_and_records_gates(tmp_path):
     nz = 10
     for k in range(nz):
         _write_tiff_pair(job, k, base, 0.7)
+    # 1 mm/px so the 40 px canvas is a physically consistent 40 mm frame
+    # for a 14 px = 14 mm ink square (the old 720 dpi fixture put a 20 mm
+    # part on a 1.4 mm canvas, which the frame fix rightly breaks)
     (job / "job_info.json").write_text(json.dumps(
-        {"layer_count": nz, "dpi": 720, "bpp": 4, "layer_height_mm": 2.0}))
+        {"layer_count": nz, "dpi": 25.4, "bpp": 4, "layer_height_mm": 2.0}))
     pkg = tmp_path / "pkg"
     pkg.mkdir()
     (pkg / "production_verify_summary.json").write_text(
