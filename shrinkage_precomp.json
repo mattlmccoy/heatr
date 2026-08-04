@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "s_xy": 0.030,
+  "s_xy_band": [0.020, 0.040],
+  "s_z_mat": 0.020,
+  "s_z_mat_band": [0.010, 0.030],
+  "source": "SHRINKAGE_COEFFICIENTS_MEMO.md",
+  "material_only": true,
+  "applicability": "SLS literature values (see source); RFAM material shrinkage unmeasured - pending P1 measurement",
+  "note": "MATERIAL shrinkage only; consolidation belongs to the densify model (spec section 1)"
+}
