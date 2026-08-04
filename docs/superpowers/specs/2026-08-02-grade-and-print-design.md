@@ -369,6 +369,39 @@ correction, run cancellation
   chain at the cancelled stage. Partial artifacts from a cancelled run
   are removed so a later run can never adopt them.
 
+## 7f. Roadmap (Matt, 2026-08-04): the full-solver port
+
+Direction: once the 2-D and 3-D solvers are fast enough, their FULL
+functionality ports into Grade and Print; the tool's standard is the best
+result the science can produce, not the fastest heuristic. Port inventory,
+each item behind its existing gates and blessing protocol:
+
+FROM THE 3-D LANE (solve3d):
+- arbitrary-geometry direct solve (Phase E tet meshing, queued in the
+  solve3d lane) - widens the ONE solvability check from is_extrusion to
+  has_solve_mesh; nothing else changes Studio-side.
+- solve speedups per 7e (warm start, coarse-to-fine with hold-out gates,
+  plateau stopping), each vs the cold-start reference at matched budget.
+- the growing solved-map library into the registry (exact-hash entries,
+  per-map gates records).
+
+FROM THE 2-D LANE (per their engine v2 solve modes):
+- direct 2-D per-slice SOLVES replacing the rulebook heuristics as the
+  2.5-D rung (their engine, their blessing; consumed through the same
+  dopant_volume contract + the 2 percent transfer gate).
+- turntable/dwell program GENERATION via their intake API (anisotropy
+  spectrum, candidate angles, per-build aggregation) - upgrades the
+  package's turntable block from intent-recording to a real program,
+  still advisory with heatr3d verification as the authority.
+- the eps_r channel only after the M2 impedance calibration lands
+  (physically expected, law uncalibrated until then).
+
+STUDIO-SIDE SEQUENCING: every ported engine enters the existing correction
+chain ranked by capability, every map faces the predicted-benefit gate
+before it ships, and every acceleration stays recorded. The fast_march /
+eqs_cache default flip is Matt's open call and is the first prerequisite
+for making solve-everywhere the default UX.
+
 ## 9. Hardening items found while reading (P1, bundled into this work)
 
 - /mesh_file/<job_id>/... and /grade/asset/... do not sanitize job_id
