@@ -1,8 +1,11 @@
 # Shrinkage and Prewarp v2: Solving for the Measured Part
 
 Date: 2026-08-04
-Status: DRAFT per Matt's direction of 2026-08-04 (levels approved in
-discussion; this document is the written spec for his review).
+Status: APPROVED by Matt 2026-08-04. Level 0 coefficients supplied by
+SHRINKAGE_COEFFICIENTS_MEMO.md (s_xy 0.030 band 0.020-0.040; s_z_mat
+0.020 band 0.010-0.030, weakest number, first P1 measurement target).
+Open question 2 resolved by the memo: end-of-exposure read stands for
+L2, cooldown promoted only if P1 residuals are structured.
 Owner: Matt McCoy
 
 ## 1. Goal and the core distinction
