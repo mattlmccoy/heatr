@@ -25,7 +25,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize, TwoSlopeNorm
+from matplotlib.colors import Normalize
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from solve3d.phase_e import render_deck_cutaway3d as C
@@ -80,92 +80,9 @@ def load():
     return z, doc
 
 
-def fig_three_arms(z, doc) -> str:
-    ax_m = np.asarray(z["axis_m"], float)
-    inside = np.asarray(z["inside"], bool)
-    mask_f = C.cutaway_mask(inside, ax_m)
-    half_mm = float(z["nominal_base_side_m"]) / 2.0 * MM
-    phi = {a: np.where(inside, C.phase_fraction_phi(z[f"T__{a}"]), 0.0)
-           for a, _ in ARMS}
-    ref = phi["uniform_baseline"]
-
-    fig = plt.figure(figsize=(15.0, 9.4), dpi=200)
-    fig.patch.set_facecolor(st.BG)
-    fig.text(0.035, 0.982, "cube, same camera, same colour scale: melt "
-             "fraction at each arm's own envelope stop",
-             fontsize=14.5, color=st.FG, ha="left", va="top")
-
-    W, H = 0.285, 0.385
-    xs = (0.035, 0.345, 0.655)
-    yt, yb = 0.545, 0.115
-    n_phi = Normalize(0.0, 1.0)
-    n_dif = TwoSlopeNorm(vmin=-0.6, vcenter=0.0, vmax=0.6)
-
-    for i, (arm, title) in enumerate(ARMS):
-        r = doc["arms"][arm]
-        cutaway(fig, [xs[i], yt, W, H], phi[arm], mask_f, ax_m,
-                C.CMAP, n_phi, half_mm)
-        fig.text(xs[i] + W / 2, yt + H + 0.015, title, fontsize=14.5,
-                 color=st.GOOD if arm == "solve_filter_only" else st.FG,
-                 ha="center", va="baseline")
-        d = 100.0 * (r["J_asymmetric"] - doc["arms"]["uniform_baseline"]
-                     ["J_asymmetric"]) / doc["arms"]["uniform_baseline"]["J_asymmetric"]
-        tag = "baseline" if i == 0 else ("%+.0f%% J" % d)
-        col = st.DIM if i == 0 else (st.GOOD if d < 0 else st.WARM)
-        fig.text(xs[i] + W / 2, yt - 0.010,
-                 f"mean phi {r['part_mean_phi']:.2f}     stop "
-                 f"{r['t_stop_s']:.0f} s", fontsize=11.5, color=st.DIM,
-                 ha="center", va="top")
-        fig.text(xs[i] + W / 2, yt - 0.040, tag, fontsize=13, color=col,
-                 ha="center", va="top")
-
-    for i, (arm, _t) in enumerate(ARMS):
-        if i == 0:
-            ax = fig.add_axes([xs[0], yb, W, H])
-            ax.axis("off")
-            ax.text(0.5, 0.62, "difference against\nthe uniform baseline",
-                    transform=ax.transAxes, ha="center", va="center",
-                    fontsize=13.5, color=st.FG, linespacing=1.6)
-            ax.text(0.5, 0.34, "orange: this arm melts more\n"
-                    "blue: this arm melts less",
-                    transform=ax.transAxes, ha="center", va="center",
-                    fontsize=11, color=st.DIM, linespacing=1.8)
-            continue
-        cutaway(fig, [xs[i], yb, W, H], phi[arm] - ref, mask_f, ax_m,
-                CMAP_DIFF, n_dif, half_mm)
-        r = doc["arms"][arm]
-        u = doc["arms"]["uniform_baseline"]
-        ratio = r["out_of_part_melt_fraction_of_part"] / \
-            u["out_of_part_melt_fraction_of_part"]
-        col2 = st.WARM if ratio > 1.5 else st.DIM
-        fig.text(xs[i] + W / 2, yb - 0.012,
-                 "melt outside part %.2f%%, %.1fx uniform"
-                 % (100 * r["out_of_part_melt_fraction_of_part"], ratio),
-                 fontsize=11, color=col2, ha="center", va="top")
-
-    cax = fig.add_axes([0.945, 0.585, 0.013, 0.310])
-    cb = fig.colorbar(plt.cm.ScalarMappable(norm=n_phi, cmap=C.CMAP), cax=cax)
-    cb.set_label("melt fraction phi", color=st.FG, fontsize=11, labelpad=-52)
-    cb.ax.tick_params(colors=st.DIM, labelsize=9)
-    cb.outline.set_edgecolor(st.DIM)
-
-    cax2 = fig.add_axes([0.945, 0.155, 0.013, 0.310])
-    cb2 = fig.colorbar(plt.cm.ScalarMappable(norm=n_dif, cmap=CMAP_DIFF),
-                       cax=cax2)
-    cb2.set_label("phi minus uniform", color=st.FG, fontsize=11, labelpad=-52)
-    cb2.ax.tick_params(colors=st.DIM, labelsize=9)
-    cb2.outline.set_edgecolor(st.DIM)
-
-    fig.text(0.5, 0.048, "quarter cutaway, cyan wireframe is the nominal cube",
-             fontsize=11, color=st.DIM, ha="center")
-    fig.text(0.5, 0.020, "solved by 3-D adjoint (filter-only arm), "
-             "budget-limited and still descending; simulation-only",
-             fontsize=11, color=st.DIM, ha="center")
-
-    out = RESULTS / "fig_deck_cube_three_arms.png"
-    fig.savefig(out, dpi=200, facecolor=st.BG)
-    plt.close(fig)
-    return str(out)
+# fig_three_arms lived here. It is SUPERSEDED by render_deck_melt_body.py and
+# was deleted rather than left in place, because it wrote the same filename:
+# dead code that silently overwrites a committed deck figure is a trap.
 
 
 def fig_solved_map(z, doc) -> str:
@@ -297,7 +214,6 @@ def fig_solved_map(z, doc) -> str:
 
 def main() -> int:
     z, doc = load()
-    print("wrote", fig_three_arms(z, doc))
     print("wrote", fig_solved_map(z, doc))
     return 0
 

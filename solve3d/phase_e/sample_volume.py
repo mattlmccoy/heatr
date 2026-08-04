@@ -32,12 +32,16 @@ RESULTS = Path(__file__).resolve().parent / "results"
 DEFAULT_N = 96
 
 
-def sample(shape: str, arms: tuple[str, ...], n: int = DEFAULT_N) -> Path:
+def sample(shape: str, arms: tuple[str, ...], n: int = DEFAULT_N,
+           pad_factor: float = 1.02) -> Path:
     from solve3d import forward as fwd
     from solve3d.phase_e import geometry as geo, run as R
 
     half = (geo.PYR_H_M if shape == "pyramid" else geo.CUBE_A_M) / 2.0
-    pad = 1.02 * half
+    # pad_factor > 1 keeps BED around the part in the grid. The melt-body
+    # figures need it: out-of-part melt is a sub-millimetre lobe just outside
+    # the faces, and a 2 percent pad has nowhere to draw it.
+    pad = pad_factor * half
     ax = np.linspace(-pad, pad, n)
     X, Y, Z = np.meshgrid(ax, ax, ax, indexing="ij")
     pts = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()])
@@ -73,6 +77,7 @@ def sample(shape: str, arms: tuple[str, ...], n: int = DEFAULT_N) -> Path:
         _g.PYR_B_M if shape == "pyramid" else _g.CUBE_A_M)
     out["nominal_height_m"] = np.float64(
         _g.PYR_H_M if shape == "pyramid" else _g.CUBE_A_M)
+    out["pad_factor"] = np.float64(pad_factor)
     p = RESULTS / f"vol_{shape}.npz"
     np.savez_compressed(p, **out)
     return p
@@ -83,8 +88,9 @@ def main() -> int:
     ap.add_argument("--shape", required=True)
     ap.add_argument("--n", type=int, default=DEFAULT_N)
     ap.add_argument("--arms", default="uniform_baseline,solve_filter_only")
+    ap.add_argument("--pad", type=float, default=1.02)
     a = ap.parse_args()
-    p = sample(a.shape, tuple(a.arms.split(",")), a.n)
+    p = sample(a.shape, tuple(a.arms.split(",")), a.n, a.pad)
     z = np.load(p)
     print("wrote", p, "grid", z["inside"].shape,
           "in-part cells", int(z["inside"].sum()))

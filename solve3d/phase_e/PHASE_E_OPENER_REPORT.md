@@ -423,7 +423,7 @@ for S in pyramid cube; do
   $SPIKE -m solve3d.phase_e.run        --shape $S
   $SPIKE -m solve3d.phase_e.rescore    --shape $S
   $SPIKE -m solve3d.phase_e.acceptance --shape $S
-  $SPIKE -m solve3d.phase_e.sample_volume --shape $S \
+  $SPIKE -m solve3d.phase_e.sample_volume --shape $S --pad 1.25 \
       --arms uniform_baseline,heuristic_grading_law,solve_filter_only
 done
 $SPIKE -m solve3d.phase_e.gradient_probe --shape pyramid
@@ -432,14 +432,49 @@ $SPIKE -m solve3d.phase_e.gradient_probe --shape pyramid
 .venv312/bin/python -m solve3d.phase_e.render_deck_cutaway3d
 .venv312/bin/python -m solve3d.phase_e.render_deck_loop3d
 .venv312/bin/python -m solve3d.phase_e.render_deck_cube
+.venv312/bin/python -m solve3d.phase_e.render_deck_melt_body --shape pyramid
+.venv312/bin/python -m solve3d.phase_e.render_deck_melt_body --shape cube
 ```
+
+`--pad 1.25` is required: every figure here is rendered off that one grid.
 
 ## Figure index
 
 | file | what |
 |---|---|
+| `fig_deck_pyramid_three_arms.png` | **the headline pair**: pyramid melt body with and without correction, plus mid-plane sections |
+| `fig_deck_cube_three_arms.png` | **the headline pair**: cube melt body with and without correction, plus mid-plane sections |
 | `fig_deck_pyramid_solved.png` | pyramid solved map: z slabs, profile, uniform vs solved sections |
+| `fig_deck_cube_solved_map.png` | cube solved map: z slabs, profile, cutaway, numbers |
 | `fig_deck_pyramid_cutaway3d.png` | pyramid uniform vs solve, 3-D quarter cutaway, melt fraction |
 | `fig_deck_solve_loop_3d.png` | the five-stage 3-D adjoint loop, real recomputed gradient at stage 4 |
-| `fig_deck_cube_three_arms.png` | cube three arms plus difference row, melt fraction |
-| `fig_deck_cube_solved_map.png` | cube solved map: z slabs, profile, cutaway, numbers |
+
+### The three-arm figures were redesigned after review
+
+The first `fig_deck_*_three_arms.png` coloured every voxel of the volume. The
+unmelted material then rendered as an opaque box that hid the result, and the
+difference row was a fog that needed a legend to decode. Matt's reframe was
+"we want to see the part with and without corrections", and that is a
+different visual encoding, not a different dataset.
+
+The current version draws **objects**: the phi >= 0.9 melt body as an opaque
+isosurface (the solid that would actually form), amber inside the nominal
+bounds and red where it has escaped them, with everything unmelted removed and
+only the cyan nominal wireframe left as the reference. The bottom row cuts the
+same three bodies on the vertical mid-plane and repeats the uniform arm's melt
+boundary as a white dashed line, so amber beyond that line is exactly what the
+correction added. Same filenames, so the deck picks the new ones up.
+
+That redesign forced one data change worth recording: the render grid
+originally padded only 2 % beyond the part, which left out-of-part melt
+literally nowhere to draw. Both volumes were re-sampled at `--pad 1.25`. On
+this grid the heuristic arm shows 3 228 melt cells outside the cube and the
+uniform and solve arms show none, which is consistent in direction with the
+6.10x out-of-bounds objective ratio in section 7b.
+
+**Two different out-of-part quantities appear in this report and they are not
+interchangeable.** The figures show melt at phi >= 0.9 outside the nominal
+solid counted on the render grid; `out_of_part_melt_fraction_of_part` in the
+JSON is the FEM integral of continuous phi over out-of-part cells. An arm can
+show no red on the figure and still carry a non-zero volumetric number. Both
+are labelled wherever they appear.
