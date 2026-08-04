@@ -1,0 +1,705 @@
+{
+  "captured_by": "studio3d/tests/fixtures/capture_tamper_fixtures.py",
+  "rule": "fixtures CAPTURED from real jobs; statistics recomputed from the real fields.npz, never authored",
+  "uploads_root": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads",
+  "jobs": {
+    "feb850ec": {
+      "label": "Tamper",
+      "source": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/feb850ec/grade/heatr3d",
+      "arms": {
+        "uncorrected": {
+          "results": {
+            "engine": "heatr3d_native",
+            "engine_march": "heatr3d",
+            "env_provenance": null,
+            "eqs_cache": {
+              "enabled": false
+            },
+            "trust_badge": "heatr3d native | S1 passed within validity domain | S4 not passed | sim-only",
+            "arm": "uncorrected",
+            "correction_engine": null,
+            "grid_n": 64,
+            "sigma_T": 28.545,
+            "t_phi90_s": 789.0,
+            "max_time_s": 1500.0,
+            "stop_mean_rho": 0.98,
+            "sim_time_s": 1075.35,
+            "solve_wall_s": 623.4,
+            "phi_hist_len": 21507,
+            "dt_s": 0.05,
+            "gates": {
+              "reached_phi90": true,
+              "MELT_ONSET_FALLBACK": false,
+              "energy_residual_frac": -1.8293231853725377e-13,
+              "energy_residual_ok": true,
+              "clamp_bound": false,
+              "T_max_C": 288.0,
+              "T_ceiling_C": 250.0,
+              "T_ceiling_ok": false
+            },
+            "nominal_vox": 10076,
+            "sintered_vox": 9082,
+            "sintered_frac": 0.9013497419610956,
+            "dice": 0.9481156696941225,
+            "unsintered_vox": 994,
+            "rho_final_mean": 0.98,
+            "rho_final_std": 0.0596,
+            "z_shrink_pct": 40.96,
+            "xy_shrink_pct": 2.27,
+            "warp_std_pct": 6.371,
+            "warp_range_pct": 40.46,
+            "nominal_height_mm": 11.25,
+            "final_height_mm": 6.83,
+            "target_final_height_mm": 6.83,
+            "layer_thickness_mm": 0.1,
+            "green_layers": 116,
+            "final_layers": 69,
+            "extra_layers": 47,
+            "layer_multiplier": 1.694
+          },
+          "results_sha256_16": "5b27d3296d5ab544",
+          "fields": {
+            "grid_n": 64,
+            "n_part_voxels": 10076,
+            "out_of_part_melt_frac": 0.032089358096474306,
+            "out_of_part_melted_voxel_frac": 0.03172159893362109,
+            "in_part_melt_frac": 0.9000315211300777,
+            "rho_final": {
+              "p2": 0.7449236810207367,
+              "p98": 1.0,
+              "spread": 0.2550763189792633,
+              "min": 0.5566332340240479,
+              "max": 1.0,
+              "mean": 0.9800074110550746,
+              "std": 0.059634268879655096,
+              "frac_at_max": 0.34319174275506154,
+              "atom_ratio": 42.17073170731707
+            },
+            "T_phi90": {
+              "p2": 162.41230010986328,
+              "p98": 274.29347229003906,
+              "spread": 111.88117218017578,
+              "min": 149.60821533203125,
+              "max": 288.00543212890625,
+              "mean": 219.159239435442,
+              "std": 28.54496190873775,
+              "frac_at_max": 0.0001984914648670107,
+              "atom_ratio": 1.0
+            }
+          },
+          "fields_sha256_16": "aa0a79629e5ef8d6"
+        },
+        "corrected": {
+          "results": {
+            "engine": "heatr3d_native",
+            "engine_march": "heatr3d",
+            "env_provenance": null,
+            "eqs_cache": {
+              "enabled": false
+            },
+            "trust_badge": "heatr3d native | S1 passed within validity domain | S4 not passed | sim-only",
+            "arm": "corrected",
+            "correction_engine": "heatr3d_native_inversion",
+            "grid_n": 64,
+            "sigma_T": 53.179,
+            "t_phi90_s": 1348.0,
+            "max_time_s": 1500.0,
+            "stop_mean_rho": 0.98,
+            "sim_time_s": 1500.0,
+            "solve_wall_s": 686.8,
+            "phi_hist_len": 30000,
+            "dt_s": 0.05,
+            "gates": {
+              "reached_phi90": true,
+              "MELT_ONSET_FALLBACK": false,
+              "energy_residual_frac": -3.5261632076635807e-13,
+              "energy_residual_ok": true,
+              "clamp_bound": false,
+              "T_max_C": 448.4,
+              "T_ceiling_C": 250.0,
+              "T_ceiling_ok": false
+            },
+            "nominal_vox": 10076,
+            "sintered_vox": 9092,
+            "sintered_frac": 0.9023421992854307,
+            "dice": 0.9486644407345576,
+            "unsintered_vox": 984,
+            "rho_final_mean": 0.9495,
+            "rho_final_std": 0.1046,
+            "z_shrink_pct": 38.57,
+            "xy_shrink_pct": 2.13,
+            "warp_std_pct": 11.041,
+            "warp_range_pct": 42.19,
+            "nominal_height_mm": 11.25,
+            "final_height_mm": 7.7,
+            "target_final_height_mm": 7.7,
+            "layer_thickness_mm": 0.1,
+            "green_layers": 126,
+            "final_layers": 77,
+            "extra_layers": 49,
+            "layer_multiplier": 1.628
+          },
+          "results_sha256_16": "28b18bcfacc16f7a",
+          "fields": {
+            "grid_n": 64,
+            "n_part_voxels": 10076,
+            "out_of_part_melt_frac": 0.17536798489850214,
+            "out_of_part_melted_voxel_frac": 0.17508767475443135,
+            "in_part_melt_frac": 0.9000317299272599,
+            "rho_final": {
+              "p2": 0.5737845003604889,
+              "p98": 1.0,
+              "spread": 0.4262154996395111,
+              "min": 0.5500020384788513,
+              "max": 1.0,
+              "mean": 0.9494899445911777,
+              "std": 0.10457630521625744,
+              "frac_at_max": 0.2683604605001985,
+              "atom_ratio": 84.50000000000001
+            },
+            "T_phi90": {
+              "p2": 170.171142578125,
+              "p98": 404.24134826660156,
+              "spread": 234.07020568847656,
+              "min": 165.15386962890625,
+              "max": 448.3670959472656,
+              "mean": 229.80048612811916,
+              "std": 53.178563153764564,
+              "frac_at_max": 9.924573243350536e-05,
+              "atom_ratio": 1.0
+            }
+          },
+          "fields_sha256_16": "4957650fc355b7ab"
+        }
+      },
+      "correction_provenance": {
+        "engine": "heatr3d_native_inversion",
+        "trust_badge": "heatr3d native inversion | legacy heuristic (the direct solve is the primary generator) | sim-only",
+        "artifact": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/feb850ec/grade/heatr3d/uncorrected/fields.npz",
+        "proxy": "rho_final",
+        "fallback_from_25d": {
+          "state": "measured_and_failed",
+          "error": "stack_to_voxel: transfer moved in-part dopant by 37.37 %, over the 2 % gate (Phase C staircase threshold). Refusing the transferred map.",
+          "artifact": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/feb850ec/grade/heatr/dopant_volume.npz"
+        },
+        "transfer": {
+          "state": "transfer_not_applicable",
+          "method": "native_inversion_same_grid",
+          "dopant_mass_move_rel": 0.0,
+          "gate": null
+        },
+        "grid_n": 64,
+        "null_correction": false
+      },
+      "emitted_sat": {
+        "zero_frac": 0.7911869789599048,
+        "mean": 0.07067619571288505,
+        "std": 0.19822060919939602
+      }
+    },
+    "c474d787": {
+      "label": "AIRCOIL",
+      "source": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/c474d787/grade/heatr3d",
+      "arms": {
+        "uncorrected": {
+          "results": {
+            "engine": "heatr3d_native",
+            "trust_badge": "heatr3d native | S1 passed within validity domain | S4 not passed | sim-only",
+            "arm": "uncorrected",
+            "correction_engine": null,
+            "grid_n": 64,
+            "sigma_T": 36.917,
+            "t_phi90_s": 646.0,
+            "max_time_s": 1500.0,
+            "stop_mean_rho": 0.98,
+            "sim_time_s": 878.8,
+            "solve_wall_s": 442.7,
+            "phi_hist_len": 17576,
+            "dt_s": 0.05,
+            "gates": {
+              "reached_phi90": true,
+              "MELT_ONSET_FALLBACK": false,
+              "energy_residual_frac": 1.1256628117530265e-13,
+              "energy_residual_ok": true,
+              "clamp_bound": false,
+              "T_max_C": 336.7,
+              "T_ceiling_C": 250.0,
+              "T_ceiling_ok": false
+            },
+            "nominal_vox": 20440,
+            "sintered_vox": 18404,
+            "sintered_frac": 0.9003913894324853,
+            "dice": 0.9475852126454536,
+            "unsintered_vox": 2036,
+            "rho_final_mean": 0.98,
+            "rho_final_std": 0.0552,
+            "z_shrink_pct": 41.01,
+            "xy_shrink_pct": 2.28,
+            "warp_std_pct": 1.772,
+            "warp_range_pct": 12.15,
+            "nominal_height_mm": 52.5,
+            "final_height_mm": 36.12,
+            "target_final_height_mm": 36.12,
+            "layer_thickness_mm": 0.1,
+            "green_layers": 613,
+            "final_layers": 362,
+            "extra_layers": 251,
+            "layer_multiplier": 1.695
+          },
+          "results_sha256_16": "e0f1bd3c8588f4dd",
+          "fields": {
+            "grid_n": 64,
+            "n_part_voxels": 20440,
+            "out_of_part_melt_frac": 0.15560886169637392,
+            "out_of_part_melted_voxel_frac": 0.15544633104954822,
+            "in_part_melt_frac": 0.9000311918877765,
+            "rho_final": {
+              "p2": 0.7563820946216583,
+              "p98": 1.0,
+              "spread": 0.24361790537834171,
+              "min": 0.6001304984092712,
+              "max": 1.0,
+              "mean": 0.9800019196772295,
+              "std": 0.055198838903793866,
+              "frac_at_max": 0.32886497064579256,
+              "atom_ratio": 48.01428571428572
+            },
+            "T_phi90": {
+              "p2": 164.98597717285156,
+              "p98": 311.26679138183596,
+              "spread": 146.2808142089844,
+              "min": 155.30807495117188,
+              "max": 336.689208984375,
+              "mean": 225.8845046989605,
+              "std": 36.91685351115305,
+              "frac_at_max": 4.892367906066536e-05,
+              "atom_ratio": 1.0
+            }
+          },
+          "fields_sha256_16": "ae0f015c9f428614"
+        },
+        "corrected": {
+          "results": {
+            "engine": "heatr3d_native",
+            "trust_badge": "heatr3d native | S1 passed within validity domain | S4 not passed | sim-only",
+            "arm": "corrected",
+            "correction_engine": "heatr3d_native_inversion",
+            "grid_n": 64,
+            "sigma_T": 111.496,
+            "t_phi90_s": 1285.4,
+            "max_time_s": 1500.0,
+            "stop_mean_rho": 0.98,
+            "sim_time_s": 1500.0,
+            "solve_wall_s": 810.8,
+            "phi_hist_len": 30000,
+            "dt_s": 0.05,
+            "gates": {
+              "reached_phi90": true,
+              "MELT_ONSET_FALLBACK": false,
+              "energy_residual_frac": 0.013348881834289096,
+              "energy_residual_ok": false,
+              "clamp_bound": true,
+              "T_max_C": 600.0,
+              "T_ceiling_C": 250.0,
+              "T_ceiling_ok": false
+            },
+            "nominal_vox": 20440,
+            "sintered_vox": 18380,
+            "sintered_frac": 0.8992172211350293,
+            "dice": 0.9469345698093766,
+            "unsintered_vox": 2060,
+            "rho_final_mean": 0.965,
+            "rho_final_std": 0.1043,
+            "z_shrink_pct": 39.43,
+            "xy_shrink_pct": 2.19,
+            "warp_std_pct": 5.832,
+            "warp_range_pct": 17.63,
+            "nominal_height_mm": 52.5,
+            "final_height_mm": 32.81,
+            "target_final_height_mm": 32.81,
+            "layer_thickness_mm": 0.1,
+            "green_layers": 542,
+            "final_layers": 329,
+            "extra_layers": 213,
+            "layer_multiplier": 1.651
+          },
+          "results_sha256_16": "c31ae7154c065818",
+          "fields": {
+            "grid_n": 64,
+            "n_part_voxels": 20440,
+            "out_of_part_melt_frac": 0.6359532475607174,
+            "out_of_part_melted_voxel_frac": 0.6359100387250521,
+            "in_part_melt_frac": 0.9000134540906535,
+            "rho_final": {
+              "p2": 0.550747275352478,
+              "p98": 1.0,
+              "spread": 0.449252724647522,
+              "min": 0.5500012636184692,
+              "max": 1.0,
+              "mean": 0.9649665372099895,
+              "std": 0.10433193595678306,
+              "frac_at_max": 0.7444227005870842,
+              "atom_ratio": 507.20000000000005
+            },
+            "T_phi90": {
+              "p2": 156.17008636474608,
+              "p98": 586.7568017578125,
+              "spread": 430.58671539306636,
+              "min": 145.42886352539062,
+              "max": 600.0,
+              "mean": 320.2563657353769,
+              "std": 111.49593397990802,
+              "frac_at_max": 0.008904109589041096,
+              "atom_ratio": 182.0
+            }
+          },
+          "fields_sha256_16": "f0611773e651a4de"
+        }
+      },
+      "correction_provenance": {
+        "engine": "heatr3d_native_inversion",
+        "trust_badge": "heatr3d native inversion | legacy heuristic (the direct solve is the primary generator) | sim-only",
+        "artifact": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/c474d787/grade/heatr3d/uncorrected/fields.npz",
+        "proxy": "rho_final",
+        "fallback_from_25d": {
+          "state": "measured_and_failed",
+          "error": "stack_to_voxel: transfer moved in-part dopant by 55.39 %, over the 2 % gate (Phase C staircase threshold). Refusing the transferred map.",
+          "artifact": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/c474d787/grade/heatr/dopant_volume.npz"
+        },
+        "transfer": {
+          "state": "transfer_not_applicable",
+          "method": "native_inversion_same_grid",
+          "dopant_mass_move_rel": 0.0,
+          "gate": null
+        },
+        "grid_n": 64,
+        "null_correction": false
+      },
+      "emitted_sat": {
+        "zero_frac": 0.7696673189823875,
+        "mean": 0.07582518101000972,
+        "std": 0.20139017178480248
+      }
+    },
+    "d4d50045": {
+      "label": "job_d4d50045",
+      "source": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/d4d50045/grade/heatr3d",
+      "arms": {
+        "uncorrected": {
+          "results": {
+            "engine": "heatr3d_native",
+            "trust_badge": "heatr3d native | S1 passed within validity domain | S4 not passed | sim-only",
+            "arm": "uncorrected",
+            "correction_engine": null,
+            "grid_n": 64,
+            "sigma_T": 52.234,
+            "t_phi90_s": 890.1,
+            "max_time_s": 1500.0,
+            "stop_mean_rho": 0.98,
+            "sim_time_s": 1269.9,
+            "solve_wall_s": 753.8,
+            "phi_hist_len": 25398,
+            "dt_s": 0.05,
+            "gates": {
+              "reached_phi90": true,
+              "MELT_ONSET_FALLBACK": false,
+              "energy_residual_frac": 2.2670823305263407e-13,
+              "energy_residual_ok": true,
+              "clamp_bound": false,
+              "T_max_C": 353.6,
+              "T_ceiling_C": 250.0,
+              "T_ceiling_ok": false
+            },
+            "nominal_vox": 7986,
+            "sintered_vox": 7178,
+            "sintered_frac": 0.8988229401452542,
+            "dice": 0.9467159060933791,
+            "unsintered_vox": 808,
+            "rho_final_mean": 0.98,
+            "rho_final_std": 0.0728,
+            "z_shrink_pct": 40.79,
+            "xy_shrink_pct": 2.27,
+            "warp_std_pct": 5.464,
+            "warp_range_pct": 42.29,
+            "nominal_height_mm": 20.62,
+            "final_height_mm": 20.62,
+            "target_final_height_mm": 20.62,
+            "layer_thickness_mm": 0.1,
+            "green_layers": 349,
+            "final_layers": 207,
+            "extra_layers": 142,
+            "layer_multiplier": 1.689
+          },
+          "results_sha256_16": "06a36bc2302cc1a2",
+          "fields": {
+            "grid_n": 64,
+            "n_part_voxels": 7986,
+            "out_of_part_melt_frac": 0.02236061281326121,
+            "out_of_part_melted_voxel_frac": 0.02230895742018744,
+            "in_part_melt_frac": 0.9000051382542654,
+            "rho_final": {
+              "p2": 0.6489400923252107,
+              "p98": 1.0,
+              "spread": 0.35105990767478934,
+              "min": 0.5500012636184692,
+              "max": 1.0,
+              "mean": 0.9800000888062933,
+              "std": 0.07277759921380579,
+              "frac_at_max": 0.6566491359879789,
+              "atom_ratio": 187.28571428571428
+            },
+            "T_phi90": {
+              "p2": 153.73676300048828,
+              "p98": 343.6668975830078,
+              "spread": 189.93013458251954,
+              "min": 129.3685760498047,
+              "max": 353.5766296386719,
+              "mean": 250.5778095790864,
+              "std": 52.23359368255428,
+              "frac_at_max": 0.00025043826696719256,
+              "atom_ratio": 1.0
+            }
+          },
+          "fields_sha256_16": "4c982873d15fe85d"
+        },
+        "corrected": {
+          "results": {
+            "engine": "heatr3d_native",
+            "trust_badge": "heatr3d native | S1 passed within validity domain | S4 not passed | sim-only",
+            "arm": "corrected",
+            "correction_engine": "heatr3d_native_inversion",
+            "grid_n": 64,
+            "sigma_T": 135.392,
+            "t_phi90_s": null,
+            "max_time_s": 1500.0,
+            "stop_mean_rho": 0.98,
+            "sim_time_s": 1500.0,
+            "solve_wall_s": 692.9,
+            "phi_hist_len": 30000,
+            "dt_s": 0.05,
+            "gates": {
+              "reached_phi90": false,
+              "MELT_ONSET_FALLBACK": true,
+              "energy_residual_frac": 0.03694202202714759,
+              "energy_residual_ok": false,
+              "clamp_bound": true,
+              "T_max_C": 600.0,
+              "T_ceiling_C": 250.0,
+              "T_ceiling_ok": false
+            },
+            "nominal_vox": 7986,
+            "sintered_vox": 4694,
+            "sintered_frac": 0.587778612572001,
+            "dice": 0.740378548895899,
+            "unsintered_vox": 3292,
+            "rho_final_mean": 0.793,
+            "rho_final_std": 0.2145,
+            "z_shrink_pct": 23.34,
+            "xy_shrink_pct": 1.29,
+            "warp_std_pct": 19.987,
+            "warp_range_pct": 42.31,
+            "nominal_height_mm": 20.62,
+            "final_height_mm": 20.62,
+            "target_final_height_mm": 20.62,
+            "layer_thickness_mm": 0.1,
+            "green_layers": 270,
+            "final_layers": 207,
+            "extra_layers": 63,
+            "layer_multiplier": 1.304
+          },
+          "results_sha256_16": "e819c81c06cada17",
+          "fields": {
+            "grid_n": 64,
+            "n_part_voxels": 7986,
+            "out_of_part_melt_frac": 0.16649218893683185,
+            "out_of_part_melted_voxel_frac": 0.16631386775155613,
+            "in_part_melt_frac": 0.5878495812776168,
+            "rho_final": {
+              "p2": 0.5500001907348633,
+              "p98": 1.0,
+              "spread": 0.4499998092651367,
+              "min": 0.5500001311302185,
+              "max": 1.0,
+              "mean": 0.7930206080262834,
+              "std": 0.21451765265687506,
+              "frac_at_max": 0.35311795642374155,
+              "atom_ratio": 201.42857142857144
+            },
+            "T_phi90": {
+              "p2": 107.39998779296874,
+              "p98": 586.5948791503907,
+              "spread": 479.19489135742197,
+              "min": 96.55809020996094,
+              "max": 600.0,
+              "mean": 253.11615707603815,
+              "std": 135.39239918567634,
+              "frac_at_max": 0.012772351615326822,
+              "atom_ratio": 51.00000000000001
+            }
+          },
+          "fields_sha256_16": "1fc275c3af17f499"
+        }
+      },
+      "correction_provenance": {
+        "engine": "heatr3d_native_inversion",
+        "trust_badge": "heatr3d native inversion | legacy heuristic (the direct solve is the primary generator) | sim-only",
+        "artifact": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/d4d50045/grade/heatr3d/uncorrected/fields.npz",
+        "proxy": "rho_final",
+        "transfer": {
+          "state": "transfer_not_applicable",
+          "method": "native_inversion_same_grid",
+          "dopant_mass_move_rel": 0.0,
+          "gate": null
+        },
+        "grid_n": 64,
+        "null_correction": false
+      },
+      "emitted_sat": {
+        "zero_frac": 0.876533934385174,
+        "mean": 0.05260873284594863,
+        "std": 0.18609733001831175
+      }
+    },
+    "2ffdfc3c": {
+      "label": "tube",
+      "source": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/2ffdfc3c/grade/heatr3d",
+      "arms": {
+        "uncorrected": {
+          "results": null,
+          "results_absent": true,
+          "fields": {
+            "grid_n": 32,
+            "n_part_voxels": 1000,
+            "out_of_part_melt_frac": 0.003737371604869931,
+            "out_of_part_melted_voxel_frac": 0.0035255603122639136,
+            "in_part_melt_frac": 0.37145150686148554,
+            "rho_final": {
+              "p2": 0.5500000715255737,
+              "p98": 0.9293543708324432,
+              "spread": 0.3793542993068695,
+              "min": 0.5500000715255737,
+              "max": 0.9490554332733154,
+              "mean": 0.6236242771148681,
+              "std": 0.11966273302128683,
+              "frac_at_max": 0.004,
+              "atom_ratio": 1.0
+            },
+            "T_phi90": {
+              "p2": 112.19014770507812,
+              "p98": 225.2124185180664,
+              "spread": 113.0222708129883,
+              "min": 106.94183349609375,
+              "max": 231.92092895507812,
+              "mean": 169.12712167358399,
+              "std": 30.438905410691547,
+              "frac_at_max": 0.004,
+              "atom_ratio": 1.0
+            }
+          },
+          "fields_sha256_16": "395a45bcc6166d1e"
+        },
+        "corrected": {
+          "results": {
+            "engine": "heatr3d_native",
+            "trust_badge": "heatr3d native | S1 passed within validity domain | S4 not passed | sim-only",
+            "arm": "corrected",
+            "correction_engine": "heatr3d_native_inversion",
+            "grid_n": 32,
+            "sigma_T": 33.215,
+            "t_phi90_s": null,
+            "max_time_s": 300.0,
+            "stop_mean_rho": 0.98,
+            "sim_time_s": 300.0,
+            "solve_wall_s": 33.2,
+            "phi_hist_len": 6000,
+            "dt_s": 0.05,
+            "gates": {
+              "reached_phi90": false,
+              "MELT_ONSET_FALLBACK": true,
+              "energy_residual_frac": -1.320118480297197e-13,
+              "energy_residual_ok": true,
+              "clamp_bound": false,
+              "T_max_C": 216.0,
+              "T_ceiling_C": 250.0,
+              "T_ceiling_ok": true
+            },
+            "nominal_vox": 1000,
+            "sintered_vox": 344,
+            "sintered_frac": 0.344,
+            "dice": 0.5119047619047619,
+            "unsintered_vox": 656,
+            "rho_final_mean": 0.6122,
+            "rho_final_std": 0.1046,
+            "z_shrink_pct": 7.46,
+            "xy_shrink_pct": 0.38,
+            "warp_std_pct": 11.061,
+            "warp_range_pct": 32.66,
+            "nominal_height_mm": 18.75,
+            "final_height_mm": 18.75,
+            "target_final_height_mm": 18.75,
+            "layer_thickness_mm": 0.1,
+            "green_layers": 203,
+            "final_layers": 188,
+            "extra_layers": 15,
+            "layer_multiplier": 1.081
+          },
+          "results_sha256_16": "a5c6c70afb1ea6fb",
+          "fields": {
+            "grid_n": 32,
+            "n_part_voxels": 1000,
+            "out_of_part_melt_frac": 0.00023264052485660172,
+            "out_of_part_melted_voxel_frac": 0.0002518257365902795,
+            "in_part_melt_frac": 0.3443143157288432,
+            "rho_final": {
+              "p2": 0.5500000715255737,
+              "p98": 0.8857879650592804,
+              "spread": 0.33578789353370664,
+              "min": 0.550000011920929,
+              "max": 0.9088062644004822,
+              "mean": 0.6122204446792603,
+              "std": 0.1045537015621766,
+              "frac_at_max": 0.004,
+              "atom_ratio": 1.0
+            },
+            "T_phi90": {
+              "p2": 102.6289047241211,
+              "p98": 213.24752960205078,
+              "spread": 110.61862487792968,
+              "min": 96.67301177978516,
+              "max": 215.99905395507812,
+              "mean": 159.92152166748048,
+              "std": 33.21537566083088,
+              "frac_at_max": 0.004,
+              "atom_ratio": 1.0
+            }
+          },
+          "fields_sha256_16": "bed33fd3b4ce81fc"
+        }
+      },
+      "correction_provenance": {
+        "engine": "heatr3d_native_inversion",
+        "trust_badge": "heatr3d native inversion | legacy heuristic (the direct solve is the primary generator) | sim-only",
+        "artifact": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/2ffdfc3c/grade/heatr3d/uncorrected/fields.npz",
+        "proxy": "rho_final",
+        "fallback_from_25d": {
+          "state": "measured_and_failed",
+          "error": "stack_to_voxel: transfer moved in-part dopant by 14.73 %, over the 2 % gate (Phase C staircase threshold). Refusing the transferred map.",
+          "artifact": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/2ffdfc3c/grade/heatr/dopant_volume.npz"
+        },
+        "transfer": {
+          "state": "transfer_not_applicable",
+          "method": "native_inversion_same_grid",
+          "dopant_mass_move_rel": 0.0,
+          "gate": null
+        },
+        "grid_n": 32,
+        "null_correction": false
+      },
+      "emitted_sat": {
+        "zero_frac": 0.024,
+        "mean": 0.8074666707515716,
+        "std": 0.3119220383379806
+      }
+    }
+  }
+}

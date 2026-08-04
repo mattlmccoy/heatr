@@ -53,8 +53,40 @@ def run_job(mesh_path: str, grade_dir: str | Path, arm: str = "uncorrected",
                       max_time_s=max_time_s, stop_mean_rho=stop_mean_rho,
                       fast_march=fast_march,
                       eqs_store_dir=(eqs_store if fast_march else None))
+
+    # ---- predicted-benefit gate (TAMPER_DIAGNOSIS.md fix 2c) ------------- #
+    # The corrected arm must BEAT uniform. On the Tamper nothing compared the
+    # two arms, so a map that zeroed 79 % of the dopant shipped. A rejection
+    # reverts the ACTIVE packaging artifacts to uniform and raises the
+    # no_correction_applied banner.
+    if arm == "corrected":
+        print("STUDIO3D_PROGRESS stage=benefit_gate", flush=True)
+        res["correction_gate"] = _gate_against_before(grade_dir, res)
+
     print("STUDIO3D_PROGRESS stage=done", flush=True)
     return res
+
+
+def _gate_against_before(grade_dir: Path,
+                         after: Dict[str, Any]) -> Dict[str, Any]:
+    """Compare the corrected arm with the BEFORE arm and ENFORCE the verdict."""
+    from studio3d.correction_gate import apply_verdict, evaluate_correction
+
+    bp = grade_dir / "heatr3d" / "uncorrected" / "results.json"
+    if not bp.exists():
+        # Benefit cannot be measured without the baseline. Refuse rather than
+        # let an unmeasured correction through (false-green rule).
+        verdict = {"verdict": "REJECTED", "failed_guards": ["no_before_arm"],
+                   "note": ("the uniform BEFORE arm's results.json is missing, "
+                            "so predicted benefit cannot be measured; the "
+                            "correction is not shipped unmeasured")}
+    else:
+        verdict = evaluate_correction(json.loads(bp.read_text()), after)
+    prov = apply_verdict(grade_dir, verdict)
+    if verdict.get("verdict") == "REJECTED":
+        print("STUDIO3D_PROGRESS stage=correction_rejected", flush=True)
+        print("STUDIO3D_BANNER " + str(prov.get("banner", "")), flush=True)
+    return verdict
 
 
 def main() -> int:

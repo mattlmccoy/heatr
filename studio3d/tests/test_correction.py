@@ -77,8 +77,13 @@ def test_fallback_to_25d_perslice(box_stl, tmp_path):
 def test_null_correction_is_flagged_when_even_the_inversion_degenerates(
         box_stl, tmp_path):
     """Null 2.5-D map falls through to the native inversion; when the
-    before-arm fields are UNIFORM (saturated run) the inversion itself
-    degenerates to an unmodulated map and the null flag must fire."""
+    before-arm fields are UNIFORM (saturated run) the part must ship UNIFORM.
+
+    BEHAVIOUR CHANGE 2026-08-04 (TAMPER_DIAGNOSIS fix 2): this case used to be
+    caught LATE, by the null_correction flag, after make_fgm had already run on
+    a degenerate proxy and happened to produce an unmodulated map. It is now
+    caught EARLY and explicitly by the degenerate-proxy refusal, which names
+    the statistic it refused on. Both ship uniform; the new path says why."""
     from studio3d.runner import voxelize_stl
     n = 16
     gd = tmp_path / "grade"
@@ -103,9 +108,10 @@ def test_null_correction_is_flagged_when_even_the_inversion_degenerates(
              sat=np.zeros((1,), np.float32), h=0.060 / n)
     prov = build_correction(gd, str(box_stl), n,
                             registry_path=tmp_path / "missing.json")
-    assert prov["engine"] == "heatr3d_native_inversion"
-    assert prov["null_correction"] is True
-    assert "NULL" in prov["null_note"]
+    assert prov["engine"] == "uniform_no_correction"
+    assert prov["no_correction_applied"] is True
+    assert "saturated" in prov["no_correction_reason"]
+    assert "NO CORRECTION APPLIED" in prov["banner"]
 
 
 def test_real_correction_is_not_flagged_null(box_stl, tmp_path):

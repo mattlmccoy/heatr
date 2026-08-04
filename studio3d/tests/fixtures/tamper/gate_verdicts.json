@@ -1,0 +1,217 @@
+{
+  "pairs": {
+    "feb850ec": {
+      "label": "Tamper",
+      "verdict": "REJECTED",
+      "failed_guards": [
+        "out_of_part_melt",
+        "T_ceiling",
+        "horizon_cap",
+        "sigma_T",
+        "rho_final_std",
+        "warp_std_pct"
+      ],
+      "out_of_part_melt": [
+        0.032089358096474306,
+        0.17536798489850214
+      ],
+      "T_max_C": [
+        288.0,
+        448.4
+      ],
+      "sigma_T": [
+        28.545,
+        53.179
+      ]
+    },
+    "c474d787": {
+      "label": "AIRCOIL",
+      "verdict": "REJECTED",
+      "failed_guards": [
+        "out_of_part_melt",
+        "T_ceiling",
+        "horizon_cap",
+        "clamp_bound",
+        "energy_residual",
+        "sigma_T",
+        "rho_final_std",
+        "warp_std_pct"
+      ],
+      "out_of_part_melt": [
+        0.15560886169637392,
+        0.6359532475607174
+      ],
+      "T_max_C": [
+        336.7,
+        600.0
+      ],
+      "sigma_T": [
+        36.917,
+        111.496
+      ]
+    },
+    "d4d50045": {
+      "label": "job_d4d50045",
+      "verdict": "REJECTED",
+      "failed_guards": [
+        "out_of_part_melt",
+        "T_ceiling",
+        "horizon_cap",
+        "clamp_bound",
+        "energy_residual",
+        "sigma_T",
+        "rho_final_std",
+        "warp_std_pct"
+      ],
+      "out_of_part_melt": [
+        0.02236061281326121,
+        0.16649218893683185
+      ],
+      "T_max_C": [
+        353.6,
+        600.0
+      ],
+      "sigma_T": [
+        52.234,
+        135.392
+      ]
+    },
+    "null_correction_control": {
+      "label": "null correction (before vs itself)",
+      "verdict": "ACCEPTED",
+      "failed_guards": []
+    }
+  },
+  "proxy": {
+    "feb850ec": {
+      "label": "Tamper",
+      "rho_final": {
+        "proxy": "rho_final",
+        "spread": 0.2550763189792633,
+        "rel_spread": 0.2550763189792633,
+        "frac_at_max": 0.34319174275506154,
+        "atom_ratio": 42.17073170731707,
+        "floor_spread": 0.02,
+        "floor_abs_spread": null,
+        "floor_frac_at_max": 0.05,
+        "floor_atom_ratio": 5.0,
+        "degenerate": true,
+        "reason": "saturated",
+        "pre_registered": "2026-08-04, never retuned against outcomes"
+      },
+      "T_phi90": {
+        "proxy": "T_phi90",
+        "spread": 111.88117218017578,
+        "rel_spread": 0.3884689651620866,
+        "frac_at_max": 0.0001984914648670107,
+        "atom_ratio": 1.0,
+        "floor_spread": 0.02,
+        "floor_abs_spread": 10.0,
+        "floor_frac_at_max": 0.05,
+        "floor_atom_ratio": 5.0,
+        "degenerate": false,
+        "reason": null,
+        "pre_registered": "2026-08-04, never retuned against outcomes"
+      },
+      "chosen_proxy": "T_phi90",
+      "why": "the before arm REACHED its density stop (rho_final_mean=0.98 >= stop_mean_rho=0.98), so rho_final is flat by construction and must not be inverted"
+    },
+    "c474d787": {
+      "label": "AIRCOIL",
+      "rho_final": {
+        "proxy": "rho_final",
+        "spread": 0.24361790537834171,
+        "rel_spread": 0.24361790537834171,
+        "frac_at_max": 0.32886497064579256,
+        "atom_ratio": 48.01428571428572,
+        "floor_spread": 0.02,
+        "floor_abs_spread": null,
+        "floor_frac_at_max": 0.05,
+        "floor_atom_ratio": 5.0,
+        "degenerate": true,
+        "reason": "saturated",
+        "pre_registered": "2026-08-04, never retuned against outcomes"
+      },
+      "T_phi90": {
+        "proxy": "T_phi90",
+        "spread": 146.2808142089844,
+        "rel_spread": 0.4344683770835464,
+        "frac_at_max": 4.892367906066536e-05,
+        "atom_ratio": 1.0,
+        "floor_spread": 0.02,
+        "floor_abs_spread": 10.0,
+        "floor_frac_at_max": 0.05,
+        "floor_atom_ratio": 5.0,
+        "degenerate": false,
+        "reason": null,
+        "pre_registered": "2026-08-04, never retuned against outcomes"
+      },
+      "chosen_proxy": "T_phi90",
+      "why": "the before arm REACHED its density stop (rho_final_mean=0.98 >= stop_mean_rho=0.98), so rho_final is flat by construction and must not be inverted"
+    },
+    "d4d50045": {
+      "label": "job_d4d50045",
+      "rho_final": {
+        "proxy": "rho_final",
+        "spread": 0.35105990767478934,
+        "rel_spread": 0.35105990767478934,
+        "frac_at_max": 0.6566491359879789,
+        "atom_ratio": 187.28571428571428,
+        "floor_spread": 0.02,
+        "floor_abs_spread": null,
+        "floor_frac_at_max": 0.05,
+        "floor_atom_ratio": 5.0,
+        "degenerate": true,
+        "reason": "saturated",
+        "pre_registered": "2026-08-04, never retuned against outcomes"
+      },
+      "T_phi90": {
+        "proxy": "T_phi90",
+        "spread": 189.93013458251954,
+        "rel_spread": 0.5371682364205279,
+        "frac_at_max": 0.00025043826696719256,
+        "atom_ratio": 1.0,
+        "floor_spread": 0.02,
+        "floor_abs_spread": 10.0,
+        "floor_frac_at_max": 0.05,
+        "floor_atom_ratio": 5.0,
+        "degenerate": false,
+        "reason": null,
+        "pre_registered": "2026-08-04, never retuned against outcomes"
+      },
+      "chosen_proxy": "T_phi90",
+      "why": "the before arm REACHED its density stop (rho_final_mean=0.98 >= stop_mean_rho=0.98), so rho_final is flat by construction and must not be inverted"
+    },
+    "2ffdfc3c": {
+      "label": "tube",
+      "rho_final": {
+        "proxy": "rho_final",
+        "spread": 0.3793542993068695,
+        "rel_spread": 0.3997177467268347,
+        "frac_at_max": 0.004,
+        "atom_ratio": 1.0,
+        "floor_spread": 0.02,
+        "floor_abs_spread": null,
+        "floor_frac_at_max": 0.05,
+        "floor_atom_ratio": 5.0,
+        "degenerate": false,
+        "reason": null,
+        "pre_registered": "2026-08-04, never retuned against outcomes"
+      },
+      "T_phi90": {
+        "proxy": "T_phi90",
+        "spread": 113.0222708129883,
+        "rel_spread": 0.4873310542615157,
+        "frac_at_max": 0.004,
+        "atom_ratio": 1.0,
+        "floor_spread": 0.02,
+        "floor_abs_spread": 10.0,
+        "floor_frac_at_max": 0.05,
+        "floor_atom_ratio": 5.0,
+        "degenerate": false,
+        "reason": null,
+        "pre_registered": "2026-08-04, never retuned against outcomes"
+      }
+    }
+  }
+}

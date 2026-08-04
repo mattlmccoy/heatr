@@ -93,6 +93,16 @@ def _fill_by_slicing(mesh: "trimesh.Trimesh", grid) -> np.ndarray:
     return part
 
 
+def _out_of_part_melt(phi_final: np.ndarray, part: np.ndarray) -> Optional[float]:
+    """Mean melt fraction outside the part mask (bed spill), or None.
+
+    Thin wrapper so the runner and the gate share ONE definition; importing
+    lazily keeps studio3d.runner free of a hard dependency on the gate module.
+    """
+    from studio3d.correction_gate import out_of_part_melt_frac
+    return out_of_part_melt_frac(phi_final, part)
+
+
 def _finite(v: Any) -> Any:
     """Strict-JSON sanitizer: non-finite floats become None, recursively.
 
@@ -221,6 +231,12 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         "eqs_cache": eqs_cache_record,
         "trust_badge": TRUST_BADGE,
         "arm": str(arm),
+        # HARD guard for the predicted-benefit gate (studio3d/correction_gate):
+        # melt OUTSIDE the part mask is bed spill -- the hard-failure side of
+        # the dense-iff-in-bounds hierarchy. Recorded for EVERY arm so the gate
+        # can compare corrected against uniform. A missing value is read by the
+        # gate as UNKNOWN and REJECTS, so this is not cosmetic.
+        "out_of_part_melt_frac": _out_of_part_melt(r.phi_final, part),
         "correction_engine": correction_engine,
         "grid_n": n,
         "sigma_T": float(round(r.sigma_T, 3)),

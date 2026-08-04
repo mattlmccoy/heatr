@@ -198,3 +198,29 @@ def test_eqs_cache_record_survives_strict_json(box20_stl, tmp_path):
     res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0,
                       fast_march=True, eqs_store_dir=tmp_path / "store")
     json.dumps(res, allow_nan=False)
+
+
+def test_runner_records_out_of_part_melt_fraction(box20_stl, tmp_path):
+    """The predicted-benefit gate's HARD guard (bed spill) reads this from
+    results.json, so the runner must record it for EVERY arm. Absent would be
+    read by the gate as UNKNOWN -> reject, so a missing value is not merely
+    cosmetic."""
+    res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0)
+    assert "out_of_part_melt_frac" in res
+    v = res["out_of_part_melt_frac"]
+    assert v is not None and 0.0 <= v <= 1.0
+    on_disk = json.loads((tmp_path / "out" / "results.json").read_text())
+    assert on_disk["out_of_part_melt_frac"] == v
+
+
+def test_out_of_part_melt_matches_the_saved_fields(box20_stl, tmp_path):
+    """Recomputing from the arm's own fields.npz must reproduce the recorded
+    number -- otherwise the gate is reading something other than what the run
+    actually produced."""
+    from studio3d.correction_gate import out_of_part_melt_frac
+    out = tmp_path / "out"
+    res = run_densify(str(box20_stl), out, n=16, max_time_s=2.0)
+    with np.load(out / "fields.npz") as d:
+        recomputed = out_of_part_melt_frac(np.asarray(d["phi_final"], float),
+                                          d["part"].astype(bool))
+    assert recomputed == pytest.approx(res["out_of_part_melt_frac"], rel=1e-6)
