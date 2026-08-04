@@ -68,6 +68,11 @@ def sample(shape: str, arms: tuple[str, ...], n: int = DEFAULT_N) -> Path:
     _, idx = cKDTree(cen).query(pts)
     out["design_nearest_index"] = idx.reshape(X.shape).astype(np.int32)
 
+    from solve3d.phase_e import geometry as _g
+    out["nominal_base_side_m"] = np.float64(
+        _g.PYR_B_M if shape == "pyramid" else _g.CUBE_A_M)
+    out["nominal_height_m"] = np.float64(
+        _g.PYR_H_M if shape == "pyramid" else _g.CUBE_A_M)
     p = RESULTS / f"vol_{shape}.npz"
     np.savez_compressed(p, **out)
     return p

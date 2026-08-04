@@ -1,4 +1,4 @@
-# Phase E opener: the SOLVED pyramid (cube arm to follow)
+# Phase E opener: pyramid and cube, two shapes solved in 3-D
 
 Pre-registration: `solve3d/phase_e/results/phase_e_preregistration.json`,
 committed in `56ee531` BEFORE any Phase E solve code ran.
@@ -11,9 +11,24 @@ Date: 2026-08-03.
 Every number below is read out of `solve3d/phase_e/results/*.json`. Nothing is
 transcribed by hand.
 
-**The cube arm is still solving (auto-resumed by the scheduler). Its gates,
-figures and report section follow when it lands. This document covers the
-pyramid only.**
+**Both shapes are complete: three arms each, both acceptance gates on each
+solve arm, figures for both.** The pyramid is section 1 to 6, the cube is
+section 7, and section 8 closes the two-shape opener.
+
+## The two-shape verdict in one table
+
+| | pyramid | cube |
+|---|---|---|
+| solve vs uniform (primary J) | **-57.98 %** | **-46.09 %** |
+| hand-built grading law vs uniform | **+4.33 % worse** | **+50.00 % worse** |
+| smoothing robustness | PASS (1.48 % vs 10 %) | PASS (2.11 % vs 10 %) |
+| mesh hold-out, shape metrics | PASS, all five | PASS, all five |
+| mesh hold-out, scalar J | **FAIL** (15.08 % vs 7.70 % band) | **FAIL** (22.61 % vs 9.64 % band) |
+| solve still beats uniform at score mesh | yes, by 54.00 % | yes, by 37.89 % |
+| `solved_label` | **false** | **false** |
+
+Neither map earns the pre-registered label, for the same reason on both
+shapes, with the same mechanism behind it (sections 3b, 7c and 8).
 
 ---
 
@@ -222,12 +237,209 @@ earned (section 3b).
 
 ---
 
+## 7. The cube
+
+Mesh: 105 853 cells, 18 028 nodes, 24 042 design cells, part volume matching
+the library solid to 2.2e-16 relative. Same lc, same kernel, same objective,
+same 12-evaluation budget as the pyramid.
+
+### 7a. Three arms
+
+`results/phase_e_cube.json`, asymmetric objective, each arm at its own
+envelope stop (all three are interior argmins, `at_horizon = false`):
+
+| arm | J_asym | vs uniform | t_stop (s) | mean phi | below floor | out-of-part | sigma_T (C) |
+|---|---|---|---|---|---|---|---|
+| uniform_baseline | 7.841949e-07 | -- | 514.30 | 0.6365 | 0.4028 | 0.00370 | 23.37 |
+| heuristic_grading_law | 1.176273e-06 | **+50.00 % worse** | 439.00 | 0.5803 | 0.4523 | 0.01181 | 38.62 |
+| solve_filter_only | 4.227897e-07 | **-46.09 %** | 623.55 | 0.7530 | 0.2786 | 0.00296 | 27.67 |
+
+On shape-relative evaluation planes (`rescore.py`, the same fix the pyramid
+needed):
+
+| arm | IoU (phi 0.9) | front SSD (mm) |
+|---|---|---|
+| uniform | 0.59991 | 1.940 |
+| heuristic | 0.53062 | 2.724 |
+| solve | 0.73789 | 1.203 |
+
+The cube starts from a far better baseline than the pyramid (uniform IoU 0.600
+against 0.185): it is a much easier shape, with no apex and a melt region that
+already fills most of the part. The solve still finds 46 % of the objective.
+
+### 7b. The hand-built law fails much harder here, and the reason is legible
+
+On the cube the `demo_pyramid_fgm` law is **50.00 % worse than uniform**, an
+order of magnitude worse than its 4.33 % loss on the pyramid. Splitting the
+objective says exactly why:
+
+| J component | uniform | heuristic | ratio |
+|---|---|---|---|
+| out-of-bounds (melt outside the part) | 3.827010e-08 | 2.336303e-07 | **6.10x** |
+| in-bounds deficit (unmelted inside) | 7.459248e-07 | 9.426430e-07 | 1.26x |
+
+**The failure is dominated by the out-of-bounds term, which the law multiplies
+by 6.1x.** The volumetric check agrees independently: melt outside the part
+goes from 0.370 % to 1.181 % of part volume, 3.20x. The two ratios differ
+because the objective weights out-of-bounds melt asymmetrically (Matt's
+recorded "dense if and only if in-bounds" refinement); both say the same
+thing, and the figure shows it as a field.
+
+This is the asymmetric objective doing its job. A law that grades dopant up
+with depth pushes heat toward the part boundary, and on a cube every boundary
+is a flat face with bed powder directly against it. The pyramid's sloped faces
+are more forgiving. The solve moves the opposite way on both shapes and cuts
+out-of-bounds melt to 0.54x uniform.
+
+### 7c. Acceptance gates: the same pattern as the pyramid
+
+`results/phase_e_gate_cube.json`. Bands measured on this shape, not inherited.
+
+**Smoothing robustness: PASS.** 0.5 mm sub-filter blur, J 4.227897e-07 to
+4.317132e-07, a **2.111 % change against a 10 % tolerance** (4.7x margin).
+
+**Mesh hold-out (lc 0.9375 to 0.625 mm): FAIL on J, PASS on all five shape
+metrics.** Map transferred by the same normalized-convolution kernel; total
+in-part dopant moved **0.309 %** (against the 7.15 % that dropped the Phase C
+inversion arm).
+
+| metric | solved moved | band (1.5x uniform's own) | uniform's own | verdict |
+|---|---|---|---|---|
+| J_asym (relative) | 0.22610 | 0.09644 | 0.06430 | **FAIL** |
+| IoU(phi 0.9) | 0.01312 | 0.02060 | 0.01374 | PASS |
+| IoU(phi 0.8) | 0.01252 | 0.01906 | 0.01271 | PASS |
+| in-part phi 0.9 | 0.01312 | 0.02060 | 0.01374 | PASS |
+| out-of-part phi 0.9 | 0.0 | 0.0 | 0.0 | PASS |
+| front SSD (mm) | 0.06738 | 0.11639 | 0.07760 | PASS |
+
+At the score mesh the solved map still beats uniform: 5.183813e-07 against
+8.346144e-07, a **37.89 % margin** (against 46.09 % in grid).
+
+Same mechanism as the pyramid, now measured twice: the solved arm's stop time
+is far more mesh-sensitive than the uniform arm the band is calibrated on.
+Cube t_stop moved 623.55 to 592.50 s (**-4.98 %**) against uniform's 514.30 to
+507.15 s (**-1.39 %**), a **3.6x** sensitivity ratio; on the pyramid it was
+3.2x. `solved_label = false`.
+
+### 7d. What the cube solve did: it emptied the two x-normal faces and both z ends
+
+`results/map_cube_solve_filter_only.npz`, 24 042 design cells, saturation in
+[0.0050, 1.0000], volume-weighted mean 0.6760, 68.1 % of cells below 0.9.
+
+Mean saturation by z slab: 0.60, 0.75, 0.76, 0.60 -- symmetric about the
+mid-plane, unlike the pyramid's monotone rise. That symmetry is the right
+answer for a symmetric part and is a free sanity check on the solve: nothing
+in the objective or the chain enforces it.
+
+In plane, the mid slabs show two dark bands on the **x-normal faces**. That is
+an independent echo of a result this lane already has: `fig1_dense_inside_bounds`
+measured that the square's out-of-part melt is not at the corners but is a 1
+to 2 voxel skin outside the two x-normal faces. The solve, with no knowledge
+of that finding, pulls dopant out of exactly those faces.
+
+### 7e. Budget
+
+`status = budget_exhausted`, 12 of 12 evaluations, wall 11 524 s, no resume.
+The trajectory is **strictly monotone decreasing** on all 12 evaluations
+(7.842e-07 to 4.228e-07), with no rejected line-search trial at all, and the
+last step still gains 1.2 %. The 1/|g0| rescale was applied (scale 1.7398e+08).
+As on the pyramid, **-46.09 % is a lower bound**.
+
+### 7f. Cube figures
+
+* `results/fig_deck_cube_three_arms.png` -- the three arms as 3-D quarter
+  cutaways at one camera coloured by melt fraction phi, over a difference row
+  against the uniform baseline. The heuristic's difference panel is blue
+  (melts less) through the core with orange spilling below the part; the
+  solve's is orange around the faces. Same data contract as the pyramid
+  cutaway: phi from the full `T_read` volume, pointwise in T.
+* `results/fig_deck_cube_solved_map.png` -- the delivered dopant map: four z
+  slabs (volume-weighted bin averages, not scatter), the mean-saturation
+  profile through build height, the same map as a 3-D cutaway, and the
+  numbers.
+
+---
+
+## 8. Closing the two-shape opener
+
+### What this campaign established
+
+1. **The 3-D transient adjoint solve beats uniform dopant on both shapes, by a
+   large margin, and the win survives mesh refinement.** -57.98 % and -46.09 %
+   in grid; +54.00 % and +37.89 % margins still present at the finer score
+   mesh. Every verdict-carrying shape metric passes its measured band on both
+   shapes.
+2. **The hand-built grading law loses on both shapes**, by 4.33 % and 50.00 %.
+   It is feedback, not a solve, and on the cube the loss is traceable to a
+   6.10x increase in the out-of-bounds objective component. Two shapes is not
+   a survey, but the law lost on the shape it was built for.
+3. **Neither map earns the pre-registered SOLVED label**, because the same
+   single check fails on both: the scalar J moves too far across meshes. The
+   shape metrics do not. The mechanism is measured, not asserted: the solve
+   extends the stop time, later stops sit on a flatter part of the trajectory,
+   and the band is calibrated on the uniform arm, which is 3.2x to 3.6x less
+   stop-sensitive. **This is a property of the band rule as pre-registered.**
+   I am not relaxing it after the fact; I am recording that a future
+   registration should either band J against the tested arm's own stop
+   sensitivity or make the shape metrics the sole verdict carriers, and that
+   change must be pre-registered before the next solve, not chosen now.
+4. **The solve's structure is physically legible on both shapes and is not
+   what the heuristic assumed.** Pyramid: empty the wide base, run the apex at
+   saturation. Cube: pull dopant symmetrically out of both z ends and out of
+   the two x-normal faces, the same faces where this lane independently
+   measured the square's melt spill.
+5. **Determinism and gradient provenance are pinned.** A recomputed forward at
+   the delivered pyramid map reproduces the stored objective exactly, relative
+   difference 0.0 (`results/grad_pyramid_solve_filter_only.json`).
+
+### What stays open
+
+* **The corner and apex adjudication belongs to S3's COMSOL anchor.** Both
+  Phase E shapes are cornered and the pyramid has an apex. No ABSOLUTE
+  fidelity number on either shape is gated by anything, and none is quoted as
+  if it were. Whether the near-apex field is mesh-converged at all is not a
+  question Phase E can settle.
+* **The projection arm was never run.** `solve_projection_beta_continuation`
+  was pre-registered as optional on one shape; the budget went to finishing
+  both filter-only arms and their gates. It is untried, not tried and rejected.
+* **Both solves are budget-limited and still descending.** Every improvement
+  quoted here is a lower bound on what 12 evaluations of this arm can reach,
+  let alone what the method can reach.
+* **Two shapes out of the fourteen-shape library.** The pyramid and cube were
+  chosen for the opener; nothing here says how the method behaves on reentrant
+  or thin-neck geometry, which is where S2 found the engine itself unsettled.
+* **The J hold-out band rule needs a pre-registered fix** before the next
+  campaign, per point 3 above.
+
+---
+
 ## Reproduce
 
 ```
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
-heatr3d_d1_spike/env/bin/python -m solve3d.phase_e.run --shape pyramid
-heatr3d_d1_spike/env/bin/python -m solve3d.phase_e.rescore --shape pyramid
-heatr3d_d1_spike/env/bin/python -m solve3d.phase_e.acceptance --shape pyramid
+SPIKE=heatr3d_d1_spike/env/bin/python
+
+for S in pyramid cube; do
+  $SPIKE -m solve3d.phase_e.run        --shape $S
+  $SPIKE -m solve3d.phase_e.rescore    --shape $S
+  $SPIKE -m solve3d.phase_e.acceptance --shape $S
+  $SPIKE -m solve3d.phase_e.sample_volume --shape $S \
+      --arms uniform_baseline,heuristic_grading_law,solve_filter_only
+done
+$SPIKE -m solve3d.phase_e.gradient_probe --shape pyramid
+
 .venv312/bin/python -m solve3d.phase_e.render_deck_pyramid
+.venv312/bin/python -m solve3d.phase_e.render_deck_cutaway3d
+.venv312/bin/python -m solve3d.phase_e.render_deck_loop3d
+.venv312/bin/python -m solve3d.phase_e.render_deck_cube
 ```
+
+## Figure index
+
+| file | what |
+|---|---|
+| `fig_deck_pyramid_solved.png` | pyramid solved map: z slabs, profile, uniform vs solved sections |
+| `fig_deck_pyramid_cutaway3d.png` | pyramid uniform vs solve, 3-D quarter cutaway, melt fraction |
+| `fig_deck_solve_loop_3d.png` | the five-stage 3-D adjoint loop, real recomputed gradient at stage 4 |
+| `fig_deck_cube_three_arms.png` | cube three arms plus difference row, melt fraction |
+| `fig_deck_cube_solved_map.png` | cube solved map: z slabs, profile, cutaway, numbers |
