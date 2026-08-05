@@ -1,0 +1,46 @@
+{
+ "what": "detached, checkpointed Tamper solve at the adaptive chamber",
+ "launched": "2026-08-05",
+ "authority": "Matt 2026-08-05 (grow the chamber); coordinator: launch if standing gates go green",
+ "gates_that_licensed_the_launch": {
+  "source": "solve3d/results/tamper_feasibility_ch085_short.json",
+  "chamber_tag": "ch085",
+  "energy_residual_frac": 5.401253329134282e-13,
+  "clamp_bound": false,
+  "cfl_violated": false,
+  "forward_physical": true,
+  "contrast_at_frozen_ch060": {
+   "energy_residual_frac": 0.0030712348353665072,
+   "clamp_bound": true,
+   "forward_physical": false
+  }
+ },
+ "command": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 heatr3d_d1_spike/env/bin/python -m solve3d.phase_e.run_tamper --budget 40 --stage all",
+ "run_id": "tamper_ch085",
+ "mesh": {"n_cells": 54495, "n_part_cells": 20106, "n_design_cells": 20106,
+          "lc_part_m": 0.0025, "chamber_m": 0.085},
+ "conventions": {
+  "objective": "asymmetric at the pre-registered phi_floor and w",
+  "read": "envelope (argmin over the arm's own trajectory)",
+  "first_step": "1/|g0| rescale, the standing convention",
+  "budget_forward_equivalents": 40,
+  "baseline": "uniform doping, scored at its OWN matched read"
+ },
+ "deviations_from_phase_e": [
+  "lc_part 2.5e-3 vs 0.9375e-3: the Tamper's own tessellation carries a 0.105 mm minimum edge, so any conforming mesh inherits ~0.092 mm elements and the explicit CFL substep follows independently of lc_part. Refining adds cells without buying back a time step.",
+  "max_time_s 900 vs 650: at 150 s this part is at 110.8 C mean heading to a ~365 C plateau; 650 s would stop it before melt and hand the envelope a degenerate argmin."
+ ],
+ "harvest": {
+  "checkpoint": "solve3d/phase_e/results/ckpt_tamper_solve_filter_only.npz",
+  "results": "solve3d/phase_e/results/phase_e_tamper.json",
+  "maps": "solve3d/phase_e/results/map_tamper_solve_filter_only.npz",
+  "fields": "solve3d/phase_e/results/field_tamper_*.npz",
+  "resume": "re-run the same command; arms already in phase_e_tamper.json are skipped and the solve arm warm-restarts from the checkpoint's best iterate with the remaining budget",
+  "resume_caveat": "a resume is a WARM RESTART, not bit-identical: scipy does not expose L-BFGS-B's curvature memory, so it is rebuilt (solve3d/phase_e/checkpoint.py)"
+ },
+ "expected_cost": {
+  "note": "a 150 s march on this mesh took 469 s wall, so a 900 s forward is roughly 47 min and a 40 forward-equivalent budget is of order 30 hours. The checkpoint is what makes that survivable; per-evaluation writes are atomic.",
+  "binding_cost": "the STL's 0.105 mm minimum tessellation edge, not the chamber and not lc_part"
+ },
+ "not_yet_delivered": "the solved-vs-uniform verdict and the deck figures; both need this run to finish"
+}
