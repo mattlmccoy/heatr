@@ -85,8 +85,11 @@ def build_case(lc_part: float = LC_PART_M, max_time_s: float = MAX_TIME_S,
         stl_path, lc_part=lc_part, with_chamber=True, L=None,
         precomp_coeffs=precomp_coeffs)
     mats = fwd.build_materials(msh, stl_mesh.part_mask_predicate(info), p)
-    eqs = adjoint.SteadyEqs(msh, mats, p)
-    tc = adjoint.TransientCase(msh, mats, p, eqs, info, 50.0, max_time_s)
+    # the SAME L the mesh was built with reaches the electrodes, the
+    # convective facet and the march; a frame mismatch here is a zero RHS
+    L = float(info.L_chamber_m)
+    eqs = adjoint.SteadyEqs(msh, mats, p, L=L)
+    tc = adjoint.TransientCase(msh, mats, p, eqs, info, 50.0, max_time_s, L=L)
     return tc, info
 
 

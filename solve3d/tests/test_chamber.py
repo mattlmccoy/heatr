@@ -145,3 +145,41 @@ def test_the_frozen_chamber_stays_available_for_reproduction():
     # and it must SAY the margin is short, not hide it
     assert s["margin_actual_m"] < ch.GAP_M
     assert s["margin_below_preregistered"] is True
+
+
+# --------------------------------------------------------------------------- #
+# The frame must reach the SOLVER, not just the mesher
+# --------------------------------------------------------------------------- #
+@pytest.mark.slow
+def test_the_transient_case_honours_a_non_default_chamber():
+    """The bug this pins: adjoint.TransientCase hardcoded fwd.L_DOMAIN for the
+    convective top facet, and SteadyEqs was constructed without L. On an 85 mm
+    mesh the electrode dofs are at z = +-42.5 mm, so looking at +-30 mm found
+    NONE, the Dirichlet rows were never set, the RHS was identically zero and
+    the solve died on `r.norm() / b.norm()`.
+
+    It failed loudly, which is the only reason it is a bug report and not a
+    silently wrong answer. Both ends of the frame are now threaded.
+    """
+    import numpy as np
+    from solve3d import adjoint, forward as fwd, stl_mesh
+    from solve3d.phase_e import run_tamper as rt
+
+    tc, info = rt.build_case(lc_part=4.0e-3, max_time_s=1.0,
+                             precomp_coeffs=None)
+    assert info.L_chamber_m == pytest.approx(0.085)
+    assert tc.L == pytest.approx(0.085)
+    # the electrodes must actually exist in this frame
+    lo, hi = fwd._electrode_dofs(tc.eqs.W, tc.msh, tc.L)
+    assert lo.size > 0 and hi.size > 0
+    # and the EQS solve must produce a non-trivial field
+    st = tc.eqs.solve_state()
+    assert float(np.abs(st.q).max()) > 0.0
+
+
+def test_the_transient_case_default_frame_is_unchanged():
+    """The knob is inert: no L argument still means the frozen chamber."""
+    from solve3d import adjoint, forward as fwd
+    import inspect
+    sig = inspect.signature(adjoint.TransientCase.__init__)
+    assert sig.parameters["L"].default == pytest.approx(fwd.L_DOMAIN)

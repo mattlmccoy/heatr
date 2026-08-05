@@ -523,7 +523,16 @@ class TransientCase:
     """
 
     def __init__(self, msh, mats, p, eqs: SteadyEqs, info, sample_dt_s: float,
-                 max_time_s: float):
+                 max_time_s: float, L: float = fwd.L_DOMAIN):
+        # THE CHAMBER FRAME. Default is the frozen 60 mm, so every existing
+        # caller is bit-identical; adaptive-chamber callers must pass the same
+        # L their MESH was built with. This was hardcoded to fwd.L_DOMAIN and
+        # on an 85 mm mesh it looked for the convective top facet -- and, via
+        # SteadyEqs, the electrode dofs -- at +-30 mm where there is nothing.
+        # The Dirichlet rows were never set, the RHS was identically zero, and
+        # the EQS solve died on r.norm() / b.norm(). It failed loudly, which is
+        # the only reason it was a crash and not a silently wrong field.
+        self.L = float(L)
         self.msh, self.mats, self.p, self.eqs, self.info = msh, mats, p, eqs, info
         self.max_time_s, self.sample_dt_s = max_time_s, sample_dt_s
         self.W = eqs.W
@@ -544,7 +553,7 @@ class TransientCase:
             fwd._assemble_real(fem.form(ufl.inner(mats.doped, v) * ufl.dx))
             / np.where(self.vol_nodal > 0, self.vol_nodal, 1.0), 0.0, 1.0)
         self.doped_cells = np.real(mats.doped.x.array).astype(float)
-        self.ds_top = fwd._top_facet_measure(msh, fwd.L_DOMAIN)
+        self.ds_top = fwd._top_facet_measure(msh, self.L)
         self.diff_form = fem.form(
             ufl.inner(self.k_fn * ufl.grad(self.T_fn), ufl.grad(v)) * ufl.dx)
         self.diffG_form = fem.form(
@@ -644,7 +653,7 @@ class TransientCase:
 
         out = fwd.march_enthalpy(
             self.msh, p, mats=self.mats, q_dg0=self.q_fn,
-            max_time_s=self.max_time_s, phi_target=2.0,
+            max_time_s=self.max_time_s, phi_target=2.0, L=self.L,
             sample_dt_s=self.sample_dt_s, resolve_hook=hook, record=rec)
         self.n_forward += 1
 
