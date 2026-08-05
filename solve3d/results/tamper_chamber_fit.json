@@ -1,0 +1,48 @@
+{
+ "what": "closed-form check on why the chamber-embedded Tamper does not melt at the frozen drive, computed WITHOUT the solver",
+ "model": "1-D slab conduction to the fixed-temperature chamber wall: dT = P_abs * gap / (k_powder * A_surface). Deliberately crude; it only has to separate 'above the melt point' from 'below it'.",
+ "drive": {
+  "power_density_w_per_m3": 1591549.4309189534,
+  "normalization": "forward.qrf_dg0 renormalizes Q so that integral(Q dV) = power_density * V_part, so both parts absorb the SAME watts per cubic metre; the drive is not the difference",
+  "k_powder_w_per_m_k": 0.197,
+  "melt_onset_c": 180.0,
+  "preheat_c": 23.0
+ },
+ "chamber": {
+  "L_DOMAIN_m": 0.06,
+  "status": "FROZEN convention, not a tunable"
+ },
+ "parts": [
+  {
+   "part": "pyramid",
+   "volume_mm3": 4188.790266060172,
+   "surface_area_mm2": 1749.1385688256505,
+   "surface_to_volume_per_mm": 0.41757606796361,
+   "xy_span_mm": 23.248947143554688,
+   "chamber_side_mm": 60.0,
+   "span_over_chamber": 0.3874824523925781,
+   "powder_gap_to_wall_mm": 18.375526428222656,
+   "absorbed_power_w": 6.666666764186918,
+   "conduction_delta_t_k": 355.51513537961546,
+   "plateau_estimate_c": 378.51513537961546,
+   "melt_onset_c": 180.0,
+   "melts": true
+  },
+  {
+   "part": "tamper",
+   "volume_mm3": 8299.199229608903,
+   "surface_area_mm2": 3977.725365243752,
+   "surface_to_volume_per_mm": 0.47929026104741446,
+   "xy_span_mm": 44.39999771118164,
+   "chamber_side_mm": 60.0,
+   "span_over_chamber": 0.7399999618530273,
+   "powder_gap_to_wall_mm": 7.80000114440918,
+   "absorbed_power_w": 13.208585810967067,
+   "conduction_delta_t_k": 131.4770549581726,
+   "plateau_estimate_c": 154.4770549581726,
+   "melt_onset_c": 180.0,
+   "melts": false
+  }
+ ],
+ "conclusion": "the Tamper spans 0.740 of the frozen chamber against the pyramid's 0.387, leaving 7.8 mm of powder to the fixed-temperature wall against 18.4 mm. At the same volumetric power it reaches a conduction-limited plateau BELOW the 180 C melt onset, so it never melts and the asymmetric objective is all in-bounds deficit with a degenerate argmin at the horizon. This is a property of the part-in-chamber configuration, not of the mesh: every geometric gate on this mesh passes (solve3d/results/stl_chamber_gate.json)."
+}
