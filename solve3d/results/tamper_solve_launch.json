@@ -16,9 +16,17 @@
   }
  },
  "command": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 heatr3d_d1_spike/env/bin/python -m solve3d.phase_e.run_tamper --budget 40 --stage all",
- "run_id": "tamper_ch085",
- "mesh": {"n_cells": 54495, "n_part_cells": 20106, "n_design_cells": 20106,
-          "lc_part_m": 0.0025, "chamber_m": 0.085},
+ "run_id": "tamper_ch086",
+ "mesh": {
+  "n_cells": 54495,
+  "n_part_cells": 20106,
+  "n_bed_cells": 34389,
+  "n_design_cells": 20106,
+  "lc_part_m": 0.0025,
+  "chamber_m": 0.086,
+  "chamber_tag": "ch086",
+  "part_volume_rel_err_vs_stl": -3.953401153555802e-06
+ },
  "conventions": {
   "objective": "asymmetric at the pre-registered phi_floor and w",
   "read": "envelope (argmin over the arm's own trajectory)",
@@ -42,5 +50,13 @@
   "note": "a 150 s march on this mesh took 469 s wall, so a 900 s forward is roughly 47 min and a 40 forward-equivalent budget is of order 30 hours. The checkpoint is what makes that survivable; per-evaluation writes are atomic.",
   "binding_cost": "the STL's 0.105 mm minimum tessellation edge, not the chamber and not lc_part"
  },
- "not_yet_delivered": "the solved-vs-uniform verdict and the deck figures; both need this run to finish"
+ "not_yet_delivered": "the solved-vs-uniform verdict and the deck figures; both need this run to finish",
+ "chamber_tag_discrepancy": {
+  "feasibility_gates_measured_at": "ch085",
+  "live_run_at": "ch086",
+  "why": "the feasibility check ran with precomp_coeffs=None; the live run has Level 0 pre-compensation ON by default, which grows the part span from 44.40 mm to 45.77 mm (xy_scale 1.030928), so the adaptive rule returns 86 mm rather than 85 mm",
+  "margin_actual_m": 0.02011,
+  "margin_still_clears_preregistered": true,
+  "note": "a 1 mm difference is physically immaterial here -- the EQS sweep shows in-part Q non-uniformity moving only -0.19 percent between 85 and 100 mm -- but it is recorded rather than blurred, and the TAG is what surfaced it. That is the tagging convention doing its job on its first live run."
+ }
 }
