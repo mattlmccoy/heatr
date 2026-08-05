@@ -25,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-from solve3d import forward as fwd
+from solve3d import forward as fwd, precomp
 
 ROOT = Path(__file__).resolve().parents[2]
 META = ROOT / "shape_library_3d" / "meta"
@@ -35,6 +35,14 @@ PYR_B_M = 23.248947030192525e-3          # square base side
 PYR_H_M = 23.248947030192525e-3          # height, apex up
 L_DOMAIN = fwd.L_DOMAIN
 SHAPES = ("pyramid", "cube")
+
+
+def _expected_volume_m3(shape: str, precomp_coeffs=None) -> float:
+    """Library volume, scaled by L0 when pre-compensation is active."""
+    v = library_volume_m3(shape)
+    if precomp_coeffs is None or precomp_coeffs.is_identity:
+        return v
+    return v * precomp_coeffs.xy_scale ** 2 * precomp_coeffs.z_scale
 
 
 def library_volume_m3(shape: str) -> float:
@@ -154,7 +162,7 @@ class MeshInfo:
 
 
 def build_mesh(shape: str, lc_part: float, lc_bed_factor: float = 4.0,
-               L: float = L_DOMAIN, seed: int = 1):
+               L: float = L_DOMAIN, seed: int = 1, precomp_coeffs=None):
     """Conforming tetrahedral mesh of the part embedded in the chamber.
 
     The part and the chamber box are FRAGMENTED so the part boundary is a
@@ -172,7 +180,7 @@ def build_mesh(shape: str, lc_part: float, lc_bed_factor: float = 4.0,
         gmsh.model.add("phase_e")
         occ = gmsh.model.occ
         box = occ.addBox(-L / 2, -L / 2, -L / 2, L, L, L)
-        part = _add_solid(occ, shape)
+        part = _add_solid(occ, shape, precomp_coeffs)
         out, _ = occ.fragment([(3, box)], [(3, part)])
         occ.synchronize()
         vols = [t for (d, t) in out if d == 3]
@@ -182,7 +190,11 @@ def build_mesh(shape: str, lc_part: float, lc_bed_factor: float = 4.0,
         gmsh.model.addPhysicalGroup(3, [part_vol], 1)
         gmsh.model.addPhysicalGroup(3, bed, 2)
 
-        half = max(PYR_B_M, CUBE_A_M) / 2.0
+        # the refinement box must follow the PRE-COMPENSATED part, or L0
+        # would quietly coarsen the mesh at the part boundary
+        _s = 1.0 if precomp_coeffs is None else max(
+            float(precomp_coeffs.xy_scale), float(precomp_coeffs.z_scale))
+        half = max(PYR_B_M, CUBE_A_M) / 2.0 * _s
         f = gmsh.model.mesh.field
         t = f.add("Box")
         pad = 0.02 * half
@@ -217,7 +229,14 @@ def build_mesh(shape: str, lc_part: float, lc_bed_factor: float = 4.0,
         n_nodes_in_part=n_part_nodes,
         n_cells_total=int(msh.topology.index_map(tdim).size_global),
         part_volume_m3=vol_m3,
-        part_volume_rel_err_vs_library=vol_m3 / library_volume_m3(shape) - 1.0)
+        precomp=(precomp.ShrinkageL0(0.0, 0.0).provenance()
+                 if precomp_coeffs is None else precomp_coeffs.provenance()),
+        # compared against the library volume SCALED BY L0: with
+        # pre-compensation on, the meshed solid is deliberately larger than
+        # nominal, and checking it against the nominal number would report a
+        # ~8 percent "error" that is actually the correction working
+        part_volume_rel_err_vs_library=(
+            vol_m3 / _expected_volume_m3(shape, precomp_coeffs) - 1.0))
     return msh, info
 
 

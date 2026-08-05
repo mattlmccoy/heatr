@@ -159,14 +159,36 @@ def test_load_defaults_matches_the_memo():
     assert c.s_z_mat_band == MEMO_S_Z_BAND
 
 
-def test_default_is_off_so_existing_campaigns_stay_bit_identical():
-    """The spec asks for default ON once the memo lands. That flip changes
-    every existing solve3d result, so it is Matt's call (EQS-02 precedent);
-    the shipped default stays OFF and the report carries the recommendation.
-    `enabled` is deliberately NOT in the shared file: the coefficients are
-    cross-lane, but whether a given lane applies them is that lane's state."""
-    assert precomp.load_defaults().enabled is False
+def test_default_is_on_per_the_approved_spec():
+    """AUTHORITY for this default: the APPROVED spec
+    docs/superpowers/specs/2026-08-04-shrinkage-prewarp-v2-design.md section 2
+    (Level 0), verbatim: "Off by default until the memo lands; then default ON
+    with the coefficients displayed."
+
+    SHRINKAGE_COEFFICIENTS_MEMO.md is the memo, and it has landed, so the
+    stated condition is met and ON is the approved state rather than a new
+    default decision by this lane.
+
+    `enabled` is deliberately NOT in the shared coefficients file: the numbers
+    are cross-lane, but whether a given lane applies them is that lane's own
+    state.
+    """
+    assert precomp.load_defaults().enabled is True
     assert "enabled" not in json.loads(SHARED.read_text())
+
+
+def test_pre_l0_campaigns_are_reproduced_by_pinning_the_coefficients_to_zero():
+    """The flip governs NEW runs. Every existing campaign artifact was made
+    with no pre-compensation, so reproducing one means pinning s_* = 0
+    explicitly; this is the supported way to do that."""
+    off = precomp.load_defaults(enabled=False)
+    assert off.is_identity
+    zeroed = precomp.ShrinkageL0(s_xy=0.0, s_z_mat=0.0)
+    assert zeroed.is_identity
+    rng = np.random.default_rng(7)
+    q = rng.normal(size=(16, 3))
+    assert np.array_equal(precomp.scale_points(q, off), q)
+    assert np.array_equal(precomp.scale_points(q, zeroed), q)
 
 
 def test_provenance_records_values_scales_band_and_source():
@@ -181,7 +203,7 @@ def test_provenance_records_values_scales_band_and_source():
     assert "SHRINKAGE_COEFFICIENTS_MEMO.md" in p["source"]
     assert p["schema_version"] == SCHEMA_VERSION
     assert p["material_only"] is True
-    assert p["enabled"] is False
+    assert p["enabled"] is True
     assert json.dumps(p)          # provenance must be JSON-serialisable
 
 
@@ -229,6 +251,38 @@ def test_predicate_without_precomp_is_unchanged():
     p = rng.normal(scale=8e-3, size=(3, 200))
     assert np.array_equal(geo.in_part_predicate("cube")(p),
                           geo.in_part_predicate("cube", precomp_coeffs=None)(p))
+
+
+def test_build_case_applies_l0_by_default_and_records_provenance():
+    """With the approved flip, a NEW run is pre-compensated without being
+    asked, and says so in its provenance."""
+    from solve3d.phase_e import run as R
+    tc = R.build_case("cube")
+    prov = tc.info.precomp
+    assert prov["enabled"] is True
+    assert prov["s_xy"] == MEMO_S_XY and prov["s_z_mat"] == MEMO_S_Z
+    assert prov["s_xy_band"] == list(MEMO_S_XY_BAND)
+    assert "unmeasured" in prov["applicability"].lower()
+    # the mesh really is the scaled solid, not the nominal one
+    c = precomp.load_defaults()
+    want = geo_nominal_cube_volume() * c.xy_scale ** 2 * c.z_scale
+    assert tc.info.part_volume_m3 == pytest.approx(want, rel=2e-3)
+
+
+def test_build_case_with_zero_coefficients_reproduces_the_recorded_mesh():
+    """The documented pre-L0 reproduction path, checked against the committed
+    Phase E artifact rather than against a remembered number."""
+    from solve3d.phase_e import run as R
+    rec = json.loads((ROOT / "solve3d" / "phase_e" / "results"
+                      / "phase_e_cube.json").read_text())["arms"]["_mesh"]
+    tc = R.build_case("cube", precomp_coeffs=precomp.ShrinkageL0(0.0, 0.0))
+    assert int(tc.ncells) == rec["n_cells"]
+    assert int(tc.vol_nodal.size) == rec["n_nodes"]
+
+
+def geo_nominal_cube_volume() -> float:
+    from solve3d.phase_e import geometry as geo
+    return geo.CUBE_A_M ** 3
 
 
 def test_precompensated_volume_grows_by_the_expected_factor():

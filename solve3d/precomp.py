@@ -26,10 +26,18 @@ schema carries material coefficients ONLY, and `from_mapping` REFUSES a
 mapping that offers a densification or total-shrinkage term instead of
 quietly ignoring it. That refusal is the named double-counting guard.
 
-DEFAULT IS OFF. The spec asks for default ON once the memo landed. Turning it
-on changes the geometry of every existing solve3d campaign, so per the EQS-02
-precedent the flip is Matt's call, not this lane's. `load_defaults()` returns
-`enabled = False` and the tranche report carries the recommendation.
+DEFAULT IS ON. Authority: the APPROVED spec
+docs/superpowers/specs/2026-08-04-shrinkage-prewarp-v2-design.md section 2
+(Level 0), verbatim: "Off by default until the memo lands; then default ON
+with the coefficients displayed." SHRINKAGE_COEFFICIENTS_MEMO.md is that memo
+and it has landed, so ON is the approved state, not a new default decision by
+this lane.
+
+Consequence for reproduction, and it is not subtle: every campaign artifact in
+solve3d/ predates L0 and was built with NO pre-compensation. Re-running any of
+them reproduces the recorded numbers only if the coefficients are pinned to
+zero explicitly, `build_case(shape, precomp_coeffs=ShrinkageL0(0.0, 0.0))`.
+The flip governs new runs; it does not retroactively describe old ones.
 """
 from __future__ import annotations
 
@@ -204,8 +212,9 @@ def from_mapping_checked(m: dict, *, enabled: bool = True) -> ShrinkageL0:
     return ShrinkageL0.from_mapping(m, enabled=enabled)
 
 
-def load_defaults(*, enabled: bool = False) -> ShrinkageL0:
-    """Read the shared root config. Default OFF; see the module docstring."""
+def load_defaults(*, enabled: bool = True) -> ShrinkageL0:
+    """Read the shared root config. Default ON; see the module docstring for
+    the spec line that authorises it and for the reproduction consequence."""
     return from_mapping_checked(json.loads(config_path().read_text()),
                                 enabled=enabled)
 

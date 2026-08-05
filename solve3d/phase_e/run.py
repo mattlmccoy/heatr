@@ -31,17 +31,32 @@ def prereg() -> dict:
     return json.loads((RESULTS / "phase_e_preregistration.json").read_text())
 
 
+_L0_DEFAULT = object()          # sentinel: "use the approved shared default"
+
+
 def build_case(shape: str, lc_part: float = LC_PART_M,
                max_time_s: float = MAX_TIME_S,
-               p: fwd.ForwardParams | None = None) -> adjoint.TransientCase:
+               p: fwd.ForwardParams | None = None,
+               precomp_coeffs=_L0_DEFAULT) -> adjoint.TransientCase:
     """A Phase B TransientCase on a Phase E conforming mesh.
 
     Constructed directly rather than through TransientCase.build, because that
     helper only knows the Phase A anchor primitives. Nothing in adjoint.py is
-    modified."""
+    modified.
+
+    LEVEL 0 IS APPLIED BY DEFAULT (approved spec section 2). The SAME
+    coefficients reach the OCC solid and the chi predicate, so the solve
+    domain and the solve target stay the same object. To reproduce a pre-L0
+    campaign, pass `precomp_coeffs=precomp.ShrinkageL0(0.0, 0.0)`.
+    """
+    from solve3d import precomp as _pc
+    if precomp_coeffs is _L0_DEFAULT:
+        precomp_coeffs = _pc.load_defaults()
     p = p or fwd.ForwardParams()
-    msh, info = geo.build_mesh(shape, lc_part=lc_part)
-    mats = fwd.build_materials(msh, geo.in_part_predicate(shape), p)
+    msh, info = geo.build_mesh(shape, lc_part=lc_part,
+                               precomp_coeffs=precomp_coeffs)
+    mats = fwd.build_materials(
+        msh, geo.in_part_predicate(shape, precomp_coeffs=precomp_coeffs), p)
     eqs = adjoint.SteadyEqs(msh, mats, p)
     return adjoint.TransientCase(msh, mats, p, eqs, info, 50.0, max_time_s)
 
