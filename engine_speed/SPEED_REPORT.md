@@ -8,6 +8,7 @@ modified, not monkeypatched, and not imported from `heatr3d_s2/`.
 | **§2–5 numba thermal march** | bit-identity gate PASSED (8/8 exact). Speed **5.9x** at n=48 / **6.3x** at n=96, against a 10x bar — **target NOT met**. Blessed by the engine lane as an opt-in; wired into studio3d behind `fast_march=True`. |
 | **§6 EQS cache** | gate PASSED (29 tests). Saves **8.26 s** per hit at n=48 and **195.50 s** at n=96; the corrected (AFTER) arm correctly MISSES. The renorm shortcut is **rejected with measurements**. |
 | **§6.6-6.7 disk store + recorded acceleration** | gate PASSED. A **fresh process** hits the per-job store: 8.280 s -> 0.0064 s, bit-identical, zero solves. Corruption (truncation, bit flip, key mismatch) MISSES loudly. Every run records `eqs_cache` hits/misses in `results.json`. |
+| **§7 Metal / Apple-silicon GPU march** | **REFUSED, with probe evidence.** Metal Shading Language has no `double`: the live shader compiler rejects it, torch-MPS raises on float64, MLX float64 is CPU-only. float32 would miss the 1e-16 parity floor by ~1e10 and buys only **1.30x** at n=48 / **2.28x** at n=96 over the numba path already shipped. Recommendation: wait for the CUDA bifurcation. |
 
 All numbers below are quoted from recorded JSON (`gate_results_n32.json`,
 `bench_results.json`, `eqs_cache_bench.json`, `fresh_process_demo.json`), not
@@ -468,7 +469,165 @@ mean the cache had ignored a real change to the dopant map.
 * **It does not make a cold solve faster.** The win is entirely in avoiding
   repeats; a first solve costs exactly what it did before.
 
-## 7. How to re-run
+## 7. Metal / Apple-silicon GPU march port: REFUSED, with measurements
+
+Compute item (2) of the shrinkage-prewarp v2 spec (section 3) asked for a
+Metal/MPS port of the thermal march, built as a parallel module in the
+`march_fast.py` pattern but gated at a **measured tolerance floor** rather than
+bit-identity, since GPU floats forfeit bit-identity.
+
+**The port was not written.** The deciding question was asked first, and it
+closes the door. This section is the negative report.
+
+Files: `march_metal.py` (live probe, hard refusal, provenance),
+`fp32_cost.py` (the measured cost of the only precision the GPU offers),
+`metal_probes/` (the probe scripts), `metal_probe_results.json` and
+`fp32_cost_results.json` (recorded output; every number below is quoted from
+them).
+
+### 7.1 The deciding question: float64 on this GPU
+
+**Metal Shading Language has no `double` type.** Not as a buffer element and not
+as a local scalar. Asked of the live runtime shader compiler on this machine
+(`metal_probes/probe_metal_fp64.py`, device `Apple M2 Pro`, families Apple7 and
+Apple8 true, Apple9 false):
+
+| MSL source | compiles |
+|---|---|
+| `device float* a` kernel (control) | **yes** |
+| `device double* a` kernel | **no**. `program_source:4:22: error: 'double' is not supported in Metal` |
+| `double x = (double)a[i];` local scalar | **no**. Same error, twice |
+
+This is the API and hardware layer, not a binding gap, so it propagates upward.
+Both candidate frameworks were still checked directly rather than inferred
+(pinned: torch 2.13.0, mlx 0.32.0, python 3.14.0, numpy 2.5.1, macOS 26.5.2):
+
+| framework | float64 on the GPU |
+|---|---|
+| torch MPS (`mps_available: true`) | `TypeError: Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64.` |
+| MLX | `mx.float64` **exists** and works on the CPU stream (0.0 deviation vs numpy). On the GPU stream: `ValueError: float64 is not supported on the GPU`. |
+
+MLX carries a trap worth recording: `mx.array(<float64 numpy array>)` returns
+**float32**, silently. A port written against MLX without an explicit dtype
+assertion would have downgraded the physics with no error and no log line.
+
+Timing corroborates that MLX's "float64" is CPU-only: on a 1 Mi-element vector,
+`gpu float32` 0.458 ms, `cpu float32` 0.468 ms, `cpu float64` 0.905 ms, and
+`gpu float64` raises.
+
+### 7.2 What float32 would cost, measured against heatr3d itself
+
+Shipping the march in float32 is a numerics change this project does not accept
+silently, so the cost was measured rather than argued.
+
+`fp32_cost.py` runs a REDUCED march (densification, powder loss, heat sinks,
+power scheduling and in-march EQS re-solves off; fixed `qrf_override` drive)
+written in the same association order as `heatr3d.run` and parameterised on
+dtype. It is not trusted as a stand-in. It is **gated against the real
+engine**, and on all six configurations the float64 arm is **bit-identical to
+`heatr3d.run`** (`max_rel_dev_T = 0.0`, `bit_identical_T = true`, including both
+guard-firing cases). The stand-in is the kernel.
+
+The float32 arm is a faithful proxy for what a Metal kernel would compute:
+`metal_probes/probe_fp32_bridge.py` measured torch-MPS float32 and MLX-GPU
+float32 as **bit-identical to numpy float32** on the harmonic-face expression:
+**0 ULP** difference on every element, both backends. If anything it flatters
+the GPU, which would additionally be free to contract multiply-add pairs.
+
+Suite (n=32, mirroring the shape of `cases.py`, where two cases exist only to
+make the guards fire):
+
+| case | max rel dev T | max abs dev T | phi cells differing | enthalpy branch flips | dT-cap hits f64/f32 | temp-clamp hits f64/f32 | melt-onset substep f64/f32 |
+|---|---|---|---|---|---|---|---|
+| benign | 7.046e-07 | 2.554e-05 C | 0 | 0 | 0/0 | 0/0 | never/never |
+| melt_window | 7.705e-07 | 1.387e-04 C | 992 | 0 | 0/0 | 0/0 | never/never |
+| melt_crossed | 1.648e-06 | 3.183e-04 C | 104 | 0 | 0/0 | 0/0 | 171/171 |
+| cfl_substep (n_sub=3) | 1.803e-07 | 1.033e-04 C | 72 | 0 | 15000/15000 | 0/0 | 18/18 |
+| clamp_temp | 8.226e-07 | 7.300e-05 C | 144 | 0 | 0/0 | 183672/183672 | 31/31 |
+| clamp_dt | 3.231e-07 | 1.954e-05 C | 0 | 0 | 60000/60000 | 3000/3000 | 17/17 |
+
+Read this honestly, in both directions:
+
+* **float32 misses the gate by ten orders of magnitude.** `gate.py` holds
+  `FLOOR_RTOL = 1e-16` and the file says in as many words that it is never
+  widened to make a case pass. The float32 deviations sit at 1.8e-07 to 1.6e-06.
+  Certifying a Metal march would mean widening the floor by ~1e10, a different
+  standard of evidence from the one the numba port passed (8/8 EXACT), on the
+  same engine, in the same report.
+* **The discrete guards did not flip here.** Enthalpy branch selection, the
+  THM-01 dT-cap count, the THM-02 clamp count and the melt-onset substep index
+  came out identical in every case, including the two guard-firing ones. That is
+  a measurement, not a guarantee: 992 cells already disagree on `phi` in
+  `melt_window`, and the melt-onset read is a threshold crossing, so a longer
+  march or a more marginal configuration can move it by a whole substep.
+  Nothing here licenses "float32 is fine."
+
+### 7.3 How much speed was on the table anyway
+
+Had float32 been acceptable, the prize is smaller than the framing assumed.
+`metal_probes/probe_gpu_march_speed.py` times one reduced substep, MLX float32
+on the M2 Pro GPU against the same formulation in numpy float64, single process:
+
+| n | cells | numpy f64 (same formulation) | MLX f32 GPU | MLX f32 CPU | numba f64 (§3) |
+|---|---|---|---|---|---|
+| 48 | 110 592 | 4.3509 ms | **1.2605 ms** | 2.9252 ms | 1.6406 ms |
+| 96 | 884 736 | 38.1914 ms | **5.9098 ms** | 21.3259 ms | 13.4599 ms |
+
+* Against the same unfused formulation: **3.45x** at n=48, **6.46x** at n=96.
+* Against the fused numba kernel already shipped and already bit-identical:
+  **1.30x** at n=48 and **2.28x** at n=96.
+
+Caveat stated rather than buried: the MLX arm is a framework-level
+implementation (roll-based neighbours, mask multiplies, many temporaries), so a
+hand-fused Metal kernel would beat it. By how much is unmeasured, because MSL
+has no `double` and the kernel was therefore never written. The comparison that
+is apples-to-apples is the 3.45x/6.46x column, and even the optimistic reading
+leaves the working grid size (n=48) close to what the CPU already does.
+
+### 7.4 Recommendation
+
+**Do not pursue a Metal march.** Wait for the CUDA bifurcation named in spec
+section 3 item (3), where float64 is native and the existing gate suite can run
+unchanged at the 1e-16 floor instead of at a widened one.
+
+If GPU throughput is wanted on this machine before that hardware exists, the
+honest options are not this port:
+
+1. **Compute item (1), the CG/AMG iterative EQS on CPU**, is untouched and is
+   the larger prize on the profile (the EQS cache section already measures
+   195.50 s saved per n=96 hit; the march is 13.5 ms/step).
+2. **A mixed-precision march**, float32 GPU stencil with a float64 CPU
+   correction, is arithmetically possible but would need its own gate design
+   and its own error-growth proof over a full exposure. It is not a smaller
+   piece of work than the CUDA path; it is a larger one with a weaker result.
+
+### 7.5 What ships instead
+
+* `march_metal.py`. Default OFF by construction: nothing calls it, and
+  `march_metal(...)` raises `MetalUnavailable` naming float64 and quoting the
+  MSL rejection. There is deliberately no `allow_float32` escape hatch:
+  passing one is a `TypeError`.
+* `metal_fp64_supported()` returns True **only** on a positively confirmed
+  float64 shader compile. A probe that could not run (binding missing, no
+  device) reports `probe_error` and reads as NOT supported. Unknown never
+  renders as healthy.
+* `metal_provenance()` extends the recorded-acceleration fields:
+  `acceleration: "metal_refused"`, `metal_fp64_supported: false`,
+  `metal_device`, `metal_refusal_reason`, and the full probe record.
+* 12 tests (`tests/test_march_metal.py`, `tests/test_fp32_cost.py`), written
+  red-first, including the live probe against this machine's Metal compiler and
+  the float64-vs-`heatr3d.run` fidelity gate.
+
+`heatr3d.py` was not modified, not imported from a fork, and not monkeypatched.
+The only environment change is `pyobjc-framework-Metal` added to `.venv312` so
+the probe is re-runnable there; torch and MLX were kept out of the project venv
+and run in a throwaway one.
+
+Load disclosure: the machine carried load average ~4.2 with one competing python
+process during the GPU benchmark capture, the same caveat §3 records for the
+numba numbers. Ratios are sound; absolute ms/step is inflated for every arm.
+
+## 8. How to re-run
 
 ```bash
 cd <repo root>
@@ -481,6 +640,10 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMBA_NUM_THREADS=1
 .venv312/bin/python -m engine_speed.bench_eqs_cache      # -> eqs_cache_bench.json
 # cross-process disk-store demo (two subprocesses, one shared store)
 .venv312/bin/python -m engine_speed.demo_fresh_process 48  # -> fresh_process_demo.json
+# Metal probe + float32 cost (§7); seconds, not minutes
+.venv312/bin/python -m engine_speed.march_metal            # live fp64 shader probe
+.venv312/bin/python -m engine_speed.fp32_cost              # -> fp32_cost_results.json
+# torch/MLX probes need a throwaway venv: see engine_speed/metal_probes/README.md
 ```
 
 Pinned: **numba 0.66.0, llvmlite 0.48.0** (installed into `.venv312`),
