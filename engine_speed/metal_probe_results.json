@@ -1,0 +1,152 @@
+{
+  "recorded_utc": "2026-08-05T06:21:03+00:00",
+  "machine": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "cpu": "Apple M2 Pro",
+    "note": "load average ~4.2 during capture, one competing python process"
+  },
+  "verdict": {
+    "metal_fp64_supported": false,
+    "decision": "Metal march port REFUSED; no float32 physics engine shipped."
+  },
+  "provenance_fields": {
+    "acceleration": "metal_refused",
+    "metal_fp64_supported": false,
+    "metal_device": "Apple M2 Pro",
+    "metal_refusal_reason": "Metal Shading Language rejects float64 on this device: Error Domain=MTLLibraryErrorDomain Code=3 \"program_source:4:22: error: 'double' is not supported in Metal. The heatr3d march is a float64 physics kernel and will not be run in float32.",
+    "metal_probe": {
+      "device_reachable": true,
+      "device_name": "Apple M2 Pro",
+      "fp32_compiles": true,
+      "fp64_compiles": false,
+      "fp64_error": "Error Domain=MTLLibraryErrorDomain Code=3 \"program_source:4:22: error: 'double' is not supported in Metal\nkernel void k(device double* a [[buffer(0)]], uint i [[thread_position_in_grid]]) {\n                     ^\n\" UserInfo={NSLocalizedDescription=program_source:4:22: error: 'double' is not supported in Metal\nkernel void k(device double* a [[buffer(0)]], uint i [[thread_position_in_grid]]) {\n                     ^\n}",
+      "probe_error": null
+    }
+  },
+  "probe_metal_shader_compiler": {
+    "machine": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.7",
+    "device_name": "Apple M2 Pro",
+    "has_unified_memory": true,
+    "max_threads_per_threadgroup": 1024,
+    "recommended_max_working_set_bytes": 26800603136,
+    "families": {
+      "Apple7": true,
+      "Apple8": true,
+      "Apple9": false,
+      "Common3": true,
+      "Metal3": true
+    },
+    "compiles": [
+      {
+        "name": "float32_kernel",
+        "compiled": true,
+        "error": null
+      },
+      {
+        "name": "float64_buffer_kernel",
+        "compiled": false,
+        "error": "Error Domain=MTLLibraryErrorDomain Code=3 \"program_source:4:22: error: 'double' is not supported in Metal\nkernel void k(device double* a [[buffer(0)]], uint i [[thread_position_in_grid]]) {\n                     ^\n\" UserInfo={NSLocalizedDescription=program_source:4:22: error: 'double' is not supported in Metal\nkernel void k(device double* a [[buffer(0)]], uint i [[thread_position_in_grid]]) {\n                     ^\n}"
+      },
+      {
+        "name": "float64_local_scalar",
+        "compiled": false,
+        "error": "Error Domain=MTLLibraryErrorDomain Code=3 \"program_source:5:5: error: 'double' is not supported in Metal\n    double x = (double)a[i];\n    ^\nprogram_source:5:17: error: 'double' is not supported in Metal\n    double x = (double)a[i];\n                ^\n\" UserInfo={NSLocalizedDescription=program_source:5:5: error: 'double' is not supported in Metal\n    double x = (double)a[i];\n    ^\nprogram_source:5:17: error: 'double' is not supported in Metal\n    double x = (double)a[i];\n                ^\n}"
+      }
+    ]
+  },
+  "probe_frameworks_fp64": {
+    "numpy_version": "2.5.1",
+    "probes": [
+      {
+        "framework": "torch",
+        "importable": true,
+        "version": "2.13.0",
+        "mps_available": true,
+        "mps_built": true,
+        "float64_to_mps": {
+          "ok": false,
+          "error": "TypeError: Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead."
+        },
+        "float64_kernel_on_mps": {
+          "ok": false,
+          "error": "TypeError: Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead."
+        },
+        "float32_kernel_on_mps": {
+          "ok": true,
+          "dtype": "torch.float32",
+          "max_rel_dev_vs_numpy_f64": 1.4565198478691654e-07
+        }
+      },
+      {
+        "framework": "mlx",
+        "importable": true,
+        "version": "0.32.0",
+        "has_float64_dtype_attr": true,
+        "default_device": "Device(gpu, 0)",
+        "float64_array": {
+          "ok": true,
+          "dtype": "mlx.core.float64"
+        },
+        "float64_numpy_ingest_dtype": "mlx.core.float32",
+        "float32_kernel_on_gpu": {
+          "ok": true,
+          "dtype": "mlx.core.float32",
+          "max_rel_dev_vs_numpy_f64": 1.4565198478691654e-07
+        }
+      }
+    ]
+  },
+  "probe_mlx_float64_on_gpu": {
+    "mlx_default_device": "Device(gpu, 0)",
+    "float64_on_gpu_stream": {
+      "ok": false,
+      "error": "ValueError: float64 is not supported on the GPU"
+    },
+    "float64_on_cpu_stream": {
+      "ok": true,
+      "dtype": "mlx.core.float64",
+      "max_rel_dev_vs_numpy_f64": 0.0
+    },
+    "ms_gpu_f32": 0.3189958501025103,
+    "ms_cpu_f32": 0.47070000000530854,
+    "ms_gpu_f64": "ValueError: float64 is not supported on the GPU",
+    "ms_cpu_f64": 0.9071333501196932
+  },
+  "probe_fp32_bridge_gpu_vs_numpy": {
+    "numpy_f32_vs_f64_max_rel": 1.9045911283555582e-07,
+    "torch_mps_f32_bitidentical_to_numpy_f32": true,
+    "torch_mps_f32_max_ulp_diff_vs_numpy_f32": 0,
+    "mlx_gpu_f32_bitidentical_to_numpy_f32": true,
+    "mlx_gpu_f32_max_ulp_diff_vs_numpy_f32": 0
+  },
+  "probe_gpu_march_speed": {
+    "mlx_version": "0.32.0",
+    "numpy_version": "2.5.1",
+    "benchmarks": [
+      {
+        "n": 48,
+        "cells": 110592,
+        "ms_numpy_f64": 4.350858300313121,
+        "ms_mlx_f32_gpu": 1.260474999435246,
+        "ms_mlx_f32_cpu": 2.9252062500745524,
+        "max_rel_dev_one_step_gpu_f32_vs_numpy_f64": 1.0459954510778264e-08
+      },
+      {
+        "n": 96,
+        "cells": 884736,
+        "ms_numpy_f64": 38.191364600061206,
+        "ms_mlx_f32_gpu": 5.909845849964768,
+        "ms_mlx_f32_cpu": 21.32586875013658,
+        "max_rel_dev_one_step_gpu_f32_vs_numpy_f64": 1.0459954510778264e-08
+      }
+    ]
+  },
+  "versions": {
+    "python_project_venv": "3.12.7",
+    "python_probe_venv": "3.14.0",
+    "torch": "2.13.0",
+    "mlx": "0.32.0",
+    "pyobjc_framework_Metal": "12.2.1"
+  }
+}
