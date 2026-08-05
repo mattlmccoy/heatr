@@ -1,0 +1,155 @@
+{
+ "what": "chamber (bed) embedding for arbitrary STL parts -- the TRANCHE1_REPORT.md named blocker, and its gates",
+ "root_cause": "_add_box_surface_loop created each of the box's 12 edges twice (gmsh.model.geo.addLine does not deduplicate), so the two faces meeting at an edge meshed independent copies and the shell was not conforming with itself. The EMPTY box failed identically with no STL part present, which is what shows the Tranche 1 attribution to the discrete entity was wrong.",
+ "equivalence_band": 0.10730769230769228,
+ "band_rule": "1.5 x MAX of the dolfinx own-refinement pair spreads (t90_rel_spread); the Phase A same-engine band",
+ "band_source": "solve3d/results/dolfinx_refinement.json",
+ "lc_part_m": 0.0015,
+ "L_chamber_m": 0.06,
+ "feature_angle_deg_default": 1.0,
+ "volume_rel_tol": 0.005,
+ "box_shell": {
+  "n_points": 8,
+  "n_curves": 12,
+  "n_curves_before_fix": 24,
+  "n_surfaces": 6,
+  "empty_box_tets": 1111
+ },
+ "occ_vs_stl_chamber": {
+  "shape": "pyramid",
+  "occ_part_volume_m3": 4.188790204786388e-06,
+  "stl_part_volume_m3": 4.188790266060173e-06,
+  "rel_diff": 1.4628038558228695e-08,
+  "band": 0.10730769230769228,
+  "pass": true,
+  "stl_part_volume_rel_err_vs_stl": 2.220446049250313e-16,
+  "occ_n_cells": 29286,
+  "stl_n_cells": 30157,
+  "stl_n_part_cells": 6239,
+  "stl_n_bed_cells": 23918
+ },
+ "level0_in_chamber": {
+  "expected_volume_growth": 1.0845022460041516,
+  "measured_stl_volume_growth": 1.0845022460041516,
+  "measured_mesh_volume_growth": 1.0845022460041516,
+  "coefficients": {
+   "level": 0,
+   "enabled": true,
+   "s_xy": 0.03,
+   "s_z_mat": 0.02,
+   "s_xy_band": [
+    0.02,
+    0.04
+   ],
+   "s_z_mat_band": [
+    0.01,
+    0.03
+   ],
+   "xy_scale": 1.0309278350515465,
+   "z_scale": 1.0204081632653061,
+   "xy_scale_band": [
+    1.0204081632653061,
+    1.0416666666666667
+   ],
+   "z_scale_band": [
+    1.0101010101010102,
+    1.0309278350515465
+   ],
+   "source": "SHRINKAGE_COEFFICIENTS_MEMO.md",
+   "schema_version": "1.0",
+   "material_only": true,
+   "applicability": "SLS literature values (see source); RFAM material shrinkage unmeasured - pending P1 measurement",
+   "scope": "MATERIAL shrinkage of nylon 12 only",
+   "excludes": "densification consolidation, which the densify march owns (double-counting guard)",
+   "config_file": "shrinkage_precomp.json",
+   "note": "MATERIAL shrinkage only; consolidation belongs to the densify model (spec section 1)"
+  }
+ },
+ "tamper": {
+  "stl": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/feb850ec/Part Studio 1 - Tamper.stl",
+  "n_facets": 2436,
+  "bbox_extent_mm": [
+   44.39999771118164,
+   44.33488464355469,
+   11.0
+  ],
+  "stl_min_edge_mm": 0.104669187251665,
+  "stl_median_edge_mm": 2.339530261110267,
+  "pyramid_min_edge_mm": 23.248947143554688,
+  "part_volume_rel_err_vs_stl": -1.4584965086772428e-06,
+  "n_cells": 90203,
+  "n_part_cells": 29303,
+  "n_bed_cells": 60900,
+  "h_min_mm": 0.09215496564572898,
+  "h_median_mm": 1.4052370252299928,
+  "note": "the STL's OWN tessellation carries 0.1 mm edges, so any conforming mesh of it inherits ~0.1 mm elements and the explicit march's CFL step follows, independently of the requested lc_part. Phase E's analytic primitives have no such feature (pyramid min edge 23 mm)."
+ },
+ "tamper_feature_angle_sweep": [
+  {
+   "feature_angle_deg": 40.0,
+   "part_volume_rel_err_vs_stl": -0.007911664113965378,
+   "n_cells": 53608,
+   "h_min_mm": 0.4247273734173711,
+   "h_median_mm": 1.6931619049657787,
+   "refused_at_shipped_tol": true
+  },
+  {
+   "feature_angle_deg": 5.0,
+   "part_volume_rel_err_vs_stl": -0.00016036718790979343,
+   "n_cells": 77817,
+   "h_min_mm": 0.08707637908244538,
+   "h_median_mm": 1.5100942174257643,
+   "refused_at_shipped_tol": false
+  },
+  {
+   "feature_angle_deg": 2.0,
+   "part_volume_rel_err_vs_stl": -9.435880991115475e-06,
+   "n_cells": 88252,
+   "h_min_mm": 0.09242744764049199,
+   "h_median_mm": 1.426496398228011,
+   "refused_at_shipped_tol": false
+  },
+  {
+   "feature_angle_deg": 1.0,
+   "part_volume_rel_err_vs_stl": -1.4584965086772428e-06,
+   "n_cells": 90203,
+   "h_min_mm": 0.09215496564572898,
+   "h_median_mm": 1.4052370252299928,
+   "refused_at_shipped_tol": false
+  }
+ ],
+ "pyramid_feature_angle_sweep": [
+  {
+   "feature_angle_deg": 40.0,
+   "part_volume_rel_err_vs_stl": 2.220446049250313e-16,
+   "n_cells": 30157,
+   "h_min_mm": 0.9468663125206458,
+   "h_median_mm": 1.748210430685072,
+   "refused_at_shipped_tol": false
+  },
+  {
+   "feature_angle_deg": 5.0,
+   "part_volume_rel_err_vs_stl": 2.220446049250313e-16,
+   "n_cells": 30157,
+   "h_min_mm": 0.9468663125206458,
+   "h_median_mm": 1.748210430685072,
+   "refused_at_shipped_tol": false
+  },
+  {
+   "feature_angle_deg": 2.0,
+   "part_volume_rel_err_vs_stl": 2.220446049250313e-16,
+   "n_cells": 30157,
+   "h_min_mm": 0.9468663125206458,
+   "h_median_mm": 1.748210430685072,
+   "refused_at_shipped_tol": false
+  },
+  {
+   "feature_angle_deg": 1.0,
+   "part_volume_rel_err_vs_stl": 2.220446049250313e-16,
+   "n_cells": 30157,
+   "h_min_mm": 0.9468663125206458,
+   "h_median_mm": 1.748210430685072,
+   "refused_at_shipped_tol": false
+  }
+ ]
+}
