@@ -83,6 +83,10 @@ class SteadyEqs:
         if not fwd.IS_COMPLEX:
             raise RuntimeError("Phase B assumes the complex scalar build")
         self.msh, self.mats, self.p, self.L = msh, mats, p, L
+        # Task 3 spike flag. DEFAULT "direct" reproduces every existing gate
+        # bit-identically; "iterative" swaps in GMRES+GAMG (see set_solver).
+        self.solver_kind = "direct"
+        self.solver_rtol = None
         self.W = fwd.functionspace(msh, ("Lagrange", degree))
         self.Q0 = mats.dg0
         import femutils as fu
@@ -126,6 +130,30 @@ class SteadyEqs:
         self.mats.sigma.x.array[:] = np.asarray(
             sigma_all, dtype=float).astype(dolfinx.default_scalar_type)
 
+    def set_solver(self, kind: str = "direct", rtol: float | None = None):
+        """Select the EQS linear solver. Task 3 spike (cgamg_protocol.json).
+
+        "direct"    PETSc preonly + LU, the incumbent. Bit-identical to today.
+        "iterative" GMRES + GAMG at `rtol`. GMRES, not CG: the EQS operator is
+                    complex SYMMETRIC (A^T = A), which is NOT Hermitian
+                    positive definite, so CG has no convergence guarantee here.
+                    That was named in the pre-registration before any run.
+
+        Changing the solver invalidates any existing factorization, so the
+        cached KSP is dropped rather than reused with the wrong type.
+        """
+        if kind not in ("direct", "iterative"):
+            raise ValueError(f"unknown solver kind {kind!r}")
+        if kind == "iterative" and not rtol:
+            raise ValueError("iterative solver requires an explicit rtol")
+        self.solver_kind = kind
+        self.solver_rtol = None if kind == "direct" else float(rtol)
+        if self._ksp is not None:
+            self._ksp.destroy()
+            self._A.destroy()
+            self._ksp = self._A = None
+        return self
+
     def _factorize(self):
         if self._ksp is not None:
             self._ksp.destroy()
@@ -134,8 +162,13 @@ class SteadyEqs:
         A.assemble()
         ksp = PETSc.KSP().create(self.msh.comm)
         ksp.setOperators(A)
-        ksp.setType("preonly")
-        ksp.getPC().setType("lu")
+        if self.solver_kind == "iterative":
+            ksp.setType("gmres")
+            ksp.getPC().setType("gamg")
+            ksp.setTolerances(rtol=self.solver_rtol, max_it=2000)
+        else:
+            ksp.setType("preonly")
+            ksp.getPC().setType("lu")
         self._A, self._ksp = A, ksp
         return ksp
 
