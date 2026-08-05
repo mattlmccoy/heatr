@@ -1,0 +1,75 @@
+{
+ "what": "Task 3 CG/AMG iterative-EQS spike: PRE-REGISTERED protocol. Written and committed BEFORE any iterative solver code exists.",
+ "plan": "docs/superpowers/plans/2026-08-04-shrinkage-v2-tranche1.md Task 3",
+ "date": "2026-08-04",
+ "step_0_direct_path_own_floor_MEASURED_FIRST": {
+  "why": "The plan requires reporting the direct path's own rtol floor BEFORE choosing an acceptance tolerance, so the iterative gate is measured against the incumbent rather than against a number picked to be passable.",
+  "method": "solve3d/adjoint.py SteadyEqs.solve_state: PETSc preonly+LU followed by N_REFINE iterative-refinement sweeps; res_norm = ||b - A x|| / ||b|| after refinement. Cube, pre-L0 geometry pinned (precomp s_*=0), 3 repeats, best and median wall reported.",
+  "levels": {
+   "coarse": {
+    "lc_part_m": 0.002,
+    "n_dofs": 2520,
+    "n_cells": 13969,
+    "lu_residual_rel": 9.59156422598949e-20,
+    "wall_best_s": 0.1695324579923181,
+    "wall_median_s": 0.17103725000924896
+   },
+   "mid": {
+    "lc_part_m": 0.0012,
+    "n_dofs": 9257,
+    "n_cells": 53480,
+    "lu_residual_rel": 8.260453182372284e-20,
+    "wall_best_s": 3.60695595901052,
+    "wall_median_s": 3.616012750004302
+   }
+  },
+  "headline": "the direct path solves to a relative residual of ~1e-19, NOT ~1e-10",
+  "consequence_stated_before_measuring_the_iterative_path": "forward.py's existing KSP_ITER preset uses ksp_rtol 1e-10, which is NINE TO TEN ORDERS OF MAGNITUDE looser than the incumbent floor. adjoint.py records that the refinement sweeps 'buy roughly two decades of FD headroom', so a 1e-10 iterative solve is expected a priori to damage the Phase B FD gate. The spike must therefore test the FD gate at the iterative tolerance, not just field agreement, and 1e-10 is NOT assumed acceptable."
+ },
+ "solver_config": {
+  "primary": {
+   "ksp_type": "cg",
+   "pc_type": "gamg",
+   "note": "CG is valid only if the operator is Hermitian positive definite; the EQS operator is COMPLEX SYMMETRIC (A^T = A), which is NOT the same thing. If CG fails or stalls this is the reason, and the fallback is GMRES+GAMG, which is what forward.py's existing KSP_ITER preset already uses.",
+   "precedent": "D1 spike reported 229-431x; that speedup is the hypothesis under test here, not an assumption"
+  },
+  "fallback": {
+   "ksp_type": "gmres",
+   "pc_type": "gamg"
+  },
+  "rtol_sweep": [
+   "1e-10",
+   "1e-12",
+   "1e-14"
+  ],
+  "rtol_selection_rule": "the LOOSEST rtol in the sweep that passes BOTH acceptance gates below; if none passes, the recommendation is to keep the direct path and say so"
+ },
+ "acceptance": {
+  "gate_1_field_agreement": {
+   "quantity": "relative L2 difference of the EQS potential V and of Q_rf between iterative and direct solves on the same assembled operator",
+   "tolerance_rule": "MEASURED, not invented: the iterative-vs-direct difference must be no larger than the direct path's own level-to-level change across the coarse->mid refinement, which is the smallest difference the incumbent itself cannot resolve. That number is computed in the spike and recorded before any verdict."
+  },
+  "gate_2_fd_regate": {
+   "what": "re-run ONE Phase B FD probe with the iterative path in the loop",
+   "standard": "the frozen protocol in solve3d/results/phase_b_protocol.json, unchanged; the gradient must still meet its recorded rel_err standard",
+   "why_this_is_the_binding_gate": "field agreement at 1e-10 can look fine while the FD headroom is destroyed, because FD differences J(s+eps)-J(s-eps) are exactly where a loose solve tolerance shows up. A gradient that no longer passes is a FAIL regardless of how good the fields look."
+  },
+  "adjoint_gets_the_same_treatment": "the A^H system (Phase B reuses the forward factorization; an iterative path must be shown to preserve that, or the adjoint solve cost must be reported separately and honestly)"
+ },
+ "benchmark_protocol": {
+  "meshes": [
+   "Phase A coarse",
+   "Phase A mid"
+  ],
+  "environment": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1",
+  "scheduling": "compute-scheduling convention: announce, 1-min load < 20, one heavy slot",
+  "repeats": 3,
+  "statistic": "best and median wall, both reported",
+  "speedup_definition": "direct wall / iterative wall on the SAME assembled operator and the same machine state"
+ },
+ "flag_and_default": {
+  "implementation": "behind a flag; default stays DIRECT and the off-path must be bit-identical to today",
+  "default_flip": "goes to Matt with the measured evidence; this lane does not flip it (EQS-02 precedent)"
+ },
+ "null_result_is_valid": "if CG/AMG cannot reach a tolerance that preserves the FD gate, the honest outcome is that the direct path stays and the D1 speedup does not transfer to this operator. That is a finding, not a failure to be worked around."
+}
