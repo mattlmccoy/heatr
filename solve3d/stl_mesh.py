@@ -383,7 +383,16 @@ def build_mesh_from_stl(path: str | Path, lc_part: float,
     # as an error (the bug Tranche 1 found on the OCC path)
     v_stl = enclosed_volume(verts, faces) * scale ** 3 * float(np.prod(factors))
     ext = vm.max(axis=0) - vm.min(axis=0)
-    if L is None:
+    # The chamber is sized on the PRE-COMPENSATED, centred extents, not on the
+    # nominal STL bbox: L0 grows the solid ~3 percent, and sizing on nominal
+    # would hand the grown part a smaller powder margin than the rule
+    # pre-registers. Same class of bug as the origin-centred refinement box.
+    from solve3d import chamber as _ch
+    chamber_spec = _ch.chamber_spec(float(ext[0]), float(ext[1]),
+                                    float(ext[2]), L_override=L)
+    if with_chamber:
+        L = chamber_spec["L_m"]
+    elif L is None:
         L = float(ext.max()) * 3.0
     if with_chamber and float(ext.max()) >= L:
         raise ValueError(
@@ -467,6 +476,8 @@ def build_mesh_from_stl(path: str | Path, lc_part: float,
         source=p.name, path=str(p), lc_part=float(lc_part), scale=float(scale),
         with_chamber=bool(with_chamber), centred=bool(centre),
         L_chamber_m=(float(L) if with_chamber else None),
+        chamber=(chamber_spec if with_chamber else None),
+        chamber_tag=(chamber_spec["tag"] if with_chamber else None),
         lc_bed=float(lc_bed_factor * lc_part),
         n_cells_total=int(msh.topology.index_map(tdim).size_global),
         n_cells_local=n_local,

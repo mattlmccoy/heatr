@@ -293,3 +293,46 @@ def test_the_pyramid_is_invariant_to_the_feature_angle_change():
         finally:
             gmsh.finalize()
     assert counts[40.0] == counts[stl_mesh.FEATURE_ANGLE_DEG]
+
+
+# --------------------------------------------------------------------------- #
+# (4) adaptive chamber sizing reaches the mesher
+# --------------------------------------------------------------------------- #
+@pytest.mark.slow
+def test_the_mesher_sizes_the_chamber_adaptively_by_default():
+    """L=None with a chamber must use the pre-registered rule, not a guess.
+    The Tamper's 44.4 mm span plus 2x20 mm is 84.4 mm -> 85 mm."""
+    from solve3d import chamber as ch
+    _m, info = stl_mesh.build_mesh_from_stl(
+        TAMPER, lc_part=2.5e-3, with_chamber=True, precomp_coeffs=None)
+    assert info.L_chamber_m == pytest.approx(0.085)
+    assert info.chamber["mode"] == "adaptive"
+    assert info.chamber["tag"] == "ch085"
+    assert info.chamber["margin_actual_m"] >= ch.GAP_M - 1e-9
+    assert info.chamber["margin_below_preregistered"] is False
+
+
+@pytest.mark.slow
+def test_the_frozen_chamber_is_still_reachable_and_says_its_margin_is_short():
+    """Reproduction path. It must not pretend the short margin is fine."""
+    _m, info = stl_mesh.build_mesh_from_stl(
+        TAMPER, lc_part=2.5e-3, with_chamber=True, L=0.060,
+        precomp_coeffs=None)
+    assert info.L_chamber_m == pytest.approx(0.060)
+    assert info.chamber["mode"] == "frozen_override"
+    assert info.chamber["tag"] == "ch060"
+    assert info.chamber["margin_below_preregistered"] is True
+
+
+@pytest.mark.slow
+def test_the_adaptive_chamber_is_sized_on_the_PRE_COMPENSATED_part():
+    """L0 grows the solid ~3 percent. Sizing the chamber on the nominal bbox
+    would silently hand the grown part a smaller margin than pre-registered --
+    the same class of bug as the origin-centred refinement box."""
+    from solve3d import chamber as ch, precomp
+    c = precomp.load_defaults()
+    _m, info = stl_mesh.build_mesh_from_stl(
+        TAMPER, lc_part=2.5e-3, with_chamber=True, precomp_coeffs=c)
+    assert info.chamber["margin_actual_m"] >= ch.GAP_M - 1e-9
+    assert info.chamber["governing_span_m"] == pytest.approx(
+        0.0444 * c.xy_scale, rel=1e-3)
