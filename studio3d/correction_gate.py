@@ -196,22 +196,46 @@ def evaluate_correction(before: Dict[str, Any],
             failed.append("out_of_part_melt")
 
     # ---- HARD guard: peak temperature, compared by VALUE ---------------- #
-    tb = _num(_get(before, "gates", "T_max_C"))
-    ta = _num(_get(after, "gates", "T_max_C"))
+    # Read preference (Tamper stale-snapshot incident, 2026-08-05): heatr3d's
+    # T_max_C is a MELT-ONSET snapshot (t90), and for densify runs the march
+    # keeps heating long past t90 - the shipped Tamper acceptance compared
+    # 239 vs 240 C snapshots while the true end-state peaks were ~70 C
+    # higher. When both arms carry the end-state peak (gates.T_end_max_C,
+    # recorded by studio3d.runner), the guard compares THAT; otherwise it
+    # falls back to the melt-onset read and says so out loud.
+    teb = _num(_get(before, "gates", "T_end_max_C"))
+    tea = _num(_get(after, "gates", "T_end_max_C"))
+    if teb is not None and tea is not None:
+        tb, ta, read = teb, tea, "end_state_peak"
+    else:
+        tb = _num(_get(before, "gates", "T_max_C"))
+        ta = _num(_get(after, "gates", "T_max_C"))
+        read = "melt_onset_snapshot"
     if tb is None or ta is None:
         guards["T_ceiling"] = {"status": "UNKNOWN", "before": tb, "after": ta,
+                               "read": read,
                                "note": "T_max_C missing; treated as a failure"}
         failed.append("T_ceiling")
     else:
         ok = ta <= tb + THRESHOLDS["T_max_regress_c"]
+        note_ok = ("peak temperature did not regress"
+                   if read == "end_state_peak" else
+                   "peak temperature did not regress (melt-onset snapshot "
+                   "read: T_end_max_C missing from one or both arms, so the "
+                   "true end-state peak was NOT compared)")
+        note_fail = ("PEAK TEMPERATURE REGRESSED (compared by value, because "
+                     "the before arm may already be over the ceiling)"
+                     if read == "end_state_peak" else
+                     "PEAK TEMPERATURE REGRESSED on the melt-onset snapshot "
+                     "read (T_end_max_C missing; the true end-state peak may "
+                     "be worse still)")
         guards["T_ceiling"] = {
             "status": "PASS" if ok else "FAIL", "before": tb, "after": ta,
+            "read": read,
             "ceiling_C": _get(before, "gates", "T_ceiling_C"),
             "before_already_over_ceiling":
                 (_get(before, "gates", "T_ceiling_ok") is False),
-            "note": ("peak temperature did not regress" if ok else
-                     "PEAK TEMPERATURE REGRESSED (compared by value, because "
-                     "the before arm may already be over the ceiling)"),
+            "note": note_ok if ok else note_fail,
         }
         if not ok:
             failed.append("T_ceiling")

@@ -222,6 +222,19 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                   densify=True, stop_mean_rho=stop_mean_rho, verbose=True)
     wall_s = time.time() - t0
 
+    # STALE-SNAPSHOT FIX (Tamper incident 2026-08-05): heatr3d's T_max_c is a
+    # MELT-ONSET read (T_phi90 snapshot at t90, heatr3d.py:1248-1263). For
+    # densify runs the march keeps heating long past t90 - on the Tamper the
+    # snapshot said 239 C while the march log showed ~317 C at the density
+    # stop. The ceiling is a material-degradation limit, so it must gate on
+    # the run's TRUE peak. T_final is the end-of-run field; with the drive on
+    # for the whole march the temperature rise is monotone, so its max is the
+    # run peak. Both reads are recorded; the ok flag uses the worse one.
+    t_end_max = (float(r.T_final[part].max())
+                 if getattr(r, "T_final", None) is not None and part.any()
+                 else None)
+    t_peak = max(float(r.T_max_c), t_end_max) if t_end_max is not None \
+        else float(r.T_max_c)
     gates = {
         "reached_phi90": bool(r.reached),
         "MELT_ONSET_FALLBACK": (not bool(r.reached)),
@@ -229,8 +242,13 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         "energy_residual_ok": bool(abs(r.energy_residual_frac) < 1e-2),
         "clamp_bound": bool(r.clamp_bound),
         "T_max_C": float(round(r.T_max_c, 1)),
+        "T_max_C_read": "melt_onset_snapshot",
+        "T_end_max_C": (float(round(t_end_max, 1))
+                        if t_end_max is not None else None),
         "T_ceiling_C": 250.0,
-        "T_ceiling_ok": bool(r.T_max_c <= 250.0),
+        "T_ceiling_ok": bool(t_peak <= 250.0),
+        "T_ceiling_read": ("end_state_peak" if t_end_max is not None
+                           else "melt_onset_snapshot"),
     }
     results: Dict[str, Any] = {
         "engine": ENGINE_LABEL,
@@ -264,6 +282,26 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         "gates": gates,
     }
     results.update({k: v for k, v in H.sinter_metrics(r).items()})
+    # END-STATE completeness from rho_final (the true end state; the
+    # sinter_metrics above classify by the stale melt-onset phi snapshot and
+    # stay recorded for continuity). fused = consolidation began (implies
+    # melt); consolidated = essentially finished. The under-consolidated
+    # count is the number a mean-based stop can hide - it is recorded so no
+    # green summary can claim a complete part while the rim is porous.
+    if r.rho_final is not None and part.any():
+        from studio3d.warped_mesh import CONSOLIDATED_RHO, FUSED_RHO
+        rho_in = r.rho_final[part]
+        results["end_state"] = {
+            "classification": "rho_final (end of run)",
+            "fused_frac": float((rho_in >= FUSED_RHO).mean()),
+            "consolidated_frac": float((rho_in >= CONSOLIDATED_RHO).mean()),
+            "n_under_consolidated": int(((rho_in >= FUSED_RHO)
+                                         & (rho_in < CONSOLIDATED_RHO)).sum()),
+            "n_unfused": int((rho_in < FUSED_RHO).sum()),
+            "min_rho_in_part": float(rho_in.min()),
+            "melt_onset_note": ("sintered_frac / dice above are melt-onset "
+                                "snapshot reads (t90), not end-state"),
+        }
     if r.rho_final is not None:
         sh = H.shrinkage_analysis(r, p, grid.h)
         results.update({k: v for k, v in sh.items()
@@ -280,6 +318,9 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                    else np.zeros((1,), np.float32)),
         sat=(np.asarray(sat, np.float32) if sat is not None
              else np.zeros((1,), np.float32)),
+        T_final=(r.T_final.astype(np.float32)
+                 if getattr(r, "T_final", None) is not None
+                 else np.zeros((1,), np.float32)),
         h=grid.h)
     np.save(out / "phi_hist.npy", np.asarray(r.phi_hist, np.float32))
     (out / "results.json").write_text(json.dumps(results, indent=2,

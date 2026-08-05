@@ -18,6 +18,21 @@ import heatr3d_job as J
 
 SINTER_PHI = 0.5      # the solver's own sinter threshold (H.sinter_metrics)
 
+# End-state classification for DENSIFY runs (Tamper incident 2026-08-05):
+# heatr3d's phi_final is a MELT-ONSET snapshot (heatr3d.py:1275, taken at t90),
+# so for densify runs it describes a mid-run state - on the real Tamper job it
+# rendered ~1000 rim voxels as loose powder whose end-state rho_final (0.83
+# mean) proves they melted and were consolidating. rho_final IS the end state
+# (rho_rel at the last step), so solid-vs-powder comes from it alone:
+#   fused        rho >= FUSED_RHO (above the 0.55 powder-bed initial; any
+#                consolidation implies the voxel melted)
+#   consolidated rho >= CONSOLIDATED_RHO (essentially finished densifying)
+# Fused-but-under-consolidated voxels are SOLID (porous material attached to
+# the part, physically nothing like loose powder) and their count is reported
+# loudly rather than hidden.
+FUSED_RHO = 0.60
+CONSOLIDATED_RHO = 0.90
+
 
 def _boxes_mesh(centers_mm: np.ndarray, sx_mm: np.ndarray,
                 sz_mm: np.ndarray) -> trimesh.Trimesh:
@@ -48,9 +63,12 @@ def build_densified_meshes(part: np.ndarray, rho_final: np.ndarray,
     heatr3d's shrinkage_analysis; classification per H.sinter_metrics.
     """
     part = np.asarray(part, bool)
-    phi = np.asarray(phi_final, float)
-    sintered = part & (phi >= SINTER_PHI)
+    rho = np.asarray(rho_final, float)
+    # END-STATE classification (see FUSED_RHO above): phi_final is a stale
+    # melt-onset snapshot for densify runs and must not decide geometry.
+    sintered = part & (rho >= FUSED_RHO)
     unsintered = part & ~sintered
+    under_consolidated = part & (rho >= FUSED_RHO) & (rho < CONSOLIDATED_RHO)
     lam_xy, lam_z = J._shrink_factor_fields(rho_final, part, p)
     h, L = grid.h, grid.L
 
@@ -111,16 +129,28 @@ def build_densified_meshes(part: np.ndarray, rho_final: np.ndarray,
             if len(mesh_.vertices):
                 mesh_.apply_translation((0.0, 0.0, shift))
 
-    info = {"n_sintered": int(sintered.sum()),
+    info = {"n_solid": int(sintered.sum()),
+            "n_powder": int(unsintered.sum()),
+            "n_under_consolidated": int(under_consolidated.sum()),
+            "min_rho_solid": (float(rho[sintered].min())
+                              if sintered.any() else None),
+            "classification": "end-state rho_final",
+            "fused_rho_threshold": FUSED_RHO,
+            "consolidated_rho_threshold": CONSOLIDATED_RHO,
+            # legacy keys, kept so existing consumers keep working
+            "n_sintered": int(sintered.sum()),
             "n_unsintered": int(unsintered.sum()),
-            "sinter_phi_threshold": SINTER_PHI,
             "solid_top_mm": (float(solid.bounds[1][2])
                              if len(solid.vertices) else None),
-            "statement": ("sintered material only, bed-suspended (no plate "
-                          "anchor): contraction about the sintered mass's "
-                          "own center per the solver's shrink law, columns "
-                          "settled; unsintered in-part voxels are loose "
-                          "powder, shown separately, never as solid part")}
+            "statement": ("fused material only (end-state rho_final >= "
+                          f"{FUSED_RHO}, NOT the stale melt-onset phi "
+                          "snapshot), bed-suspended (no plate anchor): "
+                          "contraction about the fused mass's own center per "
+                          "the solver's shrink law, columns settled; never-"
+                          "fused in-part voxels are loose powder, shown "
+                          "separately; fused-but-under-consolidated voxels "
+                          "(rho < "
+                          f"{CONSOLIDATED_RHO}) are counted, not hidden")}
     return solid, powder, info
 
 

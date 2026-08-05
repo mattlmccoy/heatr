@@ -206,3 +206,38 @@ and into its subprocess commands. The worktree
 `.claude/worktrees/strange-leakey-01a387` does not contain `studio3d/correction.py`
 (the studio3d correction module lives in the merged main tree); its `heatr3d.py`
 carries the same `make_fgm` proportional-inverse rule (worktree heatr3d.py:697).
+
+## Addendum 2026-08-05: the stale melt-onset snapshot (second incident, same job)
+
+Matt flagged the "fixed" Tamper's densified view: a two-lobed pancake instead
+of a disc. Root cause chain, verified on the archived fields plus a
+full-horizon probe (uncorrected arm, no density stop, 1500 s):
+
+1. heatr3d's T_phi90 / phi_final / T_max_c are MELT-ONSET reads by that
+   solver's documented convention (heatr3d.py:1248-1263, snapshot at t90).
+   For densify runs the march continues long past t90.
+2. The Studio consumed them as end-of-run truth. Consequences on this job:
+   the viewer classified ~1000 flange-rim voxels as loose powder from the
+   stale phi (their END-state rho_final, mean 0.83, proves they melted and
+   were consolidating); and the ceiling gate read 239.1 C while the march
+   log of the same drive shows ~317 C at the density stop and 360 C at the
+   horizon. The ACCEPTED benefit verdict rested on that under-report.
+3. The under-melt is also ANISOTROPIC by real solver physics (y = electrode
+   axis, heatr3d.py:227): uniform dopant leaves the x-rim cold; the
+   inversion boosted it but cut the y-rim 39 percent, swapping which rim
+   lags. Regional melt swap measured across ALL archived pairs: 7-41
+   percent of part voxels change melt state between arms.
+
+Fixes (Studio-side only; heatr3d.py untouched, its convention is documented):
+end-state solid classification from rho_final (FUSED_RHO 0.60 above the 0.55
+bed initial, CONSOLIDATED_RHO 0.90, under-consolidated count loud) in
+warped_mesh + viewer; gates record T_end_max_C from T_final and
+T_ceiling_ok uses the true peak; the benefit gate compares end-state peaks
+when both arms carry them and says "melt-onset read" out loud when not.
+Tests: studio3d/tests/test_stale_snapshot_fixes.py (red-first).
+
+Open finding: with true-peak reads the Tamper likely FAILS the 250 C ceiling
+in both arms at the mean-rho-0.98 stop (~300+ C). Full consolidation costs
+360 C at the horizon. Under this uniform drive the part is ceiling-limited;
+honest handling is a red ceiling gate until lower-power/longer schedules or
+the direct solve handle it.
