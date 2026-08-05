@@ -30,15 +30,32 @@ def part_hash(part: np.ndarray) -> str:
     return h.hexdigest()
 
 
+# Entries written before adaptive chamber sizing (solve3d convention,
+# 2026-08-05) carry no chamber tag; every one of them was solved in the
+# frozen 60 mm chamber, so a missing tag reads as 0.060.
+LEGACY_CHAMBER_M = 0.060
+
+
 def find_solved_map(part: np.ndarray,
-                    registry_path: Path = REGISTRY_PATH
+                    registry_path: Path = REGISTRY_PATH,
+                    chamber_m: float = LEGACY_CHAMBER_M
                     ) -> Optional[Dict[str, Any]]:
-    """The registered solved artifact for this exact part mask, or None."""
+    """The registered solved artifact for this exact part mask AND chamber.
+
+    Chamber size is part of the match key, not metadata: the cross-size
+    fringing pattern shift is measured real (solve3d chamber_field_check,
+    rel-L2 0.21 between 60 and 85 mm vs a 0.037 remesh noise floor), so a
+    map solved in one chamber is the wrong answer in another even for an
+    identical part mask.
+    """
     if not registry_path.exists():
         return None
     reg = json.loads(registry_path.read_text())
     ph = part_hash(part)
     for entry in reg.get("entries", []):
-        if entry.get("part_sha256") == ph:
+        if entry.get("part_sha256") != ph:
+            continue
+        entry_ch = float(entry.get("chamber_m", LEGACY_CHAMBER_M))
+        if abs(entry_ch - float(chamber_m)) < 1e-9:
             return dict(entry)
     return None

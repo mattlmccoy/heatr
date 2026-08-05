@@ -351,15 +351,32 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
             with np.load(fresh) as d:
                 rec = dg0_to_voxel(d["centroids"], d["s_map"], d["volumes"],
                                    part, chamber_m=0.060)
+            # adaptive chamber sizing (solve3d convention 2026-08-05): the
+            # solve's chamber tag travels into the job record, and a solve
+            # chamber different from the heatr3d verification chamber (the
+            # frozen 60 mm) is stated, never silent - the cross-size
+            # fringing shift is measured real, so the verification march
+            # sees a different field geometry than the solve optimized.
+            solve_chamber = (sr.get("mesh") or {}).get("chamber")
             prov: Dict[str, Any] = {
                 "engine": "solve3d_solved",
                 "trust_badge": ("solve3d direct solve | solved_label true "
                                 "(hold-out + smoothing gates) | sim-only"),
                 "artifact": str(fresh),
+                "solve_chamber": solve_chamber,
+                "verification_chamber_m": 0.060,
                 "solve_results": {k: sr.get(k) for k in
                                   ("solved_label", "improvement_pct", "gates",
                                    "warm_start")},
             }
+            ch_m = (solve_chamber or {}).get("L_m") \
+                if isinstance(solve_chamber, dict) else None
+            if ch_m is not None and abs(float(ch_m) - 0.060) > 1e-9:
+                prov["chamber_mismatch_note"] = (
+                    f"solved in a {float(ch_m)*1e3:.0f} mm adaptive chamber; "
+                    "heatr3d verification marches the frozen 60 mm chamber, "
+                    "so the verification field geometry differs from the "
+                    "solve's (cross-size fringing is measured real)")
             return _finish(grade_dir, n, part, rec, prov)
         solve_skip = {
             "artifact": str(fresh),

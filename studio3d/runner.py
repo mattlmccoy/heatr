@@ -269,6 +269,12 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         "out_of_part_melt_frac": _out_of_part_melt(r.phi_final, part),
         "correction_engine": correction_engine,
         "grid_n": n,
+        # chamber tag (adaptive-chamber convention, solve3d 2026-08-05):
+        # heatr3d's chamber is FROZEN at 60 mm (Grid L, owned by the
+        # graduation lane); recorded so job records are comparable-by-tag
+        # and never averaged/ranked across chamber sizes.
+        "chamber_m": CHAMBER_M,
+        "chamber_mode": "frozen_60mm_heatr3d",
         "sigma_T": float(round(r.sigma_T, 3)),
         "t_phi90_s": float(round(r.t_phi90_s, 1)),
         "max_time_s": float(max_time_s),
