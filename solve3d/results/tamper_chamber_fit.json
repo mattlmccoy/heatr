@@ -12,9 +12,10 @@
   "L_DOMAIN_m": 0.06,
   "status": "FROZEN convention, not a tunable"
  },
- "parts": [
+ "parts_frozen_60mm": [
   {
    "part": "pyramid",
+   "chamber_mm": 60.0,
    "volume_mm3": 4188.790266060172,
    "surface_area_mm2": 1749.1385688256505,
    "surface_to_volume_per_mm": 0.41757606796361,
@@ -30,6 +31,7 @@
   },
   {
    "part": "tamper",
+   "chamber_mm": 60.0,
    "volume_mm3": 8299.199229608903,
    "surface_area_mm2": 3977.725365243752,
    "surface_to_volume_per_mm": 0.47929026104741446,
@@ -42,6 +44,40 @@
    "plateau_estimate_c": 154.4770549581726,
    "melt_onset_c": 180.0,
    "melts": false
+  }
+ ],
+ "parts_adaptive": [
+  {
+   "part": "pyramid",
+   "chamber_mm": 64.0,
+   "volume_mm3": 4188.790266060172,
+   "surface_area_mm2": 1749.1385688256505,
+   "surface_to_volume_per_mm": 0.41757606796361,
+   "xy_span_mm": 23.248947143554688,
+   "chamber_side_mm": 64.0,
+   "span_over_chamber": 0.363264799118042,
+   "powder_gap_to_wall_mm": 20.375526428222656,
+   "absorbed_power_w": 6.666666764186918,
+   "conduction_delta_t_k": 394.209551756562,
+   "plateau_estimate_c": 417.209551756562,
+   "melt_onset_c": 180.0,
+   "melts": true
+  },
+  {
+   "part": "tamper",
+   "chamber_mm": 85.0,
+   "volume_mm3": 8299.199229608903,
+   "surface_area_mm2": 3977.725365243752,
+   "surface_to_volume_per_mm": 0.47929026104741446,
+   "xy_span_mm": 44.39999771118164,
+   "chamber_side_mm": 85.0,
+   "span_over_chamber": 0.5223529142491957,
+   "powder_gap_to_wall_mm": 20.30000114440918,
+   "absorbed_power_w": 13.208585810967067,
+   "conduction_delta_t_k": 342.17743263121247,
+   "plateau_estimate_c": 365.17743263121247,
+   "melt_onset_c": 180.0,
+   "melts": true
   }
  ],
  "conclusion": "the Tamper spans 0.740 of the frozen chamber against the pyramid's 0.387, leaving 7.8 mm of powder to the fixed-temperature wall against 18.4 mm. At the same volumetric power it reaches a conduction-limited plateau BELOW the 180 C melt onset, so it never melts and the asymmetric objective is all in-bounds deficit with a degenerate argmin at the horizon. This is a property of the part-in-chamber configuration, not of the mesh: every geometric gate on this mesh passes (solve3d/results/stl_chamber_gate.json)."

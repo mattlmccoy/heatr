@@ -1,0 +1,62 @@
+{
+ "what": "short uniform-doping forward on the Tamper at the ADAPTIVE chamber",
+ "chamber": {
+  "L_m": 0.085,
+  "mode": "adaptive",
+  "tag": "ch085",
+  "gap_m": 0.02,
+  "floor_m": 0.06,
+  "adaptive_would_be_m": 0.085,
+  "governing_span_m": 0.044399997711181645,
+  "spans_m": [
+   0.044399997711181645,
+   0.04433488464355469,
+   0.011
+  ],
+  "margin_actual_m": 0.02030000114440918,
+  "margin_below_preregistered": false,
+  "measured_melting_margin_m": 0.01838,
+  "gap_source": "stl_compensation_tool/pipeline_logic.py GAP_M; adopted, not invented",
+  "rationale": "27.12 MHz gives an ~11 m wavelength against parts of tens of mm, so the rig is deep in the quasi-static regime and growing the chamber does not change the material's RF characteristics; in this model that also holds by construction, because the forward is electro-quasi-static and carries no wavelength. The drive is power-density normalized to part volume, so a larger box does not dilute the watts the part absorbs. Fringing field GEOMETRY does still change with the gap, which is why the chamber sweep measures the in-part pattern rather than assuming invariance.",
+  "hardware_note": "modelling decision only; electrode gap and matching network are P-gate territory and are not bound by this",
+  "authority": "Matt, 2026-08-05"
+ },
+ "chamber_tag": "ch085",
+ "lc_part_m": 0.0025,
+ "max_time_s": 1200.0,
+ "wall_s": 468.9725239276886,
+ "n_cells": 52599,
+ "n_part_cells": 19409,
+ "part_volume_rel_err_vs_stl": -4.233225271654817e-06,
+ "standing_gates": {
+  "energy_residual_frac": 5.401253329134282e-13,
+  "energy_residual_tol": 1e-06,
+  "clamp_bound": false,
+  "cfl_violated": false,
+  "peak_T_c": 173.4191765949275,
+  "peak_source": "march_end_state",
+  "ceiling_c": 250.0,
+  "ceiling_owner": "studio3d/runner.py",
+  "peak_over_ceiling": false,
+  "complete": true,
+  "missing_keys": [],
+  "reason": [],
+  "forward_physical": true,
+  "rule": "forward_physical requires energy_residual_frac within 1e-06, clamp_bound False and cfl_violated False, with every key PRESENT; the ceiling is a process verdict and is reported separately"
+ },
+ "t90_s": NaN,
+ "reached_phi90": false,
+ "part_mean_phi": 0.0,
+ "part_mean_T_c": 110.76031592042486,
+ "T_max_c": 173.4191765949275,
+ "energy_residual_frac": 5.401253329134282e-13,
+ "curve_t_s": [
+  0.0
+ ],
+ "curve_part_mean_T_c": [
+  23.0
+ ],
+ "curve_part_mean_phi": [
+  0.0
+ ]
+}

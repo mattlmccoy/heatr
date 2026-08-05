@@ -42,8 +42,17 @@ TAMPER_STL = (REPO.parents[1] / "software" / "meteor" / "tools" / "uploads"
               / "feb850ec" / "Part Studio 1 - Tamper.stl")
 
 PART = "tamper"
-LC_PART_M = 0.9375e-3            # the Phase A coarse element size, as Phase E
-MAX_TIME_S = 650.0               # the Phase E pilot horizon
+# DEVIATION FROM PHASE E, named. Phase E used 0.9375e-3 (the Phase A coarse
+# size). This part cannot afford it: the Tamper's OWN tessellation carries a
+# 0.105 mm minimum edge, so any conforming mesh inherits ~0.092 mm elements and
+# the explicit march's CFL substep follows -- independent of lc_part. Phase E's
+# primitives have no such feature (pyramid minimum edge 23.2 mm). Refining
+# lc_part would add cells without buying back a single time step.
+LC_PART_M = 2.5e-3
+# Longer than Phase E's 650 s: at the adaptive chamber this part is heading to
+# a ~365 C plateau and reaches only 110.8 C mean by 150 s, so a 650 s horizon
+# would stop it before melt and hand the envelope a degenerate argmin.
+MAX_TIME_S = 900.0
 CHECKPOINT_INTERVAL = 25
 FILTER_RADIUS_M = 1.0e-3         # the Phase E design-chain filter radius
 
@@ -67,8 +76,13 @@ def build_case(lc_part: float = LC_PART_M, max_time_s: float = MAX_TIME_S,
     if precomp_coeffs is _L0_DEFAULT:
         precomp_coeffs = _pc.load_defaults()
     p = p or fwd.ForwardParams()
+    # ADAPTIVE CHAMBER (Matt, 2026-08-05). L=None lets solve3d/chamber.py size
+    # the box; at the frozen 60 mm this part cannot melt AND the forward is not
+    # physical (clamp latched, energy residual 3.07e-03). At the adaptive
+    # 85 mm both are fixed: residual 5.40e-13, clamp False.
+    # Reproduction of a frozen-chamber run needs L=0.060 passed explicitly.
     msh, info = stl_mesh.build_mesh_from_stl(
-        stl_path, lc_part=lc_part, with_chamber=True, L=fwd.L_DOMAIN,
+        stl_path, lc_part=lc_part, with_chamber=True, L=None,
         precomp_coeffs=precomp_coeffs)
     mats = fwd.build_materials(msh, stl_mesh.part_mask_predicate(info), p)
     eqs = adjoint.SteadyEqs(msh, mats, p)
@@ -76,11 +90,18 @@ def build_case(lc_part: float = LC_PART_M, max_time_s: float = MAX_TIME_S,
     return tc, info
 
 
+def _chamber_run_id(info) -> str:
+    """Chamber-tagged, so a ch060 and a ch085 record can never be confused."""
+    from solve3d import chamber as _ch
+    return _ch.run_id(PART, info.L_chamber_m)
+
+
 def mesh_record(tc, info, chain) -> dict:
     return {
-        "part": PART, "stl": str(info.path), "stl_facets": info.n_facets_stl,
+        "part": PART, "run_id": _chamber_run_id(info), "stl": str(info.path), "stl_facets": info.n_facets_stl,
         "lc_part_m": float(info.lc_part), "lc_bed_m": float(info.lc_bed),
         "L_chamber_m": float(info.L_chamber_m),
+        "chamber": info.chamber, "chamber_tag": info.chamber_tag,
         "feature_angle_deg": float(info.feature_angle_deg),
         "n_cells": int(info.n_cells_total),
         "n_part_cells": int(info.n_part_cells),
