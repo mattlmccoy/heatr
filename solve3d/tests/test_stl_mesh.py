@@ -96,7 +96,15 @@ def test_chi_volume_fill_on_the_stl_mesh_passes_the_shared_contract():
     # test on the original triangle soup, so a mesh that claimed the wrong
     # cells would fail here even though the volume sum agreed
     v, f = stl_mesh.load_stl(STL / "pyramid.stl")
-    ctr = stl_mesh.cell_centroids(msh) / info.scale
+    # `/ info.scale` was the whole inverse map when the mesh frame was just
+    # native-units-times-scale. It is not any more: `build_mesh_from_stl` now
+    # applies Level 0 pre-compensation BY DEFAULT (the approved spec state,
+    # matching phase_e/run.build_case), so the meshed solid is deliberately
+    # ~3 percent larger than the STL. Dividing by the scale alone put every
+    # near-boundary centroid outside the nominal triangle soup and dropped this
+    # agreement to 0.9721. `mesh_points_to_stl_native` is the exact inverse of
+    # the frame the mesher actually used, L0 included.
+    ctr = stl_mesh.mesh_points_to_stl_native(stl_mesh.cell_centroids(msh), info)
     ins = stl_mesh.points_inside(v, f, ctr)
     assert ins.mean() > 0.995, f"only {ins.mean():.4f} of cells test inside"
 

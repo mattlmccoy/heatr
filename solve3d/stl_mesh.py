@@ -31,6 +31,36 @@ import numpy as np
 
 MM_TO_M = 1.0e-3
 
+# Sharp-feature angle handed to gmsh's `classifySurfaces`: facets whose dihedral
+# angle exceeds it start a new patch, and each patch is spline-fitted by
+# `createGeometry`. Too coarse a threshold merges genuinely curved regions into
+# one patch and the fit CUTS THE CORNER, so the meshed solid is quietly smaller
+# than the STL.
+#
+# Tranche 1 measured this once, on the library pyramid, and moved pi -> 40 deg
+# (pi merged every facet and shrank the pyramid 2 percent). 40 deg is safe for
+# an all-planar primitive but NOT for arbitrary geometry: on the real user part
+# ("Part Studio 1 - Tamper.stl", a 44 mm disc-like solid with a curved wall) it
+# merges the wall into 8 patches and loses 0.79 percent of the volume. Measured
+# sweep, part volume rel err vs the STL's own enclosed volume:
+#
+#   angle    pyramid          Tamper       Tamper surfaces
+#    40.0    2.220e-16       -7.912e-03           8
+#     5.0    2.220e-16       -1.604e-04         489
+#     2.0    2.220e-16       -9.436e-06         886
+#     1.0    2.220e-16       -1.458e-06         998
+#
+# The pyramid is INVARIANT to the angle (its facets are coplanar, so nothing
+# splits), which is why lowering the default costs the library path nothing.
+# 1 degree, and the volume check below refuses anything the fit still smooths.
+FEATURE_ANGLE_DEG = 1.0
+
+# Stated discretisation tolerance on the meshed part volume against the STL's
+# own enclosed volume. Same number the Tranche 1 gates use. It is a REFUSAL,
+# not a report: a part that meshed 1 percent small would otherwise flow into a
+# solve and produce confident wrong numbers.
+VOLUME_REL_TOL = 5.0e-3
+
 
 # --------------------------------------------------------------------------- #
 # Refusals
@@ -53,6 +83,17 @@ class SelfIntersectingMeshError(MeshRefusal):
 
 class InconsistentWindingError(MeshRefusal):
     """Face orientations disagree, so the inside is not well defined."""
+
+
+class SurfaceReconstructionError(MeshRefusal):
+    """The meshed solid is not the STL solid.
+
+    gmsh's `classifySurfaces` groups facets into patches and `createGeometry`
+    spline-fits each patch, so a threshold that is too coarse smooths across
+    real geometry and the meshed part is quietly the WRONG SIZE. That is a
+    confident-wrong-number failure, not a crash, so it is refused rather than
+    reported: see FEATURE_ANGLE_DEG.
+    """
 
 
 # --------------------------------------------------------------------------- #
@@ -228,33 +269,127 @@ class StlMeshInfo:
         return f"StlMeshInfo({self.__dict__})"
 
 
+_L0_DEFAULT = object()          # sentinel: "use the approved shared default"
+
+
+def stl_vertices_in_mesh_frame(verts: np.ndarray, scale: float,
+                               centre: bool, precomp_coeffs):
+    """The affine map from STL native coordinates to solver coordinates.
+
+    Three steps, in this order, and the order is not arbitrary:
+      1. UNITS      native -> metres (`scale`).
+      2. CENTRING   subtract the bounding-box centre, so the part sits on the
+                    chamber origin. The solver's electrodes are the facets at
+                    z = +-L/2 in ABSOLUTE coordinates (forward.march_enthalpy),
+                    so a part left where the CAD put it would be off-axis in
+                    the chamber. The OCC path centres its solids for the same
+                    reason (phase_e/geometry._add_solid).
+      3. LEVEL 0    anisotropic pre-compensation about that centre. Scaling
+                    before centring would move the part as well as grow it.
+
+    Returned as (points_m, translation_m, factors) so the inverse is exact and
+    a caller can map solver points back onto the original triangle soup.
+    """
+    p = np.asarray(verts, dtype=float) * float(scale)
+    t = ((p.min(axis=0) + p.max(axis=0)) / 2.0 if centre
+         else np.zeros(3, dtype=float))
+    f = (np.ones(3) if precomp_coeffs is None or precomp_coeffs.is_identity
+         else np.asarray(precomp_coeffs.factors, dtype=float))
+    return (p - t) * f, t, f
+
+
+def mesh_points_to_stl_native(pts: np.ndarray, info) -> np.ndarray:
+    """Inverse of `stl_vertices_in_mesh_frame`, for (N, 3) solver points."""
+    p = np.asarray(pts, dtype=float)
+    return (p / np.asarray(info.precomp_factors)
+            + np.asarray(info.translation_m)) / float(info.scale)
+
+
+def part_mask_predicate(info):
+    """A `build_materials`-shaped predicate that reads the CELL TAGS.
+
+    The point of meshing the STL rather than voxelising it is that the part
+    boundary is a conforming mesh surface, so "is this cell in the part" is
+    answered by the gmsh physical group exactly, with no inside test and no
+    staircase. A geometric ray cast over ~10^5 cells would be both slower and
+    less accurate than the tagging that produced the mesh.
+
+    It is not self-certifying: `test_stl_chamber.py` cross-checks the mask
+    cell-for-cell against an INDEPENDENT ray cast on the original triangles,
+    so a tag/ordering mismatch fails a gate rather than passing silently.
+    """
+    mask = np.zeros(int(info.n_cells_local), dtype=bool)
+    mask[np.asarray(info.part_cells, dtype=np.int64)] = True
+
+    def pred(mp):
+        mp = np.asarray(mp)
+        n = mp.shape[1] if mp.ndim == 2 else 0
+        if n != mask.size:
+            raise ValueError(
+                f"part_mask_predicate: mesh has {mask.size} local cells but "
+                f"was asked about {n} points; this predicate is defined on "
+                "the cells of ITS OWN mesh only")
+        return mask
+    return pred
+
+
 def build_mesh_from_stl(path: str | Path, lc_part: float,
                         scale: float = MM_TO_M, with_chamber: bool = False,
                         L: float | None = None, lc_bed_factor: float = 4.0,
-                        seed: int = 1, check_self_intersection: bool = False):
+                        seed: int = 1, check_self_intersection: bool = False,
+                        precomp_coeffs=_L0_DEFAULT, centre: bool | None = None,
+                        feature_angle_deg: float = FEATURE_ANGLE_DEG,
+                        volume_rel_tol: float = VOLUME_REL_TOL):
     """Validate, then mesh the STL solid (optionally inside a chamber box).
 
     Refusal happens BEFORE gmsh is touched, so bad geometry costs a
     millisecond rather than a meshing run.
 
-    `with_chamber` DEFAULTS FALSE and is a KNOWN INCOMPLETE PATH. Wrapping the
-    part in a bed as a geo-kernel volume-with-a-hole fails in tetgen ("PLC
-    Error: a segment and a facet intersect") when the inner surface came from
-    a discrete entity. The part-only mesh is exact (machine-precision volume)
-    and is what Task 2's gates cover; bed embedding, which a full solve needs,
-    is the recorded next increment and is NOT claimed to work here.
+    `with_chamber=True` NOW WORKS. Tranche 1 recorded it as blocked by a tetgen
+    "PLC Error: a segment and a facet intersect" and attributed that to the
+    inner surface being a discrete entity. The attribution was wrong: the empty
+    chamber box failed identically with no part present, because
+    `_add_box_surface_loop` built each box edge twice. See that function.
+
+    LEVEL 0 IS APPLIED BY DEFAULT, matching phase_e/run.build_case. The scaled
+    solid is what gets meshed AND what the refinement box follows, so
+    pre-compensation cannot quietly coarsen the mesh at the part boundary
+    (the correction Tranche 1 had to make on the OCC path). Pass
+    `precomp_coeffs=precomp.ShrinkageL0(0.0, 0.0)` -- or `None` -- to reproduce
+    a pre-L0 run.
+
+    `centre` defaults to `with_chamber`: a part being embedded in the chamber
+    is put on the chamber origin, a part-only mesh is left in its own frame so
+    the existing part-only gates keep meshing exactly what they meshed before.
     """
     import gmsh
     from dolfinx.io import gmsh as dgmsh
     from mpi4py import MPI
 
+    from solve3d import precomp as _pc
+    if precomp_coeffs is _L0_DEFAULT:
+        precomp_coeffs = _pc.load_defaults()
+    if centre is None:
+        centre = bool(with_chamber)
+
     p = Path(path)
     verts, faces = load_stl(p)
     validate(verts, faces, check_self_intersection=check_self_intersection)
-    v_stl = enclosed_volume(verts, faces) * scale ** 3
-    ext = (verts.max(axis=0) - verts.min(axis=0)) * scale
+    vm, translation, factors = stl_vertices_in_mesh_frame(
+        verts, scale, centre, precomp_coeffs)
+    # the STL's own enclosed volume, in the SAME frame as the mesh: the
+    # pre-compensated solid is deliberately larger than nominal, and comparing
+    # the meshed volume against the nominal number would report the correction
+    # as an error (the bug Tranche 1 found on the OCC path)
+    v_stl = enclosed_volume(verts, faces) * scale ** 3 * float(np.prod(factors))
+    ext = vm.max(axis=0) - vm.min(axis=0)
     if L is None:
         L = float(ext.max()) * 3.0
+    if with_chamber and float(ext.max()) >= L:
+        raise ValueError(
+            f"part extent {float(ext.max()):.4f} m does not fit in a chamber "
+            f"of side {float(L):.4f} m; refusing rather than meshing a part "
+            "that pokes through the bed")
 
     gmsh.initialize()
     try:
@@ -269,23 +404,22 @@ def build_mesh_from_stl(path: str | Path, lc_part: float,
         # surface is exactly the one the refusal checks ran on.
         ent = gmsh.model.addDiscreteEntity(2)
         node_tags = np.arange(1, verts.shape[0] + 1, dtype=np.int64)
-        gmsh.model.mesh.addNodes(2, ent, node_tags,
-                                 (verts * scale).ravel())
+        gmsh.model.mesh.addNodes(2, ent, node_tags, vm.ravel())
         gmsh.model.mesh.addElementsByType(
             ent, 2, [], (faces + 1).ravel().astype(np.int64))
-        # 40 degrees, NOT pi: with pi every facet joins one patch and
-        # createGeometry spline-fits across the edges, which shrank the pyramid
-        # by 2 percent. A sharp-edge angle keeps each planar face its own
-        # surface, so the reconstructed geometry is exactly the facets.
-        gmsh.model.mesh.classifySurfaces(40.0 * np.pi / 180.0, True, True,
-                                         180.0 * np.pi / 180.0)
+        # See FEATURE_ANGLE_DEG for the measured sweep behind this number and
+        # for why 40 degrees was safe on the library primitives and wrong on a
+        # real curved part.
+        gmsh.model.mesh.classifySurfaces(
+            float(feature_angle_deg) * np.pi / 180.0, True, True,
+            180.0 * np.pi / 180.0)
         gmsh.model.mesh.createGeometry()
         surfs = [t for (d, t) in gmsh.model.getEntities(2)]
         part_loop = gmsh.model.geo.addSurfaceLoop(surfs)
         part_vol = gmsh.model.geo.addVolume([part_loop])
         groups = {"part": [part_vol]}
         if with_chamber:
-            ctr = ((verts.min(axis=0) + verts.max(axis=0)) / 2.0) * scale
+            ctr = None if centre else (vm.min(axis=0) + vm.max(axis=0)) / 2.0
             box_loop = _add_box_surface_loop(gmsh, L, ctr)
             # a volume whose SECOND loop is a hole: the bed wraps the part and
             # shares its boundary, which is what makes the mesh conforming
@@ -300,8 +434,8 @@ def build_mesh_from_stl(path: str | Path, lc_part: float,
         # centred on the PART's own bounding box: library STLs are not all
         # origin-centred (the pyramid sits at z in [0, 23.2] mm), and an
         # origin-centred refinement box left half of it at the coarse size
-        lo_m = verts.min(axis=0) * scale
-        hi_m = verts.max(axis=0) * scale
+        lo_m = vm.min(axis=0)
+        hi_m = vm.max(axis=0)
         pad = 0.02 * float(ext.max())
         for k, val in (("XMin", lo_m[0] - pad), ("XMax", hi_m[0] + pad),
                        ("YMin", lo_m[1] - pad), ("YMax", hi_m[1] + pad),
@@ -323,36 +457,80 @@ def build_mesh_from_stl(path: str | Path, lc_part: float,
         gmsh.finalize()
 
     tdim = msh.topology.dim
+    n_local = int(msh.topology.index_map(tdim).size_local)
     part_cells = (ct.find(1) if ct is not None
-                  else np.arange(msh.topology.index_map(tdim).size_local,
-                                 dtype=np.int32))
+                  else np.arange(n_local, dtype=np.int32))
+    part_cells = np.asarray(part_cells, dtype=np.int64)
+    part_cells = part_cells[part_cells < n_local]
     v_mesh = float(_cell_volumes(msh)[part_cells].sum())
     info = StlMeshInfo(
-        source=p.name, lc_part=float(lc_part), scale=float(scale),
-        with_chamber=bool(with_chamber),
+        source=p.name, path=str(p), lc_part=float(lc_part), scale=float(scale),
+        with_chamber=bool(with_chamber), centred=bool(centre),
+        L_chamber_m=(float(L) if with_chamber else None),
+        lc_bed=float(lc_bed_factor * lc_part),
         n_cells_total=int(msh.topology.index_map(tdim).size_global),
+        n_cells_local=n_local,
+        n_part_cells=int(part_cells.size),
+        n_bed_cells=int(n_local - part_cells.size),
         n_nodes_total=int(msh.geometry.index_map().size_global),
         n_facets_stl=int(faces.shape[0]),
         part_cells=part_cells,
+        translation_m=[float(v) for v in translation],
+        precomp_factors=[float(v) for v in factors],
+        precomp=(_pc.ShrinkageL0(0.0, 0.0).provenance()
+                 if precomp_coeffs is None else precomp_coeffs.provenance()),
+        feature_angle_deg=float(feature_angle_deg),
         stl_volume_m3=v_stl, part_volume_m3=v_mesh,
         part_volume_rel_err_vs_stl=v_mesh / v_stl - 1.0)
+    if abs(info.part_volume_rel_err_vs_stl) > float(volume_rel_tol):
+        raise SurfaceReconstructionError(
+            f"{p.name}: the meshed part volume is "
+            f"{info.part_volume_rel_err_vs_stl:+.4e} relative to the STL's own "
+            f"enclosed volume, outside the stated {volume_rel_tol:.1e} "
+            f"tolerance. The surface reconstruction at feature_angle_deg="
+            f"{float(feature_angle_deg)} has smoothed across real geometry. "
+            "Lower the angle rather than accepting the mesh: a part that is "
+            "quietly the wrong size produces confident wrong numbers.")
     return msh, info
 
 
 def _add_box_surface_loop(gmsh, L: float, centre=None) -> int:
-    """Axis-aligned chamber box in the geo kernel, returned as a surface loop."""
+    """Axis-aligned chamber box in the geo kernel, returned as a surface loop.
+
+    EACH OF THE 12 EDGES IS CREATED EXACTLY ONCE and reused, with a negative
+    tag where a face traverses it backwards. This is the whole Tranche 1
+    chamber blocker.
+
+    `gmsh.model.geo.addLine` does NOT deduplicate: building the six faces
+    independently created 24 curves, two coincident copies of every edge. Each
+    copy is meshed on its own, so the two faces meeting at that edge carried
+    different 1-D node sets and the shell was not conforming with ITSELF.
+    tetgen then reported "PLC Error: a segment and a facet intersect", which
+    was true and had nothing to do with the STL part -- the empty box failed
+    the same way. See solve3d/tests/test_stl_chamber.py, which fails at 24
+    curves before this function is corrected.
+    """
     h = L / 2.0
     cx, cy, cz = (0.0, 0.0, 0.0) if centre is None else [float(v) for v in centre]
     g = gmsh.model.geo
     c = [g.addPoint(x, y, z) for x in (cx - h, cx + h) for y in (cy - h, cy + h)
          for z in (cz - h, cz + h)]
     # corner index: bit0=z, bit1=y, bit2=x
+    lines: dict[tuple[int, int], int] = {}
+
+    def edge(a: int, b: int) -> int:
+        """Signed curve tag for the directed edge a->b, creating it once."""
+        key = (a, b) if a < b else (b, a)
+        if key not in lines:
+            lines[key] = g.addLine(c[key[0]], c[key[1]])
+        return lines[key] if a < b else -lines[key]
+
     quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1),
              (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
     faces = []
     for q in quads:
-        lines = [g.addLine(c[q[i]], c[q[(i + 1) % 4]]) for i in range(4)]
-        faces.append(g.addPlaneSurface([g.addCurveLoop(lines)]))
+        loop = [edge(q[i], q[(i + 1) % 4]) for i in range(4)]
+        faces.append(g.addPlaneSurface([g.addCurveLoop(loop)]))
     return g.addSurfaceLoop(faces)
 
 
