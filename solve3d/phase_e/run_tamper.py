@@ -150,6 +150,12 @@ def score_arm(tc, s_map: np.ndarray, name: str, extra: dict | None = None,
         "gates": {"energy_residual_frac": float(tr.out["energy_residual_frac"]),
                   "clamp_bound": bool(tr.out["clamp_bound"]),
                   "cfl_violated": bool(tr.out["cfl_violated"])},
+        # the shared cross-lane shape; `peak_T_c` is the TRUE trajectory
+        # maximum, not the read-step or end-state value (studio3d ab08872)
+        "standing_gates": gates.standing_gates(
+            tr.out or {}, peak_T_c=float(max(
+                float(np.max(tc.state_at(tr, j)))
+                for j in (ka, int(tr.n_steps))))),
         "objective_prereg": {"phi_floor": obj.PHI_FLOOR,
                              "w_out_over_w_in": obj.W_OUT_OVER_W_IN},
     }

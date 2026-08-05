@@ -299,6 +299,11 @@ def score_arm(tc, s_map: np.ndarray, name: str, grid_cache: dict) -> dict:
     Ja = tc.J_trajectory(tr)
     ka = int(np.argmin(Ja))
     T_read = tc.state_at(tr, ka)
+    # STANDING GATES, emitted with every arm so the Studio's scheduler can
+    # tell "the acceptance gates did not pass" from "the forward was not
+    # physical". Those are different verdicts and only one of them means the
+    # number must not be shown. See solve3d/gates.standing_gates.
+    stand = G.standing_gates(tr.out or {})
     phi = fwd.phase_fraction(T_read, tc.p)[0]
     vol, chi = tc.vol_nodal, tc.m_nodal
     split = obj.split_asymmetric(phi, chi, vol)
@@ -342,6 +347,10 @@ def score_arm(tc, s_map: np.ndarray, name: str, grid_cache: dict) -> dict:
         "map_stats": {"mean": float(np.average(
             s_map, weights=tc.eqs.vol[tc.eqs.part])),
             "min": float(np.min(s_map)), "max": float(np.max(s_map))},
+        "standing_gates": stand,
+        "forward_physical": stand["forward_physical"],
+        "peak_T_c": stand["peak_T_c"],
+        "peak_over_ceiling": stand["peak_over_ceiling"],
     }
 
 
@@ -639,6 +648,16 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
         "gates": {"mesh_holdout_pass": gate["mesh_holdout"]["pass"],
                   "smoothing_pass": gate["smoothing_robustness"]["pass"],
                   "detail": gate},
+        # SURFACED AT THE TOP LEVEL on the Studio lane's request: their rung
+        # needs to separate "acceptance gates not passed" (a real solve that
+        # did not help) from "forward not physical" (a number that must not be
+        # shown at all) WITHOUT having to infer it from solved_label.
+        "standing_gates": {"uniform_baseline": uniform_rec["standing_gates"],
+                           "solved": solved_rec["standing_gates"]},
+        "forward_physical": bool(uniform_rec["forward_physical"]
+                                 and solved_rec["forward_physical"]),
+        "peak_over_ceiling": bool(uniform_rec["peak_over_ceiling"]
+                                  or solved_rec["peak_over_ceiling"]),
         "solved_label": solved_label,
         "solved_label_rule": prereg()["acceptance"]["solved_label_rule"],
         "warm_start": bool(warm_start_sat),

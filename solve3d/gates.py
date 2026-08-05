@@ -222,3 +222,94 @@ def phase_fraction_phi(T, t_pc_c: float = 180.0, dt_pc_c: float = 10.0):
     are converted to melt fraction by ONE implementation."""
     Te = np.asarray(T, dtype=float)
     return np.clip((Te - t_pc_c) / dt_pc_c + 0.5, 0.0, 1.0)
+
+
+# --------------------------------------------------------------------------- #
+# The forward's STANDING GATES (cross-lane contract with the Studio)
+# --------------------------------------------------------------------------- #
+# The process temperature ceiling. The STUDIO LANE OWNS THIS NUMBER
+# (studio3d/runner.py, "T_ceiling_C": 250.0); it is mirrored here only so that
+# solve3d can report the comparison, and a test asserts the two agree rather
+# than letting them drift.
+T_CEILING_C = 250.0
+
+# Energy-residual tolerance for calling a march physical. Phase E's own
+# marches land at ~1.2e-13 (solve3d/phase_e/results/phase_e_pyramid.json), so
+# this is four orders of headroom, not a number fitted to a result.
+ENERGY_RESIDUAL_TOL = 1e-6
+
+_REQUIRED_GATE_KEYS = ("energy_residual_frac", "clamp_bound", "cfl_violated")
+
+
+def standing_gates(march_out: dict, peak_T_c: float | None = None) -> dict:
+    """The march's own gates, in the shape every scored arm should emit.
+
+    WHY THIS IS A SEPARATE, SHARED FUNCTION. The Studio's scheduler could not
+    distinguish "the acceptance gates did not pass" from "the forward was not
+    physical", because the scored arms reported the objective and the shape
+    metrics but not the march's gates. Those are different verdicts: the first
+    means the method did not help this part, the second means the number must
+    not be shown at all.
+
+    FAIL-CLOSED, deliberately. A missing key reads as VIOLATED and sets
+    `complete` False. A gate that cannot tell "I checked and it is good" from
+    "I got nothing back" is worse than no gate, so absence is never health.
+
+    THE CEILING IS NOT A PHYSICS VIOLATION. `peak_over_ceiling` is a PROCESS
+    verdict -- the part cooked -- and it is reported beside `forward_physical`
+    rather than folded into it. A drive-limited part can sit far over the
+    ceiling with perfect numerics, which is exactly the Tamper's case.
+
+    `peak_T_c` is the caller's TRUE trajectory maximum when it has one. The
+    march's `T_max_c` is its END STATE, and studio3d ab08872 is the record of
+    what taking an end-state snapshot for the peak costs: a melt-onset
+    snapshot read as end-of-run truth understated the peak. When the caller
+    supplies the trajectory maximum it wins, and `peak_source` says which was
+    used so a reader can tell.
+    """
+    out = dict(march_out or {})
+    reason: list[str] = []
+    missing = [k for k in _REQUIRED_GATE_KEYS if k not in out]
+    for k in missing:
+        reason.append(k)
+
+    resid = out.get("energy_residual_frac", None)
+    resid_f = float("nan") if resid is None else float(resid)
+    if "energy_residual_frac" not in missing and not (
+            abs(resid_f) <= ENERGY_RESIDUAL_TOL):
+        # `not (<=)` rather than `>` so NaN lands here instead of passing
+        reason.append("energy_residual_frac")
+    clamp = bool(out.get("clamp_bound", True))
+    cfl = bool(out.get("cfl_violated", True))
+    if "clamp_bound" not in missing and clamp:
+        reason.append("clamp_bound")
+    if "cfl_violated" not in missing and cfl:
+        reason.append("cfl_violated")
+
+    if peak_T_c is None:
+        peak = out.get("T_max_c", None)
+        peak_source = "march_end_state"
+    else:
+        peak = float(peak_T_c)
+        peak_source = "trajectory_maximum"
+    peak_f = float("nan") if peak is None else float(peak)
+
+    return {
+        "energy_residual_frac": resid_f,
+        "energy_residual_tol": ENERGY_RESIDUAL_TOL,
+        "clamp_bound": clamp,
+        "cfl_violated": cfl,
+        "peak_T_c": peak_f,
+        "peak_source": peak_source,
+        "ceiling_c": T_CEILING_C,
+        "ceiling_owner": "studio3d/runner.py",
+        "peak_over_ceiling": bool(peak_f > T_CEILING_C),
+        "complete": not missing,
+        "missing_keys": missing,
+        "reason": reason,
+        "forward_physical": not reason,
+        "rule": ("forward_physical requires energy_residual_frac within "
+                 f"{ENERGY_RESIDUAL_TOL:g}, clamp_bound False and "
+                 "cfl_violated False, with every key PRESENT; the ceiling is "
+                 "a process verdict and is reported separately"),
+    }
