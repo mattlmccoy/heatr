@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from studio3d.correction import build_correction
+from studio3d.precomp import prepare_mesh
 from studio3d.runner import run_densify
 
 ARMS = ("uncorrected", "corrected")
@@ -24,8 +25,16 @@ ARMS = ("uncorrected", "corrected")
 def run_job(mesh_path: str, grade_dir: str | Path, arm: str = "uncorrected",
             n: int = 64, max_time_s: float = 1500.0,
             stop_mean_rho: float | None = 0.98,
-            fast_march: bool = False) -> Dict[str, Any]:
+            fast_march: bool = False,
+            precomp: bool = True) -> Dict[str, Any]:
     """One densify arm. fast_march defaults OFF (the blessed opt-in terms).
+
+    precomp defaults ON (spec section 1, Level 0): the mesh is affinely
+    pre-compensated for MATERIAL shrinkage into <grade_dir>/precomp/<name>
+    and everything downstream -- correction build, voxelization, march --
+    consumes THAT file. The coefficients are borrowed SLS literature values,
+    unmeasured for RFAM; the applicability caveat travels in results
+    ["shrinkage_precomp"] and must be quoted with every dimensional claim.
 
     When fast_march is on, the job's EQS solution store lives at
     <grade_dir>/heatr3d/eqs_store, so a later package-verify of the SAME
@@ -38,6 +47,12 @@ def run_job(mesh_path: str, grade_dir: str | Path, arm: str = "uncorrected",
     grade_dir = Path(grade_dir)
     out = grade_dir / "heatr3d" / arm
     eqs_store = grade_dir / "heatr3d" / "eqs_store"
+
+    # Level 0 pre-compensation FIRST: the chamber-fit refusal must see the
+    # enlarged part, and every downstream consumer must see the same file.
+    print("STUDIO3D_PROGRESS stage=precomp", flush=True)
+    mesh_path, precomp_prov = prepare_mesh(mesh_path, grade_dir,
+                                           enabled=precomp)
 
     sat_path = None
     correction_engine = None
@@ -52,7 +67,8 @@ def run_job(mesh_path: str, grade_dir: str | Path, arm: str = "uncorrected",
                       correction_engine=correction_engine,
                       max_time_s=max_time_s, stop_mean_rho=stop_mean_rho,
                       fast_march=fast_march,
-                      eqs_store_dir=(eqs_store if fast_march else None))
+                      eqs_store_dir=(eqs_store if fast_march else None),
+                      shrinkage_precomp=precomp_prov)
 
     # ---- predicted-benefit gate (TAMPER_DIAGNOSIS.md fix 2c) ------------- #
     # The corrected arm must BEAT uniform. On the Tamper nothing compared the
@@ -99,6 +115,9 @@ def main() -> int:
     ap.add_argument("--stop-mean-rho", type=float, default=0.98,
                     help="stop the march at this mean part density "
                          "(<= 0 disables; horizon then rules)")
+    ap.add_argument("--no-precomp", action="store_true",
+                    help="escape hatch: skip the Level 0 material-shrinkage "
+                         "pre-compensation (recorded as enabled false)")
     ap.add_argument("--fast-march", action="store_true",
                     help="opt in to the bit-identical numba march + the "
                          "per-job EQS solution store (default off)")
@@ -107,7 +126,8 @@ def main() -> int:
     try:
         res = run_job(args.mesh, args.grade_dir, arm=args.arm, n=args.n,
                       max_time_s=args.max_time_s, stop_mean_rho=stop,
-                      fast_march=args.fast_march)
+                      fast_march=args.fast_march,
+                      precomp=not args.no_precomp)
     except Exception as e:
         # one clean line for the UI; the traceback stays in the log
         import traceback

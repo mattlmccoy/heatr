@@ -16,6 +16,7 @@ from typing import Any, Dict, Tuple
 import numpy as np
 from PIL import Image
 
+from studio3d.precomp import prepare_mesh
 from studio3d.runner import run_densify, voxelize_stl
 from studio3d.transfer import stack_to_voxel
 
@@ -70,7 +71,9 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
                    max_time_s: float = 1500.0,
                    stop_mean_rho: float | None = 0.98,
                    fast_march: bool = False,
-                   eqs_store_dir: str | Path | None = None) -> Dict[str, Any]:
+                   eqs_store_dir: str | Path | None = None,
+                   precomp: bool = True,
+                   grade_dir: str | Path | None = None) -> Dict[str, Any]:
     """Reconstruct -> transfer -> densify -> record. Never silent.
 
     eqs_store_dir: the originating job's <grade_dir>/heatr3d/eqs_store. A
@@ -87,6 +90,11 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
     pkg = Path(pkg_dir)
     rec: Dict[str, Any]
     try:
+        # verify the mesh that PRINTS: the same Level 0 pre-compensated STL
+        # the densify arms marched (reused from grade_dir when given).
+        mesh_path, precomp_prov = prepare_mesh(
+            mesh_path, grade_dir if grade_dir is not None else pkg,
+            enabled=precomp)
         sat_stack, mask_stack, z_mm, canvas_m = \
             reconstruct_sat_stack(tiff_job_dir)
         part = voxelize_stl(mesh_path, n)
@@ -103,11 +111,13 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
                           max_time_s=max_time_s,
                           stop_mean_rho=stop_mean_rho,
                           fast_march=fast_march,
-                          eqs_store_dir=(eqs_store_dir if fast_march else None))
+                          eqs_store_dir=(eqs_store_dir if fast_march else None),
+                          shrinkage_precomp=precomp_prov)
         g = res["gates"]
         gates_ok = bool(g["energy_residual_ok"] and g["T_ceiling_ok"]
                         and not g["clamp_bound"])
         rec = {"run": True, "source": "emitted_rasters",
+               "shrinkage_precomp": precomp_prov,
                "transfer": {k: v for k, v in tr.items() if k != "sat"},
                "grid_n": n, "gates": g, "gates_ok": gates_ok,
                "sigma_T": res["sigma_T"],
@@ -118,6 +128,7 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
                "eqs_cache": res.get("eqs_cache")}
     except Exception as e:
         rec = {"run": True, "source": "emitted_rasters", "gates_ok": False,
+               "shrinkage_precomp": locals().get("precomp_prov"),
                "error": f"verification failed: {e}"}
     (pkg / "production_verify_summary.json").write_text(
         json.dumps(rec, indent=2, default=float))
@@ -138,10 +149,18 @@ def main() -> int:
     ap.add_argument("--job-dir", required=True)
     ap.add_argument("--n", type=int, default=64)
     ap.add_argument("--max-time-s", type=float, default=1500.0)
+    ap.add_argument("--grade-dir", default=None,
+                    help="the job's grade dir, so the SAME pre-compensated "
+                         "mesh the densify arms used is reused here")
+    ap.add_argument("--no-precomp", action="store_true",
+                    help="escape hatch: verify the nominal mesh (recorded as "
+                         "enabled false)")
     args = ap.parse_args()
     rec = verify_package(args.pkg_dir, args.mesh, n=args.n,
                          tiff_job_dir=args.job_dir,
-                         max_time_s=args.max_time_s)
+                         max_time_s=args.max_time_s,
+                         precomp=not args.no_precomp,
+                         grade_dir=args.grade_dir)
     print("VERIFY " + json.dumps({"run": rec["run"],
                                   "gates_ok": rec.get("gates_ok")}))
     return 0

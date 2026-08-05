@@ -128,7 +128,9 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                 power_density_w_per_m3: Optional[float] = None,
                 correction_engine: Optional[str] = None,
                 fast_march: bool = False,
-                eqs_store_dir: Optional[str | Path] = None) -> Dict[str, Any]:
+                eqs_store_dir: Optional[str | Path] = None,
+                shrinkage_precomp: Optional[Dict[str, Any]] = None
+                ) -> Dict[str, Any]:
     """One densify=True heatr3d march + the standard artifact set.
 
     sat_path: optional npz with a (n, n, n) ``sat`` array (the corrected
@@ -140,6 +142,12 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
     together with fast_march=True, which is the only path that takes an
     EqsCache; it is IGNORED with an explicit warning otherwise rather than
     silently pretending to accelerate. Default None everywhere.
+
+    shrinkage_precomp: the Level 0 provenance block from
+    studio3d.precomp.prepare_mesh, describing whether mesh_path is a
+    pre-compensated mesh and with which coefficients. Recorded verbatim in
+    results.json; None means the caller did not go through the Level 0 path
+    at all (distinct from an explicit enabled=false).
 
     Recorded acceleration: results["eqs_cache"] always states whether a cache
     was active and, when it was, how many solves it hit and missed. Silent
@@ -229,6 +237,10 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         "engine_march": engine_march,
         "env_provenance": env_provenance,
         "eqs_cache": eqs_cache_record,
+        # Level 0 material-shrinkage pre-compensation provenance (spec 1):
+        # None = this caller never went through the Level 0 path; a block with
+        # enabled false = it was explicitly switched off.
+        "shrinkage_precomp": shrinkage_precomp,
         "trust_badge": TRUST_BADGE,
         "arm": str(arm),
         # HARD guard for the predicted-benefit gate (studio3d/correction_gate):
