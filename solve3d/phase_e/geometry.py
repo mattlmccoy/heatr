@@ -45,8 +45,22 @@ def library_volume_m3(shape: str) -> float:
 # --------------------------------------------------------------------------- #
 # Predicates (feed materials, chi and the nominal masks)
 # --------------------------------------------------------------------------- #
-def in_part_predicate(shape: str):
-    """`mp` is (3, N) points in metres."""
+def in_part_predicate(shape: str, *, precomp_coeffs=None):
+    """`mp` is (3, N) points in metres.
+
+    With `precomp_coeffs`, the part is the Level 0 PRE-COMPENSATED solid: a
+    point is inside iff its inverse-scaled image is inside the nominal solid.
+    chi and the mesh must both be built through this same switch or the solve
+    target and the solve domain would describe different objects.
+    `precomp_coeffs = None` is the untouched original path.
+    """
+    if precomp_coeffs is not None and not precomp_coeffs.is_identity:
+        base = in_part_predicate(shape)
+        f = precomp_coeffs.factors.reshape(3, 1)
+
+        def pred_pre(mp):
+            return base(np.asarray(mp, dtype=float) / f)
+        return pred_pre
     if shape == "cube":
         h = CUBE_A_M / 2.0
         return lambda mp: ((np.abs(mp[0]) <= h) & (np.abs(mp[1]) <= h)
@@ -79,11 +93,28 @@ def nominal_mask_2d(shape: str, z: float = 0.0) -> np.ndarray:
 # --------------------------------------------------------------------------- #
 # OCC construction
 # --------------------------------------------------------------------------- #
-def _add_solid(occ, shape: str) -> int:
+def nominal_volume_m3(shape: str, *, precomp_coeffs=None) -> float:
+    """Analytic volume of the solid that will be meshed.
+
+    Level 0 scales the solid by (xy, xy, z), so the volume grows by
+    xy_scale**2 * z_scale. Reported separately from `library_volume_m3` so a
+    pre-compensated run cannot be compared against the nominal library number
+    by accident.
+    """
+    v = CUBE_A_M ** 3 if shape == "cube" else PYR_B_M ** 2 * PYR_H_M / 3.0
+    if precomp_coeffs is None or precomp_coeffs.is_identity:
+        return float(v)
+    return float(v * precomp_coeffs.xy_scale ** 2 * precomp_coeffs.z_scale)
+
+
+def _add_solid(occ, shape: str, precomp_coeffs=None) -> int:
+    sx, _sy, sz = (1.0, 1.0, 1.0) if precomp_coeffs is None else \
+        tuple(float(v) for v in precomp_coeffs.factors)
     if shape == "cube":
-        a = CUBE_A_M
-        return occ.addBox(-a / 2, -a / 2, -a / 2, a, a, a)
-    b2, h = PYR_B_M / 2.0, PYR_H_M / 2.0
+        a = CUBE_A_M * sx
+        c = CUBE_A_M * sz
+        return occ.addBox(-a / 2, -a / 2, -c / 2, a, a, c)
+    b2, h = PYR_B_M / 2.0 * sx, PYR_H_M / 2.0 * sz
     p = [occ.addPoint(-b2, -b2, -h), occ.addPoint(b2, -b2, -h),
          occ.addPoint(b2, b2, -h), occ.addPoint(-b2, b2, -h),
          occ.addPoint(0.0, 0.0, h)]
