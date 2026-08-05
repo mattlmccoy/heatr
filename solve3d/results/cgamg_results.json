@@ -1,0 +1,149 @@
+{
+ "what": "Task 3 CG/AMG spike RESULTS",
+ "protocol": "solve3d/results/cgamg_protocol.json (committed 091863d)",
+ "solver": "GMRES + GAMG (PETSc). CG rejected a priori: the EQS operator is complex SYMMETRIC, not Hermitian positive definite, so CG has no convergence guarantee here.",
+ "env": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1",
+ "benchmarks": {
+  "coarse": {
+   "lc_part_m": 0.002,
+   "n_dofs": 2520,
+   "n_cells": 13969,
+   "direct": {
+    "wall_best_s": 0.16962754201085772,
+    "wall_median_s": 0.1724885840085335,
+    "res_norm": 9.59156422598949e-20
+   },
+   "iterative": {
+    "1e-10": {
+     "wall_best_s": 0.04278895900642965,
+     "wall_median_s": 0.043131792001076974,
+     "speedup_vs_direct_best": 3.964282982097526,
+     "res_norm": 1.0218099954495731e-19,
+     "V_rel_l2_vs_direct": 2.3795612877022317e-15,
+     "Q_rel_l2_vs_direct": 1.7930463755052855e-14
+    },
+    "1e-12": {
+     "wall_best_s": 0.046415791992330924,
+     "wall_median_s": 0.04677724999783095,
+     "speedup_vs_direct_best": 3.654522194491145,
+     "res_norm": 9.758565104412084e-20,
+     "V_rel_l2_vs_direct": 2.9055617082168264e-15,
+     "Q_rel_l2_vs_direct": 1.9685381024737884e-14
+    },
+    "1e-14": {
+     "wall_best_s": 0.05628979099856224,
+     "wall_median_s": 0.05651404199306853,
+     "speedup_vs_direct_best": 3.0134690323364386,
+     "res_norm": 9.654182160328362e-20,
+     "V_rel_l2_vs_direct": 9.159574358181965e-16,
+     "Q_rel_l2_vs_direct": 1.766576821271835e-14
+    }
+   }
+  },
+  "mid": {
+   "lc_part_m": 0.0012,
+   "n_dofs": 9257,
+   "n_cells": 53480,
+   "direct": {
+    "wall_best_s": 3.624057499997434,
+    "wall_median_s": 3.6256385409942595,
+    "res_norm": 8.260453182372284e-20
+   },
+   "iterative": {
+    "1e-10": {
+     "wall_best_s": 0.18030804199224804,
+     "wall_median_s": 0.18066216699662618,
+     "speedup_vs_direct_best": 20.09925602848731,
+     "res_norm": 8.319551148001554e-20,
+     "V_rel_l2_vs_direct": 2.343371527159989e-15,
+     "Q_rel_l2_vs_direct": 2.8285998347696673e-14
+    },
+    "1e-12": {
+     "wall_best_s": 0.2006700829952024,
+     "wall_median_s": 0.20078487500722986,
+     "speedup_vs_direct_best": 18.059779743471168,
+     "res_norm": 8.23406574994955e-20,
+     "V_rel_l2_vs_direct": 2.6016613418555593e-15,
+     "Q_rel_l2_vs_direct": 3.127169142705819e-14
+    },
+    "1e-14": {
+     "wall_best_s": 0.22186720800527837,
+     "wall_median_s": 0.2221077080030227,
+     "speedup_vs_direct_best": 16.33435392539494,
+     "res_norm": 8.382182994270848e-20,
+     "V_rel_l2_vs_direct": 1.8851799923141314e-15,
+     "Q_rel_l2_vs_direct": 3.0353632104184955e-14
+    }
+   }
+  }
+ },
+ "fd_regate": {
+  "direct_control": {
+   "solver": "direct",
+   "rtol": null,
+   "wall_s": 1206.2178557910083,
+   "all_pass_subgradient": true,
+   "n_pass_subgradient": 4,
+   "n_pass_preferred": 3,
+   "n_probes": 4,
+   "worst_best_rel_err": 1.4242701146841632e-06,
+   "probes": {
+    "max_sensitivity_cell": 1.104527565131573e-07,
+    "random_cell": 1.4242701146841632e-06,
+    "random_direction": 3.284400351349466e-07,
+    "gradient_direction": 2.230836364227443e-10
+   }
+  },
+  "iterative_1e-10": {
+   "solver": "iterative",
+   "rtol": 1e-10,
+   "wall_s": 54.13332058400556,
+   "all_pass_subgradient": true,
+   "n_pass_subgradient": 4,
+   "n_pass_preferred": 3,
+   "n_probes": 4,
+   "worst_best_rel_err": 6.783314678535785e-06,
+   "probes": {
+    "max_sensitivity_cell": 7.983732923684185e-08,
+    "random_cell": 6.783314678535785e-06,
+    "random_direction": 2.4553462518609367e-07,
+    "gradient_direction": 1.0387577791266853e-11
+   }
+  },
+  "iterative_1e-14": {
+   "solver": "iterative",
+   "rtol": 1e-14,
+   "wall_s": 65.26084854200599,
+   "all_pass_subgradient": true,
+   "n_pass_subgradient": 4,
+   "n_pass_preferred": 3,
+   "n_probes": 4,
+   "worst_best_rel_err": 7.316845192386839e-06,
+   "probes": {
+    "max_sensitivity_cell": 7.1032446730725275e-09,
+    "random_cell": 7.316845192386839e-06,
+    "random_direction": 7.733673030324808e-08,
+    "gradient_direction": 4.0913842757074873e-10
+   }
+  }
+ },
+ "thresholds": {
+  "subgradient_pass_rel_err": 1e-05,
+  "pass_rel_err": 1e-06
+ },
+ "verdict": {
+  "fd_gate_is_binding": true,
+  "control_passed": true,
+  "rtols_passing_fd_gate": [
+   "iterative_1e-10",
+   "iterative_1e-14"
+  ],
+  "selected_rtol": 1e-10,
+  "fd_arms_run": [
+   1e-10,
+   1e-14
+  ],
+  "selection_rule": "loosest rtol passing both gates (pre-registered); tighter rtols than the loosest passing one are implied and not run",
+  "recommendation": "adopt GMRES+GAMG at the selected rtol behind the flag"
+ }
+}
