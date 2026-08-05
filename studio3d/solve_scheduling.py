@@ -33,14 +33,32 @@ def slot_available(load_1min: float, n_heavy: int) -> bool:
 
 def check_part_solvable(part: np.ndarray) -> Tuple[bool, str]:
     """Can the direct solve take this part? ONE widening point, no shape
-    heuristics: solve3d's own detector decides."""
+    heuristics: solve3d's own detector decides.
+
+    WIDENED 2026-08-05 (solve3d tranche-1 notify, their commit 8d7fe39):
+    arbitrary-STL chamber tet meshing passed its equivalence gate
+    (solve3d/results/stl_chamber_gate.json), so non-extrusions route
+    through the STL chamber path. Meshability is NOT pre-checked here:
+    build_mesh_from_stl inside the solve refuses loudly
+    (SurfaceReconstructionError, including the meshed-volume-vs-STL-volume
+    check) and that refusal surfaces in the Express timeline. Note from
+    the solve3d lane: has_solve_mesh is necessary, not sufficient - a part
+    can mesh perfectly and still produce a red-gate forward (the Tamper);
+    the correction chain therefore never ships an artifact whose
+    solved_label is false (studio3d/correction.py)."""
     from solve3d import studio_geom as sg
 
     det = sg.detect_extrusion(np.asarray(part, bool))
     if det["is_extruded"]:
         return True, "extrusion detected"
-    return False, ("direct solve requires Phase E tet meshing (queued in "
-                   "the solve3d lane): " + str(det.get("refusal", "")))
+    try:
+        from solve3d import stl_mesh  # noqa: F401  (availability probe)
+    except ImportError as e:
+        return False, ("direct solve unavailable: solve3d STL chamber "
+                       f"meshing not importable ({e})")
+    return True, ("STL chamber tet meshing (solve3d tranche 1); mesh build "
+                  "may still refuse on surface-reconstruction volume "
+                  "deviation, and a red-gate solve is never shipped")
 
 
 def read_machine_state() -> Tuple[float, int]:

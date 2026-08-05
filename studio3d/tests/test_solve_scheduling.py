@@ -16,13 +16,21 @@ def test_slot_predicate_enforces_both_rules():
 
 
 def test_solvable_check_is_the_single_widening_point():
+    """WIDENED 2026-08-05 per the solve3d lane's tranche-1 notify (their
+    commit 8d7fe39): arbitrary-STL chamber tet meshing passed its
+    equivalence gate (solve3d/results/stl_chamber_gate.json), so
+    non-extrusions are now solve-eligible through the STL chamber path.
+    Meshability itself is decided by build_mesh_from_stl inside the solve
+    (it refuses with SurfaceReconstructionError on volume deviation); this
+    check only routes."""
     part = np.zeros((16, 16, 16), bool)
     part[6:10, 6:10, 4:12] = True                  # extrusion
     ok, reason = check_part_solvable(part)
     assert ok is True
+    assert "extrusion" in reason
     pyramid = part.copy()
     pyramid[6:10, 6:10, 11] = False
     pyramid[7:9, 7:9, 11] = True                   # tapering top
     ok, reason = check_part_solvable(pyramid)
-    assert ok is False
-    assert "Phase E tet meshing" in reason
+    assert ok is True
+    assert "STL chamber" in reason

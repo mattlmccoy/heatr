@@ -334,28 +334,41 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
     grade_dir = Path(grade_dir)
     part = voxelize_stl(mesh_path, n)
 
-    # spec 7e: a FRESH direct-solve artifact for this job ranks first
+    # spec 7e: a FRESH direct-solve artifact for this job ranks first.
+    # CHANGED 2026-08-05 (solve3d tranche-1 notify): "do not present a
+    # red-gate solve as a correction". solved_label is the artifact's own
+    # acceptance verdict (hold-out + smoothing, Phase C protocol); an
+    # artifact without it is recorded and SKIPPED, never shipped with a
+    # weaker badge. The Tamper is the standing counterexample: it meshes
+    # perfectly and its uniform forward is unusable (clamp_bound True,
+    # energy residual 3.07e-03).
+    solve_skip: Dict[str, Any] | None = None
     fresh = grade_dir / "heatr3d" / "solve" / "studio_solve_map.npz"
     if fresh.exists():
         sr = json.loads(
             (fresh.parent / "studio_solve_results.json").read_text())
-        with np.load(fresh) as d:
-            rec = dg0_to_voxel(d["centroids"], d["s_map"], d["volumes"],
-                               part, chamber_m=0.060)
-        solved = bool(sr.get("solved_label"))
-        prov: Dict[str, Any] = {
-            "engine": "solve3d_solved" if solved else "solve3d_unlabeled",
-            "trust_badge": ("solve3d direct solve | solved_label true "
-                            "(hold-out + smoothing gates) | sim-only"
-                            if solved else
-                            "solve3d direct solve | gates not passed | "
-                            "sim-only"),
+        if bool(sr.get("solved_label")):
+            with np.load(fresh) as d:
+                rec = dg0_to_voxel(d["centroids"], d["s_map"], d["volumes"],
+                                   part, chamber_m=0.060)
+            prov: Dict[str, Any] = {
+                "engine": "solve3d_solved",
+                "trust_badge": ("solve3d direct solve | solved_label true "
+                                "(hold-out + smoothing gates) | sim-only"),
+                "artifact": str(fresh),
+                "solve_results": {k: sr.get(k) for k in
+                                  ("solved_label", "improvement_pct", "gates",
+                                   "warm_start")},
+            }
+            return _finish(grade_dir, n, part, rec, prov)
+        solve_skip = {
             "artifact": str(fresh),
+            "reason": ("solved_label is not true: the solve's own acceptance "
+                       "gates did not pass, and a red-gate solve is never "
+                       "presented as a correction (solve3d lane, 2026-08-05)"),
             "solve_results": {k: sr.get(k) for k in
-                              ("solved_label", "improvement_pct", "gates",
-                               "warm_start")},
+                              ("solved_label", "improvement_pct", "gates")},
         }
-        return _finish(grade_dir, n, part, rec, prov)
 
     entry = reg.find_solved_map(part, registry_path=registry_path)
     if entry is not None:
@@ -382,6 +395,8 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
             logger.warning("no deliverable correction: %s", exc)
             rec, prov = _uniform_correction(part, str(exc))
 
+    if solve_skip is not None:
+        prov["solve_artifact_skipped"] = solve_skip
     return _finish(grade_dir, n, part, rec, prov)
 
 

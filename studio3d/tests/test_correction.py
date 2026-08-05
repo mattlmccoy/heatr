@@ -288,13 +288,25 @@ def test_fresh_solve_artifact_ranks_first(box_stl, tmp_path):
         assert np.allclose(d["sat"][part], 0.75, atol=1e-6)
 
 
-def test_ungated_solve_is_badged_not_solved(box_stl, tmp_path):
+def test_ungated_solve_does_not_ship(box_stl, tmp_path):
+    """CHANGED 2026-08-05 per the solve3d lane's tranche-1 notify: "do not
+    present a red-gate solve as a correction". The Tamper is the concrete
+    counterexample - it meshes perfectly and its uniform forward is not
+    usable (clamp_bound True, energy residual 3.07e-03). An artifact whose
+    solved_label is false is RECORDED and SKIPPED; the chain falls through
+    to the next rung instead of shipping it with a weaker badge."""
     from studio3d.runner import voxelize_stl
     n = 16
     gd = tmp_path / "grade"
     part = voxelize_stl(str(box_stl), n)
+    _fake_before_arm(gd, part, n)          # the next rung must be reachable
     _fake_solve_artifact(gd, part, 0.7, solved_label=False)
     prov = build_correction(gd, str(box_stl), n,
                             registry_path=tmp_path / "missing.json")
-    assert prov["engine"] == "solve3d_unlabeled"
-    assert "gates not passed" in prov["trust_badge"]
+    assert prov["engine"] != "solve3d_unlabeled"
+    skip = prov.get("solve_artifact_skipped")
+    assert skip is not None
+    assert "solved_label" in skip["reason"]
+    # the shipped map must not be the skipped artifact's 0.7 field
+    with np.load(gd / "heatr3d" / "correction_sat.npz") as d:
+        assert not np.allclose(d["sat"][part], 0.7, atol=1e-6)
