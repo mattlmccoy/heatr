@@ -101,6 +101,17 @@ def main() -> int:
             "measured the in-part Q pattern moving 0.175-0.208 rel-L2 across "
             "chamber sizes against a 0.037 remeshing noise floor "
             "(solve3d/results/chamber_field_check.json)"),
+        "caveats": {
+            "part_volume_not_matched": (
+                "heatr3d voxelises the part on each grid and the two grids "
+                "are not commensurate, so the discretised part differs "
+                "between frames. Any shift below is FRAME PLUS VOXELISATION "
+                "and is an upper bound on the frame effect alone."),
+            "melt_onset_fallback": (
+                "if reached_phi90 is False the sigma_T / T_max reads are "
+                "FINAL-TIMESTEP, not melt-onset (heatr3d's loud "
+                "MELT_ONSET_FALLBACK flag). Compared like-for-like, but not "
+                "the melt-onset quantity Phase E reports.")},
         "instruction": (
             "frozen-frame heatr3d artifacts must be RE-RUN in the grown frame "
             "rather than reused or compared across it; the chamber tag is the "

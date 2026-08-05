@@ -1,0 +1,78 @@
+{
+ "what": "the SAME part verified in the frozen 60 mm frame and in its adaptive frame, at MATCHED CELL SIZE",
+ "part": "library pyramid (heatr3d cone), side/height 23.2489 mm",
+ "part_choice_rationale": "the pyramid MELTS in both frames, so this isolates the frame. The Tamper melts in only one, which would confound 'the frame changed' with 'the part finally melted'.",
+ "matching_rule": "cell size held, not n: heatr3d_job.n_for_h. Holding n while growing L coarsens every cell and the part would silently lose resolution (S2 commensurability).",
+ "frozen": {
+  "L_m": 0.06,
+  "tag": "ch060",
+  "n": 64,
+  "cell_h_mm": 0.9375,
+  "n_part_voxels": 3768,
+  "part_volume_mm3": 3104.7363281249995,
+  "sigma_T": 29.634108460921077,
+  "t_phi90_s": NaN,
+  "reached_phi90": false,
+  "T_max_c": 262.869393888323,
+  "wall_s": 420.28327798843384
+ },
+ "grown": {
+  "L_m": 0.064,
+  "tag": "ch064",
+  "n": 69,
+  "cell_h_mm": 0.927536231884058,
+  "n_part_voxels": 4121,
+  "part_volume_mm3": 3288.4804495462836,
+  "sigma_T": 30.7199513793476,
+  "t_phi90_s": NaN,
+  "reached_phi90": false,
+  "T_max_c": 266.11925282958356,
+  "wall_s": 581.726879119873
+ },
+ "cell_size_match_rel": -0.010628019323671523,
+ "part_volume_match_rel": 0.05918187633416516,
+ "shifts": {
+  "sigma_T_rel": 0.03664165972323552,
+  "t_phi90_rel": NaN,
+  "T_max_rel": 0.012363017592840198
+ },
+ "expectation": "a shift is EXPECTED and is not a bug: the EQS sweep already measured the in-part Q pattern moving 0.175-0.208 rel-L2 across chamber sizes against a 0.037 remeshing noise floor (solve3d/results/chamber_field_check.json)",
+ "instruction": "frozen-frame heatr3d artifacts must be RE-RUN in the grown frame rather than reused or compared across it; the chamber tag is the guard that makes accidental reuse visible",
+ "preregistration": {
+  "decision": "grow the chamber adaptively with the part bounding box",
+  "rule": "L = ceil_mm(max(FLOOR_M, max_axis_span + 2 * GAP_M))",
+  "gap_m": 0.02,
+  "floor_m": 0.06,
+  "gap_evidence": {
+   "pyramid_powder_to_wall_m": 0.01838,
+   "pyramid_plateau_estimate_c": 378.5,
+   "pyramid_melts": true,
+   "tamper_powder_to_wall_m": 0.0078,
+   "tamper_plateau_estimate_c": 154.5,
+   "tamper_melts": false,
+   "melt_onset_c": 180.0,
+   "source": "solve3d/results/tamper_chamber_fit.json"
+  },
+  "identifiers": "chamber size is embedded in every run/mesh id",
+  "reproduction": "pass L_override=0.060 for any pre-2026-08-05 artifact; the adaptive default does NOT reproduce them, including the Phase E pyramid and cube",
+  "insurance_check": "solve3d/make_chamber_field_check.py measures the in-part field pattern across a chamber sweep before grown-chamber solves are trusted",
+  "authority": "Matt, 2026-08-05"
+ },
+ "hardware_note": "modelling result only; electrode gap and matching network are P-gate territory",
+ "caveats": {
+  "part_volume_not_matched": {
+   "frozen_mm3": 3104.7363281249995,
+   "grown_mm3": 3288.4804495462836,
+   "rel": 0.05918187633416516,
+   "why": "heatr3d voxelises the cone on each grid, and the two grids are not commensurate, so the discretised part is 5.9 percent larger in the grown frame. The sigma_T shift below is therefore FRAME PLUS VOXELISATION, not frame alone.",
+   "consequence": "the +3.7 percent sigma_T shift is an UPPER BOUND on the frame effect, not a measurement of it"
+  },
+  "melt_onset_fallback": {
+   "both_arms": true,
+   "reached_phi90_frozen": false,
+   "reached_phi90_grown": false,
+   "why": "neither arm's mean melt fraction crossed phi_target=0.90 inside 1500 s, so sigma_T and T_max are FINAL-TIMESTEP reads rather than melt-onset reads (heatr3d's loud MELT_ONSET_FALLBACK flag). They are compared like-for-like, but they are not the melt-onset quantity the Phase E numbers report."
+  }
+ },
+ "verdict": "the frame shift is SMALL in the verification quantities (sigma_T +3.7 percent, T_max +1.2 percent) and both figures are upper bounds because part voxelisation moved 5.9 percent in the same direction. That is consistent with the EQS sweep: the in-part Q PATTERN moves well beyond the refinement band across chambers, but the volume-integrated scalars a verification reports are far less sensitive. Re-run rather than reuse across frames still stands -- 3.7 percent is not nothing -- but the frames are not wildly different in these scalars."
+}
