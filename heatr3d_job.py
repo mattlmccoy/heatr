@@ -409,12 +409,87 @@ def _finite_results(results: dict) -> dict:
             for k, v in results.items()}
 
 
+# --------------------------------------------------------------------------- #
+# Chamber resolution (Studio cf1a203 / solve3d adaptive sizing)
+# --------------------------------------------------------------------------- #
+# heatr3d.Grid has ALWAYS taken L; nothing in the solver was hardcoded. What was
+# frozen is this job wiring, which never passed it -- so an adaptive-chamber
+# solved map could only ever be verified in a mismatched 60 mm frame.
+#
+# DISCIPLINE, from the coupling-knobs precedent (699ed79): the knob is INERT at
+# its default. An absent `chamber`, or "frozen", reproduces today's 60 mm grid
+# bit-identically, pinned by solve3d/tests/test_heatr3d_chamber.py rather than
+# asserted in a comment.
+#
+# ONE RULE, NO FORKS: the adaptive size comes from solve3d/chamber.py, the same
+# module the solve lane and the 2.5-D lane read. A second copy here would be a
+# fork waiting to drift.
+GRID_CAP = 160          # HEATR_STANDARD_PARAMETERS.md: <= 160, NEVER 240
+
+
+def resolve_chamber(cfg: dict) -> dict:
+    """The chamber this run uses, and why. Default is the frozen 60 mm."""
+    from solve3d import chamber as _ch
+    mode = str(cfg.get("chamber", "frozen")).lower()
+    if "chamber_m" in cfg and cfg["chamber_m"] is not None:
+        L = float(cfg["chamber_m"])
+        return {"L_m": L, "mode": "frozen" if L == 0.060 else "explicit",
+                "tag": _ch.chamber_tag(L), "source": "cfg.chamber_m"}
+    if mode == "frozen":
+        return {"L_m": 0.060, "mode": "frozen", "tag": _ch.chamber_tag(0.060),
+                "source": "default (unchanged heatr3d chamber)"}
+    if mode == "adaptive":
+        bbox = cfg.get("bbox_m")
+        if not bbox:
+            raise ValueError(
+                "chamber='adaptive' needs bbox_m (the part's extents in "
+                "metres); refusing to guess, because guessing would size the "
+                "chamber off the wrong part")
+        spec = _ch.chamber_spec(*[float(v) for v in bbox])
+        spec["source"] = "solve3d.chamber (shared rule)"
+        return spec
+    raise ValueError(
+        f"unknown chamber mode {mode!r}; expected 'frozen' or 'adaptive', "
+        "or an explicit chamber_m")
+
+
+def resolve_grid(cfg: dict):
+    """`H.Grid` for this config, honouring the resolved chamber."""
+    return H.Grid(n=int(cfg.get("n", 48)), L=float(resolve_chamber(cfg)["L_m"]))
+
+
+def n_for_h(L_m: float, h_target_m: float) -> int:
+    """Cells per axis holding CELL SIZE fixed as the chamber grows.
+
+    The S2 commensurability trap is holding `n` instead: a grown chamber at
+    fixed n coarsens every cell, so the PART silently loses resolution. This is
+    the other knob. It refuses to exceed the standard grid cap rather than
+    trading a stated limit for an unstated one.
+    """
+    n = int(math.ceil(float(L_m) / float(h_target_m) - 1e-9))
+    if n > GRID_CAP:
+        raise ValueError(
+            f"holding h={h_target_m * 1e3:.4f} mm in a {L_m * 1e3:.1f} mm "
+            f"chamber needs n={n}, over the standard cap {GRID_CAP} "
+            "(HEATR_STANDARD_PARAMETERS.md: <= 160, never 240). Coarsen "
+            "deliberately or shrink the chamber; do not exceed the cap.")
+    return n
+
+
+def run_identifier(name: str, cfg: dict) -> str:
+    """Run id with the chamber size IN it, so frames cannot mix silently."""
+    from solve3d import chamber as _ch
+    return _ch.run_id(f"{name}_n{int(cfg.get('n', 48))}",
+                      resolve_chamber(cfg)["L_m"])
+
+
 def main(argv: list[str]) -> None:
     cfg_path = Path(argv[1])
     preview = "--preview" in argv
     cfg = json.loads(cfg_path.read_text())
     out = Path(cfg.get("out_dir", "job_out")); out.mkdir(parents=True, exist_ok=True)
-    grid = H.Grid(n=int(cfg.get("n", 48)))
+    chamber = resolve_chamber(cfg)
+    grid = resolve_grid(cfg)
     p = H.Params()
     part = build_part(grid, cfg)
 
@@ -451,7 +526,15 @@ def main(argv: list[str]) -> None:
                # melt-onset reads. Instrumentation only; numbers unchanged.
                "MELT_ONSET_FALLBACK": (not bool(r.reached)),
                "T_max_C": round(r.T_max_c, 1),
-               "fgm": fgm, "densify": densify, "grid_n": grid.n, "solve_s": round(time.time() - t0, 1)}
+               "fgm": fgm, "densify": densify, "grid_n": grid.n, "solve_s": round(time.time() - t0, 1),
+               # THE FRAME THIS RUN WAS VERIFIED IN. Recorded because results
+               # from different chamber sizes are NOT comparable: the EQS
+               # sweep measured the in-part Q pattern moving 0.175-0.208
+               # rel-L2 across sizes against a 0.037 remeshing noise floor
+               # (solve3d/results/chamber_field_check.json). Without the tag,
+               # a ch060 and a ch085 result look interchangeable and are not.
+               "chamber_m": chamber["L_m"], "chamber_tag": chamber["tag"],
+               "chamber_mode": chamber["mode"], "cell_h_m": grid.h}
     results.update({k: v for k, v in H.sinter_metrics(r).items()})
     if densify and r.rho_final is not None:
         sh = {k: v for k, v in H.shrinkage_analysis(r, p, grid.h).items() if not k.startswith("_")}
