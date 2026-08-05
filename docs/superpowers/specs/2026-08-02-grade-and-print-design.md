@@ -369,12 +369,17 @@ correction, run cancellation
   chain at the cancelled stage. Partial artifacts from a cancelled run
   are removed so a later run can never adopt them.
 
-## 7f. Roadmap (Matt, 2026-08-04): the full-solver port
+## 7f. Roadmap (Matt, 2026-08-04; framing corrected 2026-08-05): the full-solver port
 
-Direction: once the 2-D and 3-D solvers are fast enough, their FULL
-functionality ports into Grade and Print; the tool's standard is the best
-result the science can produce, not the fastest heuristic. Port inventory,
-each item behind its existing gates and blessing protocol:
+Direction, in Matt's actual framing: Grade and Print is NOT the best we
+can do today. The best work is the intensive direct 3-D solving from the
+STL-to-layer-wise-FGM effort (the solve3d Phase E campaign - cube and
+pyramid solves). Grade and Print's current correction chain is an interim
+rung; the goal is to eventually PORT that really good, intensive 3-D
+solver (and the 2-D solve modes) into Grade and Print once they are fast
+enough. Until that port lands, results from Grade and Print carry interim
+status relative to the Phase E solver. Port inventory, each item behind
+its existing gates and blessing protocol:
 
 FROM THE 3-D LANE (solve3d):
 - arbitrary-geometry direct solve (Phase E tet meshing, queued in the
