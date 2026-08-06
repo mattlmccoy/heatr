@@ -104,12 +104,16 @@ def snapshot(ckpt: Path, pid: int, budget: int) -> dict:
         return "finite"
 
     grad_health = _bad(last_g)
+    # wall_s resets on warm restart (resume), so cross-eval deltas can go
+    # negative and must never drive timing. Use only a positive monotonic
+    # delta; otherwise timing this run is unknown (report it, do not fake).
     walls = [e.get("wall_s", 0.0) for e in hist]
     per_eval = None
-    if len(walls) >= 2:
+    if len(walls) >= 2 and walls[-1] > walls[0]:
         per_eval = round((walls[-1] - walls[0]) / (len(walls) - 1))
-    elif walls:
+    elif len(walls) == 1 and walls[0] > 0:
         per_eval = round(walls[0])
+    out["timing_note"] = None if per_eval else "unknown (resumed run; wall clock reset)"
     remaining = max(0, budget - n)
     eta_s = per_eval * remaining if per_eval else None
 
@@ -129,12 +133,13 @@ def snapshot(ckpt: Path, pid: int, budget: int) -> dict:
         "eta_h": round(eta_s / 3600, 1) if eta_s else None,
     })
 
-    # Stall: alive but the checkpoint has not advanced in > 2.5x an eval.
-    if alive and per_eval and out["ckpt_age_s"] > 2.5 * per_eval:
+    # Stall: alive but the checkpoint has not advanced in too long. Use an
+    # ABSOLUTE cap (not per_eval, which is unknown across resumes). One eval
+    # is ~80 min on this class of run; 2.5 h is a safe wedge threshold.
+    STALL_CAP_S = 9000
+    if alive and out["ckpt_age_s"] > STALL_CAP_S:
         out["stall_suspected"] = True
-        out["stall_reason"] = (
-            f"ckpt age {out['ckpt_age_s']}s > 2.5x per-eval {per_eval}s"
-        )
+        out["stall_reason"] = f"ckpt age {out['ckpt_age_s']}s > cap {STALL_CAP_S}s"
     else:
         out["stall_suspected"] = False
 
@@ -155,11 +160,11 @@ def snapshot(ckpt: Path, pid: int, budget: int) -> dict:
 def _pretty(s: dict) -> str:
     if not s.get("read_ok"):
         return f"[{s['state']}] pid {s['pid']} alive={s.get('pid_alive')}"
+    timing = f"{s['per_eval_wall_s']}s/eval ETA {s['eta_h']}h" if s.get("eta_h") else "timing unknown (resumed)"
     return (
         f"[{s['verdict']}] eval {s['evals_done']}/{s['evals_total']} "
         f"| J {s['best_J']:.4e} ({s['improvement_pct']:+.2f}%) "
-        f"| grad {s['grad_health']} "
-        f"| {s['per_eval_wall_s']}s/eval | ETA {s['eta_h']}h "
+        f"| grad {s['grad_health']} | {timing} "
         f"| RSS {s['rss_gb']}GB | ckpt {s['ckpt_age_s']}s ago"
     )
 
