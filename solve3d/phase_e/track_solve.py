@@ -117,12 +117,29 @@ def snapshot(ckpt: Path, pid: int, budget: int) -> dict:
     remaining = max(0, budget - n)
     eta_s = per_eval * remaining if per_eval else None
 
+    j_traj = [e.get("J") for e in hist]
+    # Trend over the last few evals: are we still descending, or flat?
+    trend = "unknown"
+    if len(j_traj) >= 2 and j0:
+        recent = j_traj[-min(3, len(j_traj)):]
+        drop = (recent[0] - recent[-1]) / j0
+        if drop > 1e-3:
+            trend = "descending"
+        elif drop > 1e-5:
+            trend = "slow"
+        elif drop >= -1e-5:
+            trend = "flat"
+        else:
+            trend = "rising"
     out.update({
         "state": "running" if alive else "process_gone",
         "evals_done": n,
         "evals_total": budget,
         "J0": j0,
         "best_J": best_j,
+        "J_trajectory": [round(j, 10) if j is not None else None for j in j_traj],
+        "trend": trend,
+        "design_cells_moved": None,
         "improvement_pct": round(100 * (1 - best_j / j0), 3) if j0 else None,
         "last_grad_norm": last_g,
         "grad_health": grad_health,
@@ -163,7 +180,7 @@ def _pretty(s: dict) -> str:
     timing = f"{s['per_eval_wall_s']}s/eval ETA {s['eta_h']}h" if s.get("eta_h") else "timing unknown (resumed)"
     return (
         f"[{s['verdict']}] eval {s['evals_done']}/{s['evals_total']} "
-        f"| J {s['best_J']:.4e} ({s['improvement_pct']:+.2f}%) "
+        f"| J {s['best_J']:.4e} ({s['improvement_pct']:+.2f}%, {s.get('trend')}) "
         f"| grad {s['grad_health']} | {timing} "
         f"| RSS {s['rss_gb']}GB | ckpt {s['ckpt_age_s']}s ago"
     )
