@@ -2,8 +2,12 @@
 
 Date: 2026-08-06
 Status: APPROVED by Matt 2026-08-06 ("I approve the spec build out").
-Build proceeds L2-forward -> Stage A first; rho_target/ceiling values
-finalize when POLYMER_AM_DENSITY_THERMAL_MEMO.md lands (dispatched). Section-9 open questions ANSWERED by Matt 2026-08-06 and folded
+Build proceeds L2-forward -> Stage A first; rho_target/ceiling values FINALIZED by POLYMER_AM_DENSITY_THERMAL_MEMO.md
+(c25eb5c): rho_target floor 0.90 (mechanical knee), good 0.95, ideal 0.98,
+1.0 normalization only; T_ceiling 250 C (discoloration/embrittlement bound,
+not hard burn - hard onset ~280 C air) with a 10-20 C solver margin
+(warning from ~235 C); melt onset 185 C. All SLS/MJF/DSC/TGA-sourced,
+pending RFAM in-atmosphere measurement (the named de-risking test). Section-9 open questions ANSWERED by Matt 2026-08-06 and folded
 into sections 1, 4, and 9 below. Interface sections route to the Studio
 lane before any schema freeze.
 Owner: Matt McCoy
