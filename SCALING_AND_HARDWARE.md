@@ -14,10 +14,13 @@ direction rather than a re-measured value, it says so.
 - A Linux server is worth buying **now** for throughput, persistence, and
   storage. It does **not** make a single part solve faster until the solver
   is parallelized, because the code cannot yet use many cores on one solve.
-- GPU is a **later, at-scale, mixed-precision** lever. What you would give
-  up is verification strength (bit-identity) and clean reproducibility, not
+- GPU is a **later, at-scale, float64-native** lever. What you would give up
+  is verification strength (bit-identity) and clean reproducibility, not
   physical accuracy. The physics does not need float64; the project's
-  _methodology_ does.
+  _methodology_ does, and it needs it end to end: all gated computation
+  (march, EQS solve, adjoint) stays float64, and float32 is confined to
+  display and preview surfaces (the fp32 march itself deviates ~1e-6, well
+  above the gate floor, and the adjoint differentiates it).
 - Recommended order: CPU iterative solver (CG/AMG) first, proven against the
   direct reference with the existing gates, then GPU as a backend swap under
   a tolerance-band equivalence gate. Do not couple new-solver, new-precision,
@@ -170,15 +173,22 @@ without care:
    gradient, forcing the finite-difference gate (the core gradient-correctness
    check) to loosen. That weakens the solver lane's whole methodology.
 
-Mitigation for the thermal-march accumulation (item 2): **mixed precision**,
-float32 in kernels where roundoff is harmless and float64 for accumulation and
-residuals. BUT for the EQS solve and adjoint (items 1 and 3) the solve3d lane
-has ruled that the **backend must be float64-native** (see section 5 riders):
-the finite-difference gradient gate is the binding acceptance and it does not
-survive a float32 solve. So mixed precision is a march-side tool, not a
-get-out for the solve itself. This is the constraint that makes consumer
-GPUs a poor fit for the solve (next point) and pushes any GPU solve toward
-datacenter FP64 hardware or staying on CPU.
+Mitigation, and it is narrow: **mixed precision is limited to display and
+preview surfaces; all gated computation (march, EQS solve, adjoint) is float64
+end to end.** float32 is NOT a safe carve-out for the march either, and the
+evidence is in this repo: the fp32-cost study
+(`engine_speed/fp32_cost_results.json`) measured the float32 MARCH itself
+deviating **7.0e-7 (benign) to ~1.6e-6 relative** from the bit-identical
+float64 engine, i.e. ~1e10 above the 1e-16 gate floor, and that is the march
+accumulation, not the EQS solve. Because the transient adjoint differentiates
+the march, a float32 march breaks the finite-difference gradient gate exactly
+as a float32 solve would. So float32 is acceptable only for renders, GUI field
+views, and clearly-badged non-quoted quick-look marches; never for any run
+whose numbers are quoted, gated, or fed to the adjoint. (The fp32 study also
+observed that clamp/melt branches did not flip in the tested cases; that is a
+measurement in its own caveats, not a license.) This end-to-end-float64 rule
+is what makes consumer GPUs a poor fit for the solve (next point) and pushes
+any GPU solve toward datacenter FP64 hardware or staying on CPU.
 
 ### Two things that bite harder than roundoff
 - **Consumer cards cripple float64.** Gaming NVIDIA cards run FP64 at
@@ -222,10 +232,10 @@ hardware) at once. Clean path:
 3. **Land the CPU CG/AMG iterative EQS solve** (solve3d lane, post-S2) and
    prove it against the direct-factorization reference with the existing
    gates. This is also the GPU-shaped structure.
-4. **Only then** swap in a GPU iterative backend, with a tolerance-band
-   equivalence gate replacing bit-identity and mixed precision keeping float64
-   where it is diagnostically load-bearing. The GPU becomes a verified backend
-   swap, not a rewrite-and-revalidate-and-buy gamble.
+4. **Only then** swap in a GPU iterative backend, float64-native end to end,
+   with a tolerance-band equivalence gate replacing bit-identity. The GPU
+   becomes a verified backend swap, not a rewrite-and-revalidate-and-buy
+   gamble.
 
 Two riders on step 4 (solve3d lane, confirmed 2026-08-06):
 
