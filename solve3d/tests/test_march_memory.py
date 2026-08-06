@@ -466,3 +466,26 @@ def test_the_guard_names_what_was_wrong():
     with pytest.raises(rt.NonFiniteGradientError) as e:
         rt.assert_finite_first_eval(1.0e-6, np.full(4, np.nan))
     assert "4 NaN" in str(e.value)
+
+
+def test_the_guard_refuses_an_identically_zero_gradient():
+    """Zero fails exactly like NaN and just as quietly: L-BFGS-B cannot move,
+    J is bit-identical every evaluation, and the run looks healthy. It happens
+    when the envelope argmin lands on step 0, where the read state is the
+    initial condition and cannot depend on the design -- which is what a
+    horizon too short to melt the part produces."""
+    import numpy as np
+    from solve3d.phase_e import run_tamper as rt
+
+    with pytest.raises(rt.NonFiniteGradientError) as e:
+        rt.assert_finite_first_eval(1.0e-6, np.zeros(5), read_step=0)
+    assert "|g| = 0" in str(e.value)
+    assert "lengthen max_time_s" in str(e.value)
+
+
+def test_the_guard_still_passes_a_small_but_nonzero_gradient():
+    """Mutation check: small is not zero."""
+    import numpy as np
+    from solve3d.phase_e import run_tamper as rt
+
+    rt.assert_finite_first_eval(1.0e-6, np.full(5, 1e-30))

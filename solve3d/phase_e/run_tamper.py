@@ -78,8 +78,17 @@ class NonFiniteGradientError(RuntimeError):
     """
 
 
-def assert_finite_first_eval(J, g, where: str = "evaluation 1") -> None:
-    """Refuse to optimize on a non-finite objective or gradient."""
+def assert_finite_first_eval(J, g, where: str = "evaluation 1",
+                             read_step: int | None = None) -> None:
+    """Refuse to optimize on a non-finite OR IDENTICALLY ZERO gradient.
+
+    Zero is included because it fails the same way NaN does and just as
+    quietly: L-BFGS-B cannot move, so J is bit-identical every evaluation and
+    the run looks healthy while burning the budget. It happens whenever the
+    envelope argmin lands on step 0 -- the read state is then the initial
+    condition, which does not depend on the design at all. A horizon too short
+    for the part to melt produces exactly that, and this part needs a long one.
+    """
     import numpy as _np
     bad = []
     if not _np.isfinite(J):
@@ -92,6 +101,14 @@ def assert_finite_first_eval(J, g, where: str = "evaluation 1") -> None:
     gn = float(_np.linalg.norm(g)) if g.size else 0.0
     if not _np.isfinite(gn):
         bad.append(f"|g| = {gn!r}")
+    elif gn == 0.0:
+        bad.append(
+            f"|g| = 0 exactly"
+            + (f" (envelope argmin is step {read_step}" if read_step is not None
+               else " (argmin likely step 0")
+            + "; the read state is then the initial condition and cannot "
+              "depend on the design -- lengthen max_time_s so the part melts "
+              "inside the horizon)")
     if bad:
         raise NonFiniteGradientError(
             f"{where}: " + "; ".join(bad) + ". Refusing to run the optimizer: "
@@ -284,7 +301,7 @@ def run_solve_arm(tc, chain, name: str, budget_evals: int) -> dict:
                                     checkpoint_interval=CHECKPOINT_INTERVAL)
         g_v = chain.design_vjp(v, g_s, beta=0.0)
         if fg.n_calls == 0:
-            assert_finite_first_eval(J, g_v)
+            assert_finite_first_eval(J, g_v, read_step=k)
         fg.n_calls += 1
         fg.last = {"argmin_step": k, "t_stop_s": step_to_time_s(tr, k, tc.p),
                    "at_horizon": bool(k >= tr.n_steps),
