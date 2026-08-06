@@ -101,3 +101,36 @@ Honest scoping: the five planes are the close-out's exported sample of a
 spacing is exploded for display (real planes are 10 mm apart) and the figure
 says so. The visible melt beyond the cyan bounds on the faces is the same
 real ~3.85 percent face spill as fig1, seen layerwise.
+
+---
+
+## fig5_energy_sls_vs_rfam.png
+
+Deck caption: "Where the energy goes: SLS burns most of it heating a chamber
+for a long serial build; RFAM puts it into the part. On total system energy
+RFAM should win, pending the RF-coupling measurement."
+
+NOTE ON THIS FIGURE: unlike figs 1-4 (deterministic re-renders of committed
+solve fields), fig5 renders a set of pre-derived ESTIMATES with provenance,
+not a saved field. No physics is run here either; the numbers are constants
+at the top of the script, editable to retrack the dissertation.
+
+Data provenance (all estimates, per the script docstring):
+- SLS laser dose ~262 J/cm3: areal 2.8-3.0 J/cm2 / 0.110 mm layer (Formlabs
+  Fuse 1+ 30W, ~247 um spot).
+- SLS system ~1.08e5-3.6e5 J/cm3: published SLS specific energy ~30-100
+  kWh/kg at ~1 g/cm3 dense PA12 (chamber-dominated).
+- RFAM absorbed ~2400 J/cm3: this repo's 3-D sim (power_density x exposure,
+  part volume cancels; cross-checked to the joule vs heatr3d's S1 energy
+  audit) at the efficient nominal drive.
+- RFAM system ~8.0e3-4.8e4 J/cm3: absorbed / RF coupling 5-30% (UNMEASURED -
+  the P-gate); stays below the SLS system band even at 5 percent.
+- Theoretical PA12 melt floor 130-420 J/cm3 (170 C preheat .. room temp).
+
+Honest scoping: delivered/absorbed energy, not wall-plug for RFAM (RF coupling
+is the uncertain factor, drawn as a hatched uncertainty band and flagged as the
+P-gate). SLS system energy is general SLS literature, not a Fuse-1+-specific
+measurement. Volumetric comparison (SLS areal / layer) because RFAM is a bulk
+process; the two deposit energy differently (SLS surface-serial into a
+preheated bed, RFAM bulk-parallel), which the figure states. Swap the constants
+at the top of fig5_energy_sls_vs_rfam.py to retrack a source-of-record.
