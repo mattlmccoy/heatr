@@ -3,9 +3,19 @@
 Date: 2026-08-06
 Status: DRAFT for Matt's review. Objective expansion GREENLIT in principle
 2026-08-06 ("Greenlight, spec it first"); no build until this spec is
-approved. Interface sections (Stage A power_settings, Stage C tt_program
-extension) route to the Studio lane before any schema freeze.
+approved. Section-9 open questions ANSWERED by Matt 2026-08-06 and folded
+into sections 1, 4, and 9 below. Interface sections route to the Studio
+lane before any schema freeze.
 Owner: Matt McCoy
+
+TWO TEMPERATURES, not one (Matt 2026-08-06): PA12 MELT onset is ~185 C
+(the part must exceed this to fuse - a lower requirement, not a ceiling);
+~250 C is where PA12 begins to DEGRADE/burn (the true upper ceiling). The
+constraint keeps the peak below the DEGRADATION ceiling; melt onset is a
+completeness requirement, not the constraint. Both are per-material config
+with a margin band (the degradation temperature is a literature/measurement
+target, not assumed - see the density-and-thermal survey dispatched with
+this spec).
 
 ## 1. The problem, and why the dopant alone cannot solve it
 
@@ -69,12 +79,19 @@ which the implementation exploits (Stage A below).
 
 ### Stage A - dopant + drive scalar (immediate product value)
 
-Because the ceiling is nearly dopant-independent: (1) a cheap drive
-continuation/bisection on a fixed (uniform) map finds the largest a whose
-end-state peak <= ceiling; (2) one full dopant shape-solve runs at that a.
-Output: the recommended per-part drive plus the shape-optimal map under
-ceiling. This is the "system tells the user what power to run" feature,
-delivered within the frozen 2.0.0 schema (populates
+DRIVE OBJECTIVE = BEST PART, NOT SPEED (Matt 2026-08-06: "achieve the most
+ideal part rather than speed... get good parts first, speed later"). So
+the drive is NOT chosen as the largest-under-ceiling (fastest print);
+it is chosen to MAXIMIZE PART QUALITY (density completeness toward the
+target + shape fidelity) subject to the degradation ceiling. Concretely:
+sweep drive over the feasible range (all a whose end-state peak <=
+degradation ceiling), and for each measure the achieved density and shape;
+pick the a that gives the best part, not the fastest. Where multiple a
+reach full density under ceiling, the slower/cooler one is preferred for
+margin. Then one full dopant shape-solve at the chosen a. Output: the
+recommended per-part drive plus the shape-optimal map under ceiling. This
+is the "system tells the user what power to run for the best part" feature,
+within the frozen 2.0.0 schema (populates
 power_settings.power_density_w_per_m3). Gate: the recommended (drive, map)
 verified by heatr3d exactly as the map is today; is_sendable unchanged.
 
@@ -148,16 +165,25 @@ begin the moment L2's densify forward lands (Stage A needs the forward,
 not the rho adjoint; the rho adjoint is needed at B/C). Compute-schedule
 convention governs all heavy runs.
 
-## 9. Open questions for Matt
+## 9. Open questions - ANSWERED by Matt 2026-08-06
 
-1. T_ceiling value: fixed 250 C, or a per-material config with a margin
-   band (the ink/percolation work may move the usable ceiling)?
-   [Studio: 250.0 hardcoded in runner today; per-material is a small
-   runner change - free on their side.]
-2. rho_target: 0.98 (the Studio's densification stop) or a configurable
-   floor - does the dense-iff-in-bounds 80-90% density trade apply to the
-   ceiling problem too (accept lower density to stay under ceiling)?
-   [Studio: runner already takes stop_mean_rho, so configurable is free.]
-3. Stage A drive-continuation objective: largest drive under ceiling
-   (fastest print) vs a drive that leaves headroom (robustness) - product
-   preference.
+1. T_ceiling: PER-MATERIAL config with a margin band. Physics: ~185 C is
+   PA12 MELT onset (completeness requirement, must exceed), ~250 C is
+   DEGRADATION/burn onset (the true ceiling). Constraint gates on the
+   degradation ceiling; melt onset is a separate completeness requirement.
+   The degradation temperature is a survey/measurement target, not assumed
+   (density-and-thermal survey dispatched). [Studio: 250.0 hardcoded today;
+   per-material is a small runner change.]
+2. rho_target: NOT YET KNOWN - needs a literature survey (nylon 12 and
+   other polymer AM density results). Ideal is 1.0 (fully dense); the
+   system must allow flexibility, provisionally ">=0.90", but this is to
+   be determined by the survey, which represents FINAL PART density.
+   [Studio: runner already takes stop_mean_rho, configurable is free.]
+   ACTION: density survey dispatched with this spec; rho_target stays a
+   config with a provisional 0.90 floor and a 1.0 ideal until the survey
+   sets it.
+3. Drive objective: BEST PART, NOT SPEED. "Achieve the most ideal part
+   rather than speed... get good parts first, speed later." Section 4
+   Stage A rewritten accordingly: drive chosen to maximize part quality
+   (density + shape) under the ceiling, preferring cooler/margin where
+   quality ties; speed is a later optimization.
