@@ -12,10 +12,14 @@ Stage A delivers the densify forward, the ceiling observable, and best-part
 drive selection. The dopant relocates the peak but cannot lower its magnitude
 (conservation), so the degradation ceiling is satisfied by the DRIVE, not the
 dopant; the dopant shapes within the feasible envelope. Tasks 0 through 3 are
-implemented, tested, and gated green. Task 4 (the one heavy dopant solve at the
-chosen drive) is set up as the next scheduled heavy run with a scope question
-flagged below. Task 5 output contract is built and routed to the Studio lane
-for confirmation; no schema change (stays 2.0.0).
+implemented, tested, and gated green. Task 4 phase 1 (drive selection on a real
+part at the physical rho_target 0.98) is DONE and decisive: the square needs a
+0.40x drive backoff to reach full density under the 250 C ceiling; every higher
+drive cooks over, and best-part coincides with coolest (no tradeoff). Task 4
+phase 2 (the dopant shape-solve at that drive) is queued behind the Tamper solve
+per the compute convention; its scope reading is now confirmed by both lanes.
+Task 5 output contract is built, routed to the Studio lane, and now carries a
+real recommended drive; no schema change (stays 2.0.0).
 
 ## Config values (all cited to the memo, c25eb5c)
 
@@ -172,34 +176,66 @@ folded in:
 The field write and the shared-config path/schema were routed to the Studio lane
 session ("Make Grade and Print real in RFAM Print Studio") for confirmation.
 
-## Task 4: dopant shape-solve at the chosen drive (SCHEDULED heavy run)
+## Task 4: dopant shape-solve at the chosen drive
 
-Status: NOT RUN this session. Set up as the single scheduled heavy run per the
-compute convention (the Tamper solve is holding one heavy slot).
+### Phase 1 (DONE 2026-08-06): drive selection on a real part at rho_target 0.98
 
-Procedure (the next heavy run):
-1. Select the drive on the deliverable part (cube or pyramid, both over-ceiling
-   at 1.0x) at rho_target 0.98 via `stage_a.select_drive` (forward bisection on
-   the true-max peak; a handful of densify forwards to 0.98). Detach + checkpoint
-   (solve3d/phase_e/checkpoint.py pattern), monitor via
-   solve3d/phase_e/track_solve.py.
-2. Run the Phase C/E dopant shape-solve at the chosen drive. Acceptance:
-   end-state true-max peak <= 250 C on a mesh hold-out (not just the solve
-   mesh); the solved map + drive reproduce their claimed peak under heatr3d
-   verify (cross-engine, within the cross-family band); is_sendable unchanged.
+`solve3d/stage_a_launch.py`, detached (pid 16498), checkpointed per drive,
+completed clean (verdict `ok`, not honest-null). Sweep on the square anchor
+(5600 in-part nodes), five drives to mean rho 0.98 under the shared-config
+250 C degradation ceiling. Result (`solve3d/results/stage_a_task4_square.json`):
 
-SCOPE QUESTION to resolve before launching (flagged, not guessed):
-the existing Phase C/E dopant adjoint reads the objective at the melt-onset
-ENVELOPE (argmin over the trajectory). Reading the shape objective at the
-densify END-STATE would back-propagate through the density evolution, which is
-the rho co-state / L2 adjoint SECOND half that the plan and spec place in
-Stage B+ ("no rho adjoint" in Stage A). The consistent Stage A reading is:
-optimize the dopant shape with the existing melt-onset adjoint at the chosen
-drive, and evaluate the ceiling at the densify end-state as a FORWARD gate (the
-ceiling is nearly dopant-independent, so the dopant needs no ceiling gradient in
-Stage A; the drive handles the ceiling). This was not launched blind at session
-end because firing a multi-hour heavy solve on an unverified objective-read
-interpretation would waste the single heavy slot and risk an unverified result.
+```
+ drive   power_density      true peak   rho    shape IoU   exposure   feasible
+ 0.40x   636,620 W/m^3       240.1 C    0.980    0.7047     1336.6 s     YES
+ 0.55x   875,352 W/m^3       255.8 C    0.980    0.7009      944.4 s     over
+ 0.70x  1,114,085 W/m^3      268.2 C    0.980    0.6991      732.4 s     over
+ 0.85x  1,352,817 W/m^3      278.1 C    0.980    0.6968      600.2 s     over
+ 1.00x  1,591,549 W/m^3      286.4 C    0.980    0.6956      510.0 s     over
+```
+
+Reading:
+- The ceiling BITES on a real deliverable part. To reach full density (0.98),
+  only 0.40x baseline keeps the square's true peak under 250 C (240.1 C, a 10 C
+  margin). Every higher drive densifies to 0.98 sooner but cooks over the
+  degradation onset. n_feasible = 1.
+- This is the conservation argument made concrete: the dopant cannot rescue an
+  over-ceiling drive (it relocates the peak, not its magnitude); the DRIVE is
+  the lever, and here it must back off to 40%.
+- Best-part and coolest COINCIDE (no tradeoff): shape IoU is monotone in cooler
+  drive (0.7047 at 0.40x vs 0.6956 at 1.00x), so the slow, cool bake wins on
+  BOTH feasibility and shape. The quality score Q picks 0.40x on merit, not just
+  by the cooler-tie-break.
+- Energy residual ~1e-13 across all five (conservation held), no rho clamp.
+- Recommended output (2.0.0, one field): power_density_w_per_m3 = 636,620
+  (0.40x baseline), with provenance recorded in `recommended_power_settings`.
+
+This is the "system tells the user what power to run for the best part under the
+ceiling" feature working end-to-end on a real part. It also updates the spec's
+worked example: the square at 1.0x reaches 286.4 C at rho 0.98, well over both
+the pyramid (281.7 C) and cube (~265 C) full-density peaks quoted in spec S1.
+
+### Phase 2 (QUEUED behind the Tamper solve): dopant shape-solve at 0.40x
+
+Scope reading CONFIRMED (by this lane AND the Studio lane, cross-session
+2026-08-06): optimize the dopant shape with the existing melt-onset adjoint at
+the chosen 0.40x drive, and evaluate the degradation ceiling at the densify
+END-STATE as a FORWARD gate (the ceiling is nearly dopant-independent, so the
+dopant needs no ceiling gradient in Stage A; the drive handles the ceiling; the
+rho co-state is Stage B+). No open scope question remains.
+
+Gated only on compute: Task 4 phase 1 freed a slot, but the Tamper Phase-E
+solve still holds the one-heavy-solve budget per the compute convention and the
+"schedule with other sessions" directive. Phase 2 launches when Tamper
+completes. Acceptance still to run: end-state true-max peak <= 250 C on a mesh
+HOLD-OUT (not the solve mesh); the (shaped map, 0.40x drive) reproduces its
+claimed peak under the Studio heatr3d verify (cross-engine, within the
+cross-family band); is_sendable unchanged. The Studio lane has agreed to run
+that cross-engine verify on the first real Stage A output.
+
+Cross-engine verify of the DRIVE recommendation (uniform map at 0.40x) is routed
+to the Studio lane now, ahead of phase 2, so the drive backoff is independently
+confirmed before the shape-solve spends the next heavy slot.
 
 ## Not covered by Stage A (named so silence is not read as agreement)
 
