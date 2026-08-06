@@ -1,9 +1,9 @@
 # Thermal-Ceiling-Constrained Joint Solve: Dopant, Drive, and Schedule
 
 Date: 2026-08-06
-Status: DRAFT for Matt's review. Objective expansion GREENLIT in principle
-2026-08-06 ("Greenlight, spec it first"); no build until this spec is
-approved. Section-9 open questions ANSWERED by Matt 2026-08-06 and folded
+Status: APPROVED by Matt 2026-08-06 ("I approve the spec build out").
+Build proceeds L2-forward -> Stage A first; rho_target/ceiling values
+finalize when POLYMER_AM_DENSITY_THERMAL_MEMO.md lands (dispatched). Section-9 open questions ANSWERED by Matt 2026-08-06 and folded
 into sections 1, 4, and 9 below. Interface sections route to the Studio
 lane before any schema freeze.
 Owner: Matt McCoy
