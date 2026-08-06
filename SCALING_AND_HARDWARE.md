@@ -64,18 +64,29 @@ More cells **and** a harder optimization landscape (more iterations). Hardware
 helps throughput; warm starts and multigrid help single-solve latency.
 
 ### Size (bigger parts)
-This is the axis to **verify before spending on it**. If the Buckingham-Pi
-nondimensionalization holds, cost is roughly flat in physical size, because
-the same nondimensional problem is the same number of cells. The adaptive
-chamber result is consistent with a partial version: element size is held, so
-**in-part cell count stays ~constant as the part grows (19,421 -> 19,462),
-only the bed grows** (`solve3d` chamber sweep, `chamber_field_check.json`).
-That makes cost sublinear in size, not linear.
+**Size cost is approximately invariant under uniform scaling; the practical
+cost driver is the finest absolute feature, not part size.** (solve3d lane,
+reconciled 2026-08-06.) The pieces:
 
-OPEN, and it decides the whole size axis: **does the Pi-theorem result
-actually hold end to end?** If yes, size mostly stops being a cost problem and
-you do not need hardware to brute-force it. Owner: solve3d lane. Flagged to
-that session.
+- **What holds.** For a uniformly scaled part at fixed cell count, wall cost
+  is approximately size-invariant in-model: the cell size h scales with L, the
+  CFL substep dt scales with h^2, and diffusion-driven melt time scales with
+  L^2, so the step count is roughly constant. This matches the original Pi
+  analysis's "similarity exists but is cost-neutral" verdict.
+- **Also holds.** Chamber growth at a fixed part is sublinear: element size is
+  held, so **in-part cell count stays ~constant as the chamber grows (19,421
+  -> 19,462), only the bed grows** (`solve3d` chamber sweep,
+  `chamber_field_check.json`).
+- **What does NOT hold.** Real STLs carry ABSOLUTE-size features that do not
+  scale with the part. The Tamper's **0.105 mm minimum tessellation edge**
+  sets its substep count (n_sub 33-36) and was the binding cost three separate
+  times (wall time, memory, and the live suspect in a NaN-gradient
+  investigation). So a part whose finest feature is fixed in absolute terms
+  does not enjoy the scaling invariance.
+
+Net: the size axis closes for scaled families of smooth parts and stays open
+for parts with fixed fine features. The lever to watch is mesh feature size,
+not overall part size. Owner: solve3d lane.
 
 ### Resolution (finer detail)
 Decouple two grids that are easy to conflate:
@@ -159,10 +170,15 @@ without care:
    gradient, forcing the finite-difference gate (the core gradient-correctness
    check) to loosen. That weakens the solver lane's whole methodology.
 
-Mitigation for all three: **mixed precision.** float32 only in the sparse
-matrix-vector inner loop where roundoff is harmless; float64 for accumulation,
-residuals, and the gradient checks. Keeps most of the speed and most of the
-diagnostic strength.
+Mitigation for the thermal-march accumulation (item 2): **mixed precision**,
+float32 in kernels where roundoff is harmless and float64 for accumulation and
+residuals. BUT for the EQS solve and adjoint (items 1 and 3) the solve3d lane
+has ruled that the **backend must be float64-native** (see section 5 riders):
+the finite-difference gradient gate is the binding acceptance and it does not
+survive a float32 solve. So mixed precision is a march-side tool, not a
+get-out for the solve itself. This is the constraint that makes consumer
+GPUs a poor fit for the solve (next point) and pushes any GPU solve toward
+datacenter FP64 hardware or staying on CPU.
 
 ### Two things that bite harder than roundoff
 - **Consumer cards cripple float64.** Gaming NVIDIA cards run FP64 at
@@ -211,6 +227,19 @@ hardware) at once. Clean path:
    where it is diagnostically load-bearing. The GPU becomes a verified backend
    swap, not a rewrite-and-revalidate-and-buy gamble.
 
+Two riders on step 4 (solve3d lane, confirmed 2026-08-06):
+
+- **The gradient (FD) gate is the binding acceptance for ANY backend swap,
+  CPU or CUDA.** The measured FD-headroom cost travels with the iterative path
+  regardless of backend: at rtol 1e-10 the worst-probe FD accuracy degrades
+  ~4.8x while still passing the 1e-5 gate (`solve3d/TRANCHE1_REPORT.md`). So
+  the iterative solver's tolerance is chosen against the gradient gate, not
+  the forward residual alone.
+- **Any GPU backend must be float64-native.** The Metal negative is the
+  precedent: no FP64 means no port, and there is no float32 escape hatch for
+  the solve. This rules out consumer cards for the solve itself and points at
+  datacenter FP64 hardware (or keeping the solve on CPU).
+
 ## 6. Open questions and owners
 
 - **Pi-theorem size invariance: does it hold end to end?** Decides the size
@@ -222,3 +251,14 @@ hardware) at once. Clean path:
   60 mm can solve but cannot be densify-verified, so intake still refuses
   them. Unfreezing `Grid` L is graduation-lane territory and is the unlock for
   large parts (see `studio3d` chamber-tagging, commit cf1a203).
+
+## 7. Status note (2026-08-06)
+
+The Tamper direct solve is NOT imminent. The solve3d lane killed the first
+run after finding NaN gradients on all 8 evaluations (an adjoint NaN specific
+to that config, leading suspect the 0.105 mm tessellation feature). The
+diagnosis is running red-first with a finite-gradient launch guard being added
+so silent NaN burns cannot recur. The Tamper baseline arm remains valid
+(forward physical at ch086, peak 279.8 C). Nothing in this brief depends on
+the Tamper solve completing; it is cited only as the measured example of an
+absolute-feature cost driver.
