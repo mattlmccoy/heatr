@@ -1,0 +1,118 @@
+{
+ "what": "Thermal-ceiling Stage A pre-registration. Frozen BEFORE any Stage A solve code (plan Task 0, docs/superpowers/plans/2026-08-06-thermal-ceiling-stage-a.md; spec docs/superpowers/specs/2026-08-06-thermal-ceiling-joint-solve-design.md, APPROVED). Every config value carries its citation. Downstream Stage A tasks READ this file; no threshold here may be widened.",
+ "provenance": {
+  "spec_status": "APPROVED by Matt 2026-08-06",
+  "config_memo": "POLYMER_AM_DENSITY_THERMAL_MEMO.md (commit c25eb5c)",
+  "conventions": "FROZEN_CONVENTIONS_2D.md (frozen 2026-08-01)",
+  "band_machinery": "solve3d/gates.py combine_spreads + solve3d/crossfamily.py (Phase A cross-family parity band)"
+ },
+ "T_config": {
+  "note": "TWO temperatures, not one (spec). Melt onset is a COMPLETENESS requirement (the part must exceed it to fuse); the degradation ceiling is the CONSTRAINT (the peak must stay under it). Per-material config; the values below are the PA12 defaults, provisional pending direct RFAM in-atmosphere DSC/TGA measurement (the named de-risking test).",
+  "material": "PA12",
+  "melt_onset_c": 185.0,
+  "melt_onset_role": "completeness (min in-part peak must exceed this to fuse)",
+  "melt_onset_citation": "memo Table 2a + summary: 185 C kept from Matt, sits at/above the DSC melt peak 176-184 C; true onset ~171-176 C so 185 C is slightly conservative",
+  "degradation_ceiling_c": 250.0,
+  "degradation_ceiling_role": "constraint g1: max over (t, x) of T(x,t) <= this",
+  "degradation_ceiling_citation": "memo Deliverable 2 + summary: air oxidative 5%-loss onset ~280 C minus ~30 C residence/model margin = 250 C; discoloration/embrittlement bound, NOT a hard burn point (hard onsets ~280 C air / ~350 C inert)",
+  "warning_band_start_c": 235.0,
+  "solver_margin_c_low": 10.0,
+  "solver_margin_c_high": 20.0,
+  "margin_citation": "memo Deliverable 2 chosen values + summary row 'solver warning margin': 10-20 C band starting ~235 C so model error and the KS-vs-true-peak gap cannot silently push the true peak over 250 C",
+  "ceiling_owner": "studio3d/runner.py (T_ceiling_C 250.0); gates.T_CEILING_C mirrors it and a test asserts they agree"
+ },
+ "rho_target": {
+  "note": "FINAL-PART relative density normalized so 1.0 is fully dense (zero-porosity) PA12 (~1.01 g/cm3). Per-material config; PA12 defaults below. The floor is a material knee (transfers to RFAM); the practical ideal is process-limited (MEASURE RFAM coupon before trusting it).",
+  "floor": 0.90,
+  "floor_role": "hard: below this refuse/warn (part is off the mechanical-strength plateau)",
+  "floor_citation": "memo Deliverable 1 'Chosen rho_target': mechanical knee ~0.90 from EOS qualified-part band bottoming at 0.90 g/cm3 and SLS studies calling sub-90% parts weak/porous/anisotropic; confirms Matt's provisional >=0.90",
+  "good": 0.95,
+  "good_citation": "memo: working norm for well-processed SLS PA12 (2.5-4.8% porosity)",
+  "practical_ideal": 0.98,
+  "practical_ideal_role": "the value the Stage A drive selection targets (rho_target for the densify stop)",
+  "practical_ideal_citation": "memo: realistic powder-bed best 0.98-0.99; the solve chases 0.98, not the unattainable 1.0",
+  "ideal_normalization_only": 1.0,
+  "ideal_citation": "memo: metric 1.0 anchor only, not physically attainable in a powder bed"
+ },
+ "drive_actuator": {
+  "variable": "a, a scalar uniform multiplier on ForwardParams.power_density_w_per_m3",
+  "baseline_power_density_w_per_m3": 1591549.4309189534,
+  "baseline_note": "a = 1.0 maps to the baseline 10 W over the 20 mm cylinder = 10/(pi*0.010^2*0.020) W/m3, which is exactly the field Studio hardcodes (studio3d/package.py:193, power_settings.power_density_w_per_m3 = 1.5915e6). Stage A output writes a * baseline into that field.",
+  "found_by": "forward sweep + bisection on the true-max peak (NOT adjoint; drive is a scalar, spec Stage A)",
+  "sweep_range_a": [0.40, 1.00],
+  "sweep_range_citation": "spec sec 1: pyramid 0.55x drive reaches 243 C under ceiling at rho 0.98; 1.0x cooks over 250 C. 0.40 lower bound gives headroom below the measured 0.55x feasible point; 1.00 upper bound is the baseline (over-ceiling for the demo parts).",
+  "sweep_coarse_step_a": 0.10,
+  "sweep_bisection_resolution_a": 0.01,
+  "sweep_bisection_note": "coarse grid a in {0.40,0.50,...,1.00}, then bisect to 0.01 in a on the ceiling crossing to locate the feasible envelope edge",
+  "exposure_cap_s": 1500.0,
+  "exposure_cap_note": "a drive that cannot reach rho_target practical ideal within this exposure is treated as not reaching the target (feeds the density-completeness score and the honest-null test)"
+ },
+ "best_part_quality_metric": {
+  "objective": "BEST PART, NOT SPEED (Matt 2026-08-06: 'achieve the most ideal part rather than speed... get good parts first, speed later'). The drive is chosen to MAXIMIZE part quality under the degradation ceiling, not to be the fastest under-ceiling drive.",
+  "score": "Q(a) = w_density * q_density(a) + w_shape * q_shape(a)",
+  "w_density": 0.5,
+  "w_shape": 0.5,
+  "weights_note": "equal weighting is the pre-registered default and is stated, not fitted: density is completeness (did the part densify to target) and shape is fidelity (did it densify in the right place); both are first-class for a 'good part'. Per-part reweighting is allowed but must be recorded.",
+  "q_density": "clip(achieved_mean_rho_at_stop_or_exposure_cap / rho_target.practical_ideal, 0.0, 1.0); 1.0 means the part reached the 0.98 target",
+  "q_shape": "shape fidelity of the densified end-state (solve3d/shape_metrics IoU against the analytic nominal part mask on the shared eval grid), in [0, 1]",
+  "feasibility": "a is FEASIBLE iff its true-max peak over the full densify trajectory <= degradation_ceiling_c. Infeasible drives are rejected before scoring.",
+  "tie_break": "on a quality tie the COOLER (lower-a, lower-peak) drive wins, for margin (spec Stage A: 'the slower/cooler one is preferred for margin')",
+  "tie_break_tol": 0.01,
+  "tie_break_tol_note": "two feasible drives whose Q differ by <= 0.01 are a tie; the cooler one is returned"
+ },
+ "honest_null": {
+  "rule": "MANDATORY. If NO feasible drive in the sweep range both stays under the degradation ceiling AND reaches rho_target.floor within the exposure cap, Stage A returns an explicit 'cannot make this part under this ceiling/chamber' verdict. It never returns a best-effort over-ceiling map, and never an under-dense (< floor) map presented as a solution.",
+  "citation": "spec sec 6 honest-null clause + plan Task 3 drive-limited-null path"
+ },
+ "acceptance_bands": {
+  "densify_equivalence": {
+   "what": "Task 1: solve3d march_densify vs heatr3d's own densify march on the extruded-circle anchor",
+   "quantities": ["rho_traj_rel_l2", "T_final_pattern_rel_l2", "T_end_max_rel"],
+   "band": "the Phase A cross-family parity band (gates.combine_spreads = 1.5 * (heatr3d_spread + dolfinx_spread)); rho_traj and T_final are compared by the same curve/pattern rel-L2 the Phase A gate uses, T_end_max by rel_spread",
+   "bit_identity": "march_densify(densify=False) must be BIT-IDENTICAL to the current Phase A march_enthalpy forward (pinned test); densify defaults OFF",
+   "mutation": "a dropped densification-rate term (e.g. drop the liquid viscous-capillary branch or zero drho) MUST fail the equivalence gate"
+  },
+  "ks_vs_true_max": {
+   "what": "Task 2: the KS peak-temperature aggregate must track the true max",
+   "band_rel": 0.05,
+   "band_rule": "|true_max - KS_aggregate| / true_max <= 0.05 on BOTH a synthetic field AND a real densify march. KS is a smooth lower bound on the max (approaches from below); its sharpness parameter is chosen to meet this band and recorded.",
+   "false_green_guard": "the KS aggregate is ONLY the smooth surrogate for the gradient. T_ceiling_ok and every reported physical peak are computed on the TRUE MAX, never on the KS aggregate. Reporting the KS value as the physical peak is the pre-registered false-green class and is forbidden.",
+   "band_note": "0.05 is tighter than the ceiling warning-band headroom (~15 C / 250 C = 6%), so a KS that meets this band cannot alone push the enforced true peak over the ceiling; the true max is enforced regardless."
+  },
+  "drive_selection": {
+   "what": "Task 3: select_drive on a small case",
+   "checks": [
+    "rejects any drive whose true-max peak > degradation_ceiling_c",
+    "scores the feasible rest by the best_part_quality_metric",
+    "returns the BEST-quality feasible drive (not the fastest)",
+    "on a quality tie returns the cooler (lower-a) drive",
+    "returns the honest-null verdict when no feasible drive reaches rho_target under ceiling"
+   ]
+  },
+  "dopant_solve": {
+   "what": "Task 4: the dopant shape-solve at the chosen drive",
+   "checks": [
+    "objective read at the densify end-state (not melt-onset)",
+    "end-state true-max peak <= degradation_ceiling_c on a MESH HOLD-OUT (not just the solve mesh)",
+    "the solved map + recommended drive reproduce their claimed peak under heatr3d verify (cross-engine, within the cross-family band)",
+    "is_sendable unchanged; frozen schema 2.0.0"
+   ]
+  }
+ },
+ "compute_schedule": {
+  "convention": "one heavy solve per session, max two machine-wide, 1-min load < 20 before launch, checkpoint anything long",
+  "context": "the Tamper solve is running (~one heavy slot in use). Task 1-3 equivalence/sweep runs are SHORT small-case runs. Task 4 dopant solve is the one HEAVY run: schedule it, detach + checkpoint (solve3d/phase_e/checkpoint.py pattern), monitor via solve3d/phase_e/track_solve.py.",
+  "env": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1; heatr3d side runs in .venv312, solve3d/forward (dolfinx) side runs in heatr3d_d1_spike/env"
+ },
+ "interface": {
+  "schema": "frozen 2.0.0, NO schema change (spec sec 5 Stage A)",
+  "field_written": "power_settings.power_density_w_per_m3 = a_chosen * baseline_power_density_w_per_m3",
+  "routing": "the exact field write is routed to the Studio lane ('Make Grade and Print real in RFAM Print Studio') for confirmation before finalizing"
+ },
+ "out_of_scope_stage_a": [
+  "Stage B joint drive + exposure/stop-time",
+  "Stage C dwell/rotation schedule adjoint and the turntable program-segment schema",
+  "the rho co-state / density adjoint (needed at B/C, not at A)",
+  "eps_r channel (Phase D), multi-part beds, the physical rig P-gate, any dissertation edit"
+ ]
+}

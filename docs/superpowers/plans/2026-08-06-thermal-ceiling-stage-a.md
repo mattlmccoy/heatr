@@ -9,7 +9,7 @@
 **Ground rules:** frozen conventions stand; densify default OFF and bit-identical when off; every gate JSON-quoted; no threshold widening; per-material T_config (melt ~185 C completeness, degradation ~250 C ceiling) read from config, provisional until POLYMER_AM_DENSITY_THERMAL_MEMO.md finalizes; rho_target config with provisional 0.90 floor / 1.0 ideal; heavy runs follow the compute-schedule convention (the Tamper solve is running - announce, load<20, one heavy slot); atomic solve3d/-only commits; no push without protocol; dissertation_materials READ-ONLY; OMP/OPENBLAS=1.
 
 ### Task 0: Pre-registration
-- [ ] `solve3d/results/stage_a_preregistration.json`: T_config (melt/degradation + margins, cited-provisional), rho_target (0.90 floor/1.0 ideal), the drive sweep range + resolution, the "best part" quality metric (weighted density-completeness + shape-fidelity, weights stated), the tie-break (cooler drive wins), and the acceptance bands. Commit before any solve code.
+- [x] `solve3d/results/stage_a_preregistration.json`: T_config (melt/degradation + margins, cited-provisional), rho_target (0.90 floor/1.0 ideal), the drive sweep range + resolution, the "best part" quality metric (weighted density-completeness + shape-fidelity, weights stated), the tie-break (cooler drive wins), and the acceptance bands. Commit before any solve code.
 
 ### Task 1: Densify forward in solve3d (L2 forward half)
 - [ ] Red test: `solve3d/densify_forward.py::march_densify` reproduces heatr3d's densify march (rho trajectory, T_final, T_end_max) on the extruded-circle anchor within the measured cross-family tolerance (reuse the Phase A band machinery); densify OFF is bit-identical to the current Phase A forward.
