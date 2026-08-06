@@ -12,8 +12,9 @@
 - [x] `solve3d/results/stage_a_preregistration.json`: T_config (melt/degradation + margins, cited-provisional), rho_target (0.90 floor/1.0 ideal), the drive sweep range + resolution, the "best part" quality metric (weighted density-completeness + shape-fidelity, weights stated), the tie-break (cooler drive wins), and the acceptance bands. Commit before any solve code.
 
 ### Task 1: Densify forward in solve3d (L2 forward half)
-- [ ] Red test: `solve3d/densify_forward.py::march_densify` reproduces heatr3d's densify march (rho trajectory, T_final, T_end_max) on the extruded-circle anchor within the measured cross-family tolerance (reuse the Phase A band machinery); densify OFF is bit-identical to the current Phase A forward.
-- [ ] Implement (port enthalpy densify semantics; march to rho_target stop). Green. Commit. Mutation check: a dropped densification-rate term must fail the equivalence gate.
+- [x] Red test: `solve3d/densify_forward.py::march_densify` reproduces heatr3d's densify march (rho trajectory, T_final, T_end_max) on the extruded-circle anchor within the measured cross-family tolerance (reuse the Phase A band machinery); densify OFF is bit-identical to the current Phase A forward.
+- [x] Implement (port enthalpy densify semantics; march to rho_target stop). Green. Commit. Mutation check: a dropped densification-rate term must fail the equivalence gate.
+      DONE: `forward.densify_rate` bit-for-bit vs heatr3d (test); densify guarded behind `if densify:` (off path bit-identical, existing suite green + zero-rate test); cross-family band measured (densify_parity_tolerances.json, T_end_max tol 7.0% = 1.5*(heatr3d 4.28% + solve3d 0.39% grid spreads)); gate all_pass=true (rho 0.019%/0.11%, peak 4.15%/7.0%, mean-T 0.28%/0.58%); mutation (drop liquid term) fails all three. True peak tracked as running trajectory max (ceiling quantity, never the snapshot).
 
 ### Task 2: Ceiling observable (KS peak + true max)
 - [ ] Red test: `solve3d/ceiling.py::peak_temp` returns (KS_aggregate, true_max) over the full densify trajectory; KS tracks true max within a pre-registered band on a synthetic field AND a real march; T_ceiling_ok computed on the true max (never the surrogate); melt-completeness check (min in-part peak >= melt onset) reported separately.

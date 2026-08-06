@@ -1,0 +1,68 @@
+{
+ "what": "Stage A Task 1 densify-forward equivalence gate: solve3d march_densify vs heatr3d's own densify march on the extruded-circle anchor, judged against the MEASURED densify parity band (densify_parity_tolerances.json = 1.5x heatr3d's own grid self-spread; cases.py method). rho, T_end_max and part-mean T are the end-state scalars; the melt-onset T CURVE equivalence is already covered by the Phase A gate on the same anchor.",
+ "band_source": "densify_parity_tolerances.json (1.5x heatr3d grid self-spread)",
+ "tolerances": {
+  "part_mean_rho": 0.0011007101425185516,
+  "T_end_max_c": 0.07006222371918569,
+  "part_mean_T_end_c": 0.005836435156373523
+ },
+ "config": {
+  "grid_n": 40,
+  "stop_mean_rho": 0.68,
+  "max_time_s": 400.0,
+  "drive_a": 6.0,
+  "power_density_w_per_m3": 9549296.58551372,
+  "solve3d_target_nodes_in_part": 5600,
+  "solve3d_nodes_in_part": 5383,
+  "mutate_drop_liquid": true
+ },
+ "reference_heatr3d": {
+  "engine": "heatr3d",
+  "shape": "circle",
+  "n": 40,
+  "n_voxels_in_part": 5600,
+  "part_mean_rho": 0.6802029654163074,
+  "T_end_max_c": 271.47520091961775,
+  "part_mean_T_end_c": 236.8197368931545,
+  "t90_s": 37.5,
+  "reached": true,
+  "exposure_s": 400.0,
+  "energy_residual_frac": 8.023818918124263e-15,
+  "clamp_bound": false
+ },
+ "port_solve3d": {
+  "part_mean_rho": 0.5500000601302559,
+  "T_end_max_c": 600.0,
+  "true_peak_T_c": 600.0,
+  "part_mean_T_end_c": 596.2320929363797,
+  "reached_rho": false,
+  "exposure_s": 400.0,
+  "energy_residual_frac": 0.33637275910950065,
+  "clamp_bound": true,
+  "n_nodes_in_part": 5383
+ },
+ "checks": {
+  "part_mean_rho": {
+   "port": 0.5500000601302559,
+   "ref": 0.6802029654163074,
+   "rel": 0.19141772662864368,
+   "tolerance": 0.0011007101425185516,
+   "pass": false
+  },
+  "T_end_max_c": {
+   "port": 600.0,
+   "ref": 271.47520091961775,
+   "rel": 1.2101466283752988,
+   "tolerance": 0.07006222371918569,
+   "pass": false
+  },
+  "part_mean_T_end_c": {
+   "port": 596.2320929363797,
+   "ref": 236.8197368931545,
+   "rel": 1.517662171060432,
+   "tolerance": 0.005836435156373523,
+   "pass": false
+  }
+ },
+ "all_pass": false
+}

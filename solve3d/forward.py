@@ -109,6 +109,25 @@ class ForwardParams:
     ambient_c: float = 23.0
     preheat_c: float = 23.0
     conv_h: float = 5.0              # top face (y = +L/2) only
+    # --- densification (heatr3d.Params dens_* fields, verbatim defaults;
+    #     physics_dual solid-state Arrhenius creep + liquid viscous-capillary
+    #     flow. Inert unless march_enthalpy(densify=True) is requested -- the
+    #     Phase A melt-onset march never reads them. Ported for Stage A of the
+    #     thermal-ceiling spec: the ceiling peak is an end-state quantity that
+    #     only exists once the forward marches densify to rho_target.) ---
+    dens_k0_ss: float = 0.005
+    dens_ea_ss: float = 48000.0
+    dens_phi_solid_exp: float = 0.8
+    dens_phi_threshold: float = 0.01
+    dens_phi_liq_exp: float = 1.0
+    dens_geom_factor: float = 0.05
+    dens_surface_tension: float = 0.03
+    dens_particle_radius_m: float = 3.5e-5
+    dens_eta_ref_pa_s: float = 8.0e3
+    dens_eta_ref_temp_k: float = 458.15
+    dens_eta_activation: float = 6.0e4
+    dens_rho_exp: float = 1.0
+    dens_max_drho_rate: float = 0.04   # per second
     # --- numerics ---
     dt_s: float = 0.05
     max_dt_step_c: float = 10.0
@@ -409,6 +428,33 @@ def phase_fraction(T, p: ForwardParams):
     return phi, dphi
 
 
+def densify_rate(T, phi, rho_rel, p: ForwardParams):
+    """Pure-numpy port of heatr3d.densify_rate (source anchor heatr3d.py:707).
+
+    physics_dual densification rate d(rho_rel)/dt (>= 0): solid-state Arrhenius
+    creep + liquid viscous-capillary flow, both gated by available porosity
+    (1 - rho_rel)^dens_rho_exp. Verbatim arithmetic, verbatim R_GAS = 8.314; a
+    unit test pins it bit-for-bit against heatr3d.densify_rate. This is the ONE
+    piece of densification physics Stage A ports; the march below evolves rho
+    with it and marches to rho_target so the ceiling peak (an end-state
+    quantity) exists in the solve3d forward.
+    """
+    Tk = np.maximum(np.array(T, dtype=float, copy=True) + 273.15, 1.0)
+    rho_term = np.power(np.clip(1.0 - rho_rel, 0.0, 1.0), p.dens_rho_exp)
+    # solid-state
+    kss = p.dens_k0_ss * np.exp(-p.dens_ea_ss / (R_GAS * Tk))
+    ss_drive = np.power(np.clip(1.0 - phi, 0.0, 1.0), p.dens_phi_solid_exp)
+    # liquid viscous-capillary
+    eta = p.dens_eta_ref_pa_s * np.exp(
+        p.dens_eta_activation / R_GAS * (1.0 / Tk - 1.0 / p.dens_eta_ref_temp_k))
+    kliq = p.dens_geom_factor * p.dens_surface_tension / (
+        np.maximum(eta, 1e-12) * p.dens_particle_radius_m)
+    phi_act = np.clip((phi - p.dens_phi_threshold)
+                      / max(1.0 - p.dens_phi_threshold, 1e-9), 0.0, 1.0)
+    liq_drive = np.power(phi_act, p.dens_phi_liq_exp)
+    return (kss * ss_drive + kliq * liq_drive) * rho_term
+
+
 def enthalpy_from_T(T, rho_cp, rho_L, p: ForwardParams):
     """heatr3d.enthalpy_from_T: volumetric enthalpy [J/m^3], piecewise linear
     (sensible slope rho_cp everywhere plus the latent plateau rho_L ramped
@@ -498,7 +544,9 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
                    T0_fn=None, L: float = L_DOMAIN,
                    sample_dt_s: float | None = None,
                    resolve_hook=None, record: dict | None = None,
-                   record_stride: int = 1, record_scalar_fn=None) -> dict:
+                   record_stride: int = 1, record_scalar_fn=None,
+                   densify: bool = False,
+                   stop_mean_rho: float | None = None) -> dict:
     """Mass-lumped explicit enthalpy march on the FEM mesh.
 
     DISCRETIZATION (the FEM analogue of heatr3d's explicit cell-centred FV
@@ -662,6 +710,27 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
     k_last = None
     n_k_assemblies = 0
 
+    # ---- densification state (Stage A; inert unless densify) -------------- #
+    # Guarded so the OFF path executes exactly the pre-densify statements and
+    # stays BIT-IDENTICAL to the Phase A forward (record-hook precedent). The
+    # ceiling peak is an end-state quantity, so the TRUE peak is the running
+    # maximum of the in-part temperature over the WHOLE trajectory, not the
+    # end-state snapshot -- studio3d ab08872 is the record of what a snapshot
+    # peak understated.
+    if densify:
+        drho_cap = p.dens_max_drho_rate * dt_sub
+        w_part_live = vol * m_nodal
+        part_peak_mask = m_nodal > 0.5
+        if not part_peak_mask.any():
+            part_peak_mask = m_nodal > 0.0
+        true_peak = float(T[part_peak_mask].max()) if part_peak_mask.any() \
+            else float("nan")
+        true_peak_step = 0
+        reached_rho = False
+        part_mean_rho0 = _wmean(rho_rel, w_part_live) if part_vol_m3 > 0 else float("nan")
+        rho_traj_t: list[float] = [0.0]
+        rho_traj_mean: list[float] = [part_mean_rho0]
+
     for it_sub in range(nsteps * n_sub):
         it, isub = divmod(it_sub, n_sub)
         t_now = it * p.dt_s + isub * dt_sub
@@ -685,6 +754,16 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
             if record_scalar_fn is not None:
                 record["scalars"].append(tuple(record_scalar_fn(T)))
         phi, _ = phase_fraction(T, p)
+        if densify:
+            # Density-dependent solid properties track the evolving rho_rel
+            # (heatr3d.run per-step rho_s_eff / k_s_eff). The closures below
+            # read these names; reassigning here updates them. On the first
+            # substep rho_rel is still the initial constant, so these equal the
+            # OFF-path constants -- which is why a zero-rate densify march
+            # reproduces the constant-rho march bit-for-bit (pinned test).
+            rho_s_eff = p.rho_powder + rho_rel * (p.rho_solid - p.rho_powder)
+            k_s_eff = p.k_powder + cell_average_p1(cell_dofs, rho_rel) * (
+                p.k_solid - p.k_powder)
         rho, cp, rho_L = nodal_props(phi)
         k_cells = cell_k(phi)
         if k_last is None or not np.array_equal(k_cells, k_last):
@@ -722,16 +801,49 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
         e_stored += float(np.sum(vol * m_nodal * rho_s_eff * p.latent_j_per_kg
                                  * (phi_now - phi)))
 
+        if densify:
+            # heatr3d.run densify update (heatr3d.py:1211): evolve rho_rel with
+            # the Arrhenius creep + viscous-capillary rate, capped per step, on
+            # part-carrying nodes only. Track the running TRUE peak of the
+            # in-part temperature for the ceiling constraint.
+            drho = np.clip(dt_sub * densify_rate(T, phi_now, rho_rel, p),
+                           0.0, drho_cap)
+            rho_rel = np.where(m_nodal > 0.0,
+                               np.clip(rho_rel + drho, 0.0, 1.0), rho_rel)
+            step_peak = float(T[part_peak_mask].max()) if part_peak_mask.any() \
+                else float("nan")
+            if not (step_peak <= true_peak):     # NaN-safe first assignment
+                true_peak = step_peak
+                true_peak_step = it_sub
+
         t_end_step = t_now + dt_sub
         mean_phi = _wmean(phi_now, vol * m_nodal) if part_vol_m3 > 0 else 0.0
         if not reached and mean_phi >= phi_target:
             reached = True
             t90 = t_end_step
             T_phi90 = T.copy()
-            curve_t.append(t90)
-            curve_T.append(_wmean(T, vol * m_nodal))
-            curve_phi.append(mean_phi)
-            break
+            if not densify:
+                curve_t.append(t90)
+                curve_T.append(_wmean(T, vol * m_nodal))
+                curve_phi.append(mean_phi)
+                break
+        if densify:
+            # In densify mode the march does NOT stop at melt onset; it stops at
+            # the target MEAN relative density (the realistic process stop,
+            # heatr3d.py:1231), so the ceiling peak is read at the densified
+            # end-state, not at melt-onset.
+            part_mean_rho = (_wmean(rho_rel, w_part_live)
+                             if part_vol_m3 > 0 else float("nan"))
+            if t_end_step >= next_sample - 1e-12:
+                rho_traj_t.append(t_end_step)
+                rho_traj_mean.append(part_mean_rho)
+            if (stop_mean_rho is not None and part_vol_m3 > 0
+                    and part_mean_rho >= stop_mean_rho):
+                reached_rho = True
+                curve_t.append(t_end_step)
+                curve_T.append(_wmean(T, vol * m_nodal))
+                curve_phi.append(mean_phi)
+                break
         if t_end_step >= next_sample - 1e-12:
             curve_t.append(t_end_step)
             curve_T.append(_wmean(T, vol * m_nodal) if part_vol_m3 > 0 else float("nan"))
@@ -747,7 +859,7 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
         # against, and what `n_steps` must mean downstream now that T_steps
         # holds anchors rather than one entry per step
         record["n_recorded_of"] = int(nsteps * n_sub)
-    return {
+    out = {
         "T": T, "T_phi90": T_phi90, "T0": T0_snapshot,
         "vol_nodal": vol, "m_nodal": m_nodal, "part_volume_m3": part_vol_m3,
         "reached": bool(reached), "t90_s": t90,
@@ -768,6 +880,27 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
         "curve_part_mean_phi": curve_phi,
         "n_steps_taken": int(it_sub + 1) if nsteps * n_sub > 0 else 0,
     }
+    if densify:
+        out.update({
+            "densify": True,
+            "rho_final": rho_rel,
+            "part_mean_rho": (_wmean(rho_rel, w_part_live)
+                              if part_vol_m3 > 0 else float("nan")),
+            "reached_rho": bool(reached_rho),
+            "stop_mean_rho": stop_mean_rho,
+            # the TRUE trajectory peak of the in-part temperature -- the ceiling
+            # quantity. This is the physical max over (t, x); the KS aggregate
+            # (solve3d.ceiling) is only the smooth gradient surrogate and must
+            # never be reported in this slot.
+            "true_peak_T_c": true_peak,
+            "true_peak_step_index": int(true_peak_step),
+            "T_end_max_c": (float(T[part_peak_mask].max())
+                            if part_peak_mask.any() else float("nan")),
+            "rho_traj_t_s": rho_traj_t,
+            "rho_traj_part_mean_rho": rho_traj_mean,
+            "exposure_s": float(it_sub + 1) * dt_sub,
+        })
+    return out
 
 
 def p1_cell_dofs(W) -> np.ndarray:

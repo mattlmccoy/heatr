@@ -1,0 +1,80 @@
+{
+ "what": "Stage A densify CROSS-FAMILY parity tolerances on the extruded-circle anchor (enthalpy, masked Q, coupling off, drive_a=6, stop_mean_rho=0.68). tolerance = 1.5 x (heatr3d_spread + solve3d_spread), the Phase A cross-family rule (gates.combine_spreads); each spread is that engine's own n=40-vs-n=64 grid self-spread. Frozen before the port is judged; widening forbidden.",
+ "combination_rule": "sum",
+ "safety_factor": 1.5,
+ "grids": [
+  40,
+  64
+ ],
+ "reference_grid": "n64",
+ "config": {
+  "drive_a": 6.0,
+  "stop_mean_rho": 0.68,
+  "max_time_s": 400.0,
+  "power_density_w_per_m3": 9549296.58551372
+ },
+ "heatr3d_runs": {
+  "n40": {
+   "engine": "heatr3d",
+   "shape": "circle",
+   "n": 40,
+   "n_voxels_in_part": 5600,
+   "part_mean_rho": 0.6802029654163074,
+   "T_end_max_c": 271.47520091961775,
+   "part_mean_T_end_c": 236.8197368931545,
+   "t90_s": 37.5,
+   "reached": true,
+   "exposure_s": 400.0,
+   "energy_residual_frac": 8.023818918124263e-15,
+   "clamp_bound": false
+  },
+  "n64": {
+   "engine": "heatr3d",
+   "shape": "circle",
+   "n": 64,
+   "n_voxels_in_part": 23040,
+   "part_mean_rho": 0.6804326822677322,
+   "T_end_max_c": 260.3364176214006,
+   "part_mean_T_end_c": 237.20374018560372,
+   "t90_s": 38.400000000000006,
+   "reached": true,
+   "exposure_s": 400.0,
+   "energy_residual_frac": -2.0457049654331615e-14,
+   "clamp_bound": false
+  }
+ },
+ "solve3d_runs": {
+  "n40": {
+   "part_mean_rho": 0.6803344624150294,
+   "T_end_max_c": 260.1991977395083,
+   "part_mean_T_end_c": 236.146325206044,
+   "n_nodes_in_part": 5383
+  },
+  "n64": {
+   "part_mean_rho": 0.6800650188325768,
+   "T_end_max_c": 259.18267384048255,
+   "part_mean_T_end_c": 236.6840907266854,
+   "n_nodes_in_part": 19821
+  }
+ },
+ "heatr3d_spread": {
+  "part_mean_rho": 0.0003376040825364455,
+  "T_end_max_c": 0.042786112676774866,
+  "part_mean_T_end_c": 0.0016188753691183484
+ },
+ "solve3d_spread": {
+  "part_mean_rho": 0.0003962026791425888,
+  "T_end_max_c": 0.003922036469348932,
+  "part_mean_T_end_c": 0.0022720814017973337
+ },
+ "combined_spread": {
+  "part_mean_rho": 0.0007338067616790343,
+  "T_end_max_c": 0.0467081491461238,
+  "part_mean_T_end_c": 0.003890956770915682
+ },
+ "tolerances": {
+  "part_mean_rho": 0.0011007101425185516,
+  "T_end_max_c": 0.07006222371918569,
+  "part_mean_T_end_c": 0.005836435156373523
+ }
+}
