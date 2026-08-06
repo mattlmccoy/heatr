@@ -1,0 +1,209 @@
+{
+ "what": "Stage A Task 3 end-to-end drive-selection demonstration on the extruded-circle anchor (SHORT small case). A real ceiling crossing (a=6,8 over 250 C) and both selection paths from one sweep.",
+ "records": [
+  {
+   "drive_a": 2.0,
+   "power_density_w_per_m3": 3183098.8618379068,
+   "true_peak_c": 230.42031000600423,
+   "achieved_rho": 0.6600741109116415,
+   "reached_rho": true,
+   "shape_iou": 0.852685421994885,
+   "exposure_s": 128.65,
+   "energy_residual_frac": 5.293974456552721e-14,
+   "clamp_bound": false
+  },
+  {
+   "drive_a": 4.0,
+   "power_density_w_per_m3": 6366197.7236758135,
+   "true_peak_c": 244.76932146699,
+   "achieved_rho": 0.6600026344396037,
+   "reached_rho": true,
+   "shape_iou": 0.8690537084398977,
+   "exposure_s": 70.25,
+   "energy_residual_frac": -1.3691618701456857e-14,
+   "clamp_bound": false
+  },
+  {
+   "drive_a": 6.0,
+   "power_density_w_per_m3": 9549296.58551372,
+   "true_peak_c": 254.4363194224699,
+   "achieved_rho": 0.6601562042144185,
+   "reached_rho": true,
+   "shape_iou": 0.869410569105691,
+   "exposure_s": 50.0,
+   "energy_residual_frac": 1.1008240284820967e-14,
+   "clamp_bound": false
+  },
+  {
+   "drive_a": 8.0,
+   "power_density_w_per_m3": 12732395.447351627,
+   "true_peak_c": 262.066460375401,
+   "achieved_rho": 0.6602674532707913,
+   "reached_rho": true,
+   "shape_iou": 0.725365305357812,
+   "exposure_s": 39.400000000000006,
+   "energy_residual_frac": -8.639490399877945e-15,
+   "clamp_bound": false
+  }
+ ],
+ "verdict_at_prereg_floor_0p90": {
+  "verdict": "cannot_make_under_ceiling",
+  "chosen_drive_a": null,
+  "reason": "no drive both stays under the 250 C degradation ceiling and reaches the rho_target floor 0.90 within the sweep; the part cannot be made under this ceiling/chamber",
+  "n_feasible": 2,
+  "best_feasible_density": {
+   "drive_a": 2.0,
+   "achieved_rho": 0.6600741109116415,
+   "true_peak_c": 230.42031000600423,
+   "note": "reported as evidence only; NOT a shippable solution (under the density floor)"
+  },
+  "scored": [
+   {
+    "drive_a": 2.0,
+    "power_density_w_per_m3": 3183098.8618379068,
+    "true_peak_c": 230.42031000600423,
+    "achieved_rho": 0.6600741109116415,
+    "reached_rho": true,
+    "shape_iou": 0.852685421994885,
+    "exposure_s": 128.65,
+    "energy_residual_frac": 5.293974456552721e-14,
+    "clamp_bound": false,
+    "feasible": true,
+    "q_density": 0.6735450111343281,
+    "q_shape": 0.852685421994885,
+    "Q": 0.7631152165646065
+   },
+   {
+    "drive_a": 4.0,
+    "power_density_w_per_m3": 6366197.7236758135,
+    "true_peak_c": 244.76932146699,
+    "achieved_rho": 0.6600026344396037,
+    "reached_rho": true,
+    "shape_iou": 0.8690537084398977,
+    "exposure_s": 70.25,
+    "energy_residual_frac": -1.3691618701456857e-14,
+    "clamp_bound": false,
+    "feasible": true,
+    "q_density": 0.6734720759587793,
+    "q_shape": 0.8690537084398977,
+    "Q": 0.7712628921993385
+   },
+   {
+    "drive_a": 6.0,
+    "power_density_w_per_m3": 9549296.58551372,
+    "true_peak_c": 254.4363194224699,
+    "achieved_rho": 0.6601562042144185,
+    "reached_rho": true,
+    "shape_iou": 0.869410569105691,
+    "exposure_s": 50.0,
+    "energy_residual_frac": 1.1008240284820967e-14,
+    "clamp_bound": false,
+    "feasible": false,
+    "q_density": 0.6736287798106311,
+    "q_shape": 0.869410569105691,
+    "Q": 0.771519674458161
+   },
+   {
+    "drive_a": 8.0,
+    "power_density_w_per_m3": 12732395.447351627,
+    "true_peak_c": 262.066460375401,
+    "achieved_rho": 0.6602674532707913,
+    "reached_rho": true,
+    "shape_iou": 0.725365305357812,
+    "exposure_s": 39.400000000000006,
+    "energy_residual_frac": -8.639490399877945e-15,
+    "clamp_bound": false,
+    "feasible": false,
+    "q_density": 0.6737422992559094,
+    "q_shape": 0.725365305357812,
+    "Q": 0.6995538023068607
+   }
+  ]
+ },
+ "verdict_at_reachable_demo_floor_0p60": {
+  "verdict": "ok",
+  "chosen_drive_a": 2.0,
+  "chosen": {
+   "drive_a": 2.0,
+   "power_density_w_per_m3": 3183098.8618379068,
+   "true_peak_c": 230.42031000600423,
+   "achieved_rho": 0.6600741109116415,
+   "reached_rho": true,
+   "shape_iou": 0.852685421994885,
+   "exposure_s": 128.65,
+   "energy_residual_frac": 5.293974456552721e-14,
+   "clamp_bound": false,
+   "feasible": true,
+   "q_density": 0.6735450111343281,
+   "q_shape": 0.852685421994885,
+   "Q": 0.7631152165646065
+  },
+  "n_feasible": 2,
+  "n_valid": 2,
+  "tie_broken_by_cooler": true,
+  "selection_rule": "max Q among feasible drives that reach the density floor; ties within 0.010 go to the cooler drive",
+  "scored": [
+   {
+    "drive_a": 2.0,
+    "power_density_w_per_m3": 3183098.8618379068,
+    "true_peak_c": 230.42031000600423,
+    "achieved_rho": 0.6600741109116415,
+    "reached_rho": true,
+    "shape_iou": 0.852685421994885,
+    "exposure_s": 128.65,
+    "energy_residual_frac": 5.293974456552721e-14,
+    "clamp_bound": false,
+    "feasible": true,
+    "q_density": 0.6735450111343281,
+    "q_shape": 0.852685421994885,
+    "Q": 0.7631152165646065
+   },
+   {
+    "drive_a": 4.0,
+    "power_density_w_per_m3": 6366197.7236758135,
+    "true_peak_c": 244.76932146699,
+    "achieved_rho": 0.6600026344396037,
+    "reached_rho": true,
+    "shape_iou": 0.8690537084398977,
+    "exposure_s": 70.25,
+    "energy_residual_frac": -1.3691618701456857e-14,
+    "clamp_bound": false,
+    "feasible": true,
+    "q_density": 0.6734720759587793,
+    "q_shape": 0.8690537084398977,
+    "Q": 0.7712628921993385
+   },
+   {
+    "drive_a": 6.0,
+    "power_density_w_per_m3": 9549296.58551372,
+    "true_peak_c": 254.4363194224699,
+    "achieved_rho": 0.6601562042144185,
+    "reached_rho": true,
+    "shape_iou": 0.869410569105691,
+    "exposure_s": 50.0,
+    "energy_residual_frac": 1.1008240284820967e-14,
+    "clamp_bound": false,
+    "feasible": false,
+    "q_density": 0.6736287798106311,
+    "q_shape": 0.869410569105691,
+    "Q": 0.771519674458161
+   },
+   {
+    "drive_a": 8.0,
+    "power_density_w_per_m3": 12732395.447351627,
+    "true_peak_c": 262.066460375401,
+    "achieved_rho": 0.6602674532707913,
+    "reached_rho": true,
+    "shape_iou": 0.725365305357812,
+    "exposure_s": 39.400000000000006,
+    "energy_residual_frac": -8.639490399877945e-15,
+    "clamp_bound": false,
+    "feasible": false,
+    "q_density": 0.6737422992559094,
+    "q_shape": 0.725365305357812,
+    "Q": 0.6995538023068607
+   }
+  ]
+ },
+ "note": "the physical rho_target=0.98 selection on the deliverable part is the Task 4 heavy run; this demo target (0.66) is kept low so the sweep is short."
+}
