@@ -726,6 +726,10 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
         true_peak = float(T[part_peak_mask].max()) if part_peak_mask.any() \
             else float("nan")
         true_peak_step = 0
+        # per-node running peak over the trajectory: the melt-completeness check
+        # (min in-part peak >= melt onset) needs the PEAK each node ever reached,
+        # not the end-state (a node can melt then cool as the front moves).
+        T_peak_nodal = T.copy()
         reached_rho = False
         part_mean_rho0 = _wmean(rho_rel, w_part_live) if part_vol_m3 > 0 else float("nan")
         rho_traj_t: list[float] = [0.0]
@@ -815,6 +819,7 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
             if not (step_peak <= true_peak):     # NaN-safe first assignment
                 true_peak = step_peak
                 true_peak_step = it_sub
+            np.maximum(T_peak_nodal, T, out=T_peak_nodal)
 
         t_end_step = t_now + dt_sub
         mean_phi = _wmean(phi_now, vol * m_nodal) if part_vol_m3 > 0 else 0.0
@@ -894,6 +899,8 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
             # never be reported in this slot.
             "true_peak_T_c": true_peak,
             "true_peak_step_index": int(true_peak_step),
+            "T_peak_nodal": T_peak_nodal,
+            "part_peak_mask": part_peak_mask,
             "T_end_max_c": (float(T[part_peak_mask].max())
                             if part_peak_mask.any() else float("nan")),
             "rho_traj_t_s": rho_traj_t,

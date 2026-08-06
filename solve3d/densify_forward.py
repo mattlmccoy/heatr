@@ -309,6 +309,66 @@ def equivalence_gate(n: int = GATE_GRID_N,
     return doc
 
 
+def ceiling_band_check(n: int = GATE_GRID_N,
+                       stop_mean_rho: float = GATE_STOP_MEAN_RHO,
+                       max_time_s: float = GATE_MAX_TIME_S,
+                       drive_a: float = GATE_DRIVE_A,
+                       band_rel: float = 0.05) -> dict:
+    """Task 2 acceptance: the KS aggregate tracks the true max within the
+    pre-registered 5% band on BOTH a synthetic field AND a real densify march,
+    and the ceiling verdict reads the TRUE max. Writes ceiling_ks_band.json."""
+    from solve3d import ceiling as cl
+
+    base = fwd.ForwardParams()
+    pw = base.power_density_w_per_m3 * float(drive_a)
+    p = fwd.ForwardParams(power_density_w_per_m3=pw)
+
+    ref = _heatr3d_densify_monolithic("circle", n, stop_mean_rho,
+                                      {"power_density_w_per_m3": pw}, max_time_s)
+    port = run_densify_forward("circle", ref["n_voxels_in_part"],
+                               base_lc_for_grid(n), stop_mean_rho, p=p,
+                               max_time_s=max_time_s, sample_dt_s=GATE_SAMPLE_DT_S)
+    obs = cl.observe(port, ceiling_c=250.0, melt_onset_c=185.0, warn_c=235.0)
+
+    rng = np.random.default_rng(7)
+    synth = np.concatenate([rng.normal(235.0, 5.0, 4000),
+                            rng.normal(248.0, 1.5, 200)])
+    syn = cl.peak_temp(synth)
+
+    doc = {
+        "what": "Stage A Task 2 KS-vs-true-max tracking band. The KS aggregate "
+                "is the smooth gradient surrogate ONLY; T_ceiling_ok is on the "
+                "TRUE max. Verified within the pre-registered 5% band on a "
+                "synthetic field and a real densify march.",
+        "band_rel_registered": band_rel,
+        "rho_per_c": cl.KS_RHO_PER_C,
+        "synthetic": {"true_max_c": syn["true_max_c"],
+                      "ks_aggregate_c": syn["ks_aggregate_c"],
+                      "gap_rel": syn["gap_rel"],
+                      "pass": bool(syn["gap_rel"] <= band_rel)},
+        "real_march": {"true_max_c": obs["peak"]["true_max_c"],
+                       "ks_aggregate_c": obs["peak"]["ks_aggregate_c"],
+                       "gap_rel": obs["peak"]["gap_rel"],
+                       "pass": bool(obs["peak"]["gap_rel"] <= band_rel),
+                       "true_peak_matches_march": obs["true_peak_matches_march"],
+                       "T_ceiling_ok": obs["ceiling"]["T_ceiling_ok"],
+                       "ceiling_read_on": obs["ceiling"]["peak_source"],
+                       "melt_complete": obs["completeness"]["complete"],
+                       "min_in_part_peak_c": obs["completeness"]["min_in_part_peak_c"]},
+    }
+    doc["all_pass"] = bool(doc["synthetic"]["pass"]
+                           and doc["real_march"]["pass"]
+                           and doc["real_march"]["true_peak_matches_march"])
+    gates.write_json("ceiling_ks_band.json", doc)
+    print(json.dumps({"all_pass": doc["all_pass"],
+                      "synthetic_gap_rel": doc["synthetic"]["gap_rel"],
+                      "real_gap_rel": doc["real_march"]["gap_rel"],
+                      "T_ceiling_ok": doc["real_march"]["T_ceiling_ok"],
+                      "ceiling_read_on": doc["real_march"]["ceiling_read_on"]},
+                     indent=1))
+    return doc
+
+
 def _densify_rate_no_liquid(T, phi, rho_rel, p):
     """MUTATION: the densify rate with the liquid viscous-capillary branch
     dropped. Must fail the equivalence gate (Task 1 mutation check)."""
@@ -330,6 +390,9 @@ def main() -> int:
     ap.add_argument("--measure-band", action="store_true",
                     help="measure heatr3d's own densify grid self-spread and "
                          "freeze densify_parity_tolerances.json (run first)")
+    ap.add_argument("--ceiling-band", action="store_true",
+                    help="verify the KS-vs-true-max tracking band on a real "
+                         "densify march + a synthetic field (Task 2)")
     ap.add_argument("--gate", action="store_true",
                     help="run the densify-forward equivalence gate")
     ap.add_argument("--mutate", action="store_true",
@@ -338,6 +401,8 @@ def main() -> int:
     args = ap.parse_args()
     if args.measure_band:
         measure_densify_self_spread()
+    if args.ceiling_band:
+        ceiling_band_check()
     if args.gate or args.mutate:
         doc = equivalence_gate(mutate_drop_liquid=bool(args.mutate))
         name = ("densify_equivalence_mutation.json" if args.mutate
