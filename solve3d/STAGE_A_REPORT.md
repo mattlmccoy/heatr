@@ -233,9 +233,26 @@ claimed peak under the Studio heatr3d verify (cross-engine, within the
 cross-family band); is_sendable unchanged. The Studio lane has agreed to run
 that cross-engine verify on the first real Stage A output.
 
-Cross-engine verify of the DRIVE recommendation (uniform map at 0.40x) is routed
-to the Studio lane now, ahead of phase 2, so the drive backoff is independently
-confirmed before the shape-solve spends the next heavy slot.
+Cross-engine verify of the DRIVE recommendation (uniform map at 0.40x): DONE
+and CONFIRMED (Studio lane heatr3d, 2026-08-06). Same geometry constructor, n=64,
+power_density 636,620 W/m^3, densify to mean rho 0.98, ceiling read from the same
+shared solve3d/thermal_config.json:
+
+```
+ quantity              solve3d (dolfinx FEM)   heatr3d (voxel FDM)
+ end-state peak (C)    240.1                   244.3   (+4.2 C, 1.7%)
+ reaches rho 0.98      yes                     yes (0.980)
+ under 250 C ceiling   yes                     yes
+```
+
+heatr3d's 244.3 C is inside the cross-family band [223.3, 256.9] (7% of 240.1)
+and under the ceiling; heatr3d energy audit clean (in 20578 J, stored 19982,
+loss 596, residual +0.0000, phi 1.000). Two independent engines agree on the
+densification END-STATE peak to 1.7%, both under the ceiling, from the same
+ceiling file. The 0.40x drive backoff is a cross-engine fact; is_sendable holds
+for the recommended (drive, uniform map). Evidence artifact (Studio lane):
+`solve3d/results/verify_square_stageA_heatr3d.json`. The shaped-map verify
+follows phase 2.
 
 ## Not covered by Stage A (named so silence is not read as agreement)
 
