@@ -895,7 +895,7 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
             "stop_mean_rho": stop_mean_rho,
             # the TRUE trajectory peak of the in-part temperature -- the ceiling
             # quantity. This is the physical max over (t, x); the KS aggregate
-            # (solve3d.ceiling) is only the smooth gradient surrogate and must
+            # (solve3d.ceiling) is only the smooth gradient proxy and must
             # never be reported in this slot.
             "true_peak_T_c": true_peak,
             "true_peak_step_index": int(true_peak_step),

@@ -3,7 +3,7 @@
 PURE NUMPY (imported from either environment).
 
 Spec sec 3: the peak-temperature constraint is a max over space AND time and is
-nonsmooth. For a gradient it is aggregated with a smooth KS / p-norm surrogate.
+nonsmooth. For a gradient it is aggregated with a smooth KS / p-norm proxy.
 BUT the physical peak that the degradation ceiling is enforced on is the TRUE
 max, and the two must never be confused:
 
@@ -12,7 +12,7 @@ max, and the two must never be confused:
     TRUE MAX. Presenting the KS value as the physical peak is a pre-registered
     false-green class (stage_a_preregistration.json acceptance_bands.ks_vs_true_max)
     and is refused here by construction: ceiling_status() takes the true max and
-    has no path to read the surrogate.
+    has no path to read the proxy.
 
 The KS aggregate uses the MEAN (volume-weighted) log-sum-exp form, so it is a
 LOWER bound on the max that approaches from below as the sharpness grows -- it
@@ -72,7 +72,7 @@ def peak_temp(T, weights=None, mask=None, rho: float = KS_RHO_PER_C) -> dict:
         "n_selected": int(sel.sum()),
         "gap_c": float(gap),
         "gap_rel": float(gap / denom),
-        "surrogate_is_lower_bound": bool(ks <= true_max + 1e-9),
+        "proxy_is_lower_bound": bool(ks <= true_max + 1e-9),
     }
 
 
@@ -92,7 +92,7 @@ def ceiling_status(true_max_c: float, ceiling_c: float,
         "T_ceiling_ok": ok,
         "over_by_c": float(tm - float(ceiling_c)),
         "peak_source": "true_trajectory_max",
-        "rule": "T_ceiling_ok is true_max <= ceiling; NEVER the KS surrogate",
+        "rule": "T_ceiling_ok is true_max <= ceiling; NEVER the KS proxy",
     }
     if warn_c is not None:
         out["warn_c"] = float(warn_c)
@@ -134,7 +134,7 @@ def melt_completeness(T_peak_nodal, mask, melt_onset_c: float,
 def observe(march_out: dict, ceiling_c: float, melt_onset_c: float,
             warn_c: float | None = None, rho: float = KS_RHO_PER_C) -> dict:
     """The Stage A ceiling read on a densify march output (forward.march_enthalpy
-    with densify=True). Bundles the KS-vs-true-max surrogate check, the ceiling
+    with densify=True). Bundles the KS-vs-true-max proxy check, the ceiling
     verdict (on the true max), and the melt-completeness check (separate).
     """
     if not march_out.get("densify"):
@@ -157,5 +157,5 @@ def observe(march_out: dict, ceiling_c: float, melt_onset_c: float,
         "true_peak_matches_march": consistent,
         "march_true_peak_T_c": float(march_out["true_peak_T_c"]),
         "note": "ceiling.T_ceiling_ok is on the TRUE max; peak.ks_aggregate_c is "
-                "the smooth gradient surrogate ONLY and is never the reported peak",
+                "the smooth gradient proxy ONLY and is never the reported peak",
     }

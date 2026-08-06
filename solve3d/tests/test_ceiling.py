@@ -28,7 +28,7 @@ def test_ks_is_a_lower_bound_and_tracks_true_max_within_band():
                         rng.normal(248.0, 1.0, 100)])
     pk = ceiling.peak_temp(T)
     assert pk["ks_aggregate_c"] <= pk["true_max_c"]      # lower bound
-    assert pk["surrogate_is_lower_bound"]
+    assert pk["proxy_is_lower_bound"]
     assert pk["gap_rel"] <= 0.05                         # pre-registered band
 
 
@@ -41,9 +41,9 @@ def test_higher_sharpness_shrinks_the_gap():
 
 
 # --------------------------------------------------------------------------- #
-# false-green guard: the ceiling verdict is on the TRUE max, never the surrogate
+# false-green guard: the ceiling verdict is on the TRUE max, never the proxy
 # --------------------------------------------------------------------------- #
-def test_ceiling_ok_is_on_true_max_not_the_ks_surrogate():
+def test_ceiling_ok_is_on_true_max_not_the_ks_proxy():
     # bulk sits at 240 C (under the 250 C ceiling); one hot spike at 254 C, so
     # the true peak is OVER the ceiling but the volume-mean KS lower bound sits
     # UNDER it -- exactly the false green this guard forbids.
@@ -54,10 +54,10 @@ def test_ceiling_ok_is_on_true_max_not_the_ks_surrogate():
     assert status["true_max_c"] == 254.0
     assert status["T_ceiling_ok"] is False
     assert status["in_warning_band"] is True
-    # the KS surrogate sits BELOW the ceiling -- reading the ceiling off the
-    # surrogate would falsely certify a part that is actually over the ceiling
+    # the KS proxy sits BELOW the ceiling -- reading the ceiling off the
+    # proxy would falsely certify a part that is actually over the ceiling
     assert pk["ks_aggregate_c"] < 250.0 < pk["true_max_c"]
-    # ceiling_status has no way to be fed the surrogate (no ks argument)
+    # ceiling_status has no way to be fed the proxy (no ks argument)
     import inspect
     assert "ks" not in inspect.signature(ceiling.ceiling_status).parameters
 

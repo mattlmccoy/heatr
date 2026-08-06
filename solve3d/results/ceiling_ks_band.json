@@ -1,5 +1,5 @@
 {
- "what": "Stage A Task 2 KS-vs-true-max tracking band. The KS aggregate is the smooth gradient surrogate ONLY; T_ceiling_ok is on the TRUE max. Verified within the pre-registered 5% band on a synthetic field and a real densify march.",
+ "what": "Stage A Task 2 KS-vs-true-max tracking band. The KS aggregate is the smooth gradient proxy ONLY; T_ceiling_ok is on the TRUE max. Verified within the pre-registered 5% band on a synthetic field and a real densify march.",
  "band_rel_registered": 0.05,
  "rho_per_c": 1.0,
  "synthetic": {

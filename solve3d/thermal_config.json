@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "material": "PA12",
+  "source": "POLYMER_AM_DENSITY_THERMAL_MEMO.md (commit c25eb5c)",
+  "note": "SHARED per-material thermal-ceiling config. SINGLE SOURCE OF TRUTH read by BOTH lanes: the solve3d constrained solve (solve3d/ceiling.py, solve3d/stage_a.py) and the Studio heatr3d verify (studio3d/runner.py, to replace its two hardcoded 250.0 literals). The cross-engine verify gate is only meaningful if both read the IDENTICAL ceiling, so a drive the solve deems feasible and the drive the Studio verify certifies are judged against the same number. Until the Studio runner is wired to this file, its hardcoded 250.0 matches T_ceiling_C so there is no drift today.",
+  "T_ceiling_C": 250.0,
+  "T_ceiling_role": "the CONSTRAINT: max over (t, x) of the in-part temperature must stay <= this (degradation/discoloration bound; hard onsets ~280 C air / ~350 C inert)",
+  "T_warning_C": 235.0,
+  "T_warning_role": "soft warning band start; 10-20 C solver margin absorbing model error and the KS-vs-true-peak gap",
+  "solver_margin_C": [10.0, 20.0],
+  "T_melt_onset_C": 185.0,
+  "T_melt_onset_role": "COMPLETENESS requirement (separate from the ceiling): the min in-part peak must EXCEED this to fuse; at/above the DSC melt peak 176-184 C",
+  "rho_target": {
+    "floor": 0.90,
+    "good": 0.95,
+    "practical_ideal": 0.98,
+    "ideal_normalization": 1.0
+  },
+  "rho_target_roles": {
+    "floor": "hard: below this refuse/warn (off the mechanical-strength plateau)",
+    "good": "working norm for well-processed SLS PA12",
+    "practical_ideal": "the densify stop target the drive selection chases",
+    "ideal_normalization": "metric 1.0 anchor only; not physically attainable in a powder bed"
+  },
+  "applicability": "SLS/MJF/DSC/TGA-sourced PA12 values; provisional pending direct RFAM in-atmosphere DSC/TGA + Archimedes/micro-CT coupon measurement (the named de-risking test)"
+}

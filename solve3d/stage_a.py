@@ -38,6 +38,19 @@ def prereg() -> dict:
     return json.loads((RESULTS / "stage_a_preregistration.json").read_text())
 
 
+_THERMAL_CONFIG_PATH = Path(__file__).resolve().parent / "thermal_config.json"
+
+
+def thermal_config() -> dict:
+    """The SHARED per-material thermal-ceiling config (solve3d/thermal_config.json).
+
+    Single source of truth for the ceiling / warning / melt-onset / rho_target
+    values, read by BOTH lanes so the Studio heatr3d verify and this constrained
+    solve judge a drive against the IDENTICAL ceiling (the cross-engine gate is
+    only meaningful if the number is the same)."""
+    return json.loads(_THERMAL_CONFIG_PATH.read_text())
+
+
 # --------------------------------------------------------------------------- #
 # Scoring + selection (pure logic; the tested core)
 # --------------------------------------------------------------------------- #
@@ -114,6 +127,41 @@ def select_from_sweep(records: list[dict], ceiling_c: float, rho_floor: float,
 
 
 # --------------------------------------------------------------------------- #
+# Task 5 output contract: the Studio power_settings field write (2.0.0, no
+# schema change). ROUTED to the Studio lane for confirmation before finalizing.
+# --------------------------------------------------------------------------- #
+def recommended_power_settings(chosen_drive_a: float) -> dict:
+    """Map the chosen drive scalar to the ONE Studio power_settings field.
+
+    Stage A writes ONLY power_settings.power_density_w_per_m3, the field Studio
+    currently hardcodes at 1.5915e6 (studio3d/package.py:193); a = 1.0 is exactly
+    that baseline. No new keys -- rf_mode is deliberately NOT written: 'constant'
+    is the only value until schedules exist, so it carries zero information and
+    would break the genuinely-zero-schema-change property. rf_mode becomes a real
+    discriminator (constant vs schedule) at the Stage C 2.1.0 bump, alongside the
+    turntable program-segment {angle, duration, drive} extension. Stays 2.0.0.
+    """
+    tc = thermal_config()
+    baseline = float(prereg()["drive_actuator"]["baseline_power_density_w_per_m3"])
+    pw = float(chosen_drive_a) * baseline
+    return {
+        "power_density_w_per_m3": pw,
+        "_stage_a_provenance": {
+            "drive_a": float(chosen_drive_a),
+            "baseline_power_density_w_per_m3": baseline,
+            "schema": "2.0.0 (no change; field already exists, no new keys)",
+            "field_path": "power_settings.power_density_w_per_m3",
+            "ceiling_c": float(tc["T_ceiling_C"]),
+            "thermal_config_path": "solve3d/thermal_config.json",
+            "note": ("recommended drive a=%.4f x baseline for the best part "
+                     "under the %.0f C degradation ceiling"
+                     % (float(chosen_drive_a), float(tc["T_ceiling_C"]))),
+            "routed_to_studio_for_confirmation": True,
+        },
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Sweep driver (runs the forwards; the SHORT small-case runs, spec Stage A)
 # --------------------------------------------------------------------------- #
 def _shape_iou_of_march(march: dict, melt_onset_c: float) -> float:
@@ -137,8 +185,7 @@ def run_drive_sweep(shape: str, target_nodes_in_part: int, lc0: float,
     from solve3d import forward as fwd
 
     base = fwd.ForwardParams()
-    pr = prereg()
-    melt_onset_c = float(pr["T_config"]["melt_onset_c"])
+    melt_onset_c = float(thermal_config()["T_melt_onset_C"])
     records = []
     for a in drive_grid:
         pw = base.power_density_w_per_m3 * float(a)
@@ -167,11 +214,11 @@ def select_drive(shape: str, target_nodes_in_part: int, lc0: float,
                  drive_grid, stop_mean_rho: float, **sweep_kw) -> dict:
     """Full Stage A drive selection: run the sweep, then choose the best-part
     feasible drive. Thresholds READ from the pre-registration."""
-    pr = prereg()
-    ceiling_c = float(pr["T_config"]["degradation_ceiling_c"])
-    rho_floor = float(pr["rho_target"]["floor"])
-    rho_ideal = float(pr["rho_target"]["practical_ideal"])
-    q = pr["best_part_quality_metric"]
+    tc = thermal_config()
+    ceiling_c = float(tc["T_ceiling_C"])           # SHARED config, both lanes
+    rho_floor = float(tc["rho_target"]["floor"])
+    rho_ideal = float(tc["rho_target"]["practical_ideal"])
+    q = prereg()["best_part_quality_metric"]
     records = run_drive_sweep(shape, target_nodes_in_part, lc0, drive_grid,
                               stop_mean_rho, **sweep_kw)
     verdict = select_from_sweep(records, ceiling_c, rho_floor, rho_ideal,
@@ -198,15 +245,15 @@ def main() -> int:
         #    is unreachable -> HONEST NULL (the mechanism, faithfully fired);
         #  - at a reachable demo floor (0.60) the feasible drives are valid ->
         #    OK, and best-part+cooler selection picks the coolest feasible drive.
-        pr = prereg()
-        ceiling_c = float(pr["T_config"]["degradation_ceiling_c"])
-        rho_ideal = float(pr["rho_target"]["practical_ideal"])
-        q = pr["best_part_quality_metric"]
+        tc = thermal_config()
+        ceiling_c = float(tc["T_ceiling_C"])
+        rho_ideal = float(tc["rho_target"]["practical_ideal"])
+        q = prereg()["best_part_quality_metric"]
         records = run_drive_sweep("circle", 2900, 0.060 / 32.0,
                                   drive_grid=(2.0, 4.0, 6.0, 8.0),
                                   stop_mean_rho=0.66, max_time_s=400.0)
         v_real = select_from_sweep(records, ceiling_c,
-                                   float(pr["rho_target"]["floor"]), rho_ideal,
+                                   float(tc["rho_target"]["floor"]), rho_ideal,
                                    float(q["w_density"]), float(q["w_shape"]),
                                    float(q["tie_break_tol"]))
         v_demo = select_from_sweep(records, ceiling_c, 0.60, rho_ideal,

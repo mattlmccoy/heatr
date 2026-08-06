@@ -77,6 +77,37 @@ def test_honest_null_when_no_feasible_drive_reaches_target():
     assert out["best_feasible_density"]["achieved_rho"] == 0.82
 
 
+def test_recommended_power_settings_writes_only_the_one_field():
+    """The output populates ONLY power_density_w_per_m3 (no schema change, no new
+    keys): a=1.0 is the baseline Studio hardcodes (1.5915e6), value scales
+    linearly, and rf_mode is deliberately NOT written (it defers to the Stage C
+    2.1.0 bump; 'constant' carries no information today)."""
+    base = stage_a.recommended_power_settings(1.0)
+    assert abs(base["power_density_w_per_m3"] - 1.5915e6) / 1.5915e6 < 1e-4
+    assert "rf_mode" not in base           # zero-key-change property protected
+    # the only non-provenance key is the field itself
+    assert [k for k in base if not k.startswith("_")] == ["power_density_w_per_m3"]
+    assert base["_stage_a_provenance"]["field_path"] == \
+        "power_settings.power_density_w_per_m3"
+    half = stage_a.recommended_power_settings(0.55)
+    assert abs(half["power_density_w_per_m3"]
+               - 0.55 * base["power_density_w_per_m3"]) < 1.0
+
+
+def test_shared_thermal_config_is_the_single_ceiling_source():
+    """The shared config both lanes read carries the cited PA12 values and its
+    ceiling agrees with gates.T_CEILING_C (which mirrors the Studio runner), so
+    the cross-engine verify judges a drive against the identical number."""
+    from solve3d import gates
+    tc = stage_a.thermal_config()
+    assert tc["T_ceiling_C"] == 250.0 == gates.T_CEILING_C
+    assert tc["T_warning_C"] == 235.0
+    assert tc["T_melt_onset_C"] == 185.0
+    assert tc["rho_target"]["floor"] == 0.90
+    assert tc["rho_target"]["practical_ideal"] == 0.98
+    assert "c25eb5c" in tc["source"]
+
+
 def test_score_drive_is_monotone_and_clipped():
     lo = stage_a.score_drive(0.80, 0.5, RHO_IDEAL, W_D, W_S)
     hi = stage_a.score_drive(0.98, 0.9, RHO_IDEAL, W_D, W_S)

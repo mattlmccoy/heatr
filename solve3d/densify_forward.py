@@ -337,7 +337,7 @@ def ceiling_band_check(n: int = GATE_GRID_N,
 
     doc = {
         "what": "Stage A Task 2 KS-vs-true-max tracking band. The KS aggregate "
-                "is the smooth gradient surrogate ONLY; T_ceiling_ok is on the "
+                "is the smooth gradient proxy ONLY; T_ceiling_ok is on the "
                 "TRUE max. Verified within the pre-registered 5% band on a "
                 "synthetic field and a real densify march.",
         "band_rel_registered": band_rel,

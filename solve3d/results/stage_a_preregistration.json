@@ -76,7 +76,7 @@
    "what": "Task 2: the KS peak-temperature aggregate must track the true max",
    "band_rel": 0.05,
    "band_rule": "|true_max - KS_aggregate| / true_max <= 0.05 on BOTH a synthetic field AND a real densify march. KS is a smooth lower bound on the max (approaches from below); its sharpness parameter is chosen to meet this band and recorded.",
-   "false_green_guard": "the KS aggregate is ONLY the smooth surrogate for the gradient. T_ceiling_ok and every reported physical peak are computed on the TRUE MAX, never on the KS aggregate. Reporting the KS value as the physical peak is the pre-registered false-green class and is forbidden.",
+   "false_green_guard": "the KS aggregate is ONLY the smooth proxy for the gradient. T_ceiling_ok and every reported physical peak are computed on the TRUE MAX, never on the KS aggregate. Reporting the KS value as the physical peak is the pre-registered false-green class and is forbidden.",
    "band_note": "0.05 is tighter than the ceiling warning-band headroom (~15 C / 250 C = 6%), so a KS that meets this band cannot alone push the enforced true peak over the ceiling; the true max is enforced regardless."
   },
   "drive_selection": {
