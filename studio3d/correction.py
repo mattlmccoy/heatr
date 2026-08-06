@@ -335,22 +335,53 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
     part = voxelize_stl(mesh_path, n)
 
     # spec 7e: a FRESH direct-solve artifact for this job ranks first.
-    # CHANGED 2026-08-05 (solve3d tranche-1 notify): "do not present a
-    # red-gate solve as a correction". solved_label is the artifact's own
-    # acceptance verdict (hold-out + smoothing, Phase C protocol); an
-    # artifact without it is recorded and SKIPPED, never shipped with a
-    # weaker badge. The Tamper is the standing counterexample: it meshes
-    # perfectly and its uniform forward is unusable (clamp_bound True,
-    # energy residual 3.07e-03).
+    # CHANGED 2026-08-06 (Matt): solved_label is a DESCRIPTIVE LABEL, not a
+    # gate. A good solve becomes a real correction even when solved_label is
+    # false - the cube/pyramid beat uniform 46/58 percent with physically
+    # sound forwards, and solved_label is false only because the mesh
+    # hold-out J_rel band is exceeded at corners (an S2 verification-metric
+    # limitation, not a bad map). The shippability authority stays the
+    # physical benefit gate + heatr3d verification downstream.
+    #
+    # The ONE thing that still stops a map here is a non-physical FORWARD
+    # (clamp latched / NaN gradient - the Tamper): that is a crashed
+    # simulation, not an uncertified correction, so it is recorded and
+    # skipped rather than marched into garbage. forward_physical comes from
+    # the solve's own standing gates (solve3d studio_solve). A legacy record
+    # without the field is treated as physical; the benefit gate is the
+    # backstop.
     solve_skip: Dict[str, Any] | None = None
     fresh = grade_dir / "heatr3d" / "solve" / "studio_solve_map.npz"
     if fresh.exists():
         sr = json.loads(
             (fresh.parent / "studio_solve_results.json").read_text())
-        if bool(sr.get("solved_label")):
+        forward_physical = sr.get("forward_physical")
+        if forward_physical is False:
+            solve_skip = {
+                "artifact": str(fresh),
+                "reason": ("the solve's FORWARD is not physical (standing gate "
+                           "violated - clamp latched or non-finite): a crashed "
+                           "simulation is not a correction. This is 'the sim "
+                           "did not work', not 'the sim is uncertified'."),
+                "solve_results": {k: sr.get(k) for k in
+                                  ("solved_label", "forward_physical",
+                                   "peak_over_ceiling", "improvement_pct",
+                                   "gates")},
+            }
+        else:
             with np.load(fresh) as d:
                 rec = dg0_to_voxel(d["centroids"], d["s_map"], d["volumes"],
                                    part, chamber_m=0.060)
+            certified = bool(sr.get("solved_label"))
+            # descriptive badge: says exactly what the map is, never claims a
+            # certification it does not have.
+            if certified:
+                badge = ("solve3d direct solve | solved_label true "
+                         "(hold-out + smoothing gates) | sim-only")
+            else:
+                badge = ("solve3d direct solve | forward physical, beats "
+                         "uniform, hold-out band exceeded (uncertified) | "
+                         "sim-only")
             # adaptive chamber sizing (solve3d convention 2026-08-05): the
             # solve's chamber tag travels into the job record, and a solve
             # chamber different from the heatr3d verification chamber (the
@@ -360,14 +391,16 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
             solve_chamber = (sr.get("mesh") or {}).get("chamber")
             prov: Dict[str, Any] = {
                 "engine": "solve3d_solved",
-                "trust_badge": ("solve3d direct solve | solved_label true "
-                                "(hold-out + smoothing gates) | sim-only"),
+                "certified": certified,
+                "trust_badge": badge,
                 "artifact": str(fresh),
                 "solve_chamber": solve_chamber,
                 "verification_chamber_m": 0.060,
                 "solve_results": {k: sr.get(k) for k in
-                                  ("solved_label", "improvement_pct", "gates",
-                                   "warm_start")},
+                                  ("solved_label", "beats_uniform_in_grid",
+                                   "in_grid_margin_rel", "forward_physical",
+                                   "peak_over_ceiling", "improvement_pct",
+                                   "gates", "warm_start")},
             }
             ch_m = (solve_chamber or {}).get("L_m") \
                 if isinstance(solve_chamber, dict) else None
@@ -378,14 +411,6 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
                     "so the verification field geometry differs from the "
                     "solve's (cross-size fringing is measured real)")
             return _finish(grade_dir, n, part, rec, prov)
-        solve_skip = {
-            "artifact": str(fresh),
-            "reason": ("solved_label is not true: the solve's own acceptance "
-                       "gates did not pass, and a red-gate solve is never "
-                       "presented as a correction (solve3d lane, 2026-08-05)"),
-            "solve_results": {k: sr.get(k) for k in
-                              ("solved_label", "improvement_pct", "gates")},
-        }
 
     entry = reg.find_solved_map(part, registry_path=registry_path)
     if entry is not None:
@@ -397,10 +422,12 @@ def build_correction(grade_dir: str | Path, mesh_path: str, n: int,
                                part, chamber_m=0.060)
         prov: Dict[str, Any] = {
             "engine": entry["engine"],
+            "certified": bool(entry.get("certified", True)),
             "trust_badge": entry["trust_badge"],
             "artifact": str(entry["artifact"]),
             "registry_entry": entry["name"],
             "source": entry.get("source"),
+            "note": entry.get("note"),
         }
     else:
         try:

@@ -255,7 +255,8 @@ def test_failed_25d_transfer_records_and_falls_through(tmp_path):
     assert "2 %" in prov["fallback_from_25d"]["error"]
 
 
-def _fake_solve_artifact(gd, part, value, solved_label):
+def _fake_solve_artifact(gd, part, value, solved_label,
+                         forward_physical=True, peak_over_ceiling=False):
     out = gd / "heatr3d" / "solve"
     out.mkdir(parents=True, exist_ok=True)
     n = part.shape[0]
@@ -268,6 +269,12 @@ def _fake_solve_artifact(gd, part, value, solved_label):
              v_raw=np.full(len(cents), value))
     (out / "studio_solve_results.json").write_text(json.dumps(
         {"solved_label": solved_label, "improvement_pct": 8.2,
+         "beats_uniform_in_grid": True, "in_grid_margin_rel": 0.46,
+         # forward_physical / peak_over_ceiling are the solve3d standing-gate
+         # signals (studio_solve.py): they say the FORWARD ran, distinct from
+         # solved_label which is the hold-out/smoothing CERTIFICATION.
+         "forward_physical": forward_physical,
+         "peak_over_ceiling": peak_over_ceiling,
          "gates": {"holdout": solved_label, "smoothing": solved_label}}))
 
 
@@ -288,25 +295,50 @@ def test_fresh_solve_artifact_ranks_first(box_stl, tmp_path):
         assert np.allclose(d["sat"][part], 0.75, atol=1e-6)
 
 
-def test_ungated_solve_does_not_ship(box_stl, tmp_path):
-    """CHANGED 2026-08-05 per the solve3d lane's tranche-1 notify: "do not
-    present a red-gate solve as a correction". The Tamper is the concrete
-    counterexample - it meshes perfectly and its uniform forward is not
-    usable (clamp_bound True, energy residual 3.07e-03). An artifact whose
-    solved_label is false is RECORDED and SKIPPED; the chain falls through
-    to the next rung instead of shipping it with a weaker badge."""
+def test_uncertified_but_physical_solve_ships(box_stl, tmp_path):
+    """CHANGED 2026-08-06 (Matt): a good solve whose FORWARD is physical must
+    become a real correction even when solved_label is false. The cube and
+    pyramid are the case: they beat uniform 46/58 percent and their forwards
+    are physically sound; solved_label is false only because the mesh
+    hold-out J_rel band is exceeded at the corners (an S2 verification-metric
+    limitation, not a bad dopant map). solved_label is now a descriptive
+    label, not a gate. The physical benefit gate + heatr3d verification
+    downstream remain the shippability authority."""
+    from studio3d.runner import voxelize_stl
+    n = 16
+    gd = tmp_path / "grade"
+    part = voxelize_stl(str(box_stl), n)
+    _fake_solve_artifact(gd, part, 0.7, solved_label=False,
+                         forward_physical=True)
+    prov = build_correction(gd, str(box_stl), n,
+                            registry_path=tmp_path / "missing.json")
+    # the solved map IS consumed as the correction
+    assert prov["engine"] == "solve3d_solved"
+    with np.load(gd / "heatr3d" / "correction_sat.npz") as d:
+        assert np.allclose(d["sat"][part], 0.7, atol=1e-6)
+    # provenance describes it honestly, never claims certification it lacks
+    assert prov["solve_results"]["solved_label"] is False
+    assert "solved_label true" not in prov["trust_badge"]
+    assert prov.get("solve_artifact_skipped") is None
+
+
+def test_nonphysical_forward_solve_does_not_ship(box_stl, tmp_path):
+    """The one honest guard that stays: a solve whose FORWARD is not physical
+    (clamp latched / NaN gradient - the Tamper) is a crashed simulation, not
+    a correction. It is recorded and skipped; the chain falls through. This
+    is 'the sim did not work', NOT 'the sim is uncertified'."""
     from studio3d.runner import voxelize_stl
     n = 16
     gd = tmp_path / "grade"
     part = voxelize_stl(str(box_stl), n)
     _fake_before_arm(gd, part, n)          # the next rung must be reachable
-    _fake_solve_artifact(gd, part, 0.7, solved_label=False)
+    _fake_solve_artifact(gd, part, 0.7, solved_label=False,
+                         forward_physical=False)
     prov = build_correction(gd, str(box_stl), n,
                             registry_path=tmp_path / "missing.json")
-    assert prov["engine"] != "solve3d_unlabeled"
+    assert prov["engine"] != "solve3d_solved"
     skip = prov.get("solve_artifact_skipped")
     assert skip is not None
-    assert "solved_label" in skip["reason"]
-    # the shipped map must not be the skipped artifact's 0.7 field
+    assert "forward" in skip["reason"].lower()
     with np.load(gd / "heatr3d" / "correction_sat.npz") as d:
         assert not np.allclose(d["sat"][part], 0.7, atol=1e-6)

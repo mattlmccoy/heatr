@@ -10,6 +10,32 @@
    "engine": "solve3d_solved",
    "trust_badge": "solve3d solved | solved_label true (hold-out + smoothing gates) | sim-only",
    "source": "solve3d/PHASE_C_REPORT.md"
+  },
+  {
+   "name": "phase_e_cube_n64",
+   "part_sha256": "19100ba8592459008b9b44393aaff08e38a8092fd972d14d2ff7262a59241050",
+   "grid_n": 64,
+   "chamber_m": 0.060,
+   "artifact": "solve3d/phase_e/results/map_cube_solve_filter_only.npz",
+   "form": "dg0",
+   "engine": "solve3d_solved",
+   "certified": false,
+   "trust_badge": "solve3d direct solve | forward physical, beats uniform +46%, hold-out band exceeded at corners (uncertified) | sim-only",
+   "source": "solve3d/phase_e/results/phase_e_gate_cube.json",
+   "note": "Phase E cube solve: nominal geometry (predates Level 0 pre-comp), so anchor jobs run precomp OFF. solved_label false (mesh hold-out J_rel 0.226 vs band 0.096); forward physical, beats uniform in-grid +46.1%."
+  },
+  {
+   "name": "phase_e_pyramid_n64",
+   "part_sha256": "49d98bd6ae16402a864f81d85e0b2dc5854a0eef05f94f84a67822ba42aefd7c",
+   "grid_n": 64,
+   "chamber_m": 0.060,
+   "artifact": "solve3d/phase_e/results/map_pyramid_solve_filter_only.npz",
+   "form": "dg0",
+   "engine": "solve3d_solved",
+   "certified": false,
+   "trust_badge": "solve3d direct solve | forward physical, beats uniform +58%, hold-out band exceeded at corners/apex (uncertified) | sim-only",
+   "source": "solve3d/phase_e/results/phase_e_gate_pyramid.json",
+   "note": "Phase E pyramid solve: nominal geometry (predates Level 0 pre-comp), so anchor jobs run precomp OFF. solved_label false (mesh hold-out J_rel 0.151 vs band 0.077); forward physical, beats uniform in-grid +58.0%."
   }
  ]
 }

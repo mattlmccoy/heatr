@@ -69,3 +69,58 @@ def test_chamber_tag_is_part_of_the_match_key(tmp_path):
     reg.write_text(json.dumps({"entries": [
         {"name": "grown", "part_sha256": ph, "chamber_m": 0.085}]}))
     assert find_solved_map(part, registry_path=reg, chamber_m=0.060) is None
+
+
+def test_cube_pyramid_anchors_registered():
+    """Regression anchors (plan 2026-08-06): the cube and pyramid Phase E
+    solved maps are registered so a job of either shape gets its map with no
+    re-solve. Keyed to the NOMINAL-geometry hash at n=64 (the maps predate
+    Level 0 pre-compensation and were solved on nominal geometry), chamber
+    60 mm, engine solve3d_solved. solved_label is false for both (hold-out
+    band exceeded at corners) - carried as a descriptive label, not a gate."""
+    import json
+    from studio3d.runner import voxelize_stl
+
+    reg = json.loads((ROOT / "studio3d/solved_registry.json").read_text())
+    by_name = {e["name"]: e for e in reg["entries"]}
+    for shape in ("cube", "pyramid"):
+        name = f"phase_e_{shape}_n64"
+        assert name in by_name, f"{name} not registered"
+        e = by_name[name]
+        # the registered hash matches the real nominal STL voxelized at n=64
+        part = voxelize_stl(str(ROOT / f"shape_library_3d/stl/{shape}.stl"), 64)
+        assert e["part_sha256"] == part_hash(part)
+        assert e["grid_n"] == 64
+        assert abs(float(e["chamber_m"]) - 0.060) < 1e-9
+        assert e["engine"] == "solve3d_solved"
+        assert e["certified"] is False           # honest: hold-out not passed
+        assert "uncertified" in e["trust_badge"]
+        art = ROOT / e["artifact"]
+        assert art.exists(), f"{shape} map artifact missing: {art}"
+        # find_solved_map returns it for a 60 mm job of that exact shape
+        hit = find_solved_map(part, registry_path=ROOT / "studio3d/solved_registry.json",
+                              chamber_m=0.060)
+        assert hit is not None and hit["name"] == name
+
+
+def test_cube_registry_map_consumed_end_to_end(tmp_path):
+    """Plumbing proof (plan 2026-08-06): the real cube Phase E map, matched by
+    the registry, is transferred into a real correction_sat with no re-solve.
+    Nominal geometry (precomp off, as build_correction voxelizes the mesh it
+    is given). Proves the solve-to-mask half of the generalizable pipeline."""
+    import numpy as np
+    from studio3d.correction import build_correction
+
+    cube = ROOT / "shape_library_3d/stl/cube.stl"
+    gd = tmp_path / "grade"
+    prov = build_correction(gd, str(cube), 64)     # default registry path
+    assert prov["engine"] == "solve3d_solved"
+    assert prov["certified"] is False
+    assert prov["registry_entry"] == "phase_e_cube_n64"
+    sat_p = gd / "heatr3d" / "correction_sat.npz"
+    assert sat_p.exists()
+    with np.load(sat_p) as d:
+        sat, part = d["sat"], d["part"].astype(bool)
+    in_part = sat[part]
+    assert in_part.min() >= 0.0 and in_part.max() <= 1.0
+    assert in_part.std() > 1e-3                     # a real graded field, not uniform
