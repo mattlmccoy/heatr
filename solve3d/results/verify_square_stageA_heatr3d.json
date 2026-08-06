@@ -1,0 +1,24 @@
+{
+  "what": "heatr3d cross-engine verify of the solve3d Stage A drive recommendation for the square anchor. Independent confirmation that the recommended 0.40x drive keeps the densification END-STATE peak under the shared 250 C ceiling. Pairs with stage_a_task4_square.json (the solve3d drive selection this verifies).",
+  "recommendation_source": "solve3d/results/stage_a_task4_square.json",
+  "geometry": "heatr3d.make_geometry(grid, 'square', diam=0.020, zspan=grid.L) (cases.py:63, the Phase A anchor square, full chamber height), n=64",
+  "drive_power_density_w_per_m3": 636619.7723675814,
+  "drive_fraction_of_baseline": 0.4,
+  "ceiling_source": "solve3d/thermal_config.json (T_ceiling_C, read by studio3d.runner.load_thermal_config)",
+  "ceiling_C": 250.0,
+  "cross_family_band_source": "densify_parity_tolerances.json (T_end_max tol 7%)",
+  "solve3d_true_peak_C": 240.1,
+  "heatr3d_T_end_max_C": 244.3,
+  "abs_diff_C": 4.2,
+  "rel_diff_pct": 1.75,
+  "cross_family_band_C": [
+    223.3,
+    256.9
+  ],
+  "rho_final_mean": 0.98,
+  "within_band": true,
+  "under_ceiling": true,
+  "CONFIRMED": true,
+  "engine": "heatr3d_native voxel FDM (n=64) vs solve3d dolfinx FEM tet mesh",
+  "scope": "DRIVE-only check (uniform map); the shaped-dopant-map verify follows solve3d phase 2"
+}
