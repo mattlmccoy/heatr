@@ -102,11 +102,20 @@ penalty of pure backoff. Output: a real advisory turntable+power program.
 - Stage A: NO schema change. Solve populates
   power_settings.power_density_w_per_m3 (the field currently hardcoded
   1.5915e6) with the recommended per-part drive. Stays 2.0.0.
-- Stage C: SINGLE source of truth - extend the tt_program segment to
-  {angle, duration, drive}; scalar drive (A) is the degenerate
-  single-segment/constant-drive case of the same object, so A and C share
-  one contract and the turntable and power blocks cannot disagree. 2.1.0
-  bump under the cross-lane freeze protocol, bumped when C lands.
+- Stage C: SINGLE source of truth. The Studio turntable block is
+  static-intent-only today ({mode, file, requested_intent, note},
+  package.py:156-206); mode "program" is allowed but no program-segment
+  schema exists. So Stage C DEFINES the turntable program-segment schema
+  for the first time as {angle, duration, drive} (it does not extend a
+  legacy segment - cleaner, no migration). Scalar drive (A) is the
+  degenerate single-segment/constant-drive case of the same object, so A
+  and C share one contract and the turntable and power blocks cannot
+  disagree. 2.1.0 bump under the cross-lane freeze protocol when C lands.
+  THIRD-REPRESENTATION GUARD: the dwell-schedule planner / 2-D lane intake
+  API may already carry an (angle, duration) turntable schema; the package
+  program-segment schema MUST match it (extended with per-segment drive),
+  not mint a third representation of one physical schedule. Reconcile with
+  the 2-D lane before freezing the Stage C schema.
 - End-state peak: consume gates.T_end_max_C / T_ceiling_ok from the
   Studio runner contract (true T_final peak, not melt-onset).
 
@@ -143,9 +152,12 @@ convention governs all heavy runs.
 
 1. T_ceiling value: fixed 250 C, or a per-material config with a margin
    band (the ink/percolation work may move the usable ceiling)?
+   [Studio: 250.0 hardcoded in runner today; per-material is a small
+   runner change - free on their side.]
 2. rho_target: 0.98 (the Studio's densification stop) or a configurable
    floor - does the dense-iff-in-bounds 80-90% density trade apply to the
    ceiling problem too (accept lower density to stay under ceiling)?
+   [Studio: runner already takes stop_mean_rho, so configurable is free.]
 3. Stage A drive-continuation objective: largest drive under ceiling
    (fastest print) vs a drive that leaves headroom (robustness) - product
    preference.
