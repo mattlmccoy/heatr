@@ -43,6 +43,7 @@ import numpy as np
 
 from solve3d import forward as fwd
 from solve3d import gate_fd, gates
+from solve3d import objective as obj
 
 import dolfinx
 import ufl
@@ -504,6 +505,14 @@ class _Event:
 @dataclass
 class Trajectory:
     T_steps: list = _field(default_factory=list)
+    # BOUNDED RECORDING: T_steps may hold only ANCHORS (every `T_stride`
+    # substeps) rather than one entry per step. `T_step_index` gives their
+    # absolute step indices and `J_series` carries the per-step objective
+    # values the envelope read needs. stride 1 with an empty J_series is the
+    # original store-everything trajectory.
+    T_stride: int = 1
+    T_step_index: list = _field(default_factory=list)
+    J_series: dict = _field(default_factory=dict)
     events: list = _field(default_factory=list)
     step_event: np.ndarray | None = None
     T_final: np.ndarray | None = None
@@ -523,7 +532,8 @@ class TransientCase:
     """
 
     def __init__(self, msh, mats, p, eqs: SteadyEqs, info, sample_dt_s: float,
-                 max_time_s: float, L: float = fwd.L_DOMAIN):
+                 max_time_s: float, L: float = fwd.L_DOMAIN,
+                 record_stride: int = 1):
         # THE CHAMBER FRAME. Default is the frozen 60 mm, so every existing
         # caller is bit-identical; adaptive-chamber callers must pass the same
         # L their MESH was built with. This was hardcoded to fwd.L_DOMAIN and
@@ -533,6 +543,7 @@ class TransientCase:
         # the EQS solve died on r.norm() / b.norm(). It failed loudly, which is
         # the only reason it was a crash and not a silently wrong field.
         self.L = float(L)
+        self.record_stride = int(record_stride)
         self.msh, self.mats, self.p, self.eqs, self.info = msh, mats, p, eqs, info
         self.max_time_s, self.sample_dt_s = max_time_s, sample_dt_s
         self.W = eqs.W
@@ -651,20 +662,40 @@ class TransientCase:
                                  np.asarray(rho_c, float).copy(), stk.q.copy()))
             return stk.q
 
+        # BOTH frozen objectives are evaluated at march time, one scalar pair
+        # per substep. That is what lets T_steps hold anchors only: the
+        # envelope argmin needs J(t), and J(t) is scalars. Computing them here
+        # also keeps them exact -- they are the same J the old code got by
+        # re-reading a stored field.
+        scal = None
+        if int(self.record_stride) > 1:
+            chi, vol = self.m_nodal, self.vol_nodal
+            def scal(T):
+                phi = fwd.phase_fraction(T, p)[0]
+                return (obj.j_symmetric(phi, chi, vol),
+                        obj.j_asymmetric(phi, chi, vol))
         out = fwd.march_enthalpy(
             self.msh, p, mats=self.mats, q_dg0=self.q_fn,
             max_time_s=self.max_time_s, phi_target=2.0, L=self.L,
-            sample_dt_s=self.sample_dt_s, resolve_hook=hook, record=rec)
+            sample_dt_s=self.sample_dt_s, resolve_hook=hook, record=rec,
+            record_stride=int(self.record_stride), record_scalar_fn=scal)
         self.n_forward += 1
 
-        n_steps = len(rec["T_steps"])
+        n_steps = int(rec.get("n_recorded_of", len(rec["T_steps"])))
         ev_steps = [e[0] for e in rec["q_events"]]
         for k, e in enumerate(events):
             e.step = int(ev_steps[k])
         step_event = np.zeros(n_steps, dtype=int)
         for k, s_i in enumerate(ev_steps):
             step_event[int(s_i):] = k
-        return Trajectory(T_steps=rec["T_steps"], events=events,
+        Jser = {}
+        if rec.get("scalars"):
+            arr = np.asarray(rec["scalars"], dtype=float)
+            Jser = {"symmetric": arr[:, 0], "asymmetric": arr[:, 1]}
+        return Trajectory(T_steps=rec["T_steps"],
+                          T_stride=int(rec.get("record_stride", 1)),
+                          T_step_index=list(rec.get("T_step_index", [])),
+                          J_series=Jser, events=events,
                           step_event=step_event, T_final=out["T"],
                           n_steps=n_steps, out=out)
 
@@ -884,9 +915,17 @@ class TransientCase:
 
     def _checkpoint_reader(self, tr: Trajectory, interval: int | None):
         """Store-everything (interval None) or interval checkpointing."""
-        if interval is None:
+        if interval is None and tr.T_stride <= 1:
             return lambda j: (tr.T_steps[j], 0)
-        anchors = {i: tr.T_steps[i] for i in range(0, tr.n_steps, int(interval))}
+        if interval is None:
+            interval = tr.T_stride
+        if int(interval) % tr.T_stride:
+            raise ValueError(
+                f"checkpoint_interval {interval} is not a multiple of the "
+                f"recording stride {tr.T_stride}; the reader would ask for an "
+                "anchor the forward never stored")
+        anchors = {i: tr.T_steps[i // tr.T_stride]
+                   for i in range(0, tr.n_steps, int(interval))}
         cache: dict[int, np.ndarray] = {}
 
         def read(j: int):
@@ -909,14 +948,43 @@ class TransientCase:
 
     # ---- state / trajectory readers ------------------------------------ #
     def state_at(self, tr: Trajectory, k: int) -> np.ndarray:
-        """The march state after `k` steps (k = n_steps is the horizon)."""
+        """The march state after `k` steps (k = n_steps is the horizon).
+
+        With bounded recording T_steps holds anchors only, so a non-anchor
+        step is REPLAYED forward from the nearest anchor at or below it -- at
+        most `T_stride - 1` cheap steps. The read state is asked for a handful
+        of times per arm, so this is not on any hot path.
+        """
         k = int(k)
         if k >= tr.n_steps:
             return tr.T_final
-        return tr.T_steps[k]
+        if tr.T_stride <= 1:
+            return tr.T_steps[k]
+        a = k // tr.T_stride
+        T = tr.T_steps[a].copy()
+        for i in range(a * tr.T_stride, k):
+            ev = int(tr.step_event[i])
+            T = self._step_cache(T, self._F_of_event(tr.events[ev]))["T_out"]
+        return T
 
     def J_trajectory(self, tr: Trajectory) -> np.ndarray:
-        """J at every stored read state, index j = after j steps."""
+        """J at every read state, index j = after j steps.
+
+        When the march recorded a scalar series (bounded recording) it is used
+        directly: it is the SAME J, computed from the same state at the same
+        point in the step, just without keeping the field. Re-deriving it by
+        replaying 648000 states would defeat the purpose.
+        """
+        name = getattr(self, "objective_name", None)
+        # the recorded series was computed at the FROZEN pre-registered
+        # weights; a caller that overrode w_ratio must not silently get the
+        # default-weight series back
+        ser = (tr.J_series.get(name)
+               if tr.J_series and getattr(self, "objective_w_ratio", None) is None
+               else None)
+        if ser is not None:
+            return np.append(np.asarray(ser, dtype=float),
+                             self.J_of_T(tr.T_final))
         return np.array([self.J_of_T(self.state_at(tr, j))
                          for j in range(tr.n_steps + 1)], dtype=float)
 

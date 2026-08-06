@@ -497,7 +497,8 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
                    max_time_s: float = 1500.0, phi_target: float = 0.90,
                    T0_fn=None, L: float = L_DOMAIN,
                    sample_dt_s: float | None = None,
-                   resolve_hook=None, record: dict | None = None) -> dict:
+                   resolve_hook=None, record: dict | None = None,
+                   record_stride: int = 1, record_scalar_fn=None) -> dict:
     """Mass-lumped explicit enthalpy march on the FEM mesh.
 
     DISCRETIZATION (the FEM analogue of heatr3d's explicit cell-centred FV
@@ -543,6 +544,20 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
     if record is not None:
         record.setdefault("T_steps", [])
         record.setdefault("q_events", [])
+        # BOUNDED RECORDING. `record_stride` stores only every Nth substep
+        # state (an ANCHOR); `record_scalar_fn` records a per-step scalar tuple
+        # instead. Storing every substep state cost 51.15 GB on the Tamper
+        # (18000 sample steps x 36 CFL substeps x 9866 nodes x 8 B) and the run
+        # was silently SIGKILLed by the OS three times. The reverse sweep never
+        # needed them: adjoint._checkpoint_reader replays from anchors every
+        # `checkpoint_interval` steps, so the forward was building 51 GB to
+        # extract 2 GB of anchors. DEFAULTS (stride 1, no scalar fn) are the
+        # original store-everything path, bit-identical.
+        record.setdefault("T_step_index", [])
+        record.setdefault("scalars", [])
+        record["record_stride"] = int(record_stride)
+    if int(record_stride) < 1:
+        raise ValueError(f"record_stride must be >= 1, got {record_stride}")
     if not (q_uniform is None) ^ (q_dg0 is None):
         raise ValueError("march_enthalpy: pass exactly one of q_uniform / q_dg0")
     tdim = msh.topology.dim
@@ -664,7 +679,11 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
                     record["q_events"].append(
                         (it_sub, np.real(qf.x.array).astype(float).copy()))
         if record is not None:
-            record["T_steps"].append(T.copy())
+            if it_sub % int(record_stride) == 0:
+                record["T_steps"].append(T.copy())
+                record["T_step_index"].append(it_sub)
+            if record_scalar_fn is not None:
+                record["scalars"].append(tuple(record_scalar_fn(T)))
         phi, _ = phase_fraction(T, p)
         rho, cp, rho_L = nodal_props(phi)
         k_cells = cell_k(phi)
@@ -723,6 +742,11 @@ def march_enthalpy(msh, p: ForwardParams, in_part=None,
         T_phi90 = T.copy()
     w_part = vol * m_nodal
     phi_final = phase_fraction(T_phi90, p)[0]
+    if record is not None:
+        # total substeps a state existed for: what T_step_index is indexed
+        # against, and what `n_steps` must mean downstream now that T_steps
+        # holds anchors rather than one entry per step
+        record["n_recorded_of"] = int(nsteps * n_sub)
     return {
         "T": T, "T_phi90": T_phi90, "T0": T0_snapshot,
         "vol_nodal": vol, "m_nodal": m_nodal, "part_volume_m3": part_vol_m3,

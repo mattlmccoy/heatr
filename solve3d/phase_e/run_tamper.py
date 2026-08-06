@@ -54,6 +54,14 @@ LC_PART_M = 2.5e-3
 # would stop it before melt and hand the envelope a degenerate argmin.
 MAX_TIME_S = 900.0
 CHECKPOINT_INTERVAL = 25
+# BOUNDED TRAJECTORY RECORDING. Storing every substep state cost 51.15 GB on
+# this part (18000 sample steps x 36 CFL substeps x 9866 nodes x 8 B) and the
+# OS SIGKILLed the run three times, silently, ~25-30 min in. The reverse sweep
+# only ever replays from anchors every CHECKPOINT_INTERVAL steps, so the
+# forward stores exactly those and records J(t) as scalars instead. Must
+# DIVIDE CHECKPOINT_INTERVAL or the reader would ask for an anchor that was
+# never kept. At 25 this is 2.05 GB.
+RECORD_STRIDE = 25
 FILTER_RADIUS_M = 1.0e-3         # the Phase E design-chain filter radius
 
 _L0_DEFAULT = object()
@@ -89,7 +97,8 @@ def build_case(lc_part: float = LC_PART_M, max_time_s: float = MAX_TIME_S,
     # convective facet and the march; a frame mismatch here is a zero RHS
     L = float(info.L_chamber_m)
     eqs = adjoint.SteadyEqs(msh, mats, p, L=L)
-    tc = adjoint.TransientCase(msh, mats, p, eqs, info, 50.0, max_time_s, L=L)
+    tc = adjoint.TransientCase(msh, mats, p, eqs, info, 50.0, max_time_s,
+                               L=L, record_stride=RECORD_STRIDE)
     return tc, info
 
 
