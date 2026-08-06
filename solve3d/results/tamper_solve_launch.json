@@ -87,5 +87,15 @@
   "projected_wall_12_gradient_evals_h": 16.1,
   "recommendation": "harvest at 12 gradient evaluations for the pre-registered 40 forward-equivalent comparison; any evaluations beyond that are a LABELLED extension, not the pre-registered budget. The per-evaluation checkpoint makes either stopping point available without re-running.",
   "status": "FLAGGED, not silently spent"
+ },
+ "budget_ruling": {
+  "ruling": "HARVEST AT 12 GRADIENT EVALUATIONS",
+  "authority": "coordinator, 2026-08-06",
+  "reason": "12 gradient evaluations IS the pre-registered 40 forward-equivalents at Phase C's measured 3.328 fwd-eq per evaluation. Pre-registration wins over the CLI flag's accidental semantics.",
+  "beyond_12": "runs only if Matt explicitly extends; would be a labelled extension",
+  "implementation": "relaunched with --budget 12 rather than watching for eval 12, so the run SELF-TERMINATES and scores itself. Resumed from the eval-1 checkpoint; nothing lost, since best_v was still the uniform start (all 1.0).",
+  "relaunch_pid": 3072,
+  "relaunch_started": "2026-08-06 11:46",
+  "projected_completion": "~2026-08-07 02:30 (11 more evaluations at 4837 s)"
  }
 }
