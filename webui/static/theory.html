@@ -161,7 +161,7 @@
         producing recommended exposure windows and report artifacts.
       </p>
 
-      <h2>6. Numerical Pipeline (per run)</h2>
+      <h2>6. Numerical Pipeline and PDE Solvers</h2>
       <ol>
         <li>Build geometry, masks, materials, and electrodes.</li>
         <li>Solve EQS field and compute $Q_{rf}$.</li>
@@ -170,6 +170,81 @@
         <li>Re-solve EQS periodically (or by phase schedule).</li>
         <li>Write summaries, plots, and time-series outputs.</li>
       </ol>
+
+      <p>
+        HEATR runs two <em>independent</em> discretizations of the same physics, so
+        that when they agree it is cross-validation rather than a shared bug:
+        <strong>heatr3d</strong>, a voxel finite-volume engine (the fast forward
+        model validated against Allison's data), and <strong>solve3d</strong>, a
+        finite-element (FEniCSx/dolfinx) engine built for differentiable inverse
+        design. How each PDE is actually solved:
+      </p>
+
+      <h3>6.1 EQS field solve</h3>
+      <p>
+        The complex continuity equation $\nabla\cdot(\gamma\nabla V)=0$ with
+        $\gamma=\sigma+j\omega\epsilon_0\epsilon_r$ is discretized two ways:
+      </p>
+      <ul>
+        <li>
+          <strong>Finite element (solve3d):</strong> Galerkin weak form on complex
+          P1 Lagrange elements with Dirichlet electrodes, solved by
+          <strong>GMRES preconditioned with algebraic multigrid (GAMG)</strong>,
+          relative tolerance $10^{-10}$; a direct complex LU is the small-system
+          fallback.
+        </li>
+        <li>
+          <strong>Finite volume (heatr3d):</strong> a cell-centred 7-point stencil
+          with <strong>harmonic-mean face averaging</strong> of $\gamma$, so the
+          roughly $4\times10^6$ conductivity contrast at the doped/virgin interface
+          is captured without smearing. Direct complex LU (SuperLU) on small grids,
+          otherwise <strong>BiCGSTAB with an ILU preconditioner</strong>, tolerance
+          $10^{-8}$.
+        </li>
+      </ul>
+      <p>
+        The field singularity at conductive corners (Meixner) is handled by a
+        masked-gradient stencil that never differentiates across the mask edge.
+      </p>
+
+      <h3>6.2 Thermal + phase march</h3>
+      <p>
+        The transient heat equation with latent heat is integrated by a mass-lumped
+        <strong>explicit Forward-Euler enthalpy method</strong>: the marched state is
+        volumetric enthalpy $H$, and temperature is recovered by exact
+        piecewise-linear inversion, so the melt latent heat is absorbed without
+        iterating on an apparent heat capacity. Stability is held by CFL
+        sub-stepping, $\Delta t < h^2/(6\,\alpha_{\max})$ (safety factor 0.9), with a
+        per-step $\Delta T$ clamp (the [1,1] validation panel above reports when the
+        limiter is active).
+      </p>
+
+      <h3>6.3 Densification kinetics</h3>
+      <p>
+        The relative-density ODE $d\rho_{rel}/dt = R_{ss} + R_{liq}$ combines an
+        Arrhenius solid-state creep term and a liquid viscous-capillary (Frenkel)
+        term with an Arrhenius/WLF viscosity, gated by porosity. The solve3d and
+        heatr3d densification rates are held bit-for-bit identical by a cross-engine
+        equivalence gate.
+      </p>
+
+      <h3>6.4 Inverse design: adjoint and optimizer</h3>
+      <p>
+        For dopant grading and geometry pre-warp, solve3d computes gradients by the
+        <strong>discrete adjoint (co-state) method</strong>: the adjoint system
+        $A^{H}\lambda=\rho$ reuses the forward matrix factorization, with two sweeps
+        of iterative refinement for gradient accuracy. Every gradient is
+        finite-difference-gated before it is trusted. The design is optimized with
+        <strong>L-BFGS-B</strong> (bound-constrained limited-memory quasi-Newton),
+        regularized by a normalized-convolution density filter and a smoothed-tanh
+        Heaviside projection with $\beta$-continuation $(1\to2\to4\to8\to16)$. This
+        is the same inverse-design pattern as inverse lithography technology (ILT),
+        which the geometry-pre-warp work is modeled on.
+      </p>
+      <p>
+        A complete method-to-equation-to-citation map, with source-code anchors, is
+        maintained in <code>docs/THEORY_REFERENCES.md</code>.
+      </p>
 
       <h2>7. Notes on Interpretation</h2>
       <p>
@@ -339,13 +414,81 @@
       <ul>
         <li><code>configs/experimental_pa12_dsc_profile.yaml</code> (DSC profile values)</li>
         <li><code>configs/experimental_pa12_provenance.yaml</code> (parameter-level source table)</li>
+        <li><code>docs/THEORY_REFERENCES.md</code> (full sourced reference and PDE-methods list, the source of this page)</li>
+        <li><code>rfam_paper_overleaf/references.bib</code> (canonical BibTeX)</li>
       </ul>
-      <p>Primary references:</p>
+
+      <h3>9.1 Provenance honesty</h3>
+      <p>
+        Values are tagged so a measured or cited number is never shown as if it were
+        assumed, and vice versa. <strong>[CITED]</strong> traces to a published
+        source below; <strong>[MEASURED]</strong> is an internal dataset (DSC, FLIR);
+        <strong>[ASSUMED]</strong> is a model choice not yet traced to a measurement,
+        and is an open item. Notably, the solver's $\epsilon_r = 20$ is
+        <strong>[ASSUMED]</strong> and does <em>not</em> trace to Allison's measured
+        doped value ($\epsilon_r \approx 13.8$); the carbon-black percolation
+        threshold is untested. Both are named de-risking measurements, not settled
+        inputs.
+      </p>
+
+      <h3>9.2 RFAM &mdash; core process</h3>
       <ul>
-        <li>Allison et al., <em>Computational design strategy to improve RF heating uniformity</em>, Rapid Prototyping Journal (2022), DOI: 10.1108/RPJ-08-2021-0193.</li>
-        <li>Allison et al., <em>Volumetric fusion of graphite-doped nylon</em>, Rapid Prototyping Journal (2022), DOI: 10.1108/RPJ-09-2020-0218.</li>
-        <li>HEATR internal PA12 DSC calibration dataset (used for onset/peak/end and latent heat in <code>experimental_pa12_dsc_profile.yaml</code>).</li>
-        <li>Optional crystallization branch is modeled with a Nakamura/Avrami-form class and remains default-disabled.</li>
+        <li>Allison, J. (2020). <em>Radio Frequency Additive Manufacturing: A Volumetric Approach to Polymer Powder Bed Fusion.</em> PhD thesis, The University of Texas at Austin.</li>
+        <li>Allison, J., Pearce, J., Beaman, J. &amp; Seepersad, C. (2022). Computational design strategy to improve RF heating uniformity. <em>Rapid Prototyping Journal</em> 28(8), 1476&ndash;1491. <a href="https://doi.org/10.1108/RPJ-08-2021-0193" target="_blank" rel="noopener">doi:10.1108/RPJ-08-2021-0193</a></li>
+        <li>Allison, J., Pearce, J., Beaman, J. &amp; Seepersad, C. (2022). Volumetric fusion of graphite-doped nylon 12 powder with radio frequency radiation. <em>Rapid Prototyping Journal</em> 28(2), 317&ndash;329. <a href="https://doi.org/10.1108/RPJ-09-2020-0218" target="_blank" rel="noopener">doi:10.1108/RPJ-09-2020-0218</a></li>
+        <li>Song, H., Sohaib, A., Allison, J. et al. (2025). Enhancing Heating Uniformity of RFAM via Functional Grading. <em>Journal of Manufacturing Processes.</em> <a href="https://doi.org/10.1016/j.jmapro.2025.07.013" target="_blank" rel="noopener">doi:10.1016/j.jmapro.2025.07.013</a></li>
+      </ul>
+
+      <h3>9.3 RF / microwave heating</h3>
+      <ul>
+        <li>Ferdous, M. S. et al. (2017). An Experimental 13.56 MHz RF Heating System. <em>Progress In Electromagnetics Research B</em> 79, 83&ndash;101. <a href="https://doi.org/10.2528/PIERB17091409" target="_blank" rel="noopener">doi:10.2528/PIERB17091409</a></li>
+        <li>Patil, N. et al. (2023). RF and Microwave Heating of Preceramic Polymer Nanocomposites. <em>Advanced Engineering Materials.</em> <a href="https://doi.org/10.1002/adem.201900276" target="_blank" rel="noopener">doi:10.1002/adem.201900276</a></li>
+        <li>Li, G. &amp; Zhou, J. (2024). COMSOL-Based Simulation of Microwave Heating of Al&#8322;O&#8323;/SiC Composites. <em>Symmetry</em> 16(10), 1254. <a href="https://doi.org/10.3390/sym16101254" target="_blank" rel="noopener">doi:10.3390/sym16101254</a></li>
+        <li>Wroe, F. &amp; Rowley, A. (1998). Radio-frequency and microwave-assisted processing of materials. Canadian Patent CA2261995C.</li>
+      </ul>
+
+      <h3>9.4 Electromagnetic field theory</h3>
+      <ul>
+        <li>Meixner, J. (1972). The behavior of electromagnetic fields at edges. <em>IEEE Trans. Antennas and Propagation</em> 20(4), 442&ndash;446. <a href="https://doi.org/10.1109/TAP.1972.1140243" target="_blank" rel="noopener">doi:10.1109/TAP.1972.1140243</a></li>
+      </ul>
+
+      <h3>9.5 Sintering / densification physics</h3>
+      <ul>
+        <li>Frenkel, J. (1945). Viscous flow of crystalline bodies under the action of surface tension. <em>J. Physics (USSR)</em> 9(5), 385&ndash;391.</li>
+        <li>Zhao, M., Wudy, K. &amp; Drummer, D. (2018). Crystallization Kinetics of Polyamide 12 during SLS. <em>Polymers</em> 10(2), 168. <a href="https://doi.org/10.3390/polym10020168" target="_blank" rel="noopener">doi:10.3390/polym10020168</a></li>
+        <li>Verbelen, L. et al. (2016). Characterization of polyamide powders for laser sintering. <em>European Polymer Journal</em> 75, 163&ndash;174. <a href="https://doi.org/10.1016/j.eurpolymj.2015.12.014" target="_blank" rel="noopener">doi:10.1016/j.eurpolymj.2015.12.014</a></li>
+        <li>Zarringhalam, H. et al. (2009). Degree of particle melt in Nylon-12 SLS parts. <em>Rapid Prototyping Journal</em> 15(3), 126&ndash;132. <a href="https://doi.org/10.1108/13552540910943423" target="_blank" rel="noopener">doi:10.1108/13552540910943423</a></li>
+        <li>Peyre, P. et al. (2015). Experimental and numerical analysis of the SLS of PA12 and PEKK. <em>J. Materials Processing Technology</em> 225, 326&ndash;336. <a href="https://doi.org/10.1016/j.jmatprotec.2015.04.030" target="_blank" rel="noopener">doi:10.1016/j.jmatprotec.2015.04.030</a></li>
+        <li>Mokrane, A., Boutaous, M. &amp; Xin, S. (2018). SLS of polymer powders: modeling, simulation, validation. <em>C. R. M&eacute;canique</em> 346(12), 1087&ndash;1103. <a href="https://doi.org/10.1016/j.crme.2018.08.002" target="_blank" rel="noopener">doi:10.1016/j.crme.2018.08.002</a></li>
+        <li>Lakraimi, Y. et al. (2023). Thermal Modeling of PA12 Powder in SLS using the DEM. <em>Materials</em> 16(2), 753. <a href="https://doi.org/10.3390/ma16020753" target="_blank" rel="noopener">doi:10.3390/ma16020753</a></li>
+        <li>Yang, X. et al. (2019). 3D non-isothermal phase-field simulation of microstructure evolution during SLS. <em>Additive Manufacturing</em> 29, 100783. <a href="https://doi.org/10.1016/j.addma.2019.100783" target="_blank" rel="noopener">doi:10.1016/j.addma.2019.100783</a></li>
+        <li>Zarringhalam, H. et al. (2006). Effects of processing on microstructure and properties of SLS Nylon 12. <em>Materials Science and Engineering: A</em> 435&ndash;436, 172&ndash;180. <a href="https://doi.org/10.1016/j.msea.2006.07.084" target="_blank" rel="noopener">doi:10.1016/j.msea.2006.07.084</a></li>
+        <li>Lupone, F. et al. (2021). Process Phenomena and Material Properties in SLS of Polymers: A Review. <em>Materials</em> 15(1), 183. <a href="https://doi.org/10.3390/ma15010183" target="_blank" rel="noopener">doi:10.3390/ma15010183</a></li>
+        <li>Bourell, D. et al. (2014). Performance limitations in polymer laser sintering. <em>Physics Procedia</em> 56, 147&ndash;156. <a href="https://doi.org/10.1016/j.phpro.2014.08.157" target="_blank" rel="noopener">doi:10.1016/j.phpro.2014.08.157</a></li>
+        <li>Wudy, K. et al. (2016). SLS of Filled Polymer Systems. <em>Physics Procedia</em> 83, 991&ndash;1002. <a href="https://doi.org/10.1016/j.phpro.2016.08.104" target="_blank" rel="noopener">doi:10.1016/j.phpro.2016.08.104</a></li>
+      </ul>
+
+      <h3>9.6 Inverse design (ILT analogy &mdash; the pre-warp lineage)</h3>
+      <ul>
+        <li>Pang, L. (2021). Inverse lithography technology: 30 years from concept to practical, full-chip reality. <em>J. Micro/Nanopatterning, Materials, and Metrology</em> 20(3), 030901. <a href="https://doi.org/10.1117/1.JMM.20.3.030901" target="_blank" rel="noopener">doi:10.1117/1.JMM.20.3.030901</a></li>
+        <li>Poonawala, A. &amp; Milanfar, P. (2007). Mask design for optical microlithography&mdash;an inverse imaging problem. <em>IEEE Trans. Image Processing</em> 16(3), 774&ndash;788. <a href="https://doi.org/10.1109/TIP.2006.891332" target="_blank" rel="noopener">doi:10.1109/TIP.2006.891332</a></li>
+        <li>Chan, S., Wong, A. &amp; Lam, E. (2008). Initialization for robust inverse synthesis of phase-shifting masks. <em>Optics Express</em> 16(19), 14746&ndash;14760. <a href="https://doi.org/10.1364/OE.16.014746" target="_blank" rel="noopener">doi:10.1364/OE.16.014746</a></li>
+        <li>Zhang, S., Ma, X. &amp; Zhang, J. (2023). Fast inverse lithography via a model-driven graph convolutional network. <em>Optics Express</em> 31(22), 36451&ndash;36467. <a href="https://doi.org/10.1364/OE.493178" target="_blank" rel="noopener">doi:10.1364/OE.493178</a></li>
+        <li>Zhu, B. et al. (2024). L2O-ILT: Learning to Optimize Inverse Lithography Techniques. <em>IEEE TCAD</em> 43(3), 944&ndash;955. <a href="https://doi.org/10.1109/TCAD.2023.3323164" target="_blank" rel="noopener">doi:10.1109/TCAD.2023.3323164</a></li>
+      </ul>
+
+      <h3>9.7 Additive manufacturing &mdash; background</h3>
+      <ul>
+        <li>Gibson, I., Rosen, D. &amp; Stucker, B. (2015). <em>Additive Manufacturing Technologies.</em> Springer. <a href="https://doi.org/10.1007/978-1-4939-2113-3" target="_blank" rel="noopener">doi:10.1007/978-1-4939-2113-3</a></li>
+        <li>Beaman, J. et al. (2020). Additive manufacturing review: early past to current practice. <em>J. Manufacturing Science and Engineering</em> 142(11), 110812. <a href="https://doi.org/10.1115/1.4048193" target="_blank" rel="noopener">doi:10.1115/1.4048193</a></li>
+        <li>Deckard, C. (1989). Method and apparatus for producing parts by selective sintering. U.S. Patent US4863538A.</li>
+      </ul>
+
+      <h3>9.8 Numerical methods (used in code; to be added to the BibTeX)</h3>
+      <ul>
+        <li>Byrd, R., Lu, P., Nocedal, J. &amp; Zhu, C. (1995). A limited memory algorithm for bound constrained optimization (L-BFGS-B). <em>SIAM J. Scientific Computing</em> 16(5), 1190&ndash;1208. &mdash; the design optimizer.</li>
+        <li>Wang, F., Lazarov, B. &amp; Sigmund, O. (2011). On projection methods, convergence and robust formulations in topology optimization. <em>Structural and Multidisciplinary Optimization</em> 43, 767&ndash;784. &mdash; the tanh Heaviside projection.</li>
+        <li>Patankar, S. (1980). <em>Numerical Heat Transfer and Fluid Flow.</em> Hemisphere. &mdash; harmonic-mean finite-volume treatment of discontinuous coefficients.</li>
       </ul>
     </section>
   </main>
