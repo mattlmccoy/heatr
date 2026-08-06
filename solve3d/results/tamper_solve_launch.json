@@ -58,5 +58,34 @@
   "margin_actual_m": 0.02011,
   "margin_still_clears_preregistered": true,
   "note": "a 1 mm difference is physically immaterial here -- the EQS sweep shows in-part Q non-uniformity moving only -0.19 percent between 85 and 100 mm -- but it is recorded rather than blurred, and the TAG is what surfaced it. That is the tagging convention doing its job on its first live run."
+ },
+ "relaunch_after_nan_fix": {
+  "pid": 98899,
+  "started": "2026-08-06 09:50",
+  "detach": "caffeinate -i + nohup",
+  "rss_log": "scratchpad/rss.log (stable at 3.54 GB)",
+  "uniform_baseline_wall_s": 1920,
+  "eval_1": {
+   "grad_norm": 1.0786208838935105e-07,
+   "grad_finite_and_nonzero": true,
+   "J": 4.554894893248618e-06,
+   "argmin_step": 174593,
+   "at_horizon": false,
+   "t_stop_s": 264.53484848484845,
+   "wall_s": 4837.353423834022,
+   "was_before_the_fix": "NaN on all 8 evaluations, t_stop_s 8729.65"
+  },
+  "objective_scale_applied": 9271098.074703395
+ },
+ "budget_discrepancy": {
+  "brief_specified": "40 FORWARD-EQUIVALENTS",
+  "driver_received": "40 GRADIENT EVALUATIONS (--budget 40 maps to budget_evals)",
+  "phase_c_conversion": 3.328,
+  "gradient_evals_equal_to_40_fwd_equiv": 12,
+  "measured_wall_per_gradient_eval_s": 4837,
+  "projected_wall_40_gradient_evals_h": 53.7,
+  "projected_wall_12_gradient_evals_h": 16.1,
+  "recommendation": "harvest at 12 gradient evaluations for the pre-registered 40 forward-equivalent comparison; any evaluations beyond that are a LABELLED extension, not the pre-registered budget. The per-evaluation checkpoint makes either stopping point available without re-running.",
+  "status": "FLAGGED, not silently spent"
  }
 }
