@@ -548,6 +548,16 @@ class TransientCase:
         # the only reason it was a crash and not a silently wrong field.
         self.L = float(L)
         self.record_stride = int(record_stride)
+        # THE STEP THE ADJOINT MUST TAKE. The forward marches CFL substeps of
+        # dt_sub = p.dt_s / n_sub, but `_step_cache` and the reverse sweep used
+        # p.dt_s, so with n_sub > 1 the adjoint stepped n_sub times too far and
+        # went explicitly unstable. Latent until now because every prior
+        # campaign ran at n_sub = 1 (Phase A/B/C/E anchors, pyramid, cube). On
+        # the Tamper (n_sub 33, 594000 steps) it overflowed to NaN and burned
+        # ten hours on eight evaluations with a NaN gradient.
+        # Set from the forward's own reported substep count; the default is
+        # p.dt_s, which IS dt_sub whenever n_sub is 1.
+        self.dt_step = float(p.dt_s)
         self.msh, self.mats, self.p, self.eqs, self.info = msh, mats, p, eqs, info
         self.max_time_s, self.sample_dt_s = max_time_s, sample_dt_s
         self.W = eqs.W
@@ -684,6 +694,8 @@ class TransientCase:
             sample_dt_s=self.sample_dt_s, resolve_hook=hook, record=rec,
             record_stride=int(self.record_stride), record_scalar_fn=scal)
         self.n_forward += 1
+        self.dt_step = float(p.dt_s) / float(max(1, int(
+            out.get("n_substeps_used", 1))))
 
         n_steps = int(rec.get("n_recorded_of", len(rec["T_steps"])))
         ev_steps = [e[0] for e in rec["q_events"]]
@@ -773,7 +785,7 @@ class TransientCase:
         frac_u = (T_in - lo) / p.dt_pc_c
         m_frac = (frac_u > 0.0) & (frac_u < 1.0)
         H = fwd.enthalpy_from_T(T_in, rho_cp, self.rho_L, p)
-        H2 = H + p.dt_s * np.nan_to_num(num) / np.where(
+        H2 = H + self.dt_step * np.nan_to_num(num) / np.where(
             self.vol_nodal > 0, self.vol_nodal, 1.0)
         T_new = fwd.T_from_enthalpy(H2, rho_cp, self.rho_L, p)
         dT_raw = T_new - T_in
@@ -820,7 +832,7 @@ class TransientCase:
         g_H2 = g_Tnew * dT_dH
         g_rho_cp = g_Tnew * dT_drc
 
-        g_num = g_H2 * p.dt_s / np.where(self.vol_nodal > 0, self.vol_nodal, 1.0)
+        g_num = g_H2 * self.dt_step / np.where(self.vol_nodal > 0, self.vol_nodal, 1.0)
         g_H = g_H2
         gT_in += g_H * (c["rho_cp"] + self.rho_L * c["m_frac"] / p.dt_pc_c)
         g_rho_cp = g_rho_cp + g_H * c["T_in"]

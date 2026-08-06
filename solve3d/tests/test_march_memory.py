@@ -269,3 +269,200 @@ def test_the_tamper_substep_case_would_have_been_reported_33x_too_long():
     assert naive == pytest.approx(8729.65, abs=0.01)
     assert fixed == pytest.approx(264.535, abs=0.01)
     assert fixed < 900.0
+
+
+# --------------------------------------------------------------------------- #
+# THE SUBSTEP ADJOINT BUG: the reverse sweep must step at dt_sub, not dt_s
+# --------------------------------------------------------------------------- #
+def _substep_case(stride: int = 1, n: int = 20, dt_s: float = 30.0,
+                  max_t: float = 1200.0):
+    """A case with n_sub > 1. Every prior solve3d campaign ran at n_sub = 1
+    (Phase A/B/C/E anchors, pyramid, cube), which is why this went unnoticed."""
+    import numpy as np
+    from solve3d import adjoint, forward as fwd
+
+    p = fwd.ForwardParams(dt_s=dt_s, conv_h=5.0)
+    msh = fwd.box_mesh(n)
+    mats = fwd.build_materials(msh, fwd.in_part_predicate("circle"), p)
+    eqs = adjoint.SteadyEqs(msh, mats, p)
+    return adjoint.TransientCase(msh, mats, p, eqs, None, dt_s, max_t,
+                                 record_stride=stride)
+
+
+@pytest.mark.slow
+def test_the_substep_case_actually_substeps():
+    """Guards the fixture: without n_sub > 1 the rest of this section is vacuous."""
+    import numpy as np
+    tc = _substep_case()
+    s0 = np.full(tc.eqs.part.size, tc.p.sigma_doped)
+    tr = tc.forward(s0)
+    assert tr.n_sub > 1
+
+
+@pytest.mark.slow
+def test_the_gradient_is_finite_and_sane_when_the_march_substeps():
+    """THE BUG. `_step_cache` and the reverse sweep used p.dt_s while the
+    forward marched at dt_sub = p.dt_s / n_sub, so the adjoint stepped n_sub
+    times too far and went explicitly unstable.
+
+    Measured before the fix, same case, same read step:
+        stride 1, ci None   |g| = 3.87e+42
+        stride 1, ci 10     |g| = 5.29e+13
+        stride 5, ci 10     |g| = 2.58e+12
+    On the Tamper (n_sub 33, 594000 steps) it overflowed to NaN, and the solve
+    burned ten hours on eight evaluations whose gradient was NaN every time.
+    """
+    import numpy as np
+    tc = _substep_case()
+    s0 = np.full(tc.eqs.part.size, tc.p.sigma_doped)
+    tr = tc.forward(s0)
+    tc.set_objective("asymmetric")
+    k = int(np.argmin(tc.J_trajectory(tr)))
+    g, _ = tc.gradient(s0, tr=tr, read_step=k, checkpoint_interval=None)
+    assert np.isfinite(g).all()
+    # a sane objective gradient here is O(1e-3) or smaller; 1e42 is not "large"
+    assert np.linalg.norm(g) < 1.0e3, f"|g| = {np.linalg.norm(g):.3e}"
+
+
+@pytest.mark.slow
+def test_the_substepped_gradient_is_independent_of_the_checkpoint_interval():
+    """Checkpointing only changes WHERE states come from, never the answer.
+    Before the fix these differed by thirty orders of magnitude, which is what
+    made the instability unmistakable rather than merely suspicious."""
+    import numpy as np
+    tc = _substep_case()
+    s0 = np.full(tc.eqs.part.size, tc.p.sigma_doped)
+    tr = tc.forward(s0)
+    tc.set_objective("asymmetric")
+    k = int(np.argmin(tc.J_trajectory(tr)))
+    ref, _ = tc.gradient(s0, tr=tr, read_step=k, checkpoint_interval=None)
+    got, _ = tc.gradient(s0, tr=tr, read_step=k, checkpoint_interval=10)
+    assert got == pytest.approx(ref, rel=1e-9, abs=1e-30)
+
+
+@pytest.mark.slow
+def test_the_substepped_gradient_is_independent_of_the_recording_stride():
+    """And the anchor path must agree with store-everything."""
+    import numpy as np
+    a, b = _substep_case(stride=1), _substep_case(stride=5)
+    s0 = np.full(a.eqs.part.size, a.p.sigma_doped)
+    tr_a, tr_b = a.forward(s0), b.forward(s0)
+    for tc in (a, b):
+        tc.set_objective("asymmetric")
+    k = int(np.argmin(a.J_trajectory(tr_a)))
+    ga, _ = a.gradient(s0, tr=tr_a, read_step=k, checkpoint_interval=10)
+    gb, _ = b.gradient(s0, tr=tr_b, read_step=k, checkpoint_interval=10)
+    assert gb == pytest.approx(ga, rel=1e-9, abs=1e-30)
+
+
+@pytest.mark.slow
+def test_the_substepped_gradient_passes_a_finite_difference_check():
+    """FINITE and CONSISTENT is not the same as CORRECT. The dt_step fix
+    changes the adjoint's step, so the gradient has to be re-gated against
+    finite differences on a substepped case -- the configuration no existing FD
+    gate covers (they all run at n_sub = 1).
+
+    Central differences on a directional derivative at a FIXED read step, so
+    the envelope argmin cannot move between the perturbed evaluations and
+    contaminate the comparison.
+    """
+    import numpy as np
+    tc = _substep_case()
+    s0 = np.full(tc.eqs.part.size, tc.p.sigma_doped)
+    tr = tc.forward(s0)
+    tc.set_objective("asymmetric")
+    k = int(np.argmin(tc.J_trajectory(tr)))
+    g, _ = tc.gradient(s0, tr=tr, read_step=k, checkpoint_interval=None)
+
+    rng = np.random.default_rng(0)
+    d = rng.standard_normal(s0.size)
+    d /= np.linalg.norm(d)
+    analytic = float(np.dot(g, d))
+
+    def J_at(s):
+        t = tc.forward(s)
+        return float(tc.J_trajectory(t)[k])
+
+    # h = 1e-5 relative, NOT larger. This case runs with the per-step
+    # temperature cap ACTIVE (clamp_bound True), so the objective has a kink
+    # and a coarse central difference straddles it: the same check reads
+    # 2.2e-01 at h=1e-2, 1.2e-01 at 1e-3, 5.0e-02 at 1e-4 and 8.9e-08 at 1e-5.
+    # That is the documented subgradient regime, not gradient error -- the
+    # convergence AS h SHRINKS is the evidence, which is why the sweep is
+    # recorded here rather than a single lucky step size.
+    h = 1e-5 * float(np.abs(s0).mean())
+    fd = (J_at(s0 + h * d) - J_at(s0 - h * d)) / (2.0 * h)
+    rel = abs(analytic - fd) / max(abs(fd), 1e-30)
+    assert rel < 1e-6, (
+        f"substepped gradient fails FD: analytic {analytic:.6e} vs "
+        f"fd {fd:.6e}, rel {rel:.3e}")
+
+
+@pytest.mark.slow
+def test_the_gradient_depends_on_dt_sub_not_on_the_sample_step():
+    """THE CLEANEST STATEMENT OF THE BUG, and the sharpest regression guard.
+
+    dt_s=30 with n_sub=6 and dt_s=15 with n_sub=3 both march at dt_sub = 5.0 s.
+    The physics is identical, so the gradient must be too. Before the fix the
+    adjoint used p.dt_s, so these two differed by a factor of two in the
+    adjoint's step and gave different answers; now they agree exactly.
+    """
+    import numpy as np
+
+    def grad_for(dt_s):
+        tc = _substep_case(dt_s=dt_s)
+        s0 = np.full(tc.eqs.part.size, tc.p.sigma_doped)
+        tr = tc.forward(s0)
+        assert tr.n_sub > 1
+        assert abs(tc.dt_step - 5.0) < 1e-12, tc.dt_step
+        tc.set_objective("asymmetric")
+        k = int(np.argmin(tc.J_trajectory(tr)))
+        g, _ = tc.gradient(s0, tr=tr, read_step=k, checkpoint_interval=None)
+        return g
+
+    a, b = grad_for(30.0), grad_for(15.0)
+    assert b == pytest.approx(a, rel=1e-12, abs=1e-30)
+
+
+# --------------------------------------------------------------------------- #
+# The guard: ten hours of NaN must be structurally impossible
+# --------------------------------------------------------------------------- #
+def test_the_guard_refuses_a_nan_gradient():
+    import numpy as np
+    from solve3d.phase_e import run_tamper as rt
+
+    g = np.ones(5)
+    g[2] = np.nan
+    with pytest.raises(rt.NonFiniteGradientError) as e:
+        rt.assert_finite_first_eval(1.0e-6, g)
+    assert "NaN" in str(e.value)
+    assert "Refusing to run the optimizer" in str(e.value)
+
+
+def test_the_guard_refuses_an_inf_gradient_and_a_nan_objective():
+    import numpy as np
+    from solve3d.phase_e import run_tamper as rt
+
+    with pytest.raises(rt.NonFiniteGradientError):
+        rt.assert_finite_first_eval(1.0e-6, np.array([1.0, np.inf, 2.0]))
+    with pytest.raises(rt.NonFiniteGradientError):
+        rt.assert_finite_first_eval(float("nan"), np.ones(3))
+
+
+def test_the_guard_passes_a_healthy_gradient():
+    """Mutation check: a guard that refuses everything is not a guard."""
+    import numpy as np
+    from solve3d.phase_e import run_tamper as rt
+
+    rt.assert_finite_first_eval(1.0e-6, np.array([1e-3, -2e-3, 5e-4]))
+
+
+def test_the_guard_names_what_was_wrong():
+    """The message must say WHICH quantity failed, so the next person does not
+    have to re-derive it from a checkpoint."""
+    import numpy as np
+    from solve3d.phase_e import run_tamper as rt
+
+    with pytest.raises(rt.NonFiniteGradientError) as e:
+        rt.assert_finite_first_eval(1.0e-6, np.full(4, np.nan))
+    assert "4 NaN" in str(e.value)

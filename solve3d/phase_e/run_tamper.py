@@ -62,6 +62,42 @@ CHECKPOINT_INTERVAL = 25
 # DIVIDE CHECKPOINT_INTERVAL or the reader would ask for an anchor that was
 # never kept. At 25 this is 2.05 GB.
 RECORD_STRIDE = 25
+
+
+class NonFiniteGradientError(RuntimeError):
+    """The first gradient evaluation was not finite. Abort, do not optimize.
+
+    Ten hours of compute once went into eight evaluations whose gradient was
+    NaN on every one, because the transient adjoint stepped at p.dt_s while the
+    forward substepped at dt_s/n_sub and overflowed. L-BFGS-B does not fail on
+    a NaN gradient -- it simply cannot move, so J is bit-identical every
+    evaluation and the run looks like it is working.
+
+    That must be structurally impossible, not something a human notices in a
+    checkpoint later. Evaluation 1 is checked and the run aborts loudly.
+    """
+
+
+def assert_finite_first_eval(J, g, where: str = "evaluation 1") -> None:
+    """Refuse to optimize on a non-finite objective or gradient."""
+    import numpy as _np
+    bad = []
+    if not _np.isfinite(J):
+        bad.append(f"J = {J!r}")
+    g = _np.asarray(g, dtype=float)
+    n_nan = int(_np.isnan(g).sum())
+    n_inf = int(_np.isinf(g).sum())
+    if n_nan or n_inf:
+        bad.append(f"gradient has {n_nan} NaN and {n_inf} Inf of {g.size}")
+    gn = float(_np.linalg.norm(g)) if g.size else 0.0
+    if not _np.isfinite(gn):
+        bad.append(f"|g| = {gn!r}")
+    if bad:
+        raise NonFiniteGradientError(
+            f"{where}: " + "; ".join(bad) + ". Refusing to run the optimizer: "
+            "L-BFGS-B cannot move on a non-finite gradient, so it would burn "
+            "the entire budget reporting a bit-identical J and look healthy. "
+            "Check the adjoint before relaunching.")
 FILTER_RADIUS_M = 1.0e-3         # the Phase E design-chain filter radius
 
 _L0_DEFAULT = object()
@@ -247,10 +283,15 @@ def run_solve_arm(tc, chain, name: str, budget_evals: int) -> dict:
         g_s, _ = tc.gradient_design(s, tr=tr, read_step=k,
                                     checkpoint_interval=CHECKPOINT_INTERVAL)
         g_v = chain.design_vjp(v, g_s, beta=0.0)
+        if fg.n_calls == 0:
+            assert_finite_first_eval(J, g_v)
+        fg.n_calls += 1
         fg.last = {"argmin_step": k, "t_stop_s": step_to_time_s(tr, k, tc.p),
                    "at_horizon": bool(k >= tr.n_steps),
                    "wall_s": time.perf_counter() - t0}
         return J, g_v
+
+    fg.n_calls = 0
 
     def on_eval(v, J, g):
         info = dict(getattr(fg, "last", {}))
