@@ -14,6 +14,7 @@ import argparse
 import dataclasses
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -32,6 +33,39 @@ TRUST_BADGE = ("heatr3d native | S1 passed within validity domain | "
 N_MAX = 96                     # full-physics ceiling (EQS-01 guard)
 CHAMBER_M = 0.060
 _MM_TO_M = 1e-3
+
+# SHARED thermal-ceiling config (solve3d/thermal_config.json). SINGLE SOURCE
+# OF TRUTH read by BOTH lanes: the solve3d constrained solve and this Studio
+# heatr3d verify. The cross-engine verify gate on a recommended drive is only
+# meaningful if both read the IDENTICAL ceiling. Env override for tests /
+# campaigns; mirrors the shrinkage_precomp.json loader in precomp.py.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+THERMAL_CONFIG_ENV = "RFAM_THERMAL_CONFIG"
+THERMAL_CONFIG_PATH = _REPO_ROOT / "solve3d" / "thermal_config.json"
+_THERMAL_SCHEMA = "1.0"
+
+
+def load_thermal_config(path: str | Path | None = None) -> Dict[str, Any]:
+    """The shared per-material thermal config. Refuses a missing file or an
+    unsupported schema_version rather than silently falling back to a literal
+    (a divergent ceiling would make the cross-engine verify meaningless)."""
+    if path is None:
+        env = os.environ.get(THERMAL_CONFIG_ENV)
+        path = Path(env) if env else THERMAL_CONFIG_PATH
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(
+            f"shared thermal config not found: {p} (set {THERMAL_CONFIG_ENV} "
+            "or restore solve3d/thermal_config.json)")
+    cfg = json.loads(p.read_text())
+    ver = str(cfg.get("schema_version"))
+    if ver != _THERMAL_SCHEMA:
+        raise ValueError(f"unsupported thermal-config schema_version {ver!r} "
+                         f"in {p} (supported: {_THERMAL_SCHEMA})")
+    if "T_ceiling_C" not in cfg:
+        raise ValueError(f"thermal config {p} missing T_ceiling_C")
+    cfg["_path"] = str(p)
+    return cfg
 
 
 def voxelize_stl(mesh_path: str, n: int, chamber_m: float = CHAMBER_M
@@ -240,6 +274,10 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                  else None)
     t_peak = max(float(r.T_max_c), t_end_max) if t_end_max is not None \
         else float(r.T_max_c)
+    # the ceiling comes from the SHARED config, NOT a literal, so this verify
+    # and the solve3d constrained solve gate against one identical number.
+    thermal_cfg = load_thermal_config()
+    ceiling_c = float(thermal_cfg["T_ceiling_C"])
     gates = {
         "reached_phi90": bool(r.reached),
         "MELT_ONSET_FALLBACK": (not bool(r.reached)),
@@ -250,8 +288,8 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         "T_max_C_read": "melt_onset_snapshot",
         "T_end_max_C": (float(round(t_end_max, 1))
                         if t_end_max is not None else None),
-        "T_ceiling_C": 250.0,
-        "T_ceiling_ok": bool(t_peak <= 250.0),
+        "T_ceiling_C": ceiling_c,
+        "T_ceiling_ok": bool(t_peak <= ceiling_c),
         "T_ceiling_read": ("end_state_peak" if t_end_max is not None
                            else "melt_onset_snapshot"),
     }
@@ -280,6 +318,13 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         # and never averaged/ranked across chamber sizes.
         "chamber_m": CHAMBER_M,
         "chamber_mode": "frozen_60mm_heatr3d",
+        # which shared thermal config supplied the ceiling (auditable; both
+        # lanes must show the same source for the cross-engine gate to mean
+        # anything).
+        "thermal_config": {"T_ceiling_C": ceiling_c,
+                           "source": thermal_cfg.get("source"),
+                           "material": thermal_cfg.get("material"),
+                           "path": thermal_cfg.get("_path")},
         # the effective power-density drive (the thermal-ceiling lever): a
         # backed-off drive lowers the peak temperature at target density.
         # Recorded always, so a package can never hide which drive it used.

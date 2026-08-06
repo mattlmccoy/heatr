@@ -115,6 +115,29 @@ def test_stop_mean_rho_is_wired_and_recorded(box20_stl, tmp_path):
     assert res["sim_time_s"] <= 5.0 + 1e-9
 
 
+def test_ceiling_reads_the_shared_thermal_config(box20_stl, tmp_path, monkeypatch):
+    """The thermal ceiling is the SHARED per-material config (solve3d/
+    thermal_config.json), NOT a hardcoded literal - so the Studio verify and
+    the solve3d constrained solve gate against the IDENTICAL number. Proven
+    non-vacuously: a config with a DIFFERENT ceiling must change the gate."""
+    cfg = tmp_path / "thermal.json"
+    cfg.write_text(json.dumps({"schema_version": "1.0", "material": "TEST",
+                               "T_ceiling_C": 300.0, "source": "unit test"}))
+    monkeypatch.setenv("RFAM_THERMAL_CONFIG", str(cfg))
+    res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0)
+    assert res["gates"]["T_ceiling_C"] == 300.0        # read from the file, not 250
+    # provenance: the run records which ceiling config it used
+    assert res["thermal_config"]["T_ceiling_C"] == 300.0
+    assert "source" in res["thermal_config"]
+
+
+def test_default_thermal_config_ceiling_is_250(box20_stl, tmp_path):
+    """The real repo config (solve3d/thermal_config.json) is 250 C, matching
+    the value both lanes agreed on - no drift."""
+    res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0)
+    assert res["gates"]["T_ceiling_C"] == 250.0
+
+
 def test_drive_backoff_is_wired_and_recorded(box20_stl, tmp_path):
     """The power-density drive knob must actually take effect (it is the
     drive-backoff lever for the thermal ceiling). Params is a frozen
