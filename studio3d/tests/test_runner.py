@@ -115,6 +115,22 @@ def test_stop_mean_rho_is_wired_and_recorded(box20_stl, tmp_path):
     assert res["sim_time_s"] <= 5.0 + 1e-9
 
 
+def test_drive_backoff_is_wired_and_recorded(box20_stl, tmp_path):
+    """The power-density drive knob must actually take effect (it is the
+    drive-backoff lever for the thermal ceiling). Params is a frozen
+    dataclass, so the old in-place assignment raised FrozenInstanceError -
+    the knob was silently broken. A lower drive must run without error and
+    the effective drive must be recorded in results for provenance."""
+    out = tmp_path / "out"
+    low = 1.0e6
+    res = run_densify(str(box20_stl), out, n=16, max_time_s=2.0,
+                      power_density_w_per_m3=low)
+    assert res["power_density_w_per_m3"] == low
+    # default run records the default drive too, not a null
+    res2 = run_densify(str(box20_stl), tmp_path / "out2", n=16, max_time_s=2.0)
+    assert res2["power_density_w_per_m3"] > 0
+
+
 def test_voxelize_is_fast_on_real_size_meshes(tmp_path):
     """Perf gate (found live: a 125k-triangle part sat 34 minutes inside
     mesh.contains at n=64). An 82k-triangle sphere at n=64 must voxelize

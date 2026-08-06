@@ -11,6 +11,7 @@ Every result carries its engine label and trust badge (spec section 3).
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import logging
 import time
@@ -162,7 +163,11 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
     grid = H.Grid(n=n)
     p = H.Params(phase_update="enthalpy")
     if power_density_w_per_m3 is not None:
-        p.power_density_w_per_m3 = float(power_density_w_per_m3)
+        # Params is a frozen dataclass; an in-place assignment raised
+        # FrozenInstanceError, so this drive-backoff knob (the ceiling lever)
+        # was silently broken. Rebuild the frozen instance with the new drive.
+        p = dataclasses.replace(p, power_density_w_per_m3=float(
+            power_density_w_per_m3))
 
     sat = None
     if sat_path is not None:
@@ -275,6 +280,10 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
         # and never averaged/ranked across chamber sizes.
         "chamber_m": CHAMBER_M,
         "chamber_mode": "frozen_60mm_heatr3d",
+        # the effective power-density drive (the thermal-ceiling lever): a
+        # backed-off drive lowers the peak temperature at target density.
+        # Recorded always, so a package can never hide which drive it used.
+        "power_density_w_per_m3": float(p.power_density_w_per_m3),
         "sigma_T": float(round(r.sigma_T, 3)),
         "t_phi90_s": float(round(r.t_phi90_s, 1)),
         "max_time_s": float(max_time_s),
