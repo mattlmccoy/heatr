@@ -163,7 +163,8 @@ def score_arm(tc, s_map: np.ndarray, name: str, extra: dict | None = None,
         "n_steps": tr.n_steps, "n_eqs_solves": len(tr.events),
         "J_symmetric": float(Js[ks]), "argmin_symmetric": ks,
         "J_asymmetric": float(Ja[ka]), "argmin_asymmetric": ka,
-        "t_stop_s": float(ka * tc.p.dt_s),
+        "t_stop_s": step_to_time_s(tr, ka, tc.p),
+        "n_sub": int(getattr(tr, "n_sub", 1)),
         "at_horizon_asymmetric": bool(ka >= tr.n_steps),
         "J_asym_w3_at_same_read": split3["J_asym"],
         "J_out_of_bounds": split["J_out_of_bounds"],
@@ -203,6 +204,18 @@ def score_arm(tc, s_map: np.ndarray, name: str, extra: dict | None = None,
     return rec
 
 
+def step_to_time_s(tr, k: int, p) -> float:
+    """Simulated time at trajectory step `k`, in seconds.
+
+    The trajectory is indexed by CFL SUBSTEP, not by sample step, so the time
+    is `k * dt_s / n_sub`. Using `k * dt_s` is off by n_sub -- on this part
+    (n_sub 33) it reported t_stop_s = 8729.65 s for a run whose horizon was
+    900 s. Inherited from phase_e/run.py, where n_sub is 1 and the error is
+    invisible; it becomes a confidently impossible number on a fine mesh.
+    """
+    return float(k) * float(p.dt_s) / float(max(1, int(getattr(tr, "n_sub", 1))))
+
+
 def _part_centroids(tc) -> np.ndarray:
     import dolfinx
     return np.asarray(dolfinx.mesh.compute_midpoints(
@@ -234,7 +247,7 @@ def run_solve_arm(tc, chain, name: str, budget_evals: int) -> dict:
         g_s, _ = tc.gradient_design(s, tr=tr, read_step=k,
                                     checkpoint_interval=CHECKPOINT_INTERVAL)
         g_v = chain.design_vjp(v, g_s, beta=0.0)
-        fg.last = {"argmin_step": k, "t_stop_s": float(k * tc.p.dt_s),
+        fg.last = {"argmin_step": k, "t_stop_s": step_to_time_s(tr, k, tc.p),
                    "at_horizon": bool(k >= tr.n_steps),
                    "wall_s": time.perf_counter() - t0}
         return J, g_v

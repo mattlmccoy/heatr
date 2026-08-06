@@ -511,6 +511,10 @@ class Trajectory:
     # values the envelope read needs. stride 1 with an empty J_series is the
     # original store-everything trajectory.
     T_stride: int = 1
+    # CFL substeps per sample step. The trajectory is indexed by SUBSTEP, so
+    # this is what converts a step index to a TIME; without it `k * p.dt_s`
+    # overstates the time by this factor.
+    n_sub: int = 1
     T_step_index: list = _field(default_factory=list)
     J_series: dict = _field(default_factory=dict)
     events: list = _field(default_factory=list)
@@ -694,6 +698,7 @@ class TransientCase:
             Jser = {"symmetric": arr[:, 0], "asymmetric": arr[:, 1]}
         return Trajectory(T_steps=rec["T_steps"],
                           T_stride=int(rec.get("record_stride", 1)),
+                          n_sub=int(out.get("n_substeps_used", 1)),
                           T_step_index=list(rec.get("T_step_index", [])),
                           J_series=Jser, events=events,
                           step_event=step_event, T_final=out["T"],

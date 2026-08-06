@@ -220,3 +220,52 @@ def test_a_checkpoint_interval_that_is_not_a_multiple_of_the_stride_is_refused()
     b.set_objective("asymmetric")
     with pytest.raises(ValueError, match="not a multiple"):
         b.gradient(s0, tr=tr, read_step=4, checkpoint_interval=6)
+
+
+# --------------------------------------------------------------------------- #
+# Step index -> TIME. The substep trap.
+# --------------------------------------------------------------------------- #
+def test_the_trajectory_records_its_substep_count():
+    """Without it, a step index cannot be converted to a time."""
+    import numpy as np
+    b = _small_case(1)
+    s0 = np.full(b.eqs.part.size, b.p.sigma_doped)
+    tr = b.forward(s0)
+    assert tr.n_sub >= 1
+    assert tr.n_steps % tr.n_sub == 0
+
+
+def test_step_to_time_uses_the_substep_not_the_sample_step():
+    """THE BUG THIS PINS. The trajectory is indexed by SUBSTEP, so
+    `k * p.dt_s` overstates the time by n_sub. On the Tamper (n_sub 33) the
+    uniform baseline reported t_stop_s = 8729.65 s for a run whose horizon was
+    900 s -- a number that is not merely wrong but impossible, and it was
+    inherited from phase_e/run.py where n_sub is 1 and the bug is invisible.
+    """
+    import numpy as np
+    from solve3d.phase_e import run_tamper as rt
+
+    b = _small_case(1)
+    s0 = np.full(b.eqs.part.size, b.p.sigma_doped)
+    tr = b.forward(s0)
+    t_end = rt.step_to_time_s(tr, tr.n_steps, b.p)
+    assert t_end == pytest.approx(b.max_time_s, rel=1e-9)
+    assert rt.step_to_time_s(tr, 0, b.p) == 0.0
+    # and it must never exceed the horizon for any valid index
+    for k in (0, 1, tr.n_steps // 2, tr.n_steps):
+        assert 0.0 <= rt.step_to_time_s(tr, k, b.p) <= b.max_time_s + 1e-12
+
+
+def test_the_tamper_substep_case_would_have_been_reported_33x_too_long():
+    """Regression guard with the real numbers."""
+    from solve3d.phase_e import run_tamper as rt
+
+    class _T:
+        n_sub = 33
+    class _P:
+        dt_s = 0.05
+    naive = 174593 * 0.05
+    fixed = rt.step_to_time_s(_T(), 174593, _P())
+    assert naive == pytest.approx(8729.65, abs=0.01)
+    assert fixed == pytest.approx(264.535, abs=0.01)
+    assert fixed < 900.0
