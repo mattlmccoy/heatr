@@ -1,0 +1,153 @@
+{
+ "what": "Stage A phase 2 PRE-LAUNCH FD gate: the dopant shape-solve gradient at the FIXED 0.40x drive (the only substantive change) on a coarse square case. dJ/ds (adjoint), the filter transpose, and the composite dJ/dv are each gated at the frozen tolerances (pass_rel_err 1e-06; subgradient 1e-05; transpose 1e-10). No widening.",
+ "drive": {
+  "chosen_drive_a": 0.4,
+  "power_density_w_per_m3": 636619.7723675814,
+  "note": "the ONLY substantive change vs the default-drive solve"
+ },
+ "case": {
+  "shape": "square",
+  "target_nodes_in_part": 300,
+  "n_part_cells": 1085,
+  "n_cells_total": 2551,
+  "lc0_m": 0.005,
+  "dt_s": 0.5,
+  "max_time_s": 1800.0,
+  "n_steps": 3600,
+  "n_sub": 1,
+  "cfl_violated": false
+ },
+ "read_state": {
+  "argmin_step": 1726,
+  "n_steps": 3600,
+  "at_horizon": false,
+  "t_stop_s": 863.0,
+  "part_peak_T_c": 205.1143218803192,
+  "melt_window_nodes": 56,
+  "note": "interior argmin + a live melt-window population is required, else |g|=0 and the gate is vacuous"
+ },
+ "filter": {
+  "radius_m": 0.001,
+  "truncation_sigmas": 3.0,
+  "measured_std_m": 0.0006135606138671064,
+  "mean_neighbours": 4.985253456221198,
+  "min_neighbours": 2,
+  "max_neighbours": 9,
+  "n_design": 1085,
+  "mean_cell_size_m": 0.002807116915122804,
+  "row_sum_max_dev_from_one": 4.440892098500626e-16,
+  "asymmetry_max": 0.1944969569467472
+ },
+ "gate_A_map_adjoint": {
+  "worst_best_rel_err": 3.710433438233384e-08,
+  "n_pass_preferred": 4,
+  "n_pass_subgradient": 4,
+  "n_probes": 4,
+  "all_pass_preferred": true,
+  "all_pass_subgradient": true,
+  "pass_rel_err": 1e-06,
+  "subgradient_pass_rel_err": 1e-05,
+  "evaluation_floor_range": [
+   7.115666203748165e-21,
+   3.122798093066236e-20
+  ],
+  "analytic_magnitude_range": [
+   3.5273576223945417e-09,
+   3.9838453837019574e-07
+  ],
+  "probes": {
+   "max_sensitivity_cell": {
+    "best_rel_err": 3.836887364789247e-09,
+    "best_eps": 0.0001,
+    "analytic_directional": 9.446687319001696e-08,
+    "best_abs_err": 3.6245875213392417e-16,
+    "pass_subgradient": true,
+    "pass_preferred": true
+   },
+   "random_cell": {
+    "best_rel_err": 2.4856111050765196e-08,
+    "best_eps": 0.0001,
+    "analytic_directional": -3.5273576223945417e-09,
+    "best_abs_err": 8.767639277800182e-17,
+    "pass_subgradient": true,
+    "pass_preferred": true
+   },
+   "random_direction": {
+    "best_rel_err": 3.710433438233384e-08,
+    "best_eps": 0.0001,
+    "analytic_directional": -4.539018961152168e-09,
+    "best_abs_err": 1.6841727730234358e-16,
+    "pass_subgradient": true,
+    "pass_preferred": true
+   },
+   "gradient_direction": {
+    "best_rel_err": 8.800568583695619e-09,
+    "best_eps": 1e-05,
+    "analytic_directional": 3.9838453837019574e-07,
+    "best_abs_err": 3.506010452610826e-15,
+    "pass_subgradient": true,
+    "pass_preferred": true
+   }
+  }
+ },
+ "gate_B_filter_transpose": {
+  "lhs": 7.22023473877746,
+  "rhs": 7.220234738777462,
+  "rel_err": 2.4602480440975595e-16,
+  "tolerance": 1e-10,
+  "pass": true
+ },
+ "gate_C_composite": {
+  "worst_best_rel_err": 2.9422447368027356e-08,
+  "n_pass_preferred": 4,
+  "n_pass_subgradient": 4,
+  "n_probes": 4,
+  "all_pass_preferred": true,
+  "all_pass_subgradient": true,
+  "pass_rel_err": 1e-06,
+  "subgradient_pass_rel_err": 1e-05,
+  "evaluation_floor_range": [
+   2.8158901150173843e-21,
+   2.7636522396004336e-20
+  ],
+  "analytic_magnitude_range": [
+   4.503624775393348e-09,
+   3.865417644087054e-07
+  ],
+  "probes": {
+   "max_sensitivity_cell": {
+    "best_rel_err": 2.090504302873562e-11,
+    "best_eps": 0.0001,
+    "analytic_directional": 9.13063070109074e-08,
+    "best_abs_err": 1.908762276857964e-18,
+    "pass_subgradient": true,
+    "pass_preferred": true
+   },
+   "random_cell": {
+    "best_rel_err": 2.9422447368027356e-08,
+    "best_eps": 0.0001,
+    "analytic_directional": -4.503624775393348e-09,
+    "best_abs_err": 1.325076629193548e-16,
+    "pass_subgradient": true,
+    "pass_preferred": true
+   },
+   "random_direction": {
+    "best_rel_err": 5.963530191511944e-10,
+    "best_eps": 0.001,
+    "analytic_directional": -6.227339491985821e-09,
+    "best_abs_err": 3.7136927073252094e-18,
+    "pass_subgradient": true,
+    "pass_preferred": true
+   },
+   "gradient_direction": {
+    "best_rel_err": 7.190747750080387e-10,
+    "best_eps": 0.0001,
+    "analytic_directional": 3.865417644087054e-07,
+    "best_abs_err": 2.7795243227340016e-16,
+    "pass_subgradient": true,
+    "pass_preferred": true
+   }
+  }
+ },
+ "launch_ok": true
+}
