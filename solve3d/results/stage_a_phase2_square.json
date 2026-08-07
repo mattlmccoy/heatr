@@ -1,0 +1,192 @@
+{
+ "what": "Stage A Task 4 phase 2: dopant SHAPE-solve at the fixed drive Phase 1 certified feasible; ceiling evaluated at the densify end-state as a forward gate.",
+ "stage": "A_phase2_dopant_shape_solve",
+ "part": "square",
+ "chosen_drive_a": 0.4,
+ "solve": {
+  "arm": "solve_filter_only",
+  "part": "square",
+  "objective_optimized": "asymmetric",
+  "J_asymmetric": 9.280199219444025e-07,
+  "argmin_asymmetric": 20194,
+  "t_stop_s": 1009.7,
+  "at_horizon_asymmetric": false,
+  "J_out_of_bounds": 8.073395300306888e-08,
+  "J_in_bounds_deficit": 8.472859689413336e-07,
+  "part_mean_phi": 0.8362665791705204,
+  "part_max_T_c": 227.98574470640474,
+  "sigma_T_diagnostic_c": 16.75537383806264,
+  "map_stats": {
+   "mean": 0.8223996119459595,
+   "min": 0.019591458385189255,
+   "max": 1.0000000000000009
+  },
+  "gates": {
+   "energy_residual_frac": -3.083709798098114e-13,
+   "clamp_bound": false,
+   "cfl_violated": false
+  },
+  "budget_gradient_evaluations": 12,
+  "gradient_evaluations_used": 12,
+  "resumed_from_eval": 0,
+  "J_first_eval": 2.3710400325884992e-06,
+  "trajectory": [
+   {
+    "eval": 1,
+    "J": 2.3710400325884992e-06,
+    "grad_norm": 4.471102926397649e-08,
+    "argmin_step": 18086,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 904.3000000000001,
+    "wall_s": 379.58359079097863
+   },
+   {
+    "eval": 2,
+    "J": 2.3438950185658596e-06,
+    "grad_norm": 4.415199095184079e-08,
+    "argmin_step": 18104,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 905.2,
+    "wall_s": 763.331665124977
+   },
+   {
+    "eval": 3,
+    "J": 1.2991329937269388e-06,
+    "grad_norm": 8.450852782317118e-08,
+    "argmin_step": 19791,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 989.5500000000001,
+    "wall_s": 1190.083000582992
+   },
+   {
+    "eval": 4,
+    "J": 1.088660053018833e-06,
+    "grad_norm": 3.2986364205505134e-08,
+    "argmin_step": 20074,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 1003.7,
+    "wall_s": 1602.323040999996
+   },
+   {
+    "eval": 5,
+    "J": 1.254781406628775e-06,
+    "grad_norm": 6.544957369816812e-08,
+    "argmin_step": 19793,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 989.6500000000001,
+    "wall_s": 2019.833357290976
+   },
+   {
+    "eval": 6,
+    "J": 1.0176177359245848e-06,
+    "grad_norm": 2.9234770920112392e-08,
+    "argmin_step": 20105,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 1005.25,
+    "wall_s": 2462.751184499997
+   },
+   {
+    "eval": 7,
+    "J": 1.0337248422195434e-06,
+    "grad_norm": 4.690119529145427e-08,
+    "argmin_step": 20069,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 1003.45,
+    "wall_s": 2895.0475086249935
+   },
+   {
+    "eval": 8,
+    "J": 9.970402135867918e-07,
+    "grad_norm": 1.884632278349543e-08,
+    "argmin_step": 20114,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 1005.7,
+    "wall_s": 3316.6266375409905
+   },
+   {
+    "eval": 9,
+    "J": 9.84442173095568e-07,
+    "grad_norm": 2.141066329360155e-08,
+    "argmin_step": 20133,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 1006.6500000000001,
+    "wall_s": 3750.228659207991
+   },
+   {
+    "eval": 10,
+    "J": 9.713358950843713e-07,
+    "grad_norm": 1.5831591221143972e-08,
+    "argmin_step": 20142,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 1007.1,
+    "wall_s": 4170.6890042909945
+   },
+   {
+    "eval": 11,
+    "J": 9.468003443656192e-07,
+    "grad_norm": 1.5359560582487014e-08,
+    "argmin_step": 20170,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 1008.5,
+    "wall_s": 4566.63631183299
+   },
+   {
+    "eval": 12,
+    "J": 9.280199219444025e-07,
+    "grad_norm": 1.6195680725212687e-08,
+    "argmin_step": 20194,
+    "n_steps": 36000,
+    "at_horizon": false,
+    "t_stop_s": 1009.7,
+    "wall_s": 4976.704990665981
+   }
+  ],
+  "scale_first_step": true,
+  "objective_scale_applied": 22365846.11139105,
+  "status": "budget_exhausted",
+  "wall_total_s": 4976.8
+ },
+ "acceptance": {
+  "fd_gate_passed": true,
+  "end_state_ceiling_holdout": {
+   "true_peak_c": 251.1500448377283,
+   "ceiling_c": 250.0,
+   "margin_c": -1.1500448377283021,
+   "feasible": false,
+   "holdout_nodes_in_part": 9868,
+   "holdout_lc0_m": 0.0009375,
+   "achieved_rho": 0.9800082986421607,
+   "reached_rho": true,
+   "energy_residual_frac": -2.900223761713114e-13,
+   "clamp_bound": false,
+   "note": "densify end-state true peak on a HOLD-OUT mesh (not the solve mesh), solved dopant transferred nearest-neighbour"
+  },
+  "holdout_nodes_target": 9000,
+  "is_shippable": false,
+  "note": "is_shippable = FD-gated gradient AND end-state peak <= ceiling on a mesh hold-out"
+ },
+ "recommended_power_settings": {
+  "power_density_w_per_m3": 636619.7723675814,
+  "_stage_a_provenance": {
+   "drive_a": 0.4,
+   "baseline_power_density_w_per_m3": 1591549.4309189534,
+   "schema": "2.0.0 (no change; field already exists, no new keys)",
+   "field_path": "power_settings.power_density_w_per_m3",
+   "ceiling_c": 250.0,
+   "thermal_config_path": "solve3d/thermal_config.json",
+   "note": "recommended drive a=0.4000 x baseline for the best part under the 250 C degradation ceiling",
+   "routed_to_studio_for_confirmation": true
+  }
+ }
+}

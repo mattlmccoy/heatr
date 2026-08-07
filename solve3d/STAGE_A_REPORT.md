@@ -255,9 +255,40 @@ On completion run_solve writes `stage_a_phase2_square.json` (solved map +
 recommended drive in the Stage A shape) after the end-state ceiling HOLD-OUT
 gate (finer 0.060/64 mesh, solved dopant transferred nearest-neighbour); the
 map `map_phase2_square.npz`. is_shippable = FD-gated gradient AND end-state peak
-<= 250 C on the hold-out. NOT YET DONE at time of writing -- a watcher catches
-completion. Still to run after: the Studio heatr3d cross-engine verify of the
-(shaped map, 0.40x drive) peak within the cross-family band (is_sendable).
+<= 250 C on the hold-out.
+
+PHASE 2 RESULT (DONE 2026-08-07, `stage_a_phase2_square.json`): the shape-solve
+CONVERGED WELL but the mesh HOLD-OUT ceiling gate REFUSED it -- an honest,
+important outcome.
+
+- Convergence (solve mesh): J_asymmetric 2.371e-6 (eval 1) -> 9.280e-7 (eval 12),
+  -60.9%, monotone, gradients finite (~1.6e-8), energy residual 3e-13, no clamp,
+  no CFL violation. Quality: part_mean_phi 0.836 (84% melt, vs Tamper's 34%),
+  sigma_T 16.76 C, solve-mesh peak 227.99 C (under 250). Map: mean 0.822, min
+  0.020, max 1.0 (dopant carved in places).
+- HOLD-OUT gate (the arbiter, finer mesh 9868 in-part nodes, lc0 0.9375 mm):
+  true end-state peak 251.15 C vs ceiling 250.0 -> margin -1.15 C -> feasible
+  FALSE -> **is_shippable = FALSE**. rho 0.98 reached, energy residual 3e-13.
+
+WHY THIS MATTERS (a real finding, not a bug): on the SOLVE mesh the shaped map
+peaked 227.99 C, comfortably under; on the properly-resolved HOLD-OUT mesh it
+peaks 251.15 C, 1.15 C (0.46%) OVER. Two effects compound: (1) the finer mesh
+resolves a sharper peak the solve mesh under-resolved, and (2) the shape-optimal
+dopant RELOCATED the peak upward relative to the uniform 0.40x map (uniform was
+~240 C class) -- so "the ceiling is nearly dopant-independent" has a real LIMIT:
+here the dopant moved the peak ~+11 C, enough to cross. The hold-out gate did
+exactly its job -- it refused a map that a solve-mesh-only read (227.99 C) would
+have shipped as a false-green over-ceiling part.
+
+CONSEQUENCE / FIX (next step, not this run): back the drive off below 0.40x to
+leave margin for the dopant's peak relocation, then re-solve + re-gate on the
+hold-out; and/or (deeper, Stage B+) the ceiling may need coupling to the dopant
+after all, since the dopant is NOT ceiling-neutral at this drive. The drive
+selection (Phase 1, coarse mesh) was slightly optimistic; the honest feasible
+drive for the SHAPED map, hold-out-resolved, is below 0.40x. NOT routed to the
+Studio cross-engine verify: is_shippable is already FALSE on our own hold-out, so
+asking heatr3d to confirm a known-over-ceiling map would be dishonest; the verify
+comes after the drive-backoff re-solve passes the hold-out.
 
 Cross-engine verify of the DRIVE recommendation (uniform map at 0.40x): DONE
 and CONFIRMED (Studio lane heatr3d, 2026-08-06). Same geometry constructor, n=64,
