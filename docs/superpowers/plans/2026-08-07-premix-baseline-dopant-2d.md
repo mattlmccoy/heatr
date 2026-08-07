@@ -25,11 +25,13 @@ reset `sigma[:,:] = sigma_v` (wiping the premix bed). Resolution actually shippe
   path would violate TDD. Revisit when an antennae config needs premix.
 - **Loop re-solve blocks** (turntable / `update_interval` tick / FGM-iterate): NOT premix-aware
   (they reset `sigma=virgin`). **Follow-up**, out of scope for the jared study.
-- **Task 7 (study config):** MUST set `update_interval: 0` so no in-run re-solve fires (valid here:
-  jared has `sigma_temp_coeff=0`, `sigma_density_coeff=0`, so sigma is static). Otherwise premix is
-  wiped mid-run.
-- **Task 6 (fgm_generator):** re-scope pending — check whether the generator computes any total-dopant
-  budget; if not, `budget_fixed` accounting is fully handled inside `apply_premix` (Task 6 → docstring note).
+- **Task 7 (study config):** DONE — `configs/jared_exp1_40mm_premix.yaml`, `update_interval: 0` (valid:
+  jared `sigma_temp_coeff=0`/`sigma_density_coeff=0`, sigma static) + `premix: {frac:0.0, budget:floor_added}`.
+  Verified `frac=0` bit-identical to jared.
+- **Task 6 (fgm_generator):** DONE — NO code change. `generate_fgm` produces the printed sat map; its
+  only budget (OC integral-mode per-part volume target, `fgm_generator.py:392`) conserves the *printed*
+  dopant, orthogonal to the premix baseline. Both premix variants are applied downstream in
+  `apply_premix`, so the generator is premix-agnostic. No production code → no test.
 
 ---
 
