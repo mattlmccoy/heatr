@@ -111,6 +111,18 @@ Add the drive scalar back as a joint variable under the coupled ceiling (the dri
 drops where the dopant cannot hold the peak). This reconnects to the parent spec's
 Stage A/B drive actuator.
 
+HEADROOM DRIVE POLICY (answers parent spec Q3; confirmed with the Studio lane
+2026-08-07). The phase-2 +11 C dopant peak-relocation shows that selecting the
+drive as "largest feasible on the UNIFORM map" is too aggressive: a drive with no
+headroom on uniform becomes infeasible once the shape-optimal dopant concentrates
+the peak. So the drive-selection margin (Stage A select_from_sweep, and B4 joint
+drive) must cover the MEASURED dopant peak-relocation (~+11 C here), NOT just solver
+/ mesh error. Concretely: feasible-drive := true hold-out peak of the UNIFORM map
+<= T_ceiling - Delta_dopant, where Delta_dopant is the measured (or bounded)
+shape-optimal peak relocation at that drive. The Stage A drive backoff is this
+policy applied by hand; B4 makes it the selection rule. This is a policy the parent
+Stage A spec should adopt for its drive actuator.
+
 ## Gates / acceptance (pre-registered, per the frozen protocol)
 
 - B1: dThat_peak/ds matches central FD within the frozen tolerance on a coarse
