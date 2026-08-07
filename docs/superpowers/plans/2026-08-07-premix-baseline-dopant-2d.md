@@ -32,6 +32,13 @@ reset `sigma[:,:] = sigma_v` (wiping the premix bed). Resolution actually shippe
   only budget (OC integral-mode per-part volume target, `fgm_generator.py:392`) conserves the *printed*
   dopant, orthogonal to the premix baseline. Both premix variants are applied downstream in
   `apply_premix`, so the generator is premix-agnostic. No production code → no test.
+- **Task 8 (study run):** DONE — `study_premix_sweep.py` + `augment_matched_peak.py`, results in
+  `results/premix_sweep/`, tested metrics (`premix_study_metrics.py`, 5/5). Matched-peak finding:
+  uniform premix is PARASITIC under fixed-total-power (bed absorbs ~80%, part φ 0.999→0.51-0.63 at the
+  ceiling). See `PREMIX_SWEEP_RESULTS.md`. Deferred: per-level map re-opt (adjoint lacks premix),
+  voltage-drive counterpart, heatr3d 3-D cross-check.
+- **Task 9 (figure):** DONE — `make_premix_figure.py` → `results/premix_sweep/fig_premix_sweep.png`
+  (viewed; mechanism-revealing 3-panel).
 
 ---
 
