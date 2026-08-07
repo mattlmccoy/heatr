@@ -49,7 +49,9 @@ def _rho_target() -> float:
 def uniform_holdout_peak(holdout_nodes: int = HOLDOUT_NODES,
                          holdout_lc0: float = HOLDOUT_LC0_M,
                          rho_target: float | None = None,
-                         max_time_s: float = 3000.0) -> dict:
+                         max_time_s: float = 3000.0,
+                         power_density: float | None = None,
+                         drive_a: float | None = None) -> dict:
     """The UNIFORM (s=1) dopant true end-state peak at 0.40x on the hold-out.
 
     Reuses stage_a_phase2.ceiling_end_state_gate with a uniform saturation map:
@@ -65,12 +67,17 @@ def uniform_holdout_peak(holdout_nodes: int = HOLDOUT_NODES,
     rho_t = _rho_target() if rho_target is None else float(rho_target)
     gate = p2.ceiling_end_state_gate(
         np.ones(1), np.zeros((1, 3)), holdout_nodes=int(holdout_nodes),
-        holdout_lc0=float(holdout_lc0), rho_target=rho_t, max_time_s=max_time_s)
+        holdout_lc0=float(holdout_lc0), rho_target=rho_t, max_time_s=max_time_s,
+        power_density=power_density)
     out = dict(gate)
     out["map"] = "uniform_s1"
     out["rho_target"] = rho_t
-    out["drive_a"] = p2.chosen_drive_a()
-    out["power_density_w_per_m3"] = p2.chosen_drive_power_density()
+    # drive provenance: None -> the frozen 0.40x chosen drive (B2 behavior); a
+    # B4 override records the backed-off drive it was actually measured at.
+    out["drive_a"] = (p2.chosen_drive_a() if drive_a is None else float(drive_a))
+    out["power_density_w_per_m3"] = (
+        p2.chosen_drive_power_density() if power_density is None
+        else float(power_density))
     return out
 
 

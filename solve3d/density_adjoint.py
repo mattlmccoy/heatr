@@ -130,11 +130,16 @@ def probe_indices(case: "Case", k: int = 4) -> list[int]:
 
 def build_coarse_case(target_nodes: int = COARSE_TARGET_NODES,
                       lc0: float = COARSE_LC0_M, dt: float = COARSE_DT_S,
-                      n_steps: int = COARSE_N_STEPS) -> Case:
-    """The coarse square at the FIXED 0.40x drive for the B1 FD gate."""
+                      n_steps: int = COARSE_N_STEPS,
+                      power_density: float | None = None) -> Case:
+    """The coarse square at the FIXED 0.40x drive for the B1 FD gate.
+
+    `power_density` overrides the chosen 0.40x drive for the Stage B4 drive-
+    backoff (None keeps 0.40x, so every B1/B2/B3 call is unchanged)."""
     tc = adjoint.TransientCase.build(
         shape="square", target_nodes_in_part=int(target_nodes), lc0=float(lc0),
-        p=p2.drive_params(dt_s=float(dt)), max_time_s=float(dt) * float(n_steps))
+        p=p2.drive_params(dt_s=float(dt), power_density=power_density),
+        max_time_s=float(dt) * float(n_steps))
     import dolfinx
     part_cent = np.asarray(dolfinx.mesh.compute_midpoints(
         tc.msh, tc.msh.topology.dim,

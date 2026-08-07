@@ -1,0 +1,45 @@
+{
+ "what": "Stage B4 drive-backoff probe: uniform (s=1) dolfinx hold-out peak at candidate drives, to pick the backed-off drive whose uniform peak sits a few C UNDER T_eff so the AL has a feasible region to shape up into. Peaks are MEASURED via stage_b.uniform_holdout_peak (the same arbiter the AL restoration shift reads).",
+ "stage": "B4_drive_backoff_probe",
+ "part": "square",
+ "ceiling_c": 250.0,
+ "delta_headroom_c": 15.0,
+ "t_ceiling_eff_c": 235.0,
+ "target_band_c": [
+  228.0,
+  232.0
+ ],
+ "candidates": [
+  {
+   "drive_a": 0.34,
+   "power_density_w_per_m3": 541126.8065124442,
+   "uniform_true_peak_c": 232.69711820723853,
+   "under_t_eff": true,
+   "margin_to_t_eff_c": 2.302881792761468
+  },
+  {
+   "drive_a": 0.36,
+   "power_density_w_per_m3": 572957.7951308232,
+   "uniform_true_peak_c": 235.19060183621093,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -0.19060183621093074
+  },
+  {
+   "drive_a": 0.38,
+   "power_density_w_per_m3": 604788.7837492023,
+   "uniform_true_peak_c": 237.62101388168466,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -2.621013881684661
+  }
+ ],
+ "pick": {
+  "drive_a": 0.34,
+  "uniform_peak_c": 232.69711820723853,
+  "in_band": false,
+  "band_c": [
+   228.0,
+   232.0
+  ]
+ },
+ "rule": "pick the HIGHEST drive whose uniform peak is in-band (~228-232), leaving AL room to shape UP toward T_eff=235 while staying feasible"
+}

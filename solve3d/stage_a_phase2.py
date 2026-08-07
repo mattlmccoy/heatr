@@ -70,9 +70,17 @@ def chosen_drive_power_density() -> float:
     return float(_phase1()["recommended_power_settings"]["power_density_w_per_m3"])
 
 
-def drive_params(dt_s: float | None = None) -> fwd.ForwardParams:
-    """ForwardParams at the fixed drive -- the ONE substantive change."""
-    p = fwd.ForwardParams(power_density_w_per_m3=chosen_drive_power_density())
+def drive_params(dt_s: float | None = None,
+                 power_density: float | None = None) -> fwd.ForwardParams:
+    """ForwardParams at the fixed drive -- the ONE substantive change.
+
+    `power_density` overrides the Phase-1 chosen drive (W/m^3) for the Stage B4
+    drive-backoff sweep; None keeps the frozen 0.40x chosen drive, so every
+    existing (B1/B2/B3) call is byte-identical. The override is a lower ABSOLUTE
+    drive, nothing else about the forward changes."""
+    pw = (chosen_drive_power_density() if power_density is None
+          else float(power_density))
+    p = fwd.ForwardParams(power_density_w_per_m3=pw)
     return p if dt_s is None else dataclasses.replace(p, dt_s=float(dt_s))
 
 
@@ -331,7 +339,8 @@ def ceiling_verdict(true_peak_c: float, ceiling_c: float) -> dict:
 
 def ceiling_end_state_gate(s_map_solve: np.ndarray, solve_centroids: np.ndarray,
                            holdout_nodes: int, holdout_lc0: float,
-                           rho_target: float, max_time_s: float = 3000.0) -> dict:
+                           rho_target: float, max_time_s: float = 3000.0,
+                           power_density: float | None = None) -> dict:
     """ACCEPTANCE: transfer the solved dopant saturation onto a mesh HOLD-OUT
     (finer, NOT the solve mesh), densify to rho_target at the fixed drive with
     coupling off, and read the end-state true peak against the ceiling.
@@ -346,7 +355,7 @@ def ceiling_end_state_gate(s_map_solve: np.ndarray, solve_centroids: np.ndarray,
 
     tcfg = stage_a.thermal_config()
     ceiling_c = float(tcfg["T_ceiling_C"])
-    p = drive_params()
+    p = drive_params(power_density=power_density)
 
     msh, info, _ = mg.match_lc("square", int(holdout_nodes), float(holdout_lc0))
     mats = fwd.build_materials(msh, fwd.in_part_predicate("square"), p)
