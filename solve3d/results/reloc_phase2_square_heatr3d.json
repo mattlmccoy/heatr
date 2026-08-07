@@ -1,0 +1,25 @@
+{
+  "what": "heatr3d cross-engine confirmation of the phase-2 dopant peak-RELOCATION. NOT a shippability claim (the 0.40x shaped map is is_shippable=FALSE, over ceiling on both engines). Purpose: independently bound how dopant-dependent the ceiling is, to quantify the Stage B drive-headroom margin (Delta_dopant) across engines, not just in dolfinx.",
+  "shaped_map_source": "solve3d/results/map_phase2_square.npz (DG0 s_map on centroids)",
+  "geometry": "make_geometry square diam=0.020 zspan=grid.L, n=64, standard 60mm chamber (like-for-like with verify_square_stageA_heatr3d.json)",
+  "drive_power_density_w_per_m3": 636619.7723675814,
+  "peaks_C": {
+    "uniform_0.40x": {
+      "solve3d": 240.1,
+      "heatr3d": 244.3
+    },
+    "shaped_0.40x": {
+      "solve3d_fine_holdout": 251.15,
+      "heatr3d": 257.3
+    }
+  },
+  "relocation_C": {
+    "solve3d": 11.0,
+    "heatr3d": 13.0,
+    "note": "shaped minus uniform at the same drive/chamber; engine offset (~4-6C hotter heatr3d) largely cancels in the difference, so the +11/+13 relocation agreement is the robust cross-engine quantity"
+  },
+  "shaped_rho_final_mean": 0.98,
+  "ceiling_C": 250.0,
+  "implication": "both engines confirm FGM dopant shaping is NOT thermally neutral: it concentrates heat and raises the peak ~11-13C at 0.40x. The Stage B drive-headroom margin Delta_dopant should use the more conservative ~13C (round up for safety) to be robust across engines.",
+  "engines": "heatr3d_native voxel FDM (n=64) vs solve3d dolfinx FEM tet"
+}
