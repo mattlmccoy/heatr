@@ -455,6 +455,78 @@ def densify_rate(T, phi, rho_rel, p: ForwardParams):
     return (kss * ss_drive + kliq * liq_drive) * rho_term
 
 
+def densify_rate_partials(T, phi, rho_rel, p: ForwardParams) -> dict:
+    """Analytic partials of `densify_rate` w.r.t. (T, phi, rho_rel), treated as
+    independent inputs. The forward densify march feeds phi_now = phase_fraction(T)
+    and T = post-step temperature, so the reverse sweep composes dphi/dT itself;
+    here (T, phi, rho_rel) are held mutually independent (exactly the FD gate's
+    convention: each is perturbed alone).
+
+    Every clip's subgradient takes the forward's OWN branch (zero where the clip
+    is active), matching the enthalpy/coupling clip convention already used in
+    solve3d.adjoint. Fractional-exponent bases (dens_rho_exp, dens_phi_solid_exp)
+    are guarded so an inactive clip never evaluates 0**(negative).
+    """
+    Tk = np.maximum(np.asarray(T, dtype=float) + 273.15, 1.0)
+    tk_active = (np.asarray(T, dtype=float) + 273.15) > 1.0     # max() inactive
+    # --- porosity factor rho_term = clip(1 - rho_rel, 0, 1)**dens_rho_exp -----
+    c_rho = 1.0 - np.asarray(rho_rel, dtype=float)
+    c_rho_cl = np.clip(c_rho, 0.0, 1.0)
+    rho_active = (c_rho > 0.0) & (c_rho < 1.0)
+    rho_term = np.power(c_rho_cl, p.dens_rho_exp)
+    # d rho_term / d rho_rel = dens_rho_exp * base**(exp-1) * d(base)/drho * [active]
+    base_pow_rho = np.where(c_rho_cl > 0.0,
+                            np.power(np.where(c_rho_cl > 0.0, c_rho_cl, 1.0),
+                                     p.dens_rho_exp - 1.0), 0.0)
+    drho_term_drho = -p.dens_rho_exp * base_pow_rho * rho_active
+
+    # --- solid-state Arrhenius creep kss * ss_drive --------------------------
+    kss = p.dens_k0_ss * np.exp(-p.dens_ea_ss / (R_GAS * Tk))
+    css = np.clip(1.0 - np.asarray(phi, dtype=float), 0.0, 1.0)
+    ss_active = (css > 0.0) & (css < 1.0)
+    ss_drive = np.power(css, p.dens_phi_solid_exp)
+    css_pow = np.where(css > 0.0,
+                       np.power(np.where(css > 0.0, css, 1.0),
+                                p.dens_phi_solid_exp - 1.0), 0.0)
+    dss_drive_dphi = -p.dens_phi_solid_exp * css_pow * ss_active
+    dkss_dT = kss * (p.dens_ea_ss / (R_GAS * Tk * Tk)) * tk_active
+
+    # --- liquid viscous-capillary flow kliq * liq_drive ----------------------
+    eta = p.dens_eta_ref_pa_s * np.exp(
+        p.dens_eta_activation / R_GAS * (1.0 / Tk - 1.0 / p.dens_eta_ref_temp_k))
+    eta_cl = np.maximum(eta, 1e-12)
+    eta_active = eta > 1e-12
+    kliq = p.dens_geom_factor * p.dens_surface_tension / (
+        eta_cl * p.dens_particle_radius_m)
+    # kliq = C / eta ; d kliq/dT = kliq * Ea_eta/(R Tk^2)  (eta clip inactive)
+    dkliq_dT = kliq * (p.dens_eta_activation / (R_GAS * Tk * Tk)) * tk_active * eta_active
+    denom_liq = max(1.0 - p.dens_phi_threshold, 1e-9)
+    phi_act = np.clip((np.asarray(phi, dtype=float) - p.dens_phi_threshold)
+                      / denom_liq, 0.0, 1.0)
+    liq_active = (phi_act > 0.0) & (phi_act < 1.0)
+    liq_drive = np.power(phi_act, p.dens_phi_liq_exp)
+    phi_act_pow = np.where(phi_act > 0.0,
+                           np.power(np.where(phi_act > 0.0, phi_act, 1.0),
+                                    p.dens_phi_liq_exp - 1.0), 0.0)
+    dliq_drive_dphi = (p.dens_phi_liq_exp * phi_act_pow / denom_liq) * liq_active
+
+    solid = kss * ss_drive
+    liquid = kliq * liq_drive
+    sum_drive = solid + liquid
+    dT = rho_term * (dkss_dT * ss_drive + dkliq_dT * liq_drive)
+    dphi = rho_term * (kss * dss_drive_dphi + kliq * dliq_drive_dphi)
+    drho = sum_drive * drho_term_drho
+    return {"dT": dT, "dphi": dphi, "drho": drho}
+
+
+def densify_rate_jac(T, phi, rho_rel, p: ForwardParams):
+    """(d densify_rate/dT, d densify_rate/drho_rel) at fixed phi -- the two
+    partials the FD gate pins directly. The phi partial (used by the density
+    adjoint's phi_now = phase_fraction(T) coupling) is densify_rate_partials."""
+    part = densify_rate_partials(T, phi, rho_rel, p)
+    return part["dT"], part["drho"]
+
+
 def enthalpy_from_T(T, rho_cp, rho_L, p: ForwardParams):
     """heatr3d.enthalpy_from_T: volumetric enthalpy [J/m^3], piecewise linear
     (sensible slope rho_cp everywhere plus the latent plateau rho_L ramped
