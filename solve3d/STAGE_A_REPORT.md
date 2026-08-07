@@ -215,7 +215,7 @@ ceiling" feature working end-to-end on a real part. It also updates the spec's
 worked example: the square at 1.0x reaches 286.4 C at rho 0.98, well over both
 the pyramid (281.7 C) and cube (~265 C) full-density peaks quoted in spec S1.
 
-### Phase 2 (QUEUED behind the Tamper solve): dopant shape-solve at 0.40x
+### Phase 2 (FD-GATED + LAUNCHED 2026-08-07): dopant shape-solve at 0.40x
 
 Scope reading CONFIRMED (by this lane AND the Studio lane, cross-session
 2026-08-06): optimize the dopant shape with the existing melt-onset adjoint at
@@ -224,14 +224,40 @@ END-STATE as a FORWARD gate (the ceiling is nearly dopant-independent, so the
 dopant needs no ceiling gradient in Stage A; the drive handles the ceiling; the
 rho co-state is Stage B+). No open scope question remains.
 
-Gated only on compute: Task 4 phase 1 freed a slot, but the Tamper Phase-E
-solve still holds the one-heavy-solve budget per the compute convention and the
-"schedule with other sessions" directive. Phase 2 launches when Tamper
-completes. Acceptance still to run: end-state true-max peak <= 250 C on a mesh
-HOLD-OUT (not the solve mesh); the (shaped map, 0.40x drive) reproduces its
-claimed peak under the Studio heatr3d verify (cross-engine, within the
-cross-family band); is_sendable unchanged. The Studio lane has agreed to run
-that cross-engine verify on the first real Stage A output.
+Driver: `solve3d/stage_a_phase2.py` (tests `test_stage_a_phase2.py`, 7 green).
+The ONLY substantive change vs a default-drive Phase-E square solve is the drive
+`ForwardParams(power_density_w_per_m3=636619.77)`, read from
+`stage_a_task4_square.json` so it cannot drift; the asymmetric envelope
+objective, the design_chain (filter + tanh projection), the 1/|g0| rescale and
+per-eval checkpointing are the frozen conventions reused from run_tamper.
+
+PRE-LAUNCH FD GATE (the cardinal rule; `stage_a_phase2_fd_gate.json`), coarse
+square at the 0.40x drive, frozen tolerances, NO widening:
+
+```
+ A map-space adjoint dJ/ds     worst rel 3.71e-08   4/4 pass 1e-6
+ B filter transpose identity        rel 2.46e-16    < 1e-10
+ C composite dJ/dv (solve grad) worst rel 2.94e-08   4/4 pass 1e-6
+```
+
+Interior envelope argmin (t=863 s) + 56 live melt-window nodes; filter mean 4.99
+neighbours (genuinely participates); the strongest-signal probes are the
+cleanest (1e-9..1e-11), the signature of a correct gradient, not a floor
+artifact. Solve-mesh sanity (`stage_a_phase2_solve_mesh_sanity.json`) on the
+real 5600-in-part-node / 28977-design-cell case: interior argmin (18086/36000,
+t=904 s), first |g|=4.47e-8 finite+nonzero; cost 355 s/eval.
+
+RUNNING (detached, `caffeinate -i`, checkpointed/resumable): budget 12,
+`ckpt_phase2_square.npz`, status `stage_a_phase2_square_status.json`, log
+`stage_a_phase2_square.log`. ETA ~71 min (budget 12). Monitor:
+`python -m solve3d.phase_e.track_solve solve3d/results/ckpt_phase2_square.npz <pid> 12`.
+On completion run_solve writes `stage_a_phase2_square.json` (solved map +
+recommended drive in the Stage A shape) after the end-state ceiling HOLD-OUT
+gate (finer 0.060/64 mesh, solved dopant transferred nearest-neighbour); the
+map `map_phase2_square.npz`. is_shippable = FD-gated gradient AND end-state peak
+<= 250 C on the hold-out. NOT YET DONE at time of writing -- a watcher catches
+completion. Still to run after: the Studio heatr3d cross-engine verify of the
+(shaped map, 0.40x drive) peak within the cross-family band (is_sendable).
 
 Cross-engine verify of the DRIVE recommendation (uniform map at 0.40x): DONE
 and CONFIRMED (Studio lane heatr3d, 2026-08-06). Same geometry constructor, n=64,
