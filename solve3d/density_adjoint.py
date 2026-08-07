@@ -407,6 +407,79 @@ def dks_peak_ds(case: Case, v: np.ndarray,
     return g_v
 
 
+def march_fidelity_check(case: Case | None = None) -> dict:
+    """Fidelity of the gate forward `_march` vs PRODUCTION forward.march_enthalpy
+    (the physics the B2 arbiter ceiling_end_state_gate reads).
+
+    The B2 solve minimizes a peak read from `_march`, but is judged on a peak read
+    from march_densify (-> march_enthalpy). If the two forwards diverge, the solve
+    would drive down a peak the arbiter does not see -- a silent forward mismatch.
+    This runs BOTH with byte-matched inputs: SAME mesh (tc.msh), SAME drive Q (the
+    single EQS solve), SAME dt with CFL substepping DISABLED so n_sub=1 (the exact
+    dt_sub path `_march` uses), and the SAME fixed horizon (phi_target=2.0,
+    stop_mean_rho above what the march reaches), then compares the end-state
+    in-part T field and mean rho. Bit-identity is the target."""
+    import dataclasses
+    import json
+    case = case or build_coarse_case()
+    tc = case.tc
+    v = case.design_point()
+    # gate forward (also sets tc.q_fn = st.q via _drive_F inside _march)
+    T_mine, rho_mine, _c, _F = _march(case, v, keep_cache=False)
+
+    # production forward, matched: same q (tc.q_fn), same dt, n_sub forced to 1
+    p_prod = dataclasses.replace(tc.p, enforce_cfl=False)
+    out = fwd.march_enthalpy(
+        tc.msh, p_prod, mats=tc.mats, q_dg0=tc.q_fn,
+        max_time_s=case.dt * case.n_steps, phi_target=2.0, L=tc.L,
+        sample_dt_s=None, densify=True, stop_mean_rho=0.999)
+    T_prod = out["T"]
+    rho_prod = out["rho_final"]
+
+    mask = tc.m_nodal > 0.0
+    Tm, Tp = T_mine[mask], T_prod[mask]
+    denomT = float(np.max(np.abs(Tp))) or 1.0
+    max_abs_dT = float(np.max(np.abs(Tm - Tp)))
+    rel_T = max_abs_dT / denomT
+    peak_mask = _peak_mask(tc)
+    peak_mine = float(T_mine[peak_mask].max())
+    peak_prod = float(out["true_peak_T_c"])
+    mean_rho_mine = float(np.average(rho_mine[mask]))
+    mean_rho_prod = float(np.average(rho_prod[mask]))
+    rel_mean_rho = abs(mean_rho_mine - mean_rho_prod) / max(abs(mean_rho_prod), 1e-12)
+    n_sub = int(out.get("n_substeps_used", 1))
+    agree = bool(rel_T < 1e-6 and rel_mean_rho < 1e-6 and n_sub == 1)
+    doc = {
+        "what": "Stage B fidelity cross-check: density_adjoint._march (the FD-gate "
+                "forward the co-state differentiates) vs production "
+                "forward.march_enthalpy (densify=True) -- the forward the B2 "
+                "arbiter ceiling_end_state_gate reads. Matched mesh, drive Q, dt, "
+                "n_sub=1, fixed horizon. Bit-identity is the target.",
+        "config": {"target_nodes": COARSE_TARGET_NODES, "lc0_m": COARSE_LC0_M,
+                   "dt_s": case.dt, "n_steps": case.n_steps,
+                   "n_part_nodes": int(mask.sum()),
+                   "enforce_cfl_disabled_for_match": True},
+        "n_substeps_used_prod": n_sub,
+        "n_steps_taken_prod": int(out.get("n_steps_taken", -1)),
+        "max_abs_dT_in_part_c": max_abs_dT,
+        "rel_T_in_part": rel_T,
+        "peak_true_c_mine": peak_mine,
+        "peak_true_c_prod": peak_prod,
+        "peak_abs_diff_c": abs(peak_mine - peak_prod),
+        "mean_rho_mine": mean_rho_mine,
+        "mean_rho_prod": mean_rho_prod,
+        "rel_mean_rho": rel_mean_rho,
+        "tolerance_rel": 1e-6,
+        "agree": agree,
+    }
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    path = RESULTS / "stage_b_march_fidelity.json"
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(doc, indent=1, default=float))
+    tmp.replace(path)
+    return doc
+
+
 def fd_gate(case: Case | None = None, n_probes: int = 4, h: float = 1e-4,
             seed: int = 7) -> dict:
     """B1 gate artifact: dks_peak_ds vs central FD on the high-sensitivity design

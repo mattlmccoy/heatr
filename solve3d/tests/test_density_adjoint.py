@@ -57,6 +57,18 @@ def test_dks_peak_ds_matches_fd_coarse():
         assert abs(fd - g[i]) <= 1e-6 * max(1.0, abs(fd)) + 1e-9, (i, fd, g[i])
 
 
+def test_march_matches_production_densify():
+    """The gate forward _march must reproduce production march_enthalpy (densify)
+    -- the forward the B2 arbiter reads -- or the solve would chase a peak the
+    arbiter does not judge."""
+    from solve3d import density_adjoint as da
+    d = da.march_fidelity_check()
+    assert d["n_substeps_used_prod"] == 1
+    assert d["rel_T_in_part"] < 1e-6, d
+    assert d["rel_mean_rho"] < 1e-6, d
+    assert d["agree"]
+
+
 def test_drop_lambda_rho_fails_fd():
     from solve3d import density_adjoint as da
     case = da.build_coarse_case(); v = case.design_point()
