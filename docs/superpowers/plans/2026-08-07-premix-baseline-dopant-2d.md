@@ -10,6 +10,29 @@
 
 ---
 
+## EXECUTION NOTE (2026-08-07) — scope discovery during Task 4/5
+
+Wiring premix into `run_sim` was NOT a single material-formula swap. The coupled forward
+enforces generator power and zeros the bed at **6 sites**, and its time-loop re-solve blocks
+reset `sigma[:,:] = sigma_v` (wiping the premix bed). Resolution actually shipped:
+
+- **Tasks 1–3 (premix.py):** done, 5/5 green. Unchanged from plan.
+- **Task 4 (site 2 = `run_sim`):** done. Premix-aware at the **initial** and **final** re-solve
+  blocks — the two that set the returned `Qrf` — via (i) `apply_premix` material, (ii) whole-domain
+  power enforcement when `premix_on`, (iii) skip bed-zeroing when `premix_on`. Guards: bed-absorbs,
+  total-conserves, multi-step-persist. Commit `68878e5`.
+- **Task 5 (site 1 = antenna probe):** DEFERRED — jared uses no antennae; wiring an unexercised
+  path would violate TDD. Revisit when an antennae config needs premix.
+- **Loop re-solve blocks** (turntable / `update_interval` tick / FGM-iterate): NOT premix-aware
+  (they reset `sigma=virgin`). **Follow-up**, out of scope for the jared study.
+- **Task 7 (study config):** MUST set `update_interval: 0` so no in-run re-solve fires (valid here:
+  jared has `sigma_temp_coeff=0`, `sigma_density_coeff=0`, so sigma is static). Otherwise premix is
+  wiped mid-run.
+- **Task 6 (fgm_generator):** re-scope pending — check whether the generator computes any total-dopant
+  budget; if not, `budget_fixed` accounting is fully handled inside `apply_premix` (Task 6 → docstring note).
+
+---
+
 ## File Structure
 
 - **Create** `premix.py` — pure, dependency-light module: `apply_premix()`, `premix_frac_from_wtpct()`, `PREMIX_WTPCT_FULL`. One responsibility: the premix material law. Small (<80 lines). Kept separate so it is trivially unit-testable and importable by both the 2-D model and the study script.
