@@ -71,6 +71,57 @@ def uniform_holdout_peak(holdout_nodes: int = HOLDOUT_NODES,
     return out
 
 
+def shippable_verdict(true_peak_c: float, ks_peak_c: float, ceiling_c: float,
+                      fd_gate_passed: bool) -> dict:
+    """is_shippable = (the gradient was FD-verified) AND (the TRUE end-state peak
+    is at/under the ceiling). The KS aggregate is INFORMATIONAL only -- it has no
+    path to a shippable verdict, so the false-green class (KS under while the true
+    peak is over) is structurally unexpressible (spec sec "False-green guard").
+
+    reason precedence: an unverified gradient disqualifies before any physics is
+    trusted; then the true-peak ceiling.
+    """
+    true_peak = float(true_peak_c)
+    ceil = float(ceiling_c)
+    over = bool(true_peak > ceil)
+    if not fd_gate_passed:
+        reason = "fd_gate_not_passed"
+    elif over:
+        reason = "over_ceiling_true_peak"
+    else:
+        reason = "shippable"
+    return {
+        "is_shippable": bool(fd_gate_passed and not over),
+        "reason": reason,
+        "true_peak_c": true_peak,
+        "ceiling_c": ceil,
+        "over_by_c": true_peak - ceil,
+        "fd_gate_passed": bool(fd_gate_passed),
+        "ks_peak_c_informational": float(ks_peak_c),
+        "rule": "is_shippable = fd_gate_passed AND true_peak <= ceiling; the KS "
+                "aggregate is never decisive",
+    }
+
+
+def null_verdict(best_true_peak_c: float, ceiling_c: float) -> dict:
+    """The honest-null (spec B2 clause, mirrors Stage A select_from_sweep): if even
+    the ceiling-optimal (peak-minimizing) dopant leaves the true hold-out peak over
+    the ceiling, 0.40x is infeasible for EVERY dopant -- report it with the achieved
+    min-peak as evidence rather than shipping an over-ceiling map. That means the
+    drive is too high (escalate to B4 / drive backoff), NOT a machinery failure."""
+    best = float(best_true_peak_c)
+    ceil = float(ceiling_c)
+    over = bool(best > ceil)
+    return {
+        "verdict": "no_feasible_dopant_at_this_drive" if over
+        else "feasible_dopant_exists",
+        "best_true_peak_c": best,
+        "ceiling_c": ceil,
+        "margin_c": ceil - best,
+        "note": "the peak-minimizing dopant's true hold-out peak vs the ceiling",
+    }
+
+
 def _write_json(path: Path, doc: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
