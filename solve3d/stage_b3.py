@@ -35,6 +35,12 @@ co-state is already gated, so this confirms only the scalar AL composition.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+import numpy as np
+
+from solve3d import density_adjoint as da, stage_a_phase2 as p2
+
 
 # --------------------------------------------------------------------------- #
 # Task 1: AL outer-loop pure logic (no physics)
@@ -120,3 +126,87 @@ def honest_null_verdict(shaped_true_peak: float, uniform_true_peak: float,
                 "true peak is over the ceiling; a shaped endpoint over ceiling is "
                 "solver progress, not infeasibility",
     }
+
+
+# --------------------------------------------------------------------------- #
+# Task 2: the combined AL objective + gradient (reuses B1 dks_peak_ds, B2 shape)
+# --------------------------------------------------------------------------- #
+# A gate-case KS target BELOW the coarse KS peak (~204.9 C at 0.40x) so the AL
+# hinge is ACTIVE (max(0, lambda+mu*g) > 0) and the factor*dKS_peak/ds path is
+# exercised by the FD gate -- exactly why stage_b sets GATE_CEILING_C=200.0 below
+# the same coarse peak. The REAL solve reads t_target = 250 C ceiling minus the
+# restoration shift; this gate constant is a device only, documented so it cannot
+# be mistaken for the physical target.
+GATE_LAMBDA = 500.0
+GATE_MU = 1.0e4
+GATE_T_TARGET_C = 204.0
+ENVELOPE_MAX_TIME_S = 1800.0     # J_shape melt-onset envelope horizon (argmin interior)
+
+
+@dataclass
+class ALCase:
+    """Wraps a density_adjoint.Case with the AL multiplier lambda, weight mu, and
+    the SHIFTED KS target t_target. J_shape (melt-onset envelope) reads a
+    non-densify forward via the phase-2 envelope adjoint; KS_peak reads the
+    densify end-state via the B1 density co-state. Both share the SAME mesh,
+    drive and design chain, so the two reads compose on one design vector -- the
+    identical assembly stage_b.PenaltyCase uses, with the penalty term swapped
+    for the AL term."""
+    da_case: da.Case
+    lam: float
+    mu: float
+    t_target: float
+
+    def design_point(self) -> np.ndarray:
+        return self.da_case.design_point()
+
+    def probe_indices(self, k: int = 4) -> list[int]:
+        v = (self.da_case._v0 if self.da_case._v0 is not None
+             else self.design_point())
+        _J, g = al_objective_and_grad(self, v)
+        return [int(i) for i in np.argsort(-np.abs(g))[:k]]
+
+
+def build_al_coarse_case(lam: float = GATE_LAMBDA, mu: float = GATE_MU,
+                         t_target: float = GATE_T_TARGET_C,
+                         n_steps: int = da.COARSE_N_STEPS,
+                         envelope_max_time_s: float = ENVELOPE_MAX_TIME_S
+                         ) -> ALCase:
+    """The coarse AL gate case (mirrors stage_b.build_penalty_coarse_case): the
+    density march uses case.n_steps; the melt-onset envelope uses tc.max_time_s,
+    set larger so the argmin sits interior."""
+    case = da.build_coarse_case(n_steps=int(n_steps))
+    case.tc.max_time_s = float(envelope_max_time_s)
+    return ALCase(da_case=case, lam=float(lam), mu=float(mu),
+                  t_target=float(t_target))
+
+
+def al_objective_and_grad(case: ALCase, v: np.ndarray,
+                          _drop_al_term: bool = False):
+    """(L, dL/dv) for the augmented Lagrangian
+
+        L = J_shape + (1/(2 mu)) [ max(0, lambda + mu*g)^2 - lambda^2 ],
+        g = KS_peak(v) - t_target,
+
+    design gradient dL/dv = dJ_shape/dv + max(0, lambda + mu*g) * dKS_peak/dv.
+
+    dJ_shape/dv is the phase-2 melt-onset envelope adjoint (the SAME assembly
+    stage_b.penalty_objective_and_grad uses); dKS_peak/dv is the B1 rho+T density
+    co-state da.dks_peak_ds, ALREADY FD-gated to 3.0e-9 -- B3 adds only the scalar
+    factor al_gradient_factor(lambda, mu, g). `_drop_al_term` ABLATES the AL
+    contribution (both value and gradient), the mutation that must change the
+    gradient when the hinge is active."""
+    dcase, tc, chain = case.da_case, case.da_case.tc, case.da_case.chain
+    v = np.asarray(v, float)
+    J_shape, g_shape, _info = p2.envelope_grad_of_design(tc, chain, v, beta=0.0)
+    g = np.array(g_shape, dtype=float)
+    if _drop_al_term:
+        return float(J_shape), g
+    ks = da.ks_peak_forward(dcase, v)
+    g_con = ks - case.t_target
+    factor = al_gradient_factor(case.lam, case.mu, g_con)
+    al_term = (1.0 / (2.0 * case.mu)) * (factor * factor - case.lam * case.lam)
+    J = float(J_shape) + float(al_term)
+    if factor > 0.0:
+        g = g + factor * da.dks_peak_ds(dcase, v)
+    return float(J), g

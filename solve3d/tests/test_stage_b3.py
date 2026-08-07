@@ -59,15 +59,32 @@ def test_honest_null_not_spurious_when_uniform_feasible():
 # Task 2: the combined AL-gradient FD gate (hinge active)
 # --------------------------------------------------------------------------- #
 def test_al_combined_grad_matches_fd():
-    case = b3.build_al_coarse_case(lam=500.0, mu=1.0e4, t_target=247.8)
+    # t_target sits just BELOW the coarse-case KS peak (~204.9 C at 0.40x) so the
+    # AL hinge is ACTIVE (max(0, lambda+mu*g) > 0) and the factor*dKS_peak/ds path
+    # is exercised -- exactly why stage_b's GATE_CEILING_C=200 sits below the same
+    # coarse peak. The plan's 247.8 would be INACTIVE on this mesh (KS ~205 < 247.8
+    # => factor 0), making the gate vacuous; 204.0 keeps it meaningful. The 1e-6
+    # tolerance is unchanged (no widening).
+    case = b3.build_al_coarse_case(lam=500.0, mu=1.0e4, t_target=204.0)
     v = case.design_point()
     J, g = b3.al_objective_and_grad(case, v)
     assert np.all(np.isfinite(g))
     h = 1e-4
+    worst = 0.0
     for i in case.probe_indices():
         vp = v.copy(); vp[i] += h
         vm = v.copy(); vm[i] -= h
         Jp, _ = b3.al_objective_and_grad(case, vp)
         Jm, _ = b3.al_objective_and_grad(case, vm)
         fd = (Jp - Jm) / (2 * h)
+        rel = abs(fd - g[i]) / max(1.0, abs(fd))
+        worst = max(worst, rel)
         assert abs(fd - g[i]) <= 1e-6 * max(1.0, abs(fd)) + 1e-9, (i, fd, g[i])
+    print(f"\n[B3 AL-grad FD gate] worst_rel_err={worst:.3e} (frozen 1e-6)")
+
+    # Mutation (spec gate): dropping the AL term must CHANGE the gradient where the
+    # hinge is active -- proves the max(0, lambda+mu*g)*dKS_peak/ds path is
+    # load-bearing, not a no-op.
+    _J0, g_drop = b3.al_objective_and_grad(case, v, _drop_al_term=True)
+    i0 = case.probe_indices()[0]
+    assert abs(g[i0] - g_drop[i0]) > 1e-3 * max(1.0, abs(g[i0])), (g[i0], g_drop[i0])
