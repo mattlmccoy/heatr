@@ -1,0 +1,18 @@
+{
+  "what": "heatr3d COMBINED cross-engine is_sendable gate on the B3 SHIPPABLE ceiling-coupled shaped map. The real Stage A test: does 'shippable on the solve3d dolfinx hold-out' mean 'shippable cross-engine'? Answer for the 0.40x map: NO.",
+  "map_source": "solve3d/results/map_stage_b3_square.npz (B3 augmented-Lagrangian true-peak-restoration shaped map)",
+  "geometry": "make_geometry square diam=0.020 zspan=grid.L, n=64, standard 60mm chamber (like-for-like with verify_square_stageA_heatr3d.json)",
+  "drive_power_density_w_per_m3": 636619.7723675814,
+  "rho_target": 0.98,
+  "peaks_C": {
+    "solve3d_true_holdout": 249.9,
+    "heatr3d_end_state": 257.0
+  },
+  "abs_diff_C": 7.1,
+  "ceiling_C": 250.0,
+  "heatr3d_rho_final_mean": 0.98,
+  "is_sendable_cross_engine": false,
+  "verdict": "NOT cross-engine sendable: heatr3d end-state peak 257.0 C is 7.0 C over the 250 ceiling, though solve3d dolfinx puts it at 249.90 (0.10 under). The ~4.3 C engine offset PLUS the extra shaped-map relocation (~+2.7 C) sum to a 7 C gap on this map.",
+  "implication": "VALIDATES the cross-engine gate + max-over-engines headroom policy on the first real is_sendable case: single-engine (dolfinx-only) certification would have shipped a map heatr3d says cooks 7 C over. The 0.40x B3 map needs the B4 lower drive carrying the ~15 C Delta_dopant headroom to be sendable by BOTH engines. Neither engine is physical ground truth; heatr3d is the Studio's is_sendable arbiter, and it says NO at 0.40x.",
+  "engines": "heatr3d_native voxel FDM (n=64) vs solve3d dolfinx FEM tet"
+}
