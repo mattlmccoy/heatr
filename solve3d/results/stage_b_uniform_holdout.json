@@ -1,0 +1,18 @@
+{
+ "true_peak_c": 239.99107277802923,
+ "ceiling_c": 250.0,
+ "margin_c": 10.008927221970765,
+ "feasible": true,
+ "holdout_nodes_in_part": 9868,
+ "holdout_lc0_m": 0.0009375,
+ "achieved_rho": 0.9800014427510102,
+ "reached_rho": true,
+ "energy_residual_frac": -2.9404309227175705e-13,
+ "clamp_bound": false,
+ "note": "densify end-state true peak on a HOLD-OUT mesh (not the solve mesh), solved dopant transferred nearest-neighbour",
+ "map": "uniform_s1",
+ "rho_target": 0.98,
+ "drive_a": 0.4,
+ "power_density_w_per_m3": 636619.7723675814,
+ "wall_s": 180.0
+}
