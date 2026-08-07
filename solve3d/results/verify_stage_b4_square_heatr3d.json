@@ -1,0 +1,21 @@
+{
+  "what": "heatr3d COMBINED cross-engine is_sendable gate on the B4 shaped map - THE CLOSING VERIFY. Result: is_sendable=TRUE cross-engine. The first shaped, ceiling-respecting part shippable on BOTH independent engines.",
+  "map_source": "solve3d/results/map_stage_b4_square.npz (B4 augmented-Lagrangian shaped map, drive backed to 0.34x with the 15C max-over-engines headroom)",
+  "geometry": "make_geometry square diam=0.020 zspan=grid.L, n=64, standard 60mm chamber",
+  "drive_power_density_w_per_m3": 541126.8065124442,
+  "drive_frac": 0.34,
+  "rho_target": 0.98,
+  "peaks_C": {
+    "solve3d_true_holdout": 235.03,
+    "heatr3d_end_state": 246.3
+  },
+  "engine_offset_C": 11.3,
+  "ceiling_C": 250.0,
+  "heatr3d_margin_under_ceiling_C": 3.7,
+  "heatr3d_rho_final_mean": 0.98,
+  "is_sendable_cross_engine": true,
+  "verdict": "LOOP CLOSED. heatr3d end-state peak 246.3 C is UNDER the shared 250 ceiling by 3.7 C; solve3d dolfinx 235.03. Both engines clear the ceiling on the shaped, fully-dense (rho 0.98) square. is_sendable=TRUE.",
+  "headroom_validation": "the +11.3 C heatr3d engine offset on this map CONFIRMS the 15C max-over-engines headroom was load-bearing, not over-conservative: a 10C headroom (effective ceiling 240) would have put heatr3d ~251 C, OVER. The conservative max-over-engines margin was necessary and correct.",
+  "honest_caveat": "cross-engine SIMULATION agreement, not a printed-and-measured part. Both are sim; the physical DSC/TGA + coupon measurement (P-gate) is what turns this into a measured ceiling. But two independent solvers agreeing the shaped part prints under the ceiling is the strongest pre-hardware evidence.",
+  "engines": "heatr3d_native voxel FDM (n=64) vs solve3d dolfinx FEM tet"
+}
