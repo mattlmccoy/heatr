@@ -1,0 +1,19 @@
+{
+  "wtpct": 0.0,
+  "premix_frac": 0.0,
+  "bed_absorption_fraction": 0.0,
+  "part_peak_to_mean": 1.079294182847255,
+  "part_peak_T_C": 201.9629455145897,
+  "part_mean_T_C": 187.1250199661014,
+  "peak_cell": [
+    25,
+    31
+  ],
+  "peak_reloc_cells": 0,
+  "drive_to_ceiling_W": 736.1328125,
+  "ceiling_C": 250.0,
+  "matched_peak_T_C": 253.33363439993278,
+  "matched_part_peak_to_mean": 1.1467664556069461,
+  "matched_part_mean_phi": 0.9988287898682396,
+  "matched_part_mean_T_C": 220.91127026021312
+}
