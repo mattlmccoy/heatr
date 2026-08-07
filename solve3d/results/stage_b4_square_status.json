@@ -1,0 +1,11 @@
+{
+ "state": "done",
+ "pid": 45808,
+ "is_shippable": true,
+ "true_holdout_peak_c": 235.02514518534204,
+ "converged": true,
+ "drive_a": 0.34,
+ "t_ceiling_eff_c": 235.0,
+ "wall_total_s": 4812.5,
+ "updated_utc": "2026-08-07T21:22:29Z"
+}
