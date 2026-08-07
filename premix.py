@@ -50,3 +50,13 @@ def apply_premix(blend_sigma, blend_eps, *, sigma_v, sigma_d0, eps_v, eps_d,
     sigma = sigma_premix + bs * s_span
     eps_r = eps_premix + be * e_span
     return sigma, eps_r
+
+
+def premix_frac_from_wtpct(wt_pct):
+    """[ASSUMED linear, no percolation] map wt% dopant-to-nylon -> premix_frac.
+
+    DISPLAY ONLY. The measured relationship (RFAM Paper v1.3 Fig 8a) shows a
+    percolation toe below ~15 wt%; this linear map overstates sigma there and is
+    used solely to label the premix_frac axis. See spec sec.3 and sec.8.
+    """
+    return float(wt_pct) / PREMIX_WTPCT_FULL

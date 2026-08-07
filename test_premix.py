@@ -5,10 +5,16 @@ premix_frac=0.0 must reproduce the reference inline blend BIT-FOR-BIT.
 """
 import numpy as np
 
-from premix import apply_premix
+from premix import apply_premix, premix_frac_from_wtpct, PREMIX_WTPCT_FULL
 
 # Material endpoints matching the jared config family (effective composite sigma).
 V = dict(sigma_v=1e-8, sigma_d0=0.04, eps_v=2.7, eps_d=20.0)
+
+
+def test_wtpct_bridge_is_linear_over_doped_label():
+    assert premix_frac_from_wtpct(0.0) == 0.0
+    assert np.isclose(premix_frac_from_wtpct(PREMIX_WTPCT_FULL), 1.0)
+    assert np.isclose(premix_frac_from_wtpct(15.0), 15.0 / PREMIX_WTPCT_FULL)  # 0.6
 
 
 def test_premix_off_is_bit_identical_to_inline_formula():
