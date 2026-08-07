@@ -76,6 +76,35 @@ def peak_temp(T, weights=None, mask=None, rho: float = KS_RHO_PER_C) -> dict:
     }
 
 
+def peak_temp_vjp(T, weights=None, mask=None, rho: float = KS_RHO_PER_C):
+    """d(KS aggregate)/dT_i = the volume-weighted softmax over the masked nodes.
+
+    peak_temp returns Tmax + (1/rho) ln( sum_i w_i exp(rho(T_i - Tmax)) / sum w ).
+    Differentiating w.r.t. a selected T_i (the Tmax shift is the standard
+    log-sum-exp stabilization and cancels analytically) gives
+
+        dThat/dT_i = w_i exp(rho T_i) / sum_j w_j exp(rho T_j)
+
+    which is INDEPENDENT of rho's scale-shift, non-negative, and sums to 1 over
+    the selection (a convex combination). Nodes outside the mask get 0. This is
+    the seed the rho+T density adjoint back-propagates through the densify march.
+    """
+    T = np.asarray(T, dtype=float).ravel()
+    m = np.ones(T.shape, dtype=bool) if mask is None else np.asarray(mask, bool).ravel()
+    w = (np.ones(T.shape, dtype=float) if weights is None
+         else np.asarray(weights, float).ravel())
+    if not m.any():
+        raise ValueError("peak_temp_vjp: empty selection mask")
+    if not (rho > 0.0):
+        raise ValueError("peak_temp_vjp: rho must be > 0")
+    g = np.zeros(T.shape, dtype=float)
+    z = rho * T[m]
+    z = z - z.max()                       # stable log-sum-exp shift (cancels)
+    e = w[m] * np.exp(z)
+    g[m] = e / e.sum()
+    return g
+
+
 def ceiling_status(true_max_c: float, ceiling_c: float,
                    warn_c: float | None = None) -> dict:
     """The degradation-ceiling verdict, computed on the TRUE max ONLY.
