@@ -111,17 +111,44 @@ Add the drive scalar back as a joint variable under the coupled ceiling (the dri
 drops where the dopant cannot hold the peak). This reconnects to the parent spec's
 Stage A/B drive actuator.
 
-HEADROOM DRIVE POLICY (answers parent spec Q3; confirmed with the Studio lane
-2026-08-07). The phase-2 +11 C dopant peak-relocation shows that selecting the
+HEADROOM DRIVE POLICY (answers parent spec Q3; confirmed CROSS-ENGINE with the
+Studio lane 2026-08-07). The phase-2 dopant peak-relocation shows that selecting the
 drive as "largest feasible on the UNIFORM map" is too aggressive: a drive with no
 headroom on uniform becomes infeasible once the shape-optimal dopant concentrates
 the peak. So the drive-selection margin (Stage A select_from_sweep, and B4 joint
-drive) must cover the MEASURED dopant peak-relocation (~+11 C here), NOT just solver
-/ mesh error. Concretely: feasible-drive := true hold-out peak of the UNIFORM map
-<= T_ceiling - Delta_dopant, where Delta_dopant is the measured (or bounded)
-shape-optimal peak relocation at that drive. The Stage A drive backoff is this
-policy applied by hand; B4 makes it the selection rule. This is a policy the parent
-Stage A spec should adopt for its drive actuator.
+drive) must cover the dopant peak-relocation, NOT just solver / mesh error.
+Concretely: feasible-drive := true hold-out peak of the UNIFORM map
+<= T_ceiling - Delta_dopant.
+
+Delta_dopant is the MAX-OVER-ENGINES shape-optimal peak relocation, not a
+single-engine number. Cross-engine measurement at 0.40x on the square
+(solve3d/results/reloc_phase2_square_heatr3d.json, Studio lane, commit ef1e10c):
+
+```
+ peak            solve3d (dolfinx)   heatr3d (voxel)
+ uniform 0.40x   240.1               244.3
+ shaped  0.40x   251.15 (hold-out)   257.3
+ RELOCATION      +11.0               +13.0
+```
+
+The ~4-6 C engine offset (heatr3d hotter on both maps) largely CANCELS in the
+difference, so +11/+13 is the robust relocation; heatr3d also puts the shaped map
+over 250 (257.3), independently confirming is_shippable=FALSE. Use the CONSERVATIVE
+Delta_dopant ~= 15 C (round up from the 13 C max-over-engines), so a map sized to
+the margin on the dolfinx hold-out does NOT land ~2 C hotter on heatr3d and fail
+the cross-engine is_sendable gate. Making Delta_dopant the max-over-engines
+relocation keeps this lane's hold-out and the Studio is_sendable gate consistent --
+same spirit as the shared thermal_config.json ceiling. The Stage A drive backoff is
+this policy applied by hand; B4 makes it the selection rule; the parent Stage A spec
+should adopt it for its drive actuator.
+
+NOTE for B2 at fixed 0.40x: 0.40x is NOT honest-null even though it is infeasible
+for the SHAPE-OPTIMAL dopant -- the UNIFORM map at 0.40x is under ceiling (240/244),
+so a feasible region exists. B2's penalty solve trades shape toward the uniform end
+until the true peak sits under 250; the result is the best FEASIBLE shape at 0.40x
+(materially less shaped than the infeasible phase-2 map). To recover more shape at
+full feasibility, LOWER the drive (the headroom policy) -- that is B4 / a drive
+backoff, out of this plan's B1/B2 scope.
 
 ## Gates / acceptance (pre-registered, per the frozen protocol)
 
