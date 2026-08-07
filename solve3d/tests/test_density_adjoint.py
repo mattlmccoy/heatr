@@ -40,6 +40,36 @@ def test_densify_rate_dphi_matches_fd():
     assert np.allclose(part["dphi"], fd_phi, rtol=1e-4, atol=1e-10), (part["dphi"], fd_phi)
 
 
+def test_dks_peak_ds_matches_fd_coarse():
+    from solve3d import density_adjoint as da
+    case = da.build_coarse_case()          # small mesh, few design cells, 0.40x
+    v = case.design_point()                # a non-degenerate interior design vector
+    g = da.dks_peak_ds(case, v)            # the adjoint gradient of the end-state KS peak
+    assert np.all(np.isfinite(g)) and np.any(g != 0.0)
+
+    def ks_of(vv):
+        return da.ks_peak_forward(case, vv)   # scalar end-state KS peak
+    base = ks_of(v); h = 1e-4
+    idx = da.probe_indices(case)           # a handful of high-sensitivity design cells
+    for i in idx:
+        vp = v.copy(); vp[i] += h; vm = v.copy(); vm[i] -= h
+        fd = (ks_of(vp) - ks_of(vm)) / (2 * h)     # central difference
+        assert abs(fd - g[i]) <= 1e-6 * max(1.0, abs(fd)) + 1e-9, (i, fd, g[i])
+
+
+def test_drop_lambda_rho_fails_fd():
+    from solve3d import density_adjoint as da
+    case = da.build_coarse_case(); v = case.design_point()
+    g_bad = da.dks_peak_ds(case, v, _drop_density_costate=True)   # ablation flag
+    base = da.ks_peak_forward(case, v); h = 1e-4
+    worst = 0.0
+    for i in da.probe_indices(case):
+        vp = v.copy(); vp[i] += h; vm = v.copy(); vm[i] -= h
+        fd = (da.ks_peak_forward(case, vp) - da.ks_peak_forward(case, vm)) / (2 * h)
+        worst = max(worst, abs(fd - g_bad[i]) / max(1.0, abs(fd)))
+    assert worst > 1e-3, "dropping the density co-state must break the gradient"
+
+
 def test_peak_temp_vjp_matches_fd():
     rng = np.random.default_rng(0)
     n = 40
