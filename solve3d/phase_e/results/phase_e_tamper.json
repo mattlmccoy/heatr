@@ -1,0 +1,313 @@
+{
+ "part": "tamper",
+ "arms": {
+  "_mesh": {
+   "part": "tamper",
+   "run_id": "tamper_ch086",
+   "stl": "/Users/mattmccoy/GaTech Dropbox/Matthew McCoy/mattmccoy-research/research/binderjet/software/meteor/tools/uploads/feb850ec/Part Studio 1 - Tamper.stl",
+   "stl_facets": 2436,
+   "lc_part_m": 0.0025,
+   "lc_bed_m": 0.01,
+   "L_chamber_m": 0.086,
+   "chamber": {
+    "L_m": 0.086,
+    "mode": "adaptive",
+    "tag": "ch086",
+    "gap_m": 0.02,
+    "floor_m": 0.06,
+    "adaptive_would_be_m": 0.086,
+    "governing_span_m": 0.04577319351668211,
+    "spans_m": [
+     0.04577319351668211,
+     0.04570606664283989,
+     0.011224489795918367
+    ],
+    "margin_actual_m": 0.02011340324165894,
+    "margin_below_preregistered": false,
+    "measured_melting_margin_m": 0.01838,
+    "gap_source": "stl_compensation_tool/pipeline_logic.py GAP_M; adopted, not invented",
+    "rationale": "27.12 MHz gives an ~11 m wavelength against parts of tens of mm, so the rig is deep in the quasi-static regime and growing the chamber does not change the material's RF characteristics; in this model that also holds by construction, because the forward is electro-quasi-static and carries no wavelength. The drive is power-density normalized to part volume, so a larger box does not dilute the watts the part absorbs. Fringing field GEOMETRY does still change with the gap, which is why the chamber sweep measures the in-part pattern rather than assuming invariance.",
+    "hardware_note": "modelling decision only; electrode gap and matching network are P-gate territory and are not bound by this",
+    "authority": "Matt, 2026-08-05"
+   },
+   "chamber_tag": "ch086",
+   "feature_angle_deg": 1.0,
+   "n_cells": 54495,
+   "n_part_cells": 20106,
+   "n_bed_cells": 34389,
+   "n_nodes": 10221,
+   "n_design_cells": 20106,
+   "stl_volume_m3": 9.00050020454678e-06,
+   "part_volume_m3": 9.000464621958888e-06,
+   "part_volume_rel_err_vs_stl": -3.953401153555802e-06,
+   "precomp": {
+    "level": 0,
+    "enabled": true,
+    "s_xy": 0.03,
+    "s_z_mat": 0.02,
+    "s_xy_band": [
+     0.02,
+     0.04
+    ],
+    "s_z_mat_band": [
+     0.01,
+     0.03
+    ],
+    "xy_scale": 1.0309278350515465,
+    "z_scale": 1.0204081632653061,
+    "xy_scale_band": [
+     1.0204081632653061,
+     1.0416666666666667
+    ],
+    "z_scale_band": [
+     1.0101010101010102,
+     1.0309278350515465
+    ],
+    "source": "SHRINKAGE_COEFFICIENTS_MEMO.md",
+    "schema_version": "1.0",
+    "material_only": true,
+    "applicability": "SLS literature values (see source); RFAM material shrinkage unmeasured - pending P1 measurement",
+    "scope": "MATERIAL shrinkage of nylon 12 only",
+    "excludes": "densification consolidation, which the densify march owns (double-counting guard)",
+    "config_file": "shrinkage_precomp.json",
+    "note": "MATERIAL shrinkage only; consolidation belongs to the densify model (spec section 1)"
+   },
+   "kernel": {
+    "radius_m": 0.001,
+    "truncation_sigmas": 3.0,
+    "measured_std_m": 0.0008918406358088246,
+    "mean_neighbours": 366.5054212672834,
+    "min_neighbours": 22,
+    "max_neighbours": 609,
+    "n_design": 20106,
+    "mean_cell_size_m": 0.0007649735462854893,
+    "row_sum_max_dev_from_one": 6.661338147750939e-16,
+    "asymmetry_max": 0.17979356145144682
+   }
+  },
+  "uniform_baseline": {
+   "arm": "uniform_baseline",
+   "part": "tamper",
+   "wall_forward_s": 1978.5293679590104,
+   "n_steps": 594000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 3.760612862202892e-06,
+   "argmin_symmetric": 409230,
+   "J_asymmetric": 4.554894893248582e-06,
+   "argmin_asymmetric": 174593,
+   "t_stop_s": 264.53484848484845,
+   "n_sub": 33,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 4.197098656340451e-06,
+   "J_out_of_bounds": 5.111374812973316e-07,
+   "J_in_bounds_deficit": 4.043757411951251e-06,
+   "out_of_part_melt_fraction_of_part": 0.014344955281492683,
+   "in_bounds_below_floor_fraction": 0.9395844644767432,
+   "part_mean_phi": 0.09754435196003136,
+   "part_max_T_c": 201.474481808222,
+   "sigma_T_diagnostic_c": 27.944265932798835,
+   "map_stats": {
+    "mean": 1.0,
+    "min": 1.0,
+    "max": 1.0
+   },
+   "gates": {
+    "energy_residual_frac": -8.613788692622636e-12,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "standing_gates": {
+    "energy_residual_frac": -8.613788692622636e-12,
+    "energy_residual_tol": 1e-06,
+    "clamp_bound": false,
+    "cfl_violated": false,
+    "peak_T_c": 279.77719301087643,
+    "peak_source": "trajectory_maximum",
+    "ceiling_c": 250.0,
+    "ceiling_owner": "studio3d/runner.py",
+    "peak_over_ceiling": true,
+    "complete": true,
+    "missing_keys": [],
+    "reason": [],
+    "forward_physical": true,
+    "rule": "forward_physical requires energy_residual_frac within 1e-06, clamp_bound False and cfl_violated False, with every key PRESENT; the ceiling is a process verdict and is reported separately"
+   },
+   "objective_prereg": {
+    "phi_floor": 0.85,
+    "w_out_over_w_in": 10.0
+   }
+  },
+  "solve_filter_only": {
+   "arm": "solve_filter_only",
+   "part": "tamper",
+   "wall_forward_s": 2421.8638174170046,
+   "n_steps": 594000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 3.1402206191065376e-06,
+   "argmin_symmetric": 265893,
+   "J_asymmetric": 2.502858812542467e-06,
+   "argmin_asymmetric": 237191,
+   "t_stop_s": 359.3803030303031,
+   "n_sub": 33,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 2.4377984748871526e-06,
+   "J_out_of_bounds": 9.29433395075919e-08,
+   "J_in_bounds_deficit": 2.409915473034875e-06,
+   "out_of_part_melt_fraction_of_part": 0.004874321624851588,
+   "in_bounds_below_floor_fraction": 0.7224875057041378,
+   "part_mean_phi": 0.3384144598344001,
+   "part_max_T_c": 208.43662507807394,
+   "sigma_T_diagnostic_c": 27.501147959577803,
+   "map_stats": {
+    "mean": 0.7604524853197987,
+    "min": 0.0021583940665773544,
+    "max": 1.000000000000001
+   },
+   "gates": {
+    "energy_residual_frac": -8.494732339752073e-12,
+    "clamp_bound": false,
+    "cfl_violated": false
+   },
+   "standing_gates": {
+    "energy_residual_frac": -8.494732339752073e-12,
+    "energy_residual_tol": 1e-06,
+    "clamp_bound": false,
+    "cfl_violated": false,
+    "peak_T_c": 281.88282031226385,
+    "peak_source": "trajectory_maximum",
+    "ceiling_c": 250.0,
+    "ceiling_owner": "studio3d/runner.py",
+    "peak_over_ceiling": true,
+    "complete": true,
+    "missing_keys": [],
+    "reason": [],
+    "forward_physical": true,
+    "rule": "forward_physical requires energy_residual_frac within 1e-06, clamp_bound False and cfl_violated False, with every key PRESENT; the ceiling is a process verdict and is reported separately"
+   },
+   "objective_prereg": {
+    "phi_floor": 0.85,
+    "w_out_over_w_in": 10.0
+   },
+   "status": "budget_exhausted",
+   "objective_optimized": "asymmetric",
+   "budget_gradient_evaluations": 12,
+   "gradient_evaluations_used": 12,
+   "resumed_from_eval": 1,
+   "J_first_eval": 4.554894893248618e-06,
+   "trajectory": [
+    {
+     "eval": 1,
+     "J": 4.554894893248618e-06,
+     "grad_norm": 1.0786208838935105e-07,
+     "argmin_step": 174593,
+     "t_stop_s": 264.53484848484845,
+     "at_horizon": false,
+     "wall_s": 4837.353423834022
+    },
+    {
+     "eval": 2,
+     "J": 4.554894893248618e-06,
+     "grad_norm": 1.0786208838935105e-07,
+     "argmin_step": 174593,
+     "t_stop_s": 264.53484848484845,
+     "at_horizon": false,
+     "wall_s": 4547.905126958009
+    },
+    {
+     "eval": 3,
+     "J": 4.473649422363037e-06,
+     "grad_norm": 9.574513554170838e-08,
+     "argmin_step": 178369,
+     "t_stop_s": 270.2560606060606,
+     "at_horizon": false,
+     "wall_s": 9579.518078082998
+    },
+    {
+     "eval": 4,
+     "J": 4.07286695954988e-06,
+     "grad_norm": 1.562770761870507e-07,
+     "argmin_step": 190052,
+     "t_stop_s": 287.9575757575758,
+     "at_horizon": false,
+     "wall_s": 14591.11554858301
+    },
+    {
+     "eval": 5,
+     "J": 3.6818822749345765e-06,
+     "grad_norm": 1.3614334084228109e-07,
+     "argmin_step": 202039,
+     "t_stop_s": 306.119696969697,
+     "at_horizon": false,
+     "wall_s": 19825.752791458013
+    },
+    {
+     "eval": 6,
+     "J": 3.5354408646449225e-06,
+     "grad_norm": 1.0180154731736461e-07,
+     "argmin_step": 206896,
+     "t_stop_s": 313.4787878787879,
+     "at_horizon": false,
+     "wall_s": 25345.264227958018
+    },
+    {
+     "eval": 7,
+     "J": 3.409276314732417e-06,
+     "grad_norm": 9.708687817453465e-08,
+     "argmin_step": 212532,
+     "t_stop_s": 322.0181818181818,
+     "at_horizon": false,
+     "wall_s": 30792.983824708004
+    },
+    {
+     "eval": 8,
+     "J": 3.2201222573319124e-06,
+     "grad_norm": 2.39375630240389e-07,
+     "argmin_step": 222187,
+     "t_stop_s": 336.64696969696973,
+     "at_horizon": false,
+     "wall_s": 36553.76251570802
+    },
+    {
+     "eval": 9,
+     "J": 2.789957863362584e-06,
+     "grad_norm": 1.4914173732839713e-07,
+     "argmin_step": 239213,
+     "t_stop_s": 362.44393939393944,
+     "at_horizon": false,
+     "wall_s": 42842.418088417005
+    },
+    {
+     "eval": 10,
+     "J": 2.6956275576314342e-06,
+     "grad_norm": 9.703343731656229e-08,
+     "argmin_step": 241004,
+     "t_stop_s": 365.1575757575758,
+     "at_horizon": false,
+     "wall_s": 49502.05485620801
+    },
+    {
+     "eval": 11,
+     "J": 2.594510595269158e-06,
+     "grad_norm": 1.0994713723444977e-07,
+     "argmin_step": 239116,
+     "t_stop_s": 362.2969696969697,
+     "at_horizon": false,
+     "wall_s": 55907.305319708015
+    },
+    {
+     "eval": 12,
+     "J": 2.502858812542467e-06,
+     "grad_norm": 9.24702202878573e-08,
+     "argmin_step": 237191,
+     "t_stop_s": 359.3803030303031,
+     "at_horizon": false,
+     "wall_s": 62821.167371958
+    }
+   ],
+   "scale_first_step": true,
+   "objective_scale_applied": 9271098.074703395,
+   "checkpoint": "ckpt_tamper_solve_filter_only.npz",
+   "wall_total_s": 62821.52522966699
+  }
+ }
+}
