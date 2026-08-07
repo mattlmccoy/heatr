@@ -35,4 +35,18 @@ def apply_premix(blend_sigma, blend_eps, *, sigma_v, sigma_d0, eps_v, eps_d,
         sigma = sigma_v + bs * (sigma_d0 - sigma_v)
         eps_r = eps_v + be * (eps_d - eps_v)
         return sigma, eps_r
-    raise NotImplementedError("premix_frac > 0 implemented in Task 2")
+    # premix ON: raise the whole domain to a premixed background, then re-apply
+    # the jetted increment inside the part per the dopant-budget variant.
+    sigma_premix = sigma_v + f * (sigma_d0 - sigma_v)
+    eps_premix = eps_v + f * (eps_d - eps_v)
+    if premix_budget == "floor_added":
+        s_span = sigma_d0 - sigma_v      # full jet increment on top of premix
+        e_span = eps_d - eps_v
+    elif premix_budget == "budget_fixed":
+        s_span = sigma_d0 - sigma_premix  # jet brings premix up to sigma_doped
+        e_span = eps_d - eps_premix
+    else:
+        raise ValueError(f"unknown premix_budget {premix_budget!r}")
+    sigma = sigma_premix + bs * s_span
+    eps_r = eps_premix + be * e_span
+    return sigma, eps_r

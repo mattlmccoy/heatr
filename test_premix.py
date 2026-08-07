@@ -20,3 +20,35 @@ def test_premix_off_is_bit_identical_to_inline_formula():
     # Bit-for-bit: identical float operations, identical order.
     assert np.array_equal(sigma, ref_sigma)
     assert np.array_equal(eps_r, ref_eps)
+
+
+def test_floor_added_bed_and_part_values():
+    # bed (blend=0) rises to sigma_premix; part (blend=1) = sigma_premix + full span.
+    blend = np.array([[0.0, 1.0]])
+    f = 0.5
+    sigma, eps_r = apply_premix(blend, blend, premix_frac=f,
+                                premix_budget="floor_added", **V)
+    sigma_premix = V["sigma_v"] + f * (V["sigma_d0"] - V["sigma_v"])
+    span = V["sigma_d0"] - V["sigma_v"]
+    assert np.isclose(sigma[0, 0], sigma_premix)               # bed
+    assert np.isclose(sigma[0, 1], sigma_premix + 1.0 * span)  # part boosted above doped
+    eps_premix = V["eps_v"] + f * (V["eps_d"] - V["eps_v"])
+    assert np.isclose(eps_r[0, 0], eps_premix)
+
+
+def test_budget_fixed_part_pinned_to_doped():
+    # budget_fixed: part (blend=1) pinned at sigma_d0; bed at sigma_premix.
+    blend = np.array([[0.0, 1.0]])
+    f = 0.5
+    sigma, _ = apply_premix(blend, blend, premix_frac=f,
+                            premix_budget="budget_fixed", **V)
+    sigma_premix = V["sigma_v"] + f * (V["sigma_d0"] - V["sigma_v"])
+    assert np.isclose(sigma[0, 0], sigma_premix)   # bed
+    assert np.isclose(sigma[0, 1], V["sigma_d0"])  # part exactly doped (total ~const)
+
+
+def test_unknown_budget_raises():
+    import pytest
+    with pytest.raises(ValueError):
+        apply_premix(np.zeros((2, 2)), np.zeros((2, 2)),
+                     premix_frac=0.5, premix_budget="bogus", **V)
