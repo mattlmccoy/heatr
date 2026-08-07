@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 from scipy import sparse
+from premix import apply_premix
 from scipy.sparse import linalg as spla
 from scipy.ndimage import gaussian_filter, binary_erosion, distance_transform_edt
 
@@ -2553,6 +2554,14 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     power_factor = float(elec.get("power_factor", 1.0))
     max_qrf = float(elec.get("max_qrf_w_per_m3", 2.0e9))
     zero_qrf_outside_doped = bool(elec.get("zero_qrf_outside_doped", True))
+    # Premix baseline dopant (see premix.py; spec 2026-08-07). frac=0.0 -> off,
+    # bit-for-bit original. frac>0: the whole bed is conductive, so it absorbs RF
+    # and the fixed generator power is enforced over the WHOLE domain (heatr3d
+    # compute_qrf_3d(premix=True) invariant) rather than the doped region alone.
+    _premix_cfg = cfg.get("premix", {}) if isinstance(cfg.get("premix", {}), dict) else {}
+    premix_frac = float(_premix_cfg.get("frac", 0.0))
+    premix_budget = str(_premix_cfg.get("budget", "floor_added"))
+    premix_on = premix_frac > 0.0
     qrf_file_npy = str(elec.get("qrf_file_npy", "")).strip()
     fixed_qrf_mode = bool(qrf_file_npy)
     enforce_gen_power = bool(elec.get("enforce_generator_power", False))
@@ -2798,11 +2807,15 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
     # by the per-pixel binder saturation, scaling local conductivity and
     # permittivity proportionally to the printed CB concentration.
     _eff_fill = _fgm_fb.effective_fill(fill_frac)
-    sigma = sigma_v + _eff_fill * (sigma_d0 - sigma_v)
     # In two-sided per-node direct mode, permittivity blends by geometry fill
     # only so sat>1 raises sigma without inflating eps_r past the doped value.
     _eff_fill_eps = fill_frac if getattr(_fgm_fb, "eps_geometry_only", False) else _eff_fill
-    eps_r = eps_v  + _eff_fill_eps * (eps_d  - eps_v)
+    # Premix baseline: raises the whole bed to sigma_premix/eps_premix (premix_frac=0
+    # returns the reference blend bit-for-bit). See premix.apply_premix.
+    sigma, eps_r = apply_premix(_eff_fill, _eff_fill_eps,
+                                sigma_v=sigma_v, sigma_d0=sigma_d0,
+                                eps_v=eps_v, eps_d=eps_d,
+                                premix_frac=premix_frac, premix_budget=premix_budget)
 
     # --- Optional surface sigma model ---
     # When sigma_profile == "surface", the EQS concentrates conductivity in a
@@ -2907,14 +2920,21 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         gamma, V, Ex, Ey, E_mag, Qrf = solve_electric_state(
             sigma, eps_r, omega, elec_hi, elec_lo, v_hi, v_lo, dx, dy, elec, x, y, power_factor, max_qrf
         )
+        # Premix: enforce the fixed generator power over the WHOLE domain (the
+        # premixed bed absorbs too) and DO NOT zero the bed. premix_frac=0 ->
+        # doped-only mask + bed-zeroing, i.e. the original path bit-for-bit.
+        # NOTE: the turntable/program/FGM-iterate RE-SOLVE blocks later in this
+        # function are NOT yet premix-aware; the jared premix study uses a single
+        # startup solve (no in-run re-solve), so only this block is on its path.
+        _enforce_mask = np.ones_like(doped_mask, dtype=bool) if premix_on else doped_mask
         Qrf, p_doped_eff_w_per_m, qrf_scale_applied = enforce_generator_power(
             Qrf,
-            doped_mask,
+            _enforce_mask,
             dA,
             target_power_w_per_m,
             max_qrf,
         )
-        if zero_qrf_outside_doped:
+        if zero_qrf_outside_doped and not premix_on:
             Qrf = np.where(doped_mask, Qrf, 0.0)
 
     T = np.full((ny, nx), ambient_c, dtype=float)
@@ -3715,14 +3735,17 @@ def run_sim(cfg: dict) -> tuple[SimState, dict, dict[str, list[float]]]:
         gamma, V, Ex, Ey, E_mag, Qrf = solve_electric_state(
             sigma, eps_r, omega, elec_hi, elec_lo, v_hi, v_lo, dx, dy, elec, x, y, power_factor, max_qrf
         )
+        # Premix-aware final re-solve (sets the RETURNED Qrf): enforce over the
+        # whole domain and keep the premixed bed; premix_frac=0 -> original path.
+        _final_mask = np.ones_like(doped_mask, dtype=bool) if premix_on else doped_mask
         Qrf, p_doped_eff_w_per_m, qrf_scale_applied = enforce_generator_power(
             Qrf,
-            doped_mask,
+            _final_mask,
             dA,
             target_power_w_per_m,
             max_qrf,
         )
-        if zero_qrf_outside_doped:
+        if zero_qrf_outside_doped and not premix_on:
             Qrf = np.where(doped_mask, Qrf, 0.0)
 
     state = SimState(
