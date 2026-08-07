@@ -89,7 +89,11 @@
       \int_{\Omega_{\mathrm{part}}} Q_{\mathrm{rf}}\,dV = \eta\,P_{\mathrm{gen}}
       $$
       <p>
-        with transfer efficiency $\eta$ and source power $P_{\mathrm{gen}}$.
+        with transfer efficiency $\eta$ and source power $P_{\mathrm{gen}}$. In the
+        2.5-D engine this is the <code>enforce_generator_power</code> mode: the
+        constraint is applied over the <em>doped</em> region and per unit build depth
+        (W/m, consistent with the 2.5-D formulation), and $Q_{\mathrm{rf}}$ is
+        iteratively rescaled to meet it.
       </p>
 
       <h2>3. Transient Thermal + Phase Model</h2>
@@ -151,14 +155,24 @@
 
       <h2>5. Turntable and Optimizer Logic</h2>
       <p>
-        Turntable mode rotates field orientation in phases when a trigger metric (e.g., mean melt fraction) is reached.
-        Optimizer mode captures snapshots at requested criteria:
+        Turntable mode rotates the field orientation on a <strong>fixed time
+        schedule</strong> &mdash; rotations evenly spaced over the exposure, or an
+        explicit program of angle/duration holds &mdash; to average the heating
+        pattern over angle. The rotation is time-driven; it is <em>not</em> triggered
+        by a melt-fraction threshold.
+      </p>
+      <p>
+        Optimizer mode is a separate mechanism: it captures snapshots when the mean
+        melt fraction crosses requested thresholds, while keeping the peak below the
+        temperature ceiling:
       </p>
       $$
       \phi_{mean}(t) \ge \{\phi_1,\phi_2,\ldots\},\qquad T_{max}(t) < T_{ceiling}
       $$
       <p>
-        producing recommended exposure windows and report artifacts.
+        producing recommended exposure windows and report artifacts. Defaults: melt
+        snapshot thresholds $\{0.50,\,0.75,\,0.90,\,0.95\}$ and a $250^\circ\mathrm{C}$
+        ceiling.
       </p>
 
       <h2>6. Numerical Pipeline and PDE Solvers</h2>
@@ -172,29 +186,43 @@
       </ol>
 
       <p>
-        HEATR runs two <em>independent</em> discretizations of the same physics, so
-        that when they agree it is cross-validation rather than a shared bug:
-        <strong>heatr3d</strong>, a voxel finite-volume engine (the fast forward
-        model validated against Allison's data), and <strong>solve3d</strong>, a
-        finite-element (FEniCSx/dolfinx) engine built for differentiable inverse
-        design. How each PDE is actually solved:
+        The engine behind this GUI (the Operation and Results tabs) is the
+        <strong>HEATR 2.5-D engine</strong>: it solves the EQS field with a
+        <strong>direct sparse complex LU</strong> factorization on a harmonic-mean
+        5-point finite-difference stencil, then marches the thermal, phase, and
+        density state with the explicit enthalpy scheme of 6.2&ndash;6.3.
+      </p>
+      <p>
+        Two <em>sister 3-D engines</em> solve the same physics with different
+        discretizations, so that when they agree it is cross-validation rather than a
+        shared bug: <strong>heatr3d</strong>, a voxel finite-volume engine (the fast
+        forward model validated against Allison's data), and <strong>solve3d</strong>,
+        a finite-element (FEniCSx/dolfinx) engine built for differentiable inverse
+        design (6.4). How each PDE is solved:
       </p>
 
       <h3>6.1 EQS field solve</h3>
       <p>
         The complex continuity equation $\nabla\cdot(\gamma\nabla V)=0$ with
-        $\gamma=\sigma+j\omega\epsilon_0\epsilon_r$ is discretized two ways:
+        $\gamma=\sigma+j\omega\epsilon_0\epsilon_r$ is discretized three ways across
+        the engines:
       </p>
       <ul>
         <li>
-          <strong>Finite element (solve3d):</strong> Galerkin weak form on complex
+          <strong>2.5-D GUI engine (this page):</strong> a harmonic-mean 5-point
+          finite-difference stencil solved by a <strong>direct sparse complex LU</strong>
+          factorization &mdash; direct, not iterative, so there is no preconditioner or
+          tolerance to set.
+        </li>
+        <li>
+          <strong>Finite element (solve3d, 3-D):</strong> Galerkin weak form on complex
           P1 Lagrange elements with Dirichlet electrodes, solved by
           <strong>GMRES preconditioned with algebraic multigrid (GAMG)</strong>,
           relative tolerance $10^{-10}$; a direct complex LU is the small-system
           fallback.
         </li>
         <li>
-          <strong>Finite volume (heatr3d):</strong> a cell-centred 7-point stencil
+          <strong>Finite volume (heatr3d, 3-D):</strong> a cell-centred 7-point stencil
           with <strong>harmonic-mean face averaging</strong> of $\gamma$, so the
           roughly $4\times10^6$ conductivity contrast at the doped/virgin interface
           is captured without smearing. Direct complex LU (SuperLU) on small grids,
