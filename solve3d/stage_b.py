@@ -23,11 +23,12 @@ stage_a_phase2. Nothing is restated here.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
-from solve3d import stage_a, stage_a_phase2 as p2
+from solve3d import density_adjoint as da, stage_a, stage_a_phase2 as p2
 
 RESULTS = Path(__file__).resolve().parent / "results"
 
@@ -69,6 +70,72 @@ def uniform_holdout_peak(holdout_nodes: int = HOLDOUT_NODES,
     out["drive_a"] = p2.chosen_drive_a()
     out["power_density_w_per_m3"] = p2.chosen_drive_power_density()
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Penalty objective J(s) = J_shape(s) + mu * (KS_peak(s) - T_ceiling)_+^2
+# --------------------------------------------------------------------------- #
+GATE_MU = 1.0e3
+# A gate-case ceiling BELOW the coarse KS peak (~205 C at 0.40x) so the hinge is
+# ACTIVE and the 2*mu*hinge*dKS/ds path is exercised by the FD gate. The REAL
+# solve reads the 250 C ceiling from thermal_config.json; this is a gate device
+# only, documented so it cannot be mistaken for the physical ceiling.
+GATE_CEILING_C = 200.0
+ENVELOPE_MAX_TIME_S = 1800.0     # J_shape melt-onset envelope horizon (argmin interior)
+
+
+@dataclass
+class PenaltyCase:
+    """Wraps a density_adjoint.Case with the penalty weight mu and the ceiling.
+
+    J_shape (melt-onset envelope) reads a NON-densify forward via the phase-2
+    envelope adjoint; KS_peak reads the densify end-state via the density
+    co-state adjoint. Both share the SAME mesh, drive and design chain (the case's
+    tc + chain), so the two reads compose on one design vector."""
+    da_case: da.Case
+    mu: float
+    ceiling_c: float
+
+    def design_point(self) -> np.ndarray:
+        return self.da_case.design_point()
+
+    def probe_indices(self, k: int = 4) -> list[int]:
+        v = (self.da_case._v0 if self.da_case._v0 is not None
+             else self.design_point())
+        _J, g = penalty_objective_and_grad(self, v)
+        return [int(i) for i in np.argsort(-np.abs(g))[:k]]
+
+
+def build_penalty_coarse_case(mu: float = GATE_MU,
+                              ceiling_c: float = GATE_CEILING_C,
+                              n_steps: int = da.COARSE_N_STEPS,
+                              envelope_max_time_s: float = ENVELOPE_MAX_TIME_S
+                              ) -> PenaltyCase:
+    case = da.build_coarse_case(n_steps=int(n_steps))
+    # the density march uses case.n_steps (its own loop); the melt-onset envelope
+    # uses tc.max_time_s, set larger so the argmin sits interior.
+    case.tc.max_time_s = float(envelope_max_time_s)
+    return PenaltyCase(da_case=case, mu=float(mu), ceiling_c=float(ceiling_c))
+
+
+def penalty_objective_and_grad(case: PenaltyCase, v: np.ndarray):
+    """(J, dJ/dv) for J = J_shape + mu*(KS_peak - ceiling)_+^2.
+
+    dJ_shape/dv is the phase-2 melt-onset envelope adjoint (unchanged from
+    Stage A); the hinge derivative is 2*mu*max(0, KS-ceil) * dKS/dv (Task 3),
+    zero when under ceiling. The design_chain (filter, beta 0) is applied once,
+    consistently for both reads (envelope_grad_of_design and dks_peak_ds both
+    wrap it internally)."""
+    dcase, tc, chain = case.da_case, case.da_case.tc, case.da_case.chain
+    v = np.asarray(v, float)
+    J_shape, g_shape, _info = p2.envelope_grad_of_design(tc, chain, v, beta=0.0)
+    ks = da.ks_peak_forward(dcase, v)
+    hinge = max(0.0, ks - case.ceiling_c)
+    J = float(J_shape) + case.mu * hinge * hinge
+    g = np.array(g_shape, dtype=float)
+    if hinge > 0.0:
+        g = g + 2.0 * case.mu * hinge * da.dks_peak_ds(dcase, v)
+    return float(J), g
 
 
 def shippable_verdict(true_peak_c: float, ks_peak_c: float, ceiling_c: float,

@@ -21,6 +21,23 @@ def test_uniform_holdout_peak_shape():
     assert isinstance(out["feasible"], bool)
 
 
+def test_penalty_combined_grad_matches_fd():
+    from solve3d import stage_b
+    # mu high + a gate-case ceiling BELOW the coarse KS peak so the hinge is
+    # active and the ceiling path is exercised (the real solve uses 250 C).
+    case = stage_b.build_penalty_coarse_case(mu=1.0e3)
+    v = case.design_point()
+    J, g = stage_b.penalty_objective_and_grad(case, v)
+    assert np.all(np.isfinite(g))
+    h = 1e-4
+    for i in case.probe_indices():
+        vp = v.copy(); vp[i] += h; vm = v.copy(); vm[i] -= h
+        Jp, _ = stage_b.penalty_objective_and_grad(case, vp)
+        Jm, _ = stage_b.penalty_objective_and_grad(case, vm)
+        fd = (Jp - Jm) / (2 * h)
+        assert abs(fd - g[i]) <= 1e-6 * max(1.0, abs(fd)) + 1e-9, (i, fd, g[i])
+
+
 def test_is_shippable_reads_true_peak_not_ks():
     from solve3d import stage_b
     # KS (smooth) under ceiling but TRUE peak over -> NOT shippable
