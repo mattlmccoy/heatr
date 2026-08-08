@@ -51,6 +51,29 @@ def grade_env(tmp_path):
     return mesh, gd, job
 
 
+def test_power_settings_carries_the_drive_the_arms_used(grade_env, tmp_path):
+    """The package must record the RECOMMENDED per-part drive the arms
+    actually marched at (the ceiling-feasible power), not the nominal
+    hardcode - otherwise the printed part cooks at a power the verification
+    never simulated. Stays exactly-one-power, so 2.0.0 is unchanged."""
+    mesh, gd, job = grade_env
+    for arm in ("uncorrected", "corrected"):
+        rp = gd / "heatr3d" / arm / "results.json"
+        r = json.loads(rp.read_text())
+        r["power_density_w_per_m3"] = 5.4e5      # backed-off ceiling-feasible
+        r["drive_recommended"] = True
+        rp.write_text(json.dumps(r))
+    _, manifest = emit_package(
+        tmp_path / "packages", grade_dir=gd, mesh_path=str(mesh),
+        part_name="part", tiff_job_dir=job,
+        options={"turntable_intent": False, "dwell_intent": False})
+    pw = manifest["power_settings"]
+    assert pw["power_density_w_per_m3"] == 5.4e5
+    assert pw["drive_recommended"] is True
+    assert "voltage_v" not in pw
+    assert validate_manifest(manifest) == []
+
+
 def test_manifest_conforms_to_the_frozen_schema(grade_env, tmp_path):
     mesh, gd, job = grade_env
     pkg_dir, manifest = emit_package(

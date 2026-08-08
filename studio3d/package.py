@@ -143,7 +143,17 @@ def emit_package(packages_root: str | Path, *, grade_dir: str | Path,
             densify[arm] = {k: r.get(k) for k in (
                 "engine", "trust_badge", "correction_engine", "grid_n",
                 "sigma_T", "t_phi90_s", "sim_time_s", "stop_mean_rho",
-                "rho_final_mean", "rho_final_std", "gates")}
+                "rho_final_mean", "rho_final_std", "gates",
+                "power_density_w_per_m3", "drive_recommended")}
+
+    # the print power the arms ACTUALLY marched at (the recommended
+    # ceiling-feasible drive when the solve gave one; nominal otherwise).
+    # power_settings must record this, not a hardcoded nominal, or the
+    # printed part cooks at a power the verification never simulated.
+    NOMINAL_PD = 1.5915e6
+    _c = densify.get("corrected", {})
+    drive_pd = _c.get("power_density_w_per_m3") or NOMINAL_PD
+    drive_recommended = bool(_c.get("drive_recommended"))
 
     # copy the graded TIFF job (the printer-DPI production rasters)
     job_dst = pkg / "print_job"
@@ -190,10 +200,15 @@ def emit_package(packages_root: str | Path, *, grade_dir: str | Path,
         "correction_provenance": prov,
         "densify_summary": densify,
         "power_settings": {
-            "power_density_w_per_m3": 1.5915e6,
+            "power_density_w_per_m3": drive_pd,
+            "drive_recommended": drive_recommended,
             "rf_mode": "constant",
             "note": ("heatr3d drive convention: fixed absorbed power "
-                     "density; constant RF over the exposure.")},
+                     "density; constant RF over the exposure. "
+                     + ("recommended ceiling-feasible drive from the solve."
+                        if drive_recommended else
+                        "nominal drive (no ceiling-feasible drive recommended; "
+                        "the ceiling gate is the backstop)."))},
         "raster": {
             "job_dir": "print_job", "n_tiffs": len(tiffs),
             "dpi": job_info.get("dpi", 720), "bpp": job_info.get("bpp", 4),

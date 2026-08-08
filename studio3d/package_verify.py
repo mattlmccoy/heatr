@@ -105,8 +105,19 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
         sat_path = pkg / "verify_sat.npz"
         np.savez_compressed(sat_path, sat=tr["sat"].astype(np.float32),
                             part=part)
+        # verify at the SAME power the package declares it will print at (the
+        # recommended ceiling-feasible drive), not the nominal - else the
+        # cross-engine ceiling gate certifies a power the part will not use.
+        # None -> run_densify uses its nominal default.
+        man_p = pkg / "manifest.json"
+        verify_pd = None
+        if man_p.exists():
+            verify_pd = (json.loads(man_p.read_text())
+                         .get("power_settings", {})
+                         .get("power_density_w_per_m3"))
         res = run_densify(mesh_path, pkg / "verify_run", n=n,
                           arm="corrected", sat_path=str(sat_path),
+                          power_density_w_per_m3=verify_pd,
                           correction_engine="emitted_rasters",
                           max_time_s=max_time_s,
                           stop_mean_rho=stop_mean_rho,
@@ -120,6 +131,7 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
                "shrinkage_precomp": precomp_prov,
                "transfer": {k: v for k, v in tr.items() if k != "sat"},
                "grid_n": n, "gates": g, "gates_ok": gates_ok,
+               "power_density_w_per_m3": res.get("power_density_w_per_m3"),
                "sigma_T": res["sigma_T"],
                "rho_final_mean": res.get("rho_final_mean"),
                # recorded acceleration travels with the verify record too

@@ -44,6 +44,32 @@ def test_reconstruct_recovers_the_applied_sat(tmp_path):
     assert canvas_m == pytest.approx(0.040, rel=1e-6)
 
 
+def test_verify_marches_at_the_package_declared_drive(tmp_path):
+    """is_sendable must verify at the SAME power the package will print at
+    (the recommended ceiling-feasible drive), not the nominal - else the
+    cross-engine ceiling gate certifies a power the part will not use."""
+    mesh = tmp_path / "part.stl"
+    trimesh.creation.box(extents=(20.0, 20.0, 20.0)).export(mesh)
+    job = tmp_path / "job"
+    job.mkdir()
+    ny = nx = 40
+    yy, xx = np.meshgrid(np.arange(ny), np.arange(nx), indexing="ij")
+    ink = (np.abs(xx - nx / 2) < 7) & (np.abs(yy - ny / 2) < 7)
+    base = np.where(ink, 15, 0)
+    for k in range(6):
+        _write_tiff_pair(job, k, base, 0.7)
+    (job / "job_info.json").write_text(json.dumps(
+        {"layer_count": 6, "dpi": 25.4, "bpp": 4, "layer_height_mm": 2.0}))
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "production_verify_summary.json").write_text(json.dumps({"run": False}))
+    (pkg / "manifest.json").write_text(json.dumps(
+        {"power_settings": {"power_density_w_per_m3": 5.4e5,
+                            "drive_recommended": True}}))
+    rec = verify_package(pkg, str(mesh), n=16, tiff_job_dir=job, max_time_s=2.0)
+    assert rec["power_density_w_per_m3"] == 5.4e5
+
+
 def test_verify_package_runs_the_march_and_records_gates(tmp_path):
     mesh = tmp_path / "part.stl"
     trimesh.creation.box(extents=(20.0, 20.0, 20.0)).export(mesh)

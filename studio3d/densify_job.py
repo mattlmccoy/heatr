@@ -22,6 +22,28 @@ from studio3d.runner import run_densify
 ARMS = ("uncorrected", "corrected")
 
 
+def recommended_drive(grade_dir: str | Path) -> float | None:
+    """The joint solve's recommended ceiling-feasible print power, or None.
+
+    Cross-lane contract (2026-08-07): the Studio's production solve
+    (solve3d.studio_solve, Stage A/B4) writes the ceiling-respecting drive
+    into studio_solve_results.json as recommended_power_density_w_per_m3
+    (absolute W/m3). Both densify arms run at THIS drive so the print is
+    simulated at the power it will actually use, and the benefit gate
+    compares arms at a matched drive. None means the field is absent, null
+    (an honest-null / drive-limited part), or there is no solve artifact -
+    the caller then falls back to the nominal drive and records that it did.
+    """
+    p = Path(grade_dir) / "heatr3d" / "solve" / "studio_solve_results.json"
+    if not p.exists():
+        return None
+    try:
+        val = json.loads(p.read_text()).get("recommended_power_density_w_per_m3")
+    except (ValueError, OSError):
+        return None
+    return float(val) if val is not None else None
+
+
 def run_job(mesh_path: str, grade_dir: str | Path, arm: str = "uncorrected",
             n: int = 64, max_time_s: float = 1500.0,
             stop_mean_rho: float | None = 0.98,
@@ -62,13 +84,27 @@ def run_job(mesh_path: str, grade_dir: str | Path, arm: str = "uncorrected",
         sat_path = str(grade_dir / "heatr3d" / "correction_sat.npz")
         correction_engine = prov["engine"]
 
+    # The joint solve's recommended ceiling-feasible drive is the standard
+    # print power: BOTH arms march at it (matched, so the benefit gate is
+    # like-for-like), and the ceiling gate then reads the part at the power
+    # it will actually print. Absent/honest-null -> nominal, recorded.
+    rec_drive = recommended_drive(grade_dir)
     print("STUDIO3D_PROGRESS stage=march", flush=True)
     res = run_densify(mesh_path, out, n=n, arm=arm, sat_path=sat_path,
+                      power_density_w_per_m3=rec_drive,
                       correction_engine=correction_engine,
                       max_time_s=max_time_s, stop_mean_rho=stop_mean_rho,
                       fast_march=fast_march,
                       eqs_store_dir=(eqs_store if fast_march else None),
                       shrinkage_precomp=precomp_prov)
+    res["drive_recommended"] = rec_drive is not None
+    # persist the job-level flag onto the on-disk results.json (run_densify
+    # wrote the file before this flag existed; the package reads from disk).
+    rp = out / "results.json"
+    if rp.exists():
+        disk = json.loads(rp.read_text())
+        disk["drive_recommended"] = res["drive_recommended"]
+        rp.write_text(json.dumps(disk))
 
     # ---- predicted-benefit gate (TAMPER_DIAGNOSIS.md fix 2c) ------------- #
     # The corrected arm must BEAT uniform. On the Tamper nothing compared the
