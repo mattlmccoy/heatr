@@ -44,6 +44,34 @@ def test_reconstruct_recovers_the_applied_sat(tmp_path):
     assert canvas_m == pytest.approx(0.040, rel=1e-6)
 
 
+def test_verify_refuses_a_non_frozen_chamber_drive(tmp_path):
+    """Flag 1 (solve3d, 2026-08-07): the recommended drive is valid ONLY in
+    the chamber it was solved in. heatr3d verify is frozen at 60 mm, so a
+    drive solved in a grown chamber can NOT be honestly certified here -
+    verify must REFUSE (chamber_mismatch), not densify at 60 mm and call it
+    agreement. Fail-closed BEFORE marching."""
+    mesh = tmp_path / "part.stl"
+    trimesh.creation.box(extents=(20.0, 20.0, 20.0)).export(mesh)
+    job = tmp_path / "job"
+    job.mkdir()
+    (job / "job_info.json").write_text(json.dumps(
+        {"layer_count": 1, "dpi": 25.4, "bpp": 4, "layer_height_mm": 2.0}))
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "production_verify_summary.json").write_text(json.dumps({"run": False}))
+    (pkg / "manifest.json").write_text(json.dumps(
+        {"power_settings": {"power_density_w_per_m3": 5.4e5,
+                            "drive_recommended": True},
+         "correction_provenance": {
+             "engine": "solve3d_solved",
+             "chamber_mismatch_note": "solved in an 86 mm adaptive chamber; "
+                                      "heatr3d verification marches the frozen "
+                                      "60 mm chamber"}}))
+    rec = verify_package(pkg, str(mesh), n=16, tiff_job_dir=job, max_time_s=2.0)
+    assert rec["gates_ok"] is False
+    assert "chamber" in (rec.get("error", "") + rec.get("refusal", "")).lower()
+
+
 def test_verify_marches_at_the_package_declared_drive(tmp_path):
     """is_sendable must verify at the SAME power the package will print at
     (the recommended ceiling-feasible drive), not the nominal - else the

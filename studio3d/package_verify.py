@@ -89,6 +89,25 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
     """
     pkg = Path(pkg_dir)
     rec: Dict[str, Any]
+    # Flag 1 (chamber guard): the recommended drive is valid ONLY in the
+    # chamber it was solved in; heatr3d verify is frozen at 60 mm. If the
+    # correction was solved in a different chamber, verifying at 60 mm would
+    # compare unlike chambers - a false-green. Refuse BEFORE marching.
+    man_p0 = pkg / "manifest.json"
+    if man_p0.exists():
+        note = (json.loads(man_p0.read_text())
+                .get("correction_provenance", {}).get("chamber_mismatch_note"))
+        if note:
+            rec = {"run": True, "source": "emitted_rasters", "gates_ok": False,
+                   "refusal": ("chamber_mismatch: the drive/map was solved in a "
+                               "non-60 mm chamber; heatr3d is_sendable verify is "
+                               "frozen at 60 mm and cannot certify it here. " + str(note))}
+            (pkg / "production_verify_summary.json").write_text(
+                json.dumps(rec, indent=2, default=float))
+            man = json.loads(man_p0.read_text())
+            man["production_verify"] = rec
+            man_p0.write_text(json.dumps(man, indent=2, default=float))
+            return rec
     try:
         # verify the mesh that PRINTS: the same Level 0 pre-compensated STL
         # the densify arms marched (reused from grade_dir when given).
