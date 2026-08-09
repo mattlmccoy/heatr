@@ -1,0 +1,112 @@
+{
+ "what": "Stage B4: lower-drive, headroom-margin augmented-Lagrangian dopant SHAPE-solve. Restoration shift targets T_eff = 250 - 15 = 235 C so the dolfinx shaped peak lands under T_eff and heatr3d (offset + shaped relocation) lands <= 250; is_shippable/honest_null judge the TRUE peak vs the REAL 250 ceiling. Cross-engine is_sendable is a SEPARATE heatr3d verify.",
+ "stage": "B4_lower_drive_headroom_margin_al",
+ "part": "cube",
+ "drive_a": 0.57,
+ "power_density_w_per_m3": 907183.1756238034,
+ "ceiling_c": 250.0,
+ "targets": {
+  "real_ceiling_c": 250.0,
+  "delta_headroom_c": 15.0,
+  "t_ceiling_eff_c": 235.0,
+  "rule": "restoration shift targets t_ceiling_eff; is_shippable/is_sendable judge the TRUE peak vs real_ceiling"
+ },
+ "preconditions": {
+  "launch_ok": true,
+  "fd_worst_rel_err": 3.582204977192364e-09,
+  "mutation_bites": true,
+  "fidelity_agree": true,
+  "fidelity_rel_T": 0.0
+ },
+ "outer_loop": {
+  "outer_max": 6,
+  "inner_budget": 12,
+  "lam0": 0.0,
+  "mu0": 1000.0,
+  "mu_factor": 5.0,
+  "mu_shrink": 0.5,
+  "delta_ema": 0.5,
+  "converge_tol_c": 0.25,
+  "converged": true
+ },
+ "solve_mesh": {
+  "target_nodes": 2500,
+  "lc0_m": 0.001875,
+  "dt_s": 0.5,
+  "n_steps": 2800,
+  "n_design": 9183
+ },
+ "outer_iterations": [
+  {
+   "outer": 0,
+   "inner_evals": 12,
+   "best_J": 1.1638985652586641e-06,
+   "status": "budget_exhausted",
+   "lam_after": 0.0,
+   "mu_after": 1000.0,
+   "delta": 16.917814866919016,
+   "t_target_next_c": 218.082185133081,
+   "ks_solve_c": 196.8293789031615,
+   "true_peak_c": 230.66500863699954,
+   "viol_vs_t_eff_c": 4.334991363000455,
+   "arbiter_feasible_vs_real_ceiling": true,
+   "wall_s": 2768.7
+  },
+  {
+   "outer": 1,
+   "inner_evals": 12,
+   "best_J": 1.0751870349608997e-06,
+   "status": "budget_exhausted",
+   "lam_after": 0.0,
+   "mu_after": 1000.0,
+   "delta": 25.513679513251326,
+   "t_target_next_c": 209.48632048674867,
+   "ks_solve_c": 200.9729060619938,
+   "true_peak_c": 235.08245022157743,
+   "viol_vs_t_eff_c": 0.08245022157743165,
+   "arbiter_feasible_vs_real_ceiling": true,
+   "wall_s": 4672.8
+  }
+ ],
+ "solved_map_ks_peak_c": 200.9729060619938,
+ "acceptance": {
+  "fd_gate_passed": true,
+  "fidelity_check_passed": true,
+  "true_holdout_peak_c": 235.08245022157743,
+  "shippable_verdict": {
+   "is_shippable": true,
+   "reason": "shippable",
+   "true_peak_c": 235.08245022157743,
+   "ceiling_c": 250.0,
+   "over_by_c": -14.917549778422568,
+   "fd_gate_passed": true,
+   "ks_peak_c_informational": 200.9729060619938,
+   "rule": "is_shippable = fd_gate_passed AND true_peak <= ceiling; the KS aggregate is never decisive"
+  },
+  "is_shippable": true,
+  "honest_null": {
+   "verdict": "feasible_dopant_exists",
+   "shaped_true_peak_c": 235.08245022157743,
+   "uniform_true_peak_c": 227.4678656794922,
+   "ceiling_c": 250.0,
+   "uniform_margin_c": 22.532134320507794,
+   "rule": "honest-null fires ONLY if the uniform (known-feasible-candidate) true peak is over the ceiling; a shaped endpoint over ceiling is solver progress, not infeasibility"
+  },
+  "uniform_true_peak_c": 227.4678656794922,
+  "rule": "is_shippable = FD-gated gradient AND B2 _march fidelity AND true hold-out peak <= REAL 250 ceiling; the T_eff=235 target is the AL soft target only. Cross-engine is_sendable pending."
+ },
+ "recommended_power_settings": {
+  "power_density_w_per_m3": 907183.1756238034,
+  "_stage_a_provenance": {
+   "drive_a": 0.57,
+   "baseline_power_density_w_per_m3": 1591549.4309189534,
+   "schema": "2.0.0 (no change; field already exists, no new keys)",
+   "field_path": "power_settings.power_density_w_per_m3",
+   "ceiling_c": 250.0,
+   "thermal_config_path": "solve3d/thermal_config.json",
+   "note": "recommended drive a=0.5700 x baseline for the best part under the 250 C degradation ceiling",
+   "routed_to_studio_for_confirmation": true
+  }
+ },
+ "wall_total_s": 4672.8
+}
