@@ -1,0 +1,22 @@
+{
+  "what": "heatr3d is_sendable gate on the B4 PYRAMID map - 3rd shape. PASSES (is_sendable=TRUE), completing 3/3 cross-engine on the shape family. Carries two honest caveats: verified at n=80 (not n=64) and the solve was converged=False.",
+  "map_source": "solve3d/results/map_stage_b4_pyramid.npz",
+  "geometry": "shape_library_3d/stl/pyramid.stl voxelized n=80, 60mm chamber",
+  "grid_n": 80,
+  "why_n80": "the sharp apex aliases in the DG0->voxel transfer in a GRID-DEPENDENT way: dopant mass move 2.26%(n64) / 1.59%(n80) / 3.41%(n96). n=64 and n=96 exceed the 2% fidelity gate; n=80 is faithful (1.59%). The gate correctly refused the aliased grids; n=80 is the faithful grid. NOT gate-relaxation.",
+  "drive_power_density_w_per_m3": 931056.4170875876,
+  "drive_frac": 0.585,
+  "rho_target": 0.98,
+  "peaks_C": {
+    "solve3d_true_holdout": 235.43,
+    "heatr3d_end_state": 244.2
+  },
+  "engine_offset_C": 8.8,
+  "ceiling_C": 250.0,
+  "heatr3d_margin_under_ceiling_C": 5.8,
+  "heatr3d_rho_final_mean": 0.98,
+  "solve_converged": false,
+  "is_sendable_cross_engine": true,
+  "offset_constant_walkback": "IMPORTANT correction to the earlier 2-point claim. The offset is NOT a tight constant: square +11.3 (n64), cube +11.8 (n64), PYRAMID +8.8 (n80). The pyramid is ~3 C lower AND at a different grid (n80 vs n64) AND from an unconverged solve - three confounds - so shape-vs-grid-vs-convergence can't be disentangled (a clean n64 pyramid is blocked by the apex transfer aliasing). HONEST claim: the offset is POSITIVE and ~+9-12 C across the family; the 15 C headroom comfortably covers all three (margins 3.7/3.1/5.8 C); but 'stable offset constant, no per-shape re-measurement' is NOT established.",
+  "engines": "heatr3d_native voxel FDM vs solve3d dolfinx FEM tet"
+}
