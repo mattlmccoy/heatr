@@ -1,0 +1,76 @@
+{
+ "what": "Stage B4 drive-backoff probe (geometry generalization): uniform (s=1) dolfinx hold-out peak vs drive for the CUBE. The 9000-node rows are the SAME fine arbiter the heavy AL solve reads; the 2500-node rows are a faster bracket used to locate the drive->peak curve (finer 9000 mesh resolves a ~+5.7 C higher peak). Peaks are MEASURED (no false-green).",
+ "stage": "B4_drive_backoff_probe",
+ "part": "cube",
+ "ceiling_c": 250.0,
+ "delta_headroom_c": 15.0,
+ "t_ceiling_eff_c": 235.0,
+ "target_band_c": [
+  228.0,
+  232.0
+ ],
+ "candidates_2500node": [
+  {
+   "drive_a": 0.55,
+   "power_density_w_per_m3": 875352.1870054244,
+   "uniform_true_peak_c": 220.73,
+   "holdout_resolution": "2500",
+   "holdout_nodes_in_part": 2085,
+   "under_t_eff": true,
+   "margin_to_t_eff_c": 14.27000000000001
+  },
+  {
+   "drive_a": 0.7,
+   "power_density_w_per_m3": 1114084.6016432673,
+   "uniform_true_peak_c": 249.36,
+   "holdout_resolution": "2500",
+   "holdout_nodes_in_part": 2085,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -14.360000000000014
+  },
+  {
+   "drive_a": 0.85,
+   "power_density_w_per_m3": 1352817.0162811102,
+   "uniform_true_peak_c": 263.5,
+   "holdout_resolution": "2500",
+   "holdout_nodes_in_part": 2085,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -28.5
+  }
+ ],
+ "candidates_9000node": [
+  {
+   "drive_a": 0.6,
+   "power_density_w_per_m3": 954929.658551372,
+   "uniform_true_peak_c": 236.06,
+   "holdout_resolution": "9000_arbiter",
+   "holdout_nodes_in_part": 8366,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -1.0600000000000023
+  },
+  {
+   "drive_a": 0.57,
+   "power_density_w_per_m3": 907183.1756238034,
+   "uniform_true_peak_c": 227.47,
+   "holdout_resolution": "9000_arbiter",
+   "holdout_nodes_in_part": 8366,
+   "under_t_eff": true,
+   "margin_to_t_eff_c": 7.530000000000001
+  }
+ ],
+ "pick": {
+  "drive_a": 0.57,
+  "uniform_peak_c": 227.47,
+  "holdout_resolution": "9000_arbiter",
+  "in_band": false,
+  "band_c": [
+   228.0,
+   232.0
+  ],
+  "note": "~0.5 C below band low -> marginally more conservative; a=0.58 would sit mid-band if more throughput is wanted",
+  "shaping_room_to_t_eff_c": 7.530000000000001,
+  "margin_to_real_ceiling_c": 22.53
+ },
+ "finding": "On the square power-density baseline the cube heats LESS per unit power density, so its feasible drive_a (~0.57) is HIGHER than the square 0.34x, not lower. The S1 281/265 numbers are on the Phase E opener drive scale.",
+ "rule": "pick the drive whose 9000-node uniform peak is a few C UNDER T_eff=235, leaving room to shape UP toward 235 while staying feasible vs the real 250 ceiling"
+}

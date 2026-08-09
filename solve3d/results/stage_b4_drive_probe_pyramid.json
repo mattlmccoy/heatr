@@ -1,0 +1,94 @@
+{
+ "what": "Stage B4 drive-backoff probe (geometry generalization): uniform (s=1) dolfinx hold-out peak vs drive for the PYRAMID. 9000-node rows = the fine arbiter; 2500-node rows = the faster bracket. Peaks MEASURED.",
+ "stage": "B4_drive_backoff_probe",
+ "part": "pyramid",
+ "ceiling_c": 250.0,
+ "delta_headroom_c": 15.0,
+ "t_ceiling_eff_c": 235.0,
+ "target_band_c": [
+  228.0,
+  232.0
+ ],
+ "candidates_2500node": [
+  {
+   "drive_a": 0.52,
+   "power_density_w_per_m3": 827605.7040778558,
+   "uniform_true_peak_c": 207.06,
+   "holdout_resolution": "2500",
+   "holdout_nodes_in_part": 2096,
+   "under_t_eff": true,
+   "margin_to_t_eff_c": 27.939999999999998
+  },
+  {
+   "drive_a": 0.58,
+   "power_density_w_per_m3": 923098.6699329929,
+   "uniform_true_peak_c": 222.84,
+   "holdout_resolution": "2500",
+   "holdout_nodes_in_part": 2096,
+   "under_t_eff": true,
+   "margin_to_t_eff_c": 12.159999999999997
+  },
+  {
+   "drive_a": 0.64,
+   "power_density_w_per_m3": 1018591.6357881302,
+   "uniform_true_peak_c": 240.11,
+   "holdout_resolution": "2500",
+   "holdout_nodes_in_part": 2096,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -5.110000000000014
+  },
+  {
+   "drive_a": 0.7,
+   "power_density_w_per_m3": 1114084.6016432673,
+   "uniform_true_peak_c": 258.51,
+   "holdout_resolution": "2500",
+   "holdout_nodes_in_part": 2096,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -23.50999999999999
+  },
+  {
+   "drive_a": 0.85,
+   "power_density_w_per_m3": 1352817.0162811102,
+   "uniform_true_peak_c": 282.68,
+   "holdout_resolution": "2500",
+   "holdout_nodes_in_part": 2096,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -47.68000000000001
+  },
+  {
+   "drive_a": 1.0,
+   "power_density_w_per_m3": 1591549.4309189534,
+   "uniform_true_peak_c": 298.71,
+   "holdout_resolution": "2500",
+   "holdout_nodes_in_part": 2096,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -63.70999999999998
+  }
+ ],
+ "candidates_9000node": [
+  {
+   "drive_a": 0.585,
+   "power_density_w_per_m3": 931056.4170875876,
+   "uniform_true_peak_c": 226.89,
+   "holdout_resolution": "9000_arbiter",
+   "holdout_nodes_in_part": 8478,
+   "under_t_eff": true,
+   "margin_to_t_eff_c": 8.110000000000014
+  }
+ ],
+ "pick": {
+  "drive_a": 0.585,
+  "uniform_peak_c": 226.89,
+  "holdout_resolution": "9000_arbiter",
+  "in_band": false,
+  "band_c": [
+   228.0,
+   232.0
+  ],
+  "note": "~1 C below band low -> conservative; a=0.60 would sit mid-band if more throughput is wanted",
+  "shaping_room_to_t_eff_c": 8.110000000000014,
+  "margin_to_real_ceiling_c": 23.110000000000014
+ },
+ "finding": "Pyramid runs HOTTER than the cube at equal drive_a (consistent with S1 pyramid 281 > cube 265), so its feasible drive_a (~0.585) is close to the cube (~0.57).",
+ "rule": "pick the drive whose 9000-node uniform peak is a few C UNDER T_eff=235"
+}
