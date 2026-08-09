@@ -1,0 +1,20 @@
+{
+  "what": "heatr3d combined cross-engine is_sendable gate on the B4 CUBE map. PASSES - the loop closes on a SECOND, geometrically distinct shape (compact cube vs full-height square), so it generalizes across the shape family, not square-specific.",
+  "map_source": "solve3d/results/map_stage_b4_cube.npz",
+  "geometry": "shape_library_3d/stl/cube.stl (16.12 mm, equal-volume) voxelized n=64, 60mm chamber - same cube as registry phase_e_cube_n64",
+  "drive_power_density_w_per_m3": 907183.1756238034,
+  "drive_frac": 0.57,
+  "rho_target": 0.98,
+  "peaks_C": {
+    "solve3d_true_holdout": 235.08,
+    "heatr3d_end_state": 246.9
+  },
+  "engine_offset_C": 11.8,
+  "ceiling_C": 250.0,
+  "heatr3d_margin_under_ceiling_C": 3.1,
+  "heatr3d_rho_final_mean": 0.98,
+  "is_sendable_cross_engine": true,
+  "consistency_note": "engine offset +11.8 C here vs +11.3 C on the square B4 - the shaped-map offset is stable ~+11-12 C across shapes; margin ~3 C both, so the 15 C headroom is consistently load-bearing. The cube's higher feasible drive (0.57x vs square 0.34x) confirms drive is genuinely per-part (compact cube sheds heat differently than the full-height square).",
+  "honest_caveat": "cross-engine SIMULATION agreement, not a measured part; the P-gate coupon is the physical validation.",
+  "engines": "heatr3d_native voxel FDM (n=64) vs solve3d dolfinx FEM tet"
+}
