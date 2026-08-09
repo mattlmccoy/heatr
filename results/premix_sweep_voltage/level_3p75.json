@@ -1,0 +1,11 @@
+{
+  "wtpct": 3.75,
+  "premix_frac": 0.15,
+  "voltage_to_ceiling_V": 167.40966796875,
+  "matched_peak_T_C": 249.28620617392147,
+  "matched_part_peak_to_mean": 1.2883444274281222,
+  "matched_part_mean_phi": 0.5187694393722644,
+  "matched_part_mean_T_C": 193.49344854276507,
+  "bed_absorption_fraction": 0.8165070198895026,
+  "clamp_hit": false
+}

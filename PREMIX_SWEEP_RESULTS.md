@@ -32,13 +32,30 @@ Three robust readings:
    (peak/mean 1.15 → 1.25–1.29). Within the premix-on range *more* premix is progressively less bad
    (φ 0.51→0.63), but never recovers the un-premixed φ≈1.0.
 
+## Voltage-drive counterpart — the drive mode does NOT rescue it (tested 2026-08-07)
+
+The fair counterpart (`study_premix_sweep_voltage.py`, results in `results/premix_sweep_voltage/`,
+figure `fig_premix_drive_comparison.png`) bisects the applied **voltage** to the same 250 °C ceiling
+instead of enforcing fixed power. Every converged run is THM-clean (0 clamp warnings; peak ~250 °C).
+
+| wt% | voltage→ceiling (V) | part mean φ | peak/mean | bed absorb |
+|----:|----:|----:|----:|----:|
+| 0    | 763 | 0.996 | 1.145 | 0.000 |
+| 3.75 | 167 | 0.519 | 1.288 | 0.817 |
+| 15   |  95 | 0.655 | 1.259 | 0.754 |
+
+**The part outcome (φ, uniformity, bed fraction) is essentially IDENTICAL to the power-drive sweep.**
+Only the drive *knob* moves oppositely: power (W) rises +8%, **voltage (V) falls ~8×**. That voltage
+drop is a units artifact (higher σ needs less voltage for the same field), **not** a part benefit — at
+matched ceiling the field *shape*, hence the part state, is set by the σ *pattern* (same premix), not by
+the drive mode. **Conclusion: a uniform premix baseline is parasitic under BOTH drive modes.** The bed
+absorption is geometric and drive-mode-independent.
+
 ## Critical caveats — do not over-read this
 
-1. **Drive-mode dependence (the big one).** This uses **fixed total absorbed power**, so premix only
-   redistributes it (bed parasitic). Under **voltage drive** (fixed field), higher σ raises absorbed
-   power *in the part* — the sign of the drive/fusion effect can flip. The two modes are the known
-   trade in `drive-mode-and-voltage-realizability`. A voltage-drive rerun is the honest counterpart and
-   is NOT done here.
+1. ~~Drive-mode dependence~~ **RESOLVED (see the voltage-drive section above):** the earlier hypothesis
+   that voltage drive would flip the sign and make premix helpful is **WRONG** — it flips only the drive
+   knob, not the part outcome. Premix is parasitic in both modes.
 2. **Uniform premix ≠ graded FGM.** This sweeps a *uniform* baseline over the whole bed. It does **not**
    test, and does not refute, *graded* dopant (the established FGM benefit of putting dopant where the
    part needs it). A uniform floor just raises absorption everywhere, including the parasitic bed.
