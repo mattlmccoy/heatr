@@ -1,0 +1,31 @@
+{
+  "uniform": {
+    "drive_to_ceiling_W": 736.1328125,
+    "part_peak_T_C": 253.33363439993278,
+    "part_mean_phi": 0.9988287898682396,
+    "part_peak_to_mean": 1.1467664556069461,
+    "part_mean_T_C": 220.91127026021312
+  },
+  "premix_15wt": {
+    "drive_to_ceiling_W": 796.2890625,
+    "part_peak_T_C": 247.4261281169941,
+    "part_mean_phi": 0.6317130698380404,
+    "part_peak_to_mean": 1.2508840548911153,
+    "part_mean_T_C": 197.8010089340627
+  },
+  "graded": {
+    "drive_to_ceiling_W": 796.2890625,
+    "part_peak_T_C": 247.4518000765794,
+    "part_mean_phi": 1.0,
+    "part_peak_to_mean": 1.0345659764156765,
+    "part_mean_T_C": 239.18416584111225
+  },
+  "_meta": {
+    "graded_arm": "A15",
+    "graded_sat_range": [
+      0.10731837153434753,
+      1.499910593032837
+    ],
+    "sat_max": 1.499910593032837
+  }
+}
