@@ -1,0 +1,70 @@
+{
+ "what": "Stage B B1 FD gate: rho+T density co-state adjoint dks_peak/ds vs central finite differences on the coarse square's high-sensitivity design cells; frozen 1e-6 relative, no widening. Mutation: dropping lambda_rho must FAIL (rel_err > 1e-3).",
+ "coupling": "off",
+ "coupling_note": "EQS solved once at preheat, drive fixed for the march (the Stage A hold-out convention); the adjoint is derived for the same OFF forward -- consistent, not a mismatch.",
+ "drive_a": 0.4,
+ "power_density_w_per_m3": 636619.7723675814,
+ "case": {
+  "target_nodes": 120,
+  "lc0_m": 0.006,
+  "dt_s": 1.0,
+  "n_steps": 900,
+  "march_time_s": 900.0,
+  "n_part_nodes": 34,
+  "n_design_cells": 340,
+  "fixed_horizon_no_rho_stop": true,
+  "fixed_horizon_note": "the gate marches a FIXED number of steps (no rho-target early stop) so the end-state is a SMOOTH function of the design; a moving stop would inject a kink."
+ },
+ "end_state": {
+  "peak_true_c": 222.56312470789092,
+  "peak_ks_c": 220.22376398499412,
+  "mean_rho": 0.6439418326963641,
+  "max_rho": 0.999451681640819
+ },
+ "clips_inactive": {
+  "dt_step_cap": true,
+  "temp_bound": true,
+  "drho_cap_in_part": true
+ },
+ "n_probes": 4,
+ "probe_indices": [
+  96,
+  131,
+  98,
+  198
+ ],
+ "h": 0.0001,
+ "worst_rel_err": 4.623588655126515e-10,
+ "pass_rel_err": 1e-06,
+ "fd_gate_passed": true,
+ "mutation_worst_rel_err_drop_lambda_rho": 0.01724222351134748,
+ "mutation_bites": true,
+ "rho_target_reached": false,
+ "launch_ok": true,
+ "probes": {
+  "96": {
+   "fd": 1.5901791550732014,
+   "adjoint": 1.5901791549389237,
+   "rel_err": 8.444186910747657e-11,
+   "rel_err_drop_lambda_rho": 0.01613485924723639
+  },
+  "131": {
+   "fd": 1.5563623468040078,
+   "adjoint": 1.5563623474872594,
+   "rel_err": 4.390055303387625e-10,
+   "rel_err_drop_lambda_rho": 0.01724222351134748
+  },
+  "98": {
+   "fd": 1.519004762116083,
+   "adjoint": 1.5190047615747968,
+   "rel_err": 3.5634261361858775e-10,
+   "rel_err_drop_lambda_rho": 0.01430232401903976
+  },
+  "198": {
+   "fd": 1.5175164685388154,
+   "adjoint": 1.5175164692404526,
+   "rel_err": 4.623588655126515e-10,
+   "rel_err_drop_lambda_rho": 0.017065524480078174
+  }
+ }
+}

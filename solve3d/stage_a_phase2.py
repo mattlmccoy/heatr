@@ -337,10 +337,30 @@ def ceiling_verdict(true_peak_c: float, ceiling_c: float) -> dict:
             "margin_c": ceil - peak, "feasible": bool(peak <= ceil)}
 
 
+def _holdout_mesh_and_predicate(shape: str, holdout_nodes: int,
+                                holdout_lc0: float, p):
+    """Build the FINE hold-out mesh + part predicate for `shape`, dispatched by
+    geometry family (density_adjoint.geometry_family): square/circle through
+    mesh_gmsh (the byte-identical anchor path), cube/pyramid through the Phase E
+    conforming OCC mesh. Returns (msh, info, mats)."""
+    from solve3d import density_adjoint as da
+    if da.geometry_family(shape) == "anchor":
+        import mesh_gmsh as mg
+        kind = "cylinder" if shape == "circle" else "square"
+        msh, info, _ = mg.match_lc(kind, int(holdout_nodes), float(holdout_lc0))
+        mats = fwd.build_materials(msh, fwd.in_part_predicate(shape), p)
+        return msh, info, mats
+    from solve3d.phase_e import geometry as geo
+    msh, info, _ = geo.match_lc(shape, int(holdout_nodes), float(holdout_lc0))
+    mats = fwd.build_materials(msh, geo.in_part_predicate(shape), p)
+    return msh, info, mats
+
+
 def ceiling_end_state_gate(s_map_solve: np.ndarray, solve_centroids: np.ndarray,
                            holdout_nodes: int, holdout_lc0: float,
                            rho_target: float, max_time_s: float = 3000.0,
-                           power_density: float | None = None) -> dict:
+                           power_density: float | None = None,
+                           shape: str = "square") -> dict:
     """ACCEPTANCE: transfer the solved dopant saturation onto a mesh HOLD-OUT
     (finer, NOT the solve mesh), densify to rho_target at the fixed drive with
     coupling off, and read the end-state true peak against the ceiling.
@@ -349,16 +369,16 @@ def ceiling_end_state_gate(s_map_solve: np.ndarray, solve_centroids: np.ndarray,
     (saturation units), then converted to sigma exactly as the solve does. The
     ceiling being nearly dopant-independent is the physics that makes this a
     forward gate rather than a constrained solve; the number is still MEASURED,
-    never assumed (no false-green)."""
-    import mesh_gmsh as mg
+    never assumed (no false-green). `shape` selects the hold-out geometry
+    (default "square" -> byte-identical; cube/pyramid -> Phase E conforming)."""
     from scipy.spatial import cKDTree
 
     tcfg = stage_a.thermal_config()
     ceiling_c = float(tcfg["T_ceiling_C"])
     p = drive_params(power_density=power_density)
 
-    msh, info, _ = mg.match_lc("square", int(holdout_nodes), float(holdout_lc0))
-    mats = fwd.build_materials(msh, fwd.in_part_predicate("square"), p)
+    msh, info, mats = _holdout_mesh_and_predicate(shape, int(holdout_nodes),
+                                                  float(holdout_lc0), p)
     import dolfinx
     cent = np.asarray(dolfinx.mesh.compute_midpoints(
         msh, msh.topology.dim,

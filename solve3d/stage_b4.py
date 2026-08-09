@@ -113,29 +113,36 @@ def pick_backed_off_drive(peaks: dict, band: tuple = UNIFORM_TARGET_BAND_C) -> d
 # --------------------------------------------------------------------------- #
 # Task A: FD-gate RE-CONFIRM at the backed-off drive (gradient UNCHANGED)
 # --------------------------------------------------------------------------- #
-def fd_gate_reconfirm(power_density: float, lam: float = b3.GATE_LAMBDA,
+def fd_gate_reconfirm(power_density: float | None = None,
+                      lam: float = b3.GATE_LAMBDA,
                       mu: float = b3.GATE_MU, h: float = 1e-4,
-                      tol: float = 1e-6) -> dict:
-    """Re-confirm the combined AL gradient FD gate at the B4 backed-off drive.
+                      tol: float = 1e-6, shape: str = "square") -> dict:
+    """Re-confirm the combined AL gradient FD gate on the coarse `shape` case.
 
     The gradient composition is UNCHANGED from B3 (same envelope adjoint, same
-    FD-gated dks_peak_ds, same max(0, lambda+mu*g) factor); only the absolute drive
-    differs, so this re-confirms the numbers still agree, it is not a new
-    derivation. The hinge is kept ACTIVE by setting t_target just BELOW the coarse
-    KS peak MEASURED at this drive (a lower drive => a lower coarse peak, so the
-    fixed 204 C B3 gate constant would go inactive). Central difference on the
-    top-|g| probe indices; PASS when worst_rel_err <= tol (expect ~1e-8)."""
+    FD-gated dks_peak_ds, same max(0, lambda+mu*g) factor). Two uses:
+      * B4 square: re-confirm the numbers still agree at the backed-off drive
+        (`power_density` set, shape="square").
+      * GEOMETRY GENERALIZATION (the IRON LAW): re-gate the SAME combined gradient
+        on a NEW mesh (shape="cube"/"pyramid"). A correct density co-state on the
+        square is NOT proof on the cube -- different mesh, different element
+        quality -- so this is re-run per geometry at the frozen tol, no widening.
+    `power_density=None` uses the frozen 0.40x drive (the natural gate drive for
+    the geometry re-gate). The hinge is kept ACTIVE by setting t_target just BELOW
+    the coarse KS peak MEASURED on this mesh at this drive. Central difference on
+    the top-|g| probe indices; PASS when worst_rel_err <= tol (expect ~1e-8)."""
     probe = b3.build_al_coarse_case(lam=lam, mu=mu, t_target=0.0,
-                                    power_density=power_density)
+                                    power_density=power_density, shape=shape)
     v = probe.design_point()
     ks_coarse = float(da.ks_peak_forward(probe.da_case, v))
     t_target = ks_coarse - 1.0                 # just below the peak: hinge active
     case = b3.build_al_coarse_case(lam=lam, mu=mu, t_target=t_target,
-                                   power_density=power_density)
+                                   power_density=power_density, shape=shape)
     J, g = b3.al_objective_and_grad(case, v)
-    assert np.all(np.isfinite(g)), "non-finite AL gradient at backed-off drive"
+    assert np.all(np.isfinite(g)), "non-finite AL gradient on the coarse mesh"
     worst = 0.0
     probes = case.probe_indices()
+    probe_recs = []
     for i in probes:
         vp = v.copy(); vp[i] += h
         vm = v.copy(); vm[i] -= h
@@ -144,11 +151,18 @@ def fd_gate_reconfirm(power_density: float, lam: float = b3.GATE_LAMBDA,
         fd = (Jp - Jm) / (2 * h)
         rel = abs(fd - g[i]) / max(1.0, abs(fd))
         worst = max(worst, rel)
+        probe_recs.append({"i": int(i), "fd": float(fd), "adjoint": float(g[i]),
+                           "rel_err": float(rel)})
     _J0, g_drop = b3.al_objective_and_grad(case, v, _drop_al_term=True)
     i0 = probes[0]
     mutation_bites = abs(g[i0] - g_drop[i0]) > 1e-3 * max(1.0, abs(g[i0]))
-    return {"power_density_w_per_m3": float(power_density),
+    return {"shape": shape,
+            "power_density_w_per_m3": (float(power_density)
+                                       if power_density is not None else None),
+            "n_design": int(case.da_case.chain.n_design),
+            "n_part_nodes": int(da._peak_mask(case.da_case.tc).sum()),
             "ks_coarse_c": ks_coarse, "gate_t_target_c": float(t_target),
+            "probe_indices": [int(i) for i in probes], "probes": probe_recs,
             "worst_rel_err": float(worst), "tol": float(tol),
             "launch_ok": bool(worst <= tol), "mutation_bites": bool(mutation_bites),
             "hinge_active": bool(b3.al_gradient_factor(lam, mu, ks_coarse - t_target)
@@ -160,28 +174,31 @@ def fd_gate_reconfirm(power_density: float, lam: float = b3.GATE_LAMBDA,
 # --------------------------------------------------------------------------- #
 def drive_probe(candidates: tuple = DRIVE_CANDIDATES,
                 band: tuple = UNIFORM_TARGET_BAND_C,
-                delta_headroom: float = DELTA_HEADROOM_C) -> dict:
+                delta_headroom: float = DELTA_HEADROOM_C,
+                shape: str = "square") -> dict:
     """Measure the UNIFORM (s=1) dolfinx hold-out peak at each candidate drive and
     pick the backed-off drive whose uniform peak lands a few C UNDER T_eff.
 
     Reuses stage_b.uniform_holdout_peak (the SAME arbiter the AL restoration shift
     reads), so the probe peak and the AL feasibility test are like-for-like. A
-    handful of densify forwards per drive, not a heavy solve. Writes
-    stage_b4_drive_probe.json (no false-green: peaks are MEASURED)."""
+    handful of densify forwards per drive, not a heavy solve. `shape` selects the
+    geometry (default "square"; cube/pyramid -> Phase E conforming hold-out).
+    Writes stage_b4_drive_probe[_shape].json (no false-green: peaks are
+    MEASURED)."""
     ceiling_c = float(stage_a.thermal_config()["T_ceiling_C"])
     t_eff = t_ceiling_eff(ceiling_c, delta_headroom)
     peaks = {}
     records = []
     for a in candidates:
         pw = power_density_for_drive_a(a)
-        rec = stage_b.uniform_holdout_peak(power_density=pw, drive_a=a)
+        rec = stage_b.uniform_holdout_peak(power_density=pw, drive_a=a, shape=shape)
         tp = float(rec["true_peak_c"])
         peaks[float(a)] = tp
         records.append({"drive_a": float(a), "power_density_w_per_m3": float(pw),
                         "uniform_true_peak_c": tp,
                         "under_t_eff": bool(tp < t_eff),
                         "margin_to_t_eff_c": float(t_eff - tp)})
-        print(f"[B4 probe drive={a:.2f}x pw={pw:.1f}] uniform peak={tp:.2f}C "
+        print(f"[B4 probe {shape} drive={a:.2f}x pw={pw:.1f}] uniform peak={tp:.2f}C "
               f"(T_eff={t_eff:.1f}, margin={t_eff - tp:+.2f}C)", flush=True)
     pick = pick_backed_off_drive(peaks, band=band)
     doc = {
@@ -191,7 +208,7 @@ def drive_probe(candidates: tuple = DRIVE_CANDIDATES,
                 "shape up into. Peaks are MEASURED via stage_b.uniform_holdout_peak "
                 "(the same arbiter the AL restoration shift reads).",
         "stage": "B4_drive_backoff_probe",
-        "part": "square",
+        "part": shape,
         "ceiling_c": ceiling_c,
         "delta_headroom_c": float(delta_headroom),
         "t_ceiling_eff_c": t_eff,
@@ -201,11 +218,35 @@ def drive_probe(candidates: tuple = DRIVE_CANDIDATES,
         "rule": "pick the HIGHEST drive whose uniform peak is in-band (~228-232), "
                 "leaving AL room to shape UP toward T_eff=235 while staying feasible",
     }
-    stage_b._write_json(RESULTS / "stage_b4_drive_probe.json", doc)
-    print(f"[B4 probe] PICK drive={pick['drive_a']:.2f}x "
+    name = ("stage_b4_drive_probe.json" if shape == "square"
+            else f"stage_b4_drive_probe_{shape}.json")
+    stage_b._write_json(RESULTS / name, doc)
+    print(f"[B4 probe {shape}] PICK drive={pick['drive_a']:.2f}x "
           f"uniform={pick['uniform_peak_c']:.2f}C in_band={pick['in_band']}",
           flush=True)
     return doc
+
+
+def _preconditions_for_shape(shape: str) -> dict:
+    """The launch guard for the heavy AL solve, per geometry.
+
+    square -> stage_b._preconditions() (the frozen B1 FD gate + _march fidelity
+    artifacts, byte-identical). cube/pyramid -> the geometry-generalization
+    artifacts written by the Step 2 gate: geom_al_fd_gate_{shape}.json
+    (combined AL gradient re-gated on THIS mesh, launch_ok + mutation_bites) and
+    geom_march_fidelity_{shape}.json (the _march-vs-production fidelity on THIS
+    mesh, agree). Both must be green before the heavy solve -- the same
+    no-ungated-gradient rule the square enforces."""
+    import json as _json
+    if shape == "square":
+        return stage_b._preconditions()
+    gate = _json.loads((RESULTS / f"geom_al_fd_gate_{shape}.json").read_text())
+    fid = _json.loads((RESULTS / f"geom_march_fidelity_{shape}.json").read_text())
+    return {"launch_ok": bool(gate.get("launch_ok")),
+            "fd_worst_rel_err": gate.get("worst_rel_err"),
+            "mutation_bites": bool(gate.get("mutation_bites")),
+            "fidelity_agree": bool(fid.get("agree")),
+            "fidelity_rel_T": fid.get("rel_T_in_part")}
 
 
 # --------------------------------------------------------------------------- #
@@ -215,7 +256,8 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
                     outer_max: int = b3.OUTER_MAX,
                     inner_budget: int = b3.INNER_BUDGET,
                     holdout_nodes: int = stage_b.SOLVE_HOLDOUT_NODES,
-                    holdout_lc0: float = stage_b.SOLVE_HOLDOUT_LC0_M) -> dict:
+                    holdout_lc0: float = stage_b.SOLVE_HOLDOUT_LC0_M,
+                    shape: str = "square") -> dict:
     """The outer augmented-Lagrangian solve at the BACKED-OFF drive with the
     EFFECTIVE ceiling T_eff = ceiling - delta_headroom as the restoration-shift
     target. Two coupled B4 changes vs b3.run_solve_al, NO new physics:
@@ -229,12 +271,13 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
     is_sendable verdict is a SEPARATE heatr3d verify step (the main session runs it
     after this solve, exactly as with B3).
 
-    REFUSES to start unless B1 launch_ok AND the B2 _march fidelity check are both
-    green (stage_b._preconditions), same guard as b3.run_solve_al."""
-    pre = stage_b._preconditions()
+    REFUSES to start unless the launch_ok FD gate AND the _march fidelity check
+    are both green for THIS geometry (_preconditions_for_shape), same guard as
+    b3.run_solve_al."""
+    pre = _preconditions_for_shape(shape)
     if not (pre["launch_ok"] and pre["fidelity_agree"]):
         raise RuntimeError(
-            f"run_solve_al_b4 refused: launch_ok={pre['launch_ok']} "
+            f"run_solve_al_b4 refused ({shape}): launch_ok={pre['launch_ok']} "
             f"fidelity_agree={pre['fidelity_agree']}. Both must be green before the "
             "heavy B4 AL solve.")
     from solve3d.phase_e import checkpoint as ck
@@ -247,17 +290,18 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
     pw = power_density_for_drive_a(drive_a)
 
     # uniform feasibility at the backed-off drive (NOT the cached 0.40x artifact)
-    uniform_rec = stage_b.uniform_holdout_peak(power_density=pw, drive_a=drive_a)
+    uniform_rec = stage_b.uniform_holdout_peak(power_density=pw, drive_a=drive_a,
+                                               shape=shape)
     uniform_tp = float(uniform_rec["true_peak_c"])
 
     lam, mu, delta = b3.LAM0, b3.MU0, 0.0
     t_target = t_eff                          # shift targets T_eff, not 250
-    case = b3.build_al_solve_case(lam, mu, t_target, power_density=pw)
+    case = b3.build_al_solve_case(lam, mu, t_target, power_density=pw, shape=shape)
     dcase, chain = case.da_case, case.da_case.chain
     n = chain.n_design
     v = np.ones(n)
 
-    status = RESULTS / "stage_b4_square_status.json"
+    status = RESULTS / f"stage_b4_{shape}_status.json"
     stage_b._write_json(status, {
         "state": "running", "pid": os.getpid(), "n_design": int(n),
         "drive_a": float(drive_a), "power_density_w_per_m3": float(pw),
@@ -293,7 +337,7 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
                 "updated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
             return {"ks_peak_c": float(ks)}
 
-        ckpt = RESULTS / f"ckpt_stage_b4_square_outer{k}.npz"
+        ckpt = RESULTS / f"ckpt_stage_b4_{shape}_outer{k}.npz"
         res = ck.run_with_checkpoint(fg, v, int(inner_budget), ckpt,
                                      bounds=(0.0, 1.0), scale_first_step=True,
                                      on_eval=on_eval)
@@ -303,7 +347,8 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
         s_map = chain.design_to_map(v, 0.0)
         gate = p2.ceiling_end_state_gate(
             s_map, chain.centroids, holdout_nodes=int(holdout_nodes),
-            holdout_lc0=float(holdout_lc0), rho_target=rho_t, power_density=pw)
+            holdout_lc0=float(holdout_lc0), rho_target=rho_t, power_density=pw,
+            shape=shape)
         true_peak = float(gate["true_peak_c"])
         ks_solve = float(da.ks_peak_forward(dcase, v))
 
@@ -338,7 +383,7 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
 
     v_best = v
     s_best = chain.design_to_map(v_best, 0.0)
-    np.savez_compressed(RESULTS / "map_stage_b4_square.npz", v_raw=v_best,
+    np.savez_compressed(RESULTS / f"map_stage_b4_{shape}.npz", v_raw=v_best,
                         s_map=s_best, centroids=chain.centroids,
                         volumes=chain.volumes)
 
@@ -358,7 +403,7 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
                 "<= 250; is_shippable/honest_null judge the TRUE peak vs the REAL "
                 "250 ceiling. Cross-engine is_sendable is a SEPARATE heatr3d verify.",
         "stage": "B4_lower_drive_headroom_margin_al",
-        "part": "square",
+        "part": shape,
         "drive_a": float(drive_a),
         "power_density_w_per_m3": float(pw),
         "ceiling_c": ceiling_c,
@@ -390,7 +435,7 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
             stage_a.recommended_power_settings(float(drive_a)),
         "wall_total_s": round(time.perf_counter() - t0, 1),
     }
-    stage_b._write_json(RESULTS / "stage_b4_square.json", doc)
+    stage_b._write_json(RESULTS / f"stage_b4_{shape}.json", doc)
     stage_b._write_json(status, {
         "state": "done", "pid": os.getpid(),
         "is_shippable": bool(verdict["is_shippable"]),
@@ -417,16 +462,18 @@ def main() -> int:
                     help="B4 heavy AL solve at the backed-off drive + T_eff")
     ap.add_argument("--drive-a", type=float, default=None,
                     help="B4 backed-off drive multiplier (from the probe)")
+    ap.add_argument("--shape", type=str, default="square",
+                    help="geometry: square (default) | cube | pyramid")
     ap.add_argument("--outer-max", type=int, default=b3.OUTER_MAX)
     ap.add_argument("--inner-budget", type=int, default=b3.INNER_BUDGET)
     a = ap.parse_args()
     if a.probe:
-        drive_probe()
+        drive_probe(shape=a.shape)
     elif a.solve:
         if a.drive_a is None:
             raise SystemExit("--solve requires --drive-a X (from the probe)")
         run_solve_al_b4(drive_a=a.drive_a, outer_max=a.outer_max,
-                        inner_budget=a.inner_budget)
+                        inner_budget=a.inner_budget, shape=a.shape)
     return 0
 
 

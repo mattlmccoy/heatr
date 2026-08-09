@@ -1,0 +1,30 @@
+{
+ "shape": "pyramid",
+ "iron_law": "combined AL gate + density co-state gate + march fidelity, re-run on THIS mesh at the frozen 1e-6 tol (no widening)",
+ "gate_drive_mult_of_0p40x": 2.0,
+ "gate_power_density_w_per_m3": 1273239.5447351628,
+ "gate_regime_note": "densifying regime so lambda_rho is load-bearing; the SOLVE drive is the backed-off value from the probe",
+ "al_gate": {
+  "worst_rel_err": 2.43526307649207e-09,
+  "tol": 1e-06,
+  "launch_ok": true,
+  "mutation_bites": true
+ },
+ "density_gate": {
+  "worst_rel_err": 1.0401640046195637e-09,
+  "pass_rel_err": 1e-06,
+  "fd_gate_passed": true,
+  "mutation_worst_rel_err_drop_lambda_rho": 0.036030780290499005,
+  "mutation_bites": true,
+  "launch_ok": true
+ },
+ "march_fidelity": {
+  "rel_T_in_part": 0.0,
+  "rel_mean_rho": 0.0,
+  "agree": true
+ },
+ "fd_gate_green": true,
+ "n_design": 222,
+ "n_part_nodes": 22,
+ "wall_s": 22.0
+}

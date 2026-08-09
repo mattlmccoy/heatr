@@ -178,12 +178,16 @@ def build_al_coarse_case(lam: float = GATE_LAMBDA, mu: float = GATE_MU,
                          t_target: float = GATE_T_TARGET_C,
                          n_steps: int = da.COARSE_N_STEPS,
                          envelope_max_time_s: float = ENVELOPE_MAX_TIME_S,
-                         power_density: float | None = None) -> ALCase:
+                         power_density: float | None = None,
+                         shape: str = "square") -> ALCase:
     """The coarse AL gate case (mirrors stage_b.build_penalty_coarse_case): the
     density march uses case.n_steps; the melt-onset envelope uses tc.max_time_s,
     set larger so the argmin sits interior. `power_density` overrides the 0.40x
-    drive for the B4 FD-gate re-confirm at the backed-off drive (None = 0.40x)."""
-    case = da.build_coarse_case(n_steps=int(n_steps), power_density=power_density)
+    drive for the B4 FD-gate re-confirm at the backed-off drive (None = 0.40x).
+    `shape` selects the geometry (default "square"; cube/pyramid -> Phase E
+    conforming mesh) so the combined AL gradient is FD-gated on EACH solid."""
+    case = da.build_coarse_case(n_steps=int(n_steps), power_density=power_density,
+                                shape=shape)
     case.tc.max_time_s = float(envelope_max_time_s)
     return ALCase(da_case=case, lam=float(lam), mu=float(mu),
                   t_target=float(t_target))
@@ -238,15 +242,17 @@ CONVERGE_TOL_C = 0.25            # |true arbiter peak - ceiling| convergence ban
 
 
 def build_al_solve_case(lam: float, mu: float, t_target: float,
-                        power_density: float | None = None) -> ALCase:
+                        power_density: float | None = None,
+                        shape: str = "square") -> ALCase:
     """The heavy AL case on B2's solve mesh (stage_b.SOLVE_* constants), wrapped
     with the AL scalars. Mirrors stage_b.build_penalty_solve_case, penalty term
     swapped for the AL term. `power_density` overrides the 0.40x drive for the B4
-    backed-off drive (None = 0.40x, byte-identical to B3)."""
+    backed-off drive (None = 0.40x, byte-identical to B3). `shape` selects the
+    geometry (default "square"; cube/pyramid -> Phase E conforming solve mesh)."""
     case = da.build_coarse_case(
         target_nodes=stage_b.SOLVE_TARGET_NODES, lc0=stage_b.SOLVE_LC0_M,
         dt=stage_b.SOLVE_DT_S, n_steps=stage_b.SOLVE_N_STEPS,
-        power_density=power_density)
+        power_density=power_density, shape=shape)
     case.tc.max_time_s = stage_b.SOLVE_ENVELOPE_MAX_TIME_S
     return ALCase(da_case=case, lam=float(lam), mu=float(mu),
                   t_target=float(t_target))

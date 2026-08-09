@@ -1,0 +1,23 @@
+{
+ "what": "Stage B fidelity cross-check: density_adjoint._march (the FD-gate forward the co-state differentiates) vs production forward.march_enthalpy (densify=True) -- the forward the B2 arbiter ceiling_end_state_gate reads. Matched mesh, drive Q, dt, n_sub=1, fixed horizon. Bit-identity is the target.",
+ "config": {
+  "target_nodes": 120,
+  "lc0_m": 0.006,
+  "dt_s": 1.0,
+  "n_steps": 900,
+  "n_part_nodes": 96,
+  "enforce_cfl_disabled_for_match": true
+ },
+ "n_substeps_used_prod": 1,
+ "n_steps_taken_prod": 900,
+ "max_abs_dT_in_part_c": 0.0,
+ "rel_T_in_part": 0.0,
+ "peak_true_c_mine": 197.19043795291122,
+ "peak_true_c_prod": 197.19043795291122,
+ "peak_abs_diff_c": 0.0,
+ "mean_rho_mine": 0.5593265575893008,
+ "mean_rho_prod": 0.5593265575893008,
+ "rel_mean_rho": 0.0,
+ "tolerance_rel": 1e-06,
+ "agree": true
+}

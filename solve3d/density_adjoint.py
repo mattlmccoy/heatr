@@ -61,6 +61,54 @@ COARSE_DT_S = 1.0
 COARSE_N_STEPS = 900
 FILTER_RADIUS_M = 1.0e-3          # the frozen phase-2 design-chain filter radius
 
+# Geometry families. The square/circle Phase A ANCHORS mesh through
+# adjoint.TransientCase.build (mesh_gmsh); the Phase E cube/pyramid mesh through
+# the CONFORMING gmsh+OCC solids (phase_e.geometry). Both return an
+# adjoint.TransientCase with the SAME drive, horizon and design chain, so every
+# downstream read (density co-state, AL, arbiter) is geometry-agnostic.
+ANCHOR_SHAPES = ("square", "circle")
+PHASE_E_SHAPES = ("cube", "pyramid")
+
+
+def geometry_family(shape: str) -> str:
+    """"anchor" (square/circle, Phase A primitive mesh) or "phase_e" (cube/
+    pyramid, conforming OCC mesh). Unknown shapes are a hard error -- never a
+    silent fallthrough to the square mesh."""
+    if shape in ANCHOR_SHAPES:
+        return "anchor"
+    if shape in PHASE_E_SHAPES:
+        return "phase_e"
+    raise ValueError(f"unknown geometry {shape!r}; "
+                     f"expected one of {ANCHOR_SHAPES + PHASE_E_SHAPES}")
+
+
+def _build_transient_case_for_shape(shape: str, target_nodes: int, lc0: float,
+                                    p, max_time_s: float):
+    """Dispatch the mesh + materials by geometry family, REUSING the existing
+    builders (no adjoint code is forked):
+
+      anchor  -> adjoint.TransientCase.build (mesh_gmsh.match_lc, the square path,
+                 byte-identical to the pre-generalization call).
+      phase_e -> the Phase E conforming mesh: geometry.match_lc(shape) matches the
+                 in-part node count exactly as mesh_gmsh does, and
+                 geometry.in_part_predicate(shape) tags the part. Nominal geometry
+                 (no L0 precomp), mirroring the square anchor which carries none.
+
+    Both paths pass the SAME ForwardParams `p` (drive), the SAME horizon and
+    sample_dt_s = p.eqs_update_interval_s, so the phase_e case is the square case
+    with only the solid swapped."""
+    fam = geometry_family(shape)
+    if fam == "anchor":
+        return adjoint.TransientCase.build(
+            shape=shape, target_nodes_in_part=int(target_nodes), lc0=float(lc0),
+            p=p, max_time_s=float(max_time_s))
+    from solve3d.phase_e import geometry as geo
+    msh, info, _hist = geo.match_lc(shape, int(target_nodes), float(lc0))
+    mats = fwd.build_materials(msh, geo.in_part_predicate(shape), p)
+    eqs = adjoint.SteadyEqs(msh, mats, p)
+    return adjoint.TransientCase(msh, mats, p, eqs, info,
+                                 p.eqs_update_interval_s, float(max_time_s))
+
 
 @dataclass
 class _StepCache:
@@ -131,15 +179,21 @@ def probe_indices(case: "Case", k: int = 4) -> list[int]:
 def build_coarse_case(target_nodes: int = COARSE_TARGET_NODES,
                       lc0: float = COARSE_LC0_M, dt: float = COARSE_DT_S,
                       n_steps: int = COARSE_N_STEPS,
-                      power_density: float | None = None) -> Case:
-    """The coarse square at the FIXED 0.40x drive for the B1 FD gate.
+                      power_density: float | None = None,
+                      shape: str = "square") -> Case:
+    """The coarse case at the FIXED 0.40x drive for the B1 FD gate.
 
     `power_density` overrides the chosen 0.40x drive for the Stage B4 drive-
-    backoff (None keeps 0.40x, so every B1/B2/B3 call is unchanged)."""
-    tc = adjoint.TransientCase.build(
-        shape="square", target_nodes_in_part=int(target_nodes), lc0=float(lc0),
-        p=p2.drive_params(dt_s=float(dt), power_density=power_density),
-        max_time_s=float(dt) * float(n_steps))
+    backoff (None keeps 0.40x, so every B1/B2/B3 call is unchanged). `shape`
+    selects the geometry (default "square" -> byte-identical anchor path;
+    "cube"/"pyramid" -> the Phase E conforming mesh via
+    _build_transient_case_for_shape). The design chain, the density co-state and
+    everything downstream are geometry-agnostic -- only the mesh + part mask
+    change."""
+    tc = _build_transient_case_for_shape(
+        shape, int(target_nodes), float(lc0),
+        p2.drive_params(dt_s=float(dt), power_density=power_density),
+        float(dt) * float(n_steps))
     import dolfinx
     part_cent = np.asarray(dolfinx.mesh.compute_midpoints(
         tc.msh, tc.msh.topology.dim,
@@ -412,7 +466,8 @@ def dks_peak_ds(case: Case, v: np.ndarray,
     return g_v
 
 
-def march_fidelity_check(case: Case | None = None) -> dict:
+def march_fidelity_check(case: Case | None = None,
+                         out_name: str | None = None) -> dict:
     """Fidelity of the gate forward `_march` vs PRODUCTION forward.march_enthalpy
     (the physics the B2 arbiter ceiling_end_state_gate reads).
 
@@ -478,7 +533,7 @@ def march_fidelity_check(case: Case | None = None) -> dict:
         "agree": agree,
     }
     RESULTS.mkdir(parents=True, exist_ok=True)
-    path = RESULTS / "stage_b_march_fidelity.json"
+    path = RESULTS / (out_name or "stage_b_march_fidelity.json")
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(doc, indent=1, default=float))
     tmp.replace(path)
@@ -486,7 +541,7 @@ def march_fidelity_check(case: Case | None = None) -> dict:
 
 
 def fd_gate(case: Case | None = None, n_probes: int = 4, h: float = 1e-4,
-            seed: int = 7) -> dict:
+            seed: int = 7, out_name: str | None = None) -> dict:
     """B1 gate artifact: dks_peak_ds vs central FD on the high-sensitivity design
     cells (frozen 1e-6 relative, NO widening) + the drop-lambda_rho mutation.
 
@@ -558,7 +613,7 @@ def fd_gate(case: Case | None = None, n_probes: int = 4, h: float = 1e-4,
         "probes": probes,
     }
     RESULTS.mkdir(parents=True, exist_ok=True)
-    path = RESULTS / "stage_b_density_adjoint_fd_gate.json"
+    path = RESULTS / (out_name or "stage_b_density_adjoint_fd_gate.json")
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(doc, indent=1, default=float))
     tmp.replace(path)

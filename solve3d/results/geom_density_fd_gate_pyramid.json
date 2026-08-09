@@ -1,0 +1,70 @@
+{
+ "what": "Stage B B1 FD gate: rho+T density co-state adjoint dks_peak/ds vs central finite differences on the coarse square's high-sensitivity design cells; frozen 1e-6 relative, no widening. Mutation: dropping lambda_rho must FAIL (rel_err > 1e-3).",
+ "coupling": "off",
+ "coupling_note": "EQS solved once at preheat, drive fixed for the march (the Stage A hold-out convention); the adjoint is derived for the same OFF forward -- consistent, not a mismatch.",
+ "drive_a": 0.4,
+ "power_density_w_per_m3": 636619.7723675814,
+ "case": {
+  "target_nodes": 120,
+  "lc0_m": 0.006,
+  "dt_s": 1.0,
+  "n_steps": 900,
+  "march_time_s": 900.0,
+  "n_part_nodes": 22,
+  "n_design_cells": 222,
+  "fixed_horizon_no_rho_stop": true,
+  "fixed_horizon_note": "the gate marches a FIXED number of steps (no rho-target early stop) so the end-state is a SMOOTH function of the design; a moving stop would inject a kink."
+ },
+ "end_state": {
+  "peak_true_c": 197.19043795291122,
+  "peak_ks_c": 195.1903087184073,
+  "mean_rho": 0.5789701517170425,
+  "max_rho": 0.9316572282519173
+ },
+ "clips_inactive": {
+  "dt_step_cap": true,
+  "temp_bound": true,
+  "drho_cap_in_part": true
+ },
+ "n_probes": 4,
+ "probe_indices": [
+  23,
+  212,
+  12,
+  214
+ ],
+ "h": 0.0001,
+ "worst_rel_err": 1.0401640046195637e-09,
+ "pass_rel_err": 1e-06,
+ "fd_gate_passed": true,
+ "mutation_worst_rel_err_drop_lambda_rho": 0.036030780290499005,
+ "mutation_bites": true,
+ "rho_target_reached": false,
+ "launch_ok": true,
+ "probes": {
+  "23": {
+   "fd": -2.2544078736075335,
+   "adjoint": -2.2544078735500017,
+   "rel_err": 2.5519675392196235e-11,
+   "rel_err_drop_lambda_rho": 0.036030780290499005
+  },
+  "212": {
+   "fd": -2.129246646518368,
+   "adjoint": -2.1292466465945945,
+   "rel_err": 3.5799788966569653e-11,
+   "rel_err_drop_lambda_rho": 0.03533688169136617
+  },
+  "12": {
+   "fd": -2.05309551205346,
+   "adjoint": -2.0530955104912314,
+   "rel_err": 7.609137322440009e-10,
+   "rel_err_drop_lambda_rho": 0.03586399894495958
+  },
+  "214": {
+   "fd": -1.9604358735136884,
+   "adjoint": -1.9604358714745136,
+   "rel_err": 1.0401640046195637e-09,
+   "rel_err_drop_lambda_rho": 0.03557986898793944
+  }
+ }
+}

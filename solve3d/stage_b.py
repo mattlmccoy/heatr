@@ -51,7 +51,8 @@ def uniform_holdout_peak(holdout_nodes: int = HOLDOUT_NODES,
                          rho_target: float | None = None,
                          max_time_s: float = 3000.0,
                          power_density: float | None = None,
-                         drive_a: float | None = None) -> dict:
+                         drive_a: float | None = None,
+                         shape: str = "square") -> dict:
     """The UNIFORM (s=1) dopant true end-state peak at 0.40x on the hold-out.
 
     Reuses stage_a_phase2.ceiling_end_state_gate with a uniform saturation map:
@@ -68,9 +69,10 @@ def uniform_holdout_peak(holdout_nodes: int = HOLDOUT_NODES,
     gate = p2.ceiling_end_state_gate(
         np.ones(1), np.zeros((1, 3)), holdout_nodes=int(holdout_nodes),
         holdout_lc0=float(holdout_lc0), rho_target=rho_t, max_time_s=max_time_s,
-        power_density=power_density)
+        power_density=power_density, shape=shape)
     out = dict(gate)
     out["map"] = "uniform_s1"
+    out["shape"] = shape
     out["rho_target"] = rho_t
     # drive provenance: None -> the frozen 0.40x chosen drive (B2 behavior); a
     # B4 override records the backed-off drive it was actually measured at.
