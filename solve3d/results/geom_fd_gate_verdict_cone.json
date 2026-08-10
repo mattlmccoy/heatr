@@ -5,16 +5,16 @@
  "gate_power_density_w_per_m3": 1273239.5447351628,
  "gate_regime_note": "densifying regime so lambda_rho is load-bearing; the SOLVE drive is the backed-off value from the probe",
  "al_gate": {
-  "worst_rel_err": 5.9467683883661034e-09,
+  "worst_rel_err": 6.483400588986607e-09,
   "tol": 1e-06,
   "launch_ok": true,
   "mutation_bites": true
  },
  "density_gate": {
-  "worst_rel_err": 4.164285192572105e-09,
+  "worst_rel_err": 4.236930948656455e-09,
   "pass_rel_err": 1e-06,
   "fd_gate_passed": true,
-  "mutation_worst_rel_err_drop_lambda_rho": 0.03410549547180332,
+  "mutation_worst_rel_err_drop_lambda_rho": 0.04511012825395541,
   "mutation_bites": true,
   "launch_ok": true
  },
@@ -24,7 +24,7 @@
   "agree": true
  },
  "fd_gate_green": true,
- "n_design": 254,
+ "n_design": 255,
  "n_part_nodes": 12,
- "wall_s": 22.7
+ "wall_s": 19.3
 }

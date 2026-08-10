@@ -37,9 +37,9 @@ contention. Engineer builds + FD-gates + probes (light); I launch heavy solves.
 | square (anchor) | extrusion | - | 0.34x | 3e-9 | 235.03 | 246.3 | YES | +11.3 | DONE |
 | cube | smooth convex | n64 ok | 0.57x | 3.58e-9 | 235.08 | 246.9 | YES | +11.8 | DONE |
 | pyramid | sharp | n80 only (n64/96 alias) | 0.585x | 2.44e-9 | 235.43 | 244.2 | YES | +8.8 | DONE (converged=False) |
-| **cone** | sharp | n96 (n64/80 alias apex) | 0.55x | 5.95e-9 GREEN | - | - | - | - | READY TO LAUNCH |
-| **sphere** | smooth convex | n64 ok | 0.55x | 1.45e-9 GREEN | - | - | - | - | READY TO LAUNCH |
-| **cylinder** | thin/elongated | n64 ok | 0.55x | 1.26e-9 GREEN | - | - | - | - | READY TO LAUNCH |
+| **cone** | sharp | n96 (+Y: n64/80 alias apex on y) | adaptive | 6.48e-9 GREEN | - | - | - | - | REORIENTED, drive probing |
+| **sphere** | smooth convex | n64 ok | adaptive | 1.45e-9 GREEN | - | - | - | - | REORIENTED, drive probing |
+| **cylinder** | thin/elongated | n64 (+Y: n80 z-ramp 2.02%) | adaptive | 1.33e-9 GREEN | - | - | - | - | REORIENTED, drive probing |
 | trunc_octahedron | smooth convex | - | - | - | - | - | - | - | queued |
 | icosphere_coarse | smooth convex | - | - | - | - | - | - | - | queued |
 | uv_sphere | smooth convex | - | - | - | - | - | - | - | queued |
@@ -121,5 +121,39 @@ Cube/sphere/square ~symmetric, unaffected (cube acceptance still valid).
   as square 0.34 / cube 0.57 landed.
 - DELTA_EMA: cone (sharp apex) launch with --delta-ema 0.3 (the pyramid oscillated
   at the 0.5 default, converged=False); sphere/cylinder keep 0.5.
+
+## ORIENTATION FIX (2026-08-10, Matt option 1: natural-up -> +Y)
+- ROOT CAUSE: the EQS field + build axis is Y (forward._electrode_dofs electrodes
+  at x[1]=+-L/2; open/convection face y=+L/2). The cone/cylinder were built as
+  Z-axis bodies of revolution, so they solved SIDEWAYS relative to how the part
+  heats + densifies. Matt stopped the sideways cone de-risk solve.
+- FIX (rebuild, not rotate): the phase_e OCC primitives are now BUILT along +Y
+  directly (cone apex at +Y / base disc at -Y; cylinder axis along Y). Volume is
+  rotation-invariant, so the equal-volume sizing + the 1e-9 volume check are
+  unaffected (all 5 shapes still 4188.79 mm^3 at 1e-15). Predicates updated to
+  the Y axis. Sphere is symmetric -> no change (verified centered).
+- REUSABLE CONVENTION (natural-up -> +Y), shape_campaign.STL_REORIENT: the library
+  STLs ship the bodies of revolution native-+Z, so the fidelity VOXEL side rotates
+  the STL +Z -> +Y (Rx -90) to match the +Y tet mesh. cone/cylinder -> Rx-90;
+  sphere/cube/pyramid -> identity. AWKWARD shapes FLAGGED for Matt's review, not
+  guessed: toroid, flat_plane, l_extrusion, lattice (principled default =
+  longest axis vertical / largest flat face down; decide per shape in the 9-run).
+- RE-MEASURED (orientation changes the transfer, so re-run not assume):
+  - FIDELITY unchanged in CHOSEN grid but re-verified: cone n96 (apex-alias moved
+    z->y: n64 y-ramp 4.86% / n80 1.93% / n96 0.33%), sphere n64 (identical,
+    symmetric), cylinder n64 (n80 z-ramp 2.02% just over). None transfer-limited.
+  - FD-GATE (IRON LAW) re-run GREEN on each reoriented mesh: cone AL 6.48e-9 /
+    density 4.24e-9 (drop-lambda_rho 4.51%); sphere identical (1.45e-9 / 2.87e-10);
+    cylinder AL 2.05e-9 / density 1.33e-9 (drop-lambda_rho 1.44%). All mutations
+    bite in the densifying regime.
+  - DRIVE PROBE re-run ADAPTIVELY on the reoriented meshes (the sideways 0.55/0.60
+    peaks are invalid): stage_b4.adaptive_drive_probe secant-walks the uniform peak
+    to ~2-3 C under T_eff=235 so shapes are well-tuned, not under-driven. Corrected
+    selection (highest measured drive with uniform <= T_eff) + honest-null. [drives
+    filled when the detached probe completes.]
+- RE-SOLVE FLAG (do NOT run now): the already-done PYRAMID was solved apex-SIDEWAYS
+  (+Z). For consistency it must be RE-SOLVED apex-up (+Y) after the de-risk
+  validates -- a heavy solve, flagged for relaunch, not run here. (cube is
+  axis-agnostic; square is the 2-D anchor -- neither needs a re-solve.)
 - Offset is NOT a stable constant (pyramid +8.8 vs square/cube +11-12, confounded by grid/aliasing/convergence). The campaign's matched-grid offsets replace the walked-back claim. See [[thermal-ceiling-loop-closed]].
 - Expected transfer-limited candidates (fidelity gate may flag): cone (apex), lattice (struts), open_cylinder/pipe (walls). Honest flag > forced grid-confounded verify.

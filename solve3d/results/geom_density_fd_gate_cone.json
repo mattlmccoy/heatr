@@ -11,15 +11,15 @@
   "n_steps": 900,
   "march_time_s": 900.0,
   "n_part_nodes": 12,
-  "n_design_cells": 254,
+  "n_design_cells": 255,
   "fixed_horizon_no_rho_stop": true,
   "fixed_horizon_note": "the gate marches a FIXED number of steps (no rho-target early stop) so the end-state is a SMOOTH function of the design; a moving stop would inject a kink."
  },
  "end_state": {
-  "peak_true_c": 208.02580713560482,
-  "peak_ks_c": 206.35682783964484,
-  "mean_rho": 0.7429267106311322,
-  "max_rho": 0.9855600336639377
+  "peak_true_c": 230.01548467745366,
+  "peak_ks_c": 228.25636721717174,
+  "mean_rho": 0.6384356437656926,
+  "max_rho": 0.9998596372920167
  },
  "clips_inactive": {
   "dt_step_cap": true,
@@ -28,43 +28,43 @@
  },
  "n_probes": 4,
  "probe_indices": [
-  184,
-  27,
-  15,
-  225
+  252,
+  254,
+  236,
+  176
  ],
  "h": 0.0001,
- "worst_rel_err": 4.164285192572105e-09,
+ "worst_rel_err": 4.236930948656455e-09,
  "pass_rel_err": 1e-06,
  "fd_gate_passed": true,
- "mutation_worst_rel_err_drop_lambda_rho": 0.03410549547180332,
+ "mutation_worst_rel_err_drop_lambda_rho": 0.04511012825395541,
  "mutation_bites": true,
  "rho_target_reached": false,
  "launch_ok": true,
  "probes": {
-  "184": {
-   "fd": 1.277550491636248,
-   "adjoint": 1.2775504969563325,
-   "rel_err": 4.164285192572105e-09,
-   "rel_err_drop_lambda_rho": 0.02414744329824644
+  "252": {
+   "fd": -3.567330752360931,
+   "adjoint": -3.567330767475465,
+   "rel_err": 4.236930948656455e-09,
+   "rel_err_drop_lambda_rho": 0.04511012825395541
   },
-  "27": {
-   "fd": -1.2616876090021378,
-   "adjoint": -1.2616876078541421,
-   "rel_err": 9.098890171480025e-10,
-   "rel_err_drop_lambda_rho": 0.03410549547180332
+  "254": {
+   "fd": -3.500450319080528,
+   "adjoint": -3.5004503180954063,
+   "rel_err": 2.814271514076305e-10,
+   "rel_err_drop_lambda_rho": 0.044887167615951316
   },
-  "15": {
-   "fd": -1.2484907709620074,
-   "adjoint": -1.2484907708054642,
-   "rel_err": 1.2538596717728577e-10,
-   "rel_err_drop_lambda_rho": 0.026885490909431792
+  "236": {
+   "fd": -1.2335801183382955,
+   "adjoint": -1.2335801169582465,
+   "rel_err": 1.1187347651596413e-09,
+   "rel_err_drop_lambda_rho": 0.031614642946278235
   },
-  "225": {
-   "fd": 1.1903560414339154,
-   "adjoint": 1.190356041959448,
-   "rel_err": 4.4149204956598337e-10,
-   "rel_err_drop_lambda_rho": 0.012891698219644912
+  "176": {
+   "fd": 1.1836638761053564,
+   "adjoint": 1.1836638763918435,
+   "rel_err": 2.420341298602652e-10,
+   "rel_err_drop_lambda_rho": 0.009560408942400607
   }
  }
 }

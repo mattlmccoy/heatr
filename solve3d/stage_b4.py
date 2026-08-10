@@ -224,6 +224,32 @@ def drive_probe(candidates: tuple = DRIVE_CANDIDATES,
                                  delta_headroom, band)
 
 
+def next_drive_secant(measured: dict, target_peak: float,
+                      default_slope: float = 300.0, snap: float = 0.005,
+                      bounds: tuple = (0.30, 1.0)) -> float:
+    """The next drive to probe in the ADAPTIVE ladder, aimed at `target_peak`.
+
+    `measured` maps drive_a -> uniform_peak_c. The uniform peak is ~affine in the
+    drive, so with two points we secant-interpolate the drive that lands at
+    target_peak (a couple C under T_eff, so the pick is well-tuned, not
+    under-driven like a coarse fixed 0.55/0.60 ladder); with one point we step by
+    the family default slope (~300 C per unit drive). Clamped to `bounds` and
+    snapped to `snap` so the ladder is a small set of clean drives."""
+    pts = sorted(measured.items())
+    if len(pts) == 1:
+        a, p = pts[0]
+        slope = default_slope
+        a_next = a + (target_peak - p) / slope
+    else:
+        (a1, p1), (a2, p2) = pts[-2], pts[-1]
+        slope = (p2 - p1) / (a2 - a1) if a2 != a1 else default_slope
+        if abs(slope) < 1e-6:
+            slope = default_slope
+        a_next = a2 + (target_peak - p2) / slope
+    a_next = min(max(a_next, float(bounds[0])), float(bounds[1]))
+    return round(a_next / snap) * snap
+
+
 def _fidelity_grid_for_shape(shape: str):
     """The fidelity pre-gate's chosen voxel grid for `shape` (the grid the
     cross-engine verify transfers the solved map onto). Read from
@@ -281,6 +307,53 @@ def _finalize_drive_probe(shape: str, records: list, t_eff: float,
           f"uniform={pick['uniform_peak_c']:.2f}C under_t_eff={pick['under_t_eff']} "
           f"drive_limited={pick['drive_limited']} grid={grid}", flush=True)
     return doc
+
+
+def adaptive_drive_probe(shape: str, a0: float = 0.57,
+                         target_margin_c: float = 2.5, max_forwards: int = 4,
+                         delta_headroom: float = DELTA_HEADROOM_C,
+                         band: tuple = UNIFORM_TARGET_BAND_C) -> dict:
+    """ADAPTIVE drive-backoff probe: secant-walk the uniform peak to a couple C
+    UNDER T_eff so the pick is well-tuned, not under-driven like a coarse fixed
+    ladder. Starts at `a0`, measures the uniform hold-out peak, and steps toward
+    target_peak = T_eff - target_margin_c until a measured drive lands just under
+    T_eff or the forward budget is spent. Then the CORRECTED selection picks the
+    highest measured drive whose uniform peak <= T_eff (honest-null if none).
+    Each forward is a real hold-out march (~15 min); the secant keeps the count
+    to ~3-4. Writes the canonical stage_b4_drive_probe_<shape>.json."""
+    ceiling_c = float(stage_a.thermal_config()["T_ceiling_C"])
+    t_eff = t_ceiling_eff(ceiling_c, delta_headroom)
+    target_peak = t_eff - float(target_margin_c)
+    measured: dict = {}
+    records = []
+    a = float(a0)
+    for _ in range(int(max_forwards)):
+        a = round(a / 0.005) * 0.005
+        if a in measured:
+            break
+        pw = power_density_for_drive_a(a)
+        rec = stage_b.uniform_holdout_peak(power_density=pw, drive_a=a,
+                                           shape=shape)
+        tp = float(rec["true_peak_c"])
+        measured[a] = tp
+        records.append({"drive_a": float(a), "power_density_w_per_m3": float(pw),
+                        "uniform_true_peak_c": tp,
+                        "under_t_eff": bool(tp <= t_eff),
+                        "margin_to_t_eff_c": float(t_eff - tp)})
+        print(f"[B4 adaptive {shape} drive={a:.3f}x pw={pw:.1f}] uniform peak="
+              f"{tp:.2f}C (T_eff={t_eff:.1f}, target={target_peak:.1f}, "
+              f"margin={t_eff - tp:+.2f}C)", flush=True)
+        # stop once the HIGHEST measured under-T_eff drive is within the target
+        # window (target_peak-1 .. T_eff): well-tuned, no point spending forwards
+        under = {d: p for d, p in measured.items() if p <= t_eff}
+        if under:
+            a_best = max(under)
+            if target_peak - 1.0 <= measured[a_best] <= t_eff and a_best == a:
+                break
+        a = next_drive_secant(measured, target_peak)
+    records.sort(key=lambda r: r["drive_a"])
+    return _finalize_drive_probe(shape, records, t_eff, ceiling_c,
+                                 delta_headroom, band)
 
 
 def reselect_drive_probe(shape: str, delta_headroom: float = DELTA_HEADROOM_C,
@@ -541,6 +614,10 @@ def main() -> int:
     ap.add_argument("--reselect", action="store_true",
                     help="re-apply the corrected selection to already-MEASURED "
                          "candidates (rewrites the JSON, no re-probe)")
+    ap.add_argument("--adaptive", action="store_true",
+                    help="adaptive secant drive probe (well-tuned, not under-driven)")
+    ap.add_argument("--a0", type=float, default=0.57,
+                    help="adaptive probe starting drive")
     ap.add_argument("--solve", action="store_true",
                     help="B4 heavy AL solve at the backed-off drive + T_eff")
     ap.add_argument("--drive-a", type=float, default=None,
@@ -555,6 +632,8 @@ def main() -> int:
     a = ap.parse_args()
     if a.reselect:
         reselect_drive_probe(shape=a.shape)
+    elif a.adaptive:
+        adaptive_drive_probe(shape=a.shape, a0=a.a0)
     elif a.probe:
         drive_probe(shape=a.shape)
     elif a.solve:

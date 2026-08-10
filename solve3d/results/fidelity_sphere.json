@@ -2,6 +2,8 @@
   "what": "Shape-library campaign fidelity PRE-GATE (step 1): DG0->voxel transfer mass-move per candidate grid, gated on the worst axis ramp at the 2% Phase-C staircase threshold. Pick the faithful grid (argmin worst-axis) or flag transfer_limited. Probe fields vary O(1) across the part like a shaped dopant map; radial is reported, not gated (pathologically conservative on convex parts).",
   "stage": "fidelity_pre_gate",
   "shape": "sphere",
+  "build_axis": "+Y",
+  "stl_reorientation": null,
   "chamber_m": 0.06,
   "n_design_cells": 9952,
   "candidate_grids": [

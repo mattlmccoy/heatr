@@ -157,3 +157,24 @@ def test_finalize_drive_probe_writes_canonical_launch_fields(tmp_path,
     written = json.loads((tmp_path / "stage_b4_drive_probe_cylinder.json")
                          .read_text())
     assert written["chosen_drive_a"] == 0.55
+
+
+def test_next_drive_secant_one_point_uses_default_slope():
+    # one measured point: step toward target_peak using the family default slope
+    nxt = b4.next_drive_secant({0.55: 226.79}, target_peak=232.5,
+                               default_slope=300.0)
+    assert nxt == pytest.approx(0.57, abs=1e-9)     # 0.55 + (232.5-226.79)/300
+
+
+def test_next_drive_secant_two_points_interpolate_the_line():
+    # two points define peak(drive); aim the next probe at target_peak
+    nxt = b4.next_drive_secant({0.55: 226.79, 0.60: 242.0}, target_peak=232.5)
+    # slope 304.2 C/drive -> 0.60 + (232.5-242.0)/304.2 = 0.5688 -> snap 0.005
+    assert nxt == pytest.approx(0.57, abs=1e-9)
+
+
+def test_next_drive_secant_clamps_and_snaps():
+    nxt = b4.next_drive_secant({0.55: 300.0}, target_peak=232.5,
+                               default_slope=300.0, bounds=(0.30, 1.0))
+    assert 0.30 <= nxt <= 1.0
+    assert abs(nxt / 0.005 - round(nxt / 0.005)) < 1e-9   # snapped to 0.005

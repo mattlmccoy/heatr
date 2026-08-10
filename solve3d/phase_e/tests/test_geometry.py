@@ -75,30 +75,32 @@ def test_pyramid_cross_section_shrinks_to_a_point_at_the_apex():
 
 
 def test_cone_cross_section_shrinks_to_a_point_at_the_apex():
-    """Apex up (matching the library STL after centering): full circular section
-    at the base, vanishing at the top. A cone built upside down would pass the
-    volume check but mirror the geometry against the STL voxel part."""
+    """Axis +Y, apex UP (the build/field axis is Y): full circular section at the
+    base (y=-h/2), vanishing at the apex (y=+h/2). A cone built along z or apex
+    down would pass the volume check but solve sideways / mirrored."""
     from solve3d.phase_e import geometry
     h = geometry.CONE_H_M
     R = geometry.CONE_R_M
     pred = geometry.in_part_predicate("cone")
     eps = 1e-4
-    assert pred(np.array([[0.0], [0.0], [-h / 2 + eps]]))[0]       # axis@base in
-    assert pred(np.array([[0.0], [0.0], [+h / 2 - eps]]))[0]       # axis@apex in
-    assert pred(np.array([[R * 0.9], [0.0], [-h / 2 + eps]]))[0]   # wide at base
-    assert not pred(np.array([[R * 0.9], [0.0], [+h / 2 - eps]]))[0]  # narrow apex
+    assert pred(np.array([[0.0], [-h / 2 + eps], [0.0]]))[0]       # axis@base in
+    assert pred(np.array([[0.0], [+h / 2 - eps], [0.0]]))[0]       # axis@apex in
+    assert pred(np.array([[R * 0.9], [-h / 2 + eps], [0.0]]))[0]   # wide at base
+    assert not pred(np.array([[R * 0.9], [+h / 2 - eps], [0.0]]))[0]  # narrow apex
+    # and NOT wide along z at the apex either (true body of revolution about Y)
+    assert not pred(np.array([[0.0], [+h / 2 - eps], [R * 0.9]]))[0]
 
 
-def test_cylinder_is_a_z_axis_body_of_revolution():
+def test_cylinder_is_a_y_axis_body_of_revolution():
     from solve3d.phase_e import geometry
     h, R = geometry.CYL_H_M, geometry.CYL_R_M
     pred = geometry.in_part_predicate("cylinder")
     eps = 1e-4
-    # full radius at both flat faces, nothing beyond the wall or the flat caps
-    assert pred(np.array([[R * 0.99], [0.0], [-h / 2 + eps]]))[0]
-    assert pred(np.array([[R * 0.99], [0.0], [+h / 2 - eps]]))[0]
+    # full radius (in x-z) at both flat caps; nothing past the wall or the caps
+    assert pred(np.array([[R * 0.99], [-h / 2 + eps], [0.0]]))[0]
+    assert pred(np.array([[0.0], [+h / 2 - eps], [R * 0.99]]))[0]
     assert not pred(np.array([[R * 1.01], [0.0], [0.0]]))[0]        # past wall
-    assert not pred(np.array([[0.0], [0.0], [h / 2 + eps]]))[0]     # past cap
+    assert not pred(np.array([[0.0], [h / 2 + eps], [0.0]]))[0]     # past cap
 
 
 def test_sphere_predicate_is_the_ball():

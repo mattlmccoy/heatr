@@ -2,8 +2,10 @@
   "what": "Shape-library campaign fidelity PRE-GATE (step 1): DG0->voxel transfer mass-move per candidate grid, gated on the worst axis ramp at the 2% Phase-C staircase threshold. Pick the faithful grid (argmin worst-axis) or flag transfer_limited. Probe fields vary O(1) across the part like a shaped dopant map; radial is reported, not gated (pathologically conservative on convex parts).",
   "stage": "fidelity_pre_gate",
   "shape": "cylinder",
+  "build_axis": "+Y",
+  "stl_reorientation": "Rx-90",
   "chamber_m": 0.06,
-  "n_design_cells": 9480,
+  "n_design_cells": 9570,
   "candidate_grids": [
     64,
     80,
@@ -16,22 +18,22 @@
   },
   "per_grid_mass_move_by_field": {
     "64": {
-      "xramp": 0.00057039920672039,
-      "yramp": 0.0012256947487762468,
-      "zramp": 0.012512674026571954,
-      "radial": 0.008844579057338325
+      "xramp": 0.0006105271807725175,
+      "yramp": 0.0018208042224542873,
+      "zramp": 0.011314788999007607,
+      "radial": 0.010242485487819161
     },
     "80": {
-      "xramp": 0.0014935461870330456,
-      "yramp": 0.007040601392024303,
-      "zramp": 0.0199564831305044,
-      "radial": 0.017138767993264678
+      "xramp": 0.0017257281230265004,
+      "yramp": 0.0065672098061999255,
+      "zramp": 0.0202,
+      "radial": 0.01670614741120244
     },
     "96": {
-      "xramp": 0.0021376043280527113,
-      "yramp": 0.00893195868217928,
-      "zramp": 0.01868584170344525,
-      "radial": 0.0037971158562088024
+      "xramp": 0.0032142378507841454,
+      "yramp": 0.009278472296780017,
+      "zramp": 0.018268781075904045,
+      "radial": 0.0041912208530415105
     }
   },
   "gate_fields": [
@@ -45,14 +47,14 @@
   "gate": 0.02,
   "selection": {
     "chosen_grid": 64,
-    "chosen_worst_axis_move": 0.012512674026571954,
+    "chosen_worst_axis_move": 0.011314788999007607,
     "faithful": true,
     "transfer_limited": false,
     "gate": 0.02,
     "per_grid_worst_axis": {
-      "64": 0.012512674026571954,
-      "80": 0.0199564831305044,
-      "96": 0.01868584170344525
+      "64": 0.011314788999007607,
+      "80": 0.0202,
+      "96": 0.018268781075904045
     }
   },
   "chosen_grid": 64,

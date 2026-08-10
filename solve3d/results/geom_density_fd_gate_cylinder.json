@@ -11,15 +11,15 @@
   "n_steps": 900,
   "march_time_s": 900.0,
   "n_part_nodes": 35,
-  "n_design_cells": 363,
+  "n_design_cells": 362,
   "fixed_horizon_no_rho_stop": true,
   "fixed_horizon_note": "the gate marches a FIXED number of steps (no rho-target early stop) so the end-state is a SMOOTH function of the design; a moving stop would inject a kink."
  },
  "end_state": {
-  "peak_true_c": 212.41898995896668,
-  "peak_ks_c": 208.9366702225263,
-  "mean_rho": 0.6917793440961196,
-  "max_rho": 0.9971038831335785
+  "peak_true_c": 218.43068747716023,
+  "peak_ks_c": 215.47091744422346,
+  "mean_rho": 0.7104859239618433,
+  "max_rho": 0.9987020650967574
  },
  "clips_inactive": {
   "dt_step_cap": true,
@@ -28,43 +28,43 @@
  },
  "n_probes": 4,
  "probe_indices": [
-  235,
-  148,
-  182,
-  147
+  173,
+  164,
+  94,
+  127
  ],
  "h": 0.0001,
- "worst_rel_err": 2.230740551317347e-09,
+ "worst_rel_err": 1.325790921491432e-09,
  "pass_rel_err": 1e-06,
  "fd_gate_passed": true,
- "mutation_worst_rel_err_drop_lambda_rho": 0.021328096094129036,
+ "mutation_worst_rel_err_drop_lambda_rho": 0.014351038901683544,
  "mutation_bites": true,
  "rho_target_reached": false,
  "launch_ok": true,
  "probes": {
-  "235": {
-   "fd": 1.4958626930194896,
-   "adjoint": 1.4958626918905609,
-   "rel_err": 7.547007713649472e-10,
-   "rel_err_drop_lambda_rho": 0.021328096094129036
+  "173": {
+   "fd": 0.9926318303143944,
+   "adjoint": 0.9926318316401853,
+   "rel_err": 1.325790921491432e-09,
+   "rel_err_drop_lambda_rho": 0.014351038901683544
   },
-  "148": {
-   "fd": 1.3784413268069784,
-   "adjoint": 1.3784413237320334,
-   "rel_err": 2.230740551317347e-09,
-   "rel_err_drop_lambda_rho": 0.012637093785765014
+  "164": {
+   "fd": 0.9607870482852832,
+   "adjoint": 0.9607870479162696,
+   "rel_err": 3.690135974565578e-10,
+   "rel_err_drop_lambda_rho": 0.011651053359364338
   },
-  "182": {
-   "fd": 1.2588501117249962,
-   "adjoint": 1.258850110598947,
-   "rel_err": 8.945062190908243e-10,
-   "rel_err_drop_lambda_rho": 0.014131197595728836
+  "94": {
+   "fd": 0.9154049851645141,
+   "adjoint": 0.9154049845961533,
+   "rel_err": 5.683608028661524e-10,
+   "rel_err_drop_lambda_rho": 0.01205666760478874
   },
-  "147": {
-   "fd": 1.237102055000605,
-   "adjoint": 1.237102053457466,
-   "rel_err": 1.2473822719494567e-09,
-   "rel_err_drop_lambda_rho": 0.015008002682797231
+  "127": {
+   "fd": 0.8689052235411054,
+   "adjoint": 0.8689052227892842,
+   "rel_err": 7.518212719048734e-10,
+   "rel_err_drop_lambda_rho": 0.009814184413068805
   }
  }
 }

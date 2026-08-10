@@ -43,6 +43,27 @@ import numpy as np
 
 # candidate voxel grids probed by the fidelity pre-gate
 CANDIDATE_GRIDS = (64, 80, 96)
+
+# --------------------------------------------------------------------------- #
+# BUILD-AXIS CONVENTION: natural-up -> +Y (2026-08-10). The EQS field + build
+# axis is Y (forward._electrode_dofs electrodes at x[1]=+-L/2, open/convection
+# face y=+L/2), so every part must stand with its natural "up" along +Y or it
+# solves sideways. The phase_e OCC primitives are BUILT along +Y directly; the
+# library STLs ship these bodies with their native axis along +Z, so the voxel
+# side rotates the STL +Z->+Y (Rx -90 deg) to match the tet mesh. For the
+# awkward shapes (toroid, flat_plane, l_extrusion, lattice) the principled
+# default is "longest axis vertical / largest flat face down" -- each is FLAGGED
+# in the tracker for Matt's review rather than guessed silently here.
+STL_REORIENT = {
+    # bodies of revolution, native axis +Z -> +Y
+    "cone": "Rx-90", "cylinder": "Rx-90",
+    # symmetric or already axis-along-Y in the STL -> identity
+    "sphere": None,
+    # polyhedra whose OCC is built axis-agnostic and STL already matches
+    "cube": None, "pyramid": None,
+}
+# shapes whose build-axis default is a JUDGEMENT CALL, flagged for review
+AWKWARD_SHAPES = ("toroid", "flat_plane", "l_extrusion", "lattice")
 # the 2 % Phase-C staircase gate studio3d.transfer enforces on the transferred map
 MASS_MOVE_GATE = 0.02
 # axis-ramp fields the worst-axis screen gates on (radial is reported, not gated)
@@ -178,13 +199,37 @@ def _dg0_voxel_mass_move(centroids, values, volumes, part, chamber_m) -> float:
         return float(m.group(1)) / 100.0
 
 
+def _reoriented_stl_path(shape: str, stl_path, tmpdir) -> str:
+    """Return a path to the STL reoriented to the build-axis convention (natural
+    up -> +Y). For bodies of revolution shipped native-+Z (cone/cylinder) this
+    rotates the mesh +Z->+Y (Rx -90) and writes a temp STL so the voxel part
+    matches the +Y-built tet mesh. Identity shapes return the original path."""
+    import numpy as _np
+    import trimesh
+    from pathlib import Path
+
+    kind = STL_REORIENT.get(shape, None)
+    if kind is None:
+        return str(stl_path)
+    if kind != "Rx-90":
+        raise ValueError(f"unknown STL reorientation {kind!r} for {shape!r}")
+    mesh = trimesh.load_mesh(str(stl_path))
+    Rx = trimesh.transformations.rotation_matrix(-_np.pi / 2.0, [1.0, 0.0, 0.0])
+    mesh.apply_transform(Rx)                      # +Z -> +Y
+    out = Path(tmpdir) / f"{shape}_reoriented_plusY.stl"
+    mesh.export(str(out))
+    return str(out)
+
+
 def measure_fidelity(shape: str, dg0_path=None, grids=CANDIDATE_GRIDS,
                      chamber_m: float = 0.060, stl_path=None) -> dict:
-    """Stage 2: at each candidate grid, voxelize the library STL with the SAME
-    voxelizer the cross-engine verify uses, transfer each probe field, and select
-    the faithful grid (or flag transfer_limited). Writes fidelity_<shape>.json.
+    """Stage 2: at each candidate grid, voxelize the library STL (REORIENTED to
+    the +Y build-axis convention, matching the tet mesh) with the SAME voxelizer
+    the cross-engine verify uses, transfer each probe field, and select the
+    faithful grid (or flag transfer_limited). Writes fidelity_<shape>.json.
     trimesh + heatr3d only."""
     import json
+    import tempfile
     from pathlib import Path
 
     from studio3d.runner import voxelize_stl
@@ -199,10 +244,12 @@ def measure_fidelity(shape: str, dg0_path=None, grids=CANDIDATE_GRIDS,
     centroids, volumes = d["centroids"], d["volumes"]
     fields = build_probe_fields(centroids)
 
+    tmpdir = tempfile.mkdtemp(prefix="fidelity_reorient_")
+    stl_use = _reoriented_stl_path(shape, stl_path, tmpdir)
     grid_moves: Dict[int, Dict[str, float]] = {}
     part_vox: Dict[int, int] = {}
     for n in grids:
-        part = voxelize_stl(str(stl_path), int(n), chamber_m=chamber_m)
+        part = voxelize_stl(stl_use, int(n), chamber_m=chamber_m)
         part_vox[int(n)] = int(part.sum())
         grid_moves[int(n)] = {
             name: _dg0_voxel_mass_move(centroids, vals, volumes, part, chamber_m)
@@ -218,6 +265,8 @@ def measure_fidelity(shape: str, dg0_path=None, grids=CANDIDATE_GRIDS,
                 "reported, not gated (pathologically conservative on convex parts).",
         "stage": "fidelity_pre_gate",
         "shape": shape,
+        "build_axis": "+Y",
+        "stl_reorientation": STL_REORIENT.get(shape, None),
         "chamber_m": float(chamber_m),
         "n_design_cells": int(centroids.shape[0]),
         "candidate_grids": [int(n) for n in grids],

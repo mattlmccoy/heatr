@@ -119,6 +119,28 @@ def test_gate_threshold_is_strict_less_than():
 # from verify_stage_b4_pyramid_heatr3d.json). Needs trimesh + the solved map, so
 # it runs only in the .venv312 env and skips in the spike env.
 # --------------------------------------------------------------------------- #
+def test_build_axis_convention_maps_native_z_bodies_to_plus_y():
+    # The natural-up -> +Y convention: bodies of revolution shipped native-+Z
+    # (cone/cylinder) rotate +Z->+Y; symmetric/aligned shapes are identity.
+    assert sc.STL_REORIENT["cone"] == "Rx-90"
+    assert sc.STL_REORIENT["cylinder"] == "Rx-90"
+    assert sc.STL_REORIENT["sphere"] is None
+    # the awkward shapes are flagged, not silently reoriented
+    for s in ("toroid", "flat_plane", "l_extrusion", "lattice"):
+        assert s in sc.AWKWARD_SHAPES
+        assert s not in sc.STL_REORIENT
+
+
+def test_reorient_rotation_sends_plus_z_apex_to_plus_y():
+    trimesh = pytest.importorskip("trimesh")     # .venv312 only
+    import numpy as _np
+    Rx = trimesh.transformations.rotation_matrix(-_np.pi / 2.0, [1.0, 0.0, 0.0])
+    apex_z = _np.array([0.0, 0.0, 1.0, 1.0])      # native +Z apex (homogeneous)
+    moved = Rx @ apex_z
+    assert moved[1] == pytest.approx(1.0)         # -> +Y
+    assert abs(moved[2]) < 1e-12
+
+
 def test_dg0_voxel_mass_move_reproduces_pinned_pyramid():
     trimesh = pytest.importorskip("trimesh")     # noqa: F841 (.venv312 only)
     from pathlib import Path

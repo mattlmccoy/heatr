@@ -39,9 +39,17 @@ PYR_H_M = 23.248947030192525e-3          # height, apex up
 # curved solid cannot match an analytic solid on BOTH bbox and volume, so we size
 # each curved primitive to V0 EXACTLY (preserving the pre-registered 1e-9 volume
 # check) and accept the ~0.07 % bbox artifact against the meta bbox -- sub-voxel,
-# and exactly what the fidelity pre-gate measures. Each is a z-axis body of
-# revolution centred on the origin, matching the library STL after voxelize_stl
-# re-centres it. Cone apex UP (base at z=-h/2), like the pyramid.
+# and exactly what the fidelity pre-gate measures.
+#
+# BUILD AXIS = +Y (natural-up -> +Y convention, 2026-08-10). The EQS field +
+# build direction is Y: forward._electrode_dofs puts the electrodes at x[1]=+-L/2
+# and the open/convection face is y=+L/2. So each body of revolution stands with
+# its symmetry/height axis along Y (cone apex at +Y, base disc at -Y; cylinder
+# axis along Y). Building sideways (+Z) would solve the part rotated 90 deg
+# relative to how it heats and densifies. Volume is rotation-invariant, so the
+# equal-volume sizing and the 1e-9 check are unaffected. The STL library ships
+# these bodies with their native axis along +Z, so the fidelity voxel side
+# (shape_campaign) rotates the STL +Z->+Y to match (Rx -90 deg).
 V0_M3 = 4188.790204786391e-9
 SPH_R_M = (3.0 * V0_M3 / (4.0 * np.pi)) ** (1.0 / 3.0)          # 10.000 mm
 CONE_R_M = (3.0 * V0_M3 / (2.0 * np.pi)) ** (1.0 / 3.0)         # cubic bbox 2r=h
@@ -114,17 +122,18 @@ def in_part_predicate(shape: str, *, precomp_coeffs=None):
         R, h = CONE_R_M, CONE_H_M
 
         def pred_cone(mp):
-            z = mp[2]
-            # circular section radius at height z; full R at the base (z=-h/2),
-            # zero at the apex (z=+h/2)
-            rz = R * (h / 2.0 - z) / h
-            return ((np.abs(z) <= h / 2.0)
-                    & ((mp[0] ** 2 + mp[1] ** 2) <= np.maximum(rz, 0.0) ** 2))
+            # axis along +Y: circular x-z section, full R at the base (y=-h/2),
+            # zero at the apex (y=+h/2)
+            y = mp[1]
+            ry = R * (h / 2.0 - y) / h
+            return ((np.abs(y) <= h / 2.0)
+                    & ((mp[0] ** 2 + mp[2] ** 2) <= np.maximum(ry, 0.0) ** 2))
         return pred_cone
     if shape == "cylinder":
         R2, h = CYL_R_M ** 2, CYL_H_M
-        return lambda mp: ((np.abs(mp[2]) <= h / 2.0)
-                           & ((mp[0] ** 2 + mp[1] ** 2) <= R2))
+        # axis along +Y: circular x-z section, flat caps at y=+-h/2
+        return lambda mp: ((np.abs(mp[1]) <= h / 2.0)
+                           & ((mp[0] ** 2 + mp[2] ** 2) <= R2))
     raise ValueError(f"unknown Phase E shape {shape!r}")
 
 
@@ -183,11 +192,12 @@ def _add_solid(occ, shape: str, precomp_coeffs=None) -> int:
     if shape == "sphere":
         return occ.addSphere(0.0, 0.0, 0.0, SPH_R_M)
     if shape == "cone":
-        # apex UP: base disc at z=-h/2 (radius R), apex at z=+h/2 (radius 0)
-        return occ.addCone(0.0, 0.0, -CONE_H_M / 2.0, 0.0, 0.0, CONE_H_M,
+        # axis +Y, apex UP: base disc at y=-h/2 (radius R), apex at y=+h/2
+        return occ.addCone(0.0, -CONE_H_M / 2.0, 0.0, 0.0, CONE_H_M, 0.0,
                            CONE_R_M, 0.0)
     if shape == "cylinder":
-        return occ.addCylinder(0.0, 0.0, -CYL_H_M / 2.0, 0.0, 0.0, CYL_H_M,
+        # axis +Y (standing up): flat caps at y=+-h/2
+        return occ.addCylinder(0.0, -CYL_H_M / 2.0, 0.0, 0.0, CYL_H_M, 0.0,
                                CYL_R_M)
     # pyramid
     b2, h = PYR_B_M / 2.0 * sx, PYR_H_M / 2.0 * sz
