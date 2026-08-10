@@ -61,9 +61,24 @@ import numpy as np
 from solve3d import (adjoint, design_chain as dc, forward as fwd,
                      objective as obj, shape_metrics as sm, studio_geom as sg)
 from solve3d import gates as G
+from solve3d import stage_a as stage_a
 
 RESULTS = Path(__file__).resolve().parent / "results"
 L_DOMAIN = sg.L_DOMAIN
+
+# --------------------------------------------------------------------------- #
+# Ceiling-feasible drive selection (the Grade-and-Print PRODUCER, Matt path A).
+#
+# baseline power density: a = 1.0 is exactly the Studio's hardcoded 1.5915e6
+# (studio3d/package.py:193). The recommended drive is a * baseline; carried as
+# an ABSOLUTE W/m3 in studio_solve_results.json for the Studio to print at.
+# --------------------------------------------------------------------------- #
+DRIVE_BASELINE_W_PER_M3 = float(
+    stage_a.recommended_power_settings(1.0)["power_density_w_per_m3"])
+# candidate drive multipliers, low -> high; the HIGHEST feasible one is picked
+# (most part throughput while staying under the ceiling). A ladder around the
+# B4 square result (0.34x) widened so an arbitrary part can find feasibility.
+CEILING_DRIVE_CANDIDATES = (0.26, 0.30, 0.34, 0.38, 0.42)
 
 # Phase C anchor: circle d=20 mm, full height -> in-part node density.
 _ANCHOR_VOLUME_M3 = float(np.pi * 0.010 ** 2 * 0.060)
@@ -79,6 +94,178 @@ NODE_MATCH_TOL = 0.20
 
 def prereg() -> dict:
     return json.loads((RESULTS / "phase_c_preregistration.json").read_text())
+
+
+# --------------------------------------------------------------------------- #
+# Ceiling-feasible drive selection: pure pick, physics probe, wiring, emission
+# --------------------------------------------------------------------------- #
+def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
+                             ceiling_c: float, chamber_tag: str,
+                             thermal_config_path: str, rho_target: float) -> dict:
+    """Pick the ceiling-feasible drive from MEASURED uniform end-state peaks.
+
+    `peaks_by_drive` maps a drive multiplier `a` to a dict with at least
+    `true_peak_c`, `reached_rho` and `achieved_rho` (as measured by a uniform
+    densify on THIS part's mesh at power a * baseline). A drive is FEASIBLE iff
+    it both densifies (`reached_rho`) AND keeps the true end-state peak at or
+    under the real ceiling. The HIGHEST feasible drive is recommended (most part
+    throughput). Pure logic; no physics.
+
+    HONEST-NULL (the false-green refusal): if no drive is feasible the part is
+    drive-limited -- `recommended_power_density_w_per_m3` and
+    `recommended_drive_frac` are BOTH None and `recommended_drive_reason` says
+    why. A drive-limited part NEVER emits a cooking power number; the Studio
+    consumer then falls back to nominal + drive_recommended=false + the
+    heatr3d ceiling gate backstop.
+    """
+    ceiling_c = float(ceiling_c)
+    baseline = float(baseline)
+    rho_target = float(rho_target)
+    candidates = []
+    feasible = []
+    for a in sorted(peaks_by_drive):
+        rec = peaks_by_drive[a]
+        peak = float(rec["true_peak_c"])
+        reached = bool(rec["reached_rho"])
+        under = bool(peak <= ceiling_c)
+        is_feasible = bool(reached and under)
+        candidates.append({
+            "drive_a": float(a),
+            "power_density_w_per_m3": float(a) * baseline,
+            "true_peak_c": peak,
+            "reached_rho": reached,
+            "achieved_rho": float(rec.get("achieved_rho", float("nan"))),
+            "under_ceiling": under,
+            "feasible": is_feasible,
+        })
+        if is_feasible:
+            feasible.append(float(a))
+
+    out = {
+        "chamber_tag": str(chamber_tag),
+        "ceiling_c": ceiling_c,
+        "thermal_config_path": str(thermal_config_path),
+        "baseline_power_density_w_per_m3": baseline,
+        "rho_target": rho_target,
+        "candidates": candidates,
+    }
+    if feasible:
+        a = max(feasible)                        # highest feasible drive
+        peak = float(peaks_by_drive[a]["true_peak_c"])
+        out["recommended_drive_frac"] = float(a)
+        out["recommended_power_density_w_per_m3"] = float(a) * baseline
+        out["recommended_drive_reason"] = (
+            "ceiling_feasible: uniform end-state peak %.2f C <= %.1f C at %.3fx "
+            "(highest drive that densifies to rho>=%.2f and stays under the "
+            "ceiling in %s)" % (peak, ceiling_c, a, rho_target, chamber_tag))
+        return out
+
+    # honest-null: distinguish "cooks" from "never densifies" in the reason
+    n_over = sum(1 for c in candidates if c["reached_rho"] and not c["under_ceiling"])
+    n_cold = sum(1 for c in candidates if not c["reached_rho"])
+    if n_over and not n_cold:
+        why = ("every drive that densifies to rho>=%.2f exceeds the ceiling"
+               % rho_target)
+    elif n_cold and not n_over:
+        why = "no drive reaches rho>=%.2f within the horizon" % rho_target
+    else:
+        why = ("no drive both densifies to rho>=%.2f and stays under the ceiling"
+               % rho_target)
+    out["recommended_drive_frac"] = None
+    out["recommended_power_density_w_per_m3"] = None
+    out["recommended_drive_reason"] = (
+        "drive_limited: no feasible drive reaches rho_target under %.0fC (%s)"
+        % (ceiling_c, why))
+    return out
+
+
+def _uniform_end_state_peak(msh, rings: list, z_lo: float, z_hi: float,
+                            drive_a: float, *, baseline: float,
+                            rho_target: float, max_time_s: float,
+                            sample_dt_s: float = 20.0) -> dict:
+    """Measure the UNIFORM (fully doped) densify end-state peak on THIS part's
+    mesh at power a * baseline. Mirrors stage_a_phase2.ceiling_end_state_gate's
+    forward read (solve_eqs -> qrf_dg0 -> march_densify), but on the Studio
+    part's own conforming mesh -- an arbitrary extruded part has no
+    pre-registered hold-out geometry, so the drive must be judged on the part
+    that will actually print. A handful of densify forwards, not a heavy solve.
+    """
+    from solve3d import densify_forward as df
+    import dataclasses
+
+    pw = float(drive_a) * float(baseline)
+    p = dataclasses.replace(fwd.ForwardParams(), power_density_w_per_m3=pw)
+    mats = fwd.build_materials(msh, in_part_predicate(rings, z_lo, z_hi), p)
+    Vr, Vi = fwd.solve_eqs(msh, mats, p)
+    drive = fwd.qrf_dg0(msh, Vr, Vi, mats, p)
+    march = df.march_densify(msh, p, stop_mean_rho=float(rho_target), mats=mats,
+                             q_dg0=drive["q"], max_time_s=float(max_time_s),
+                             sample_dt_s=float(sample_dt_s))
+    return {
+        "drive_a": float(drive_a),
+        "power_density_w_per_m3": pw,
+        "true_peak_c": float(march["true_peak_T_c"]),
+        "reached_rho": bool(march["reached_rho"]),
+        "achieved_rho": float(march["part_mean_rho"]),
+    }
+
+
+def recommended_drive_for_part(msh, rings: list, z_lo: float, z_hi: float, *,
+                               candidates: tuple = CEILING_DRIVE_CANDIDATES,
+                               baseline: float = DRIVE_BASELINE_W_PER_M3,
+                               ceiling_c: float | None = None,
+                               chamber_tag: str | None = None,
+                               thermal_config_path: str = "solve3d/thermal_config.json",
+                               rho_target: float | None = None,
+                               max_time_s: float = 3000.0,
+                               sample_dt_s: float = 20.0,
+                               peak_probe=None) -> dict:
+    """Run the ceiling-coupled drive selection for the uploaded part.
+
+    Measures the uniform end-state peak at each candidate drive (via
+    `peak_probe`, defaulting to the real densify probe on `msh`), then picks the
+    highest feasible drive or honest-nulls. `peak_probe(drive_a, msh=..,
+    rings=.., z_lo=.., z_hi=.., baseline=.., rho_target=.., max_time_s=..,
+    sample_dt_s=..)` is injectable so the contract is testable without physics.
+    """
+    from solve3d import chamber as chamber_mod
+    tcfg = stage_a.thermal_config()
+    if ceiling_c is None:
+        ceiling_c = float(tcfg["T_ceiling_C"])
+    if rho_target is None:
+        rho_target = float(tcfg["rho_target"]["practical_ideal"])
+    if chamber_tag is None:
+        chamber_tag = chamber_mod.chamber_tag(L_DOMAIN)
+    probe = peak_probe if peak_probe is not None else _uniform_end_state_peak
+
+    peaks = {}
+    for a in candidates:
+        rec = probe(float(a), msh=msh, rings=rings, z_lo=z_lo, z_hi=z_hi,
+                    baseline=baseline, rho_target=rho_target,
+                    max_time_s=max_time_s, sample_dt_s=sample_dt_s)
+        peaks[float(a)] = rec
+        print(f"[studio_solve drive={a:.3f}x pw={float(a) * baseline:.1f}] "
+              f"uniform peak={rec['true_peak_c']:.2f}C "
+              f"reached_rho={rec['reached_rho']} "
+              f"rho={rec['achieved_rho']:.3f}", flush=True)
+    return select_recommended_drive(
+        peaks, baseline=baseline, ceiling_c=ceiling_c, chamber_tag=chamber_tag,
+        thermal_config_path=thermal_config_path, rho_target=rho_target)
+
+
+_RECOMMENDED_DRIVE_FIELDS = (
+    "recommended_power_density_w_per_m3", "recommended_drive_frac",
+    "chamber_tag", "ceiling_c", "thermal_config_path", "recommended_drive_reason")
+
+
+def _merge_recommended_drive(doc: dict, rec: dict) -> dict:
+    """Fold the PINNED contract fields into the studio_solve_results.json doc at
+    the top level (the fields the Studio consumer reads), and carry the full
+    selection record nested under `recommended_drive` for provenance."""
+    for k in _RECOMMENDED_DRIVE_FIELDS:
+        doc[k] = rec.get(k)
+    doc["recommended_drive"] = rec
+    return doc
 
 
 # --------------------------------------------------------------------------- #
@@ -540,8 +727,20 @@ def run_gates(tc, chain, s_best: np.ndarray, solved_rec: dict,
 # --------------------------------------------------------------------------- #
 def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
                    warm_start_sat=None, max_time_s: float = MAX_TIME_S,
-                   sample_dt_s: float = SAMPLE_DT_S) -> dict:
-    """Solve one imported EXTRUDED part; write the Studio's artifact pair."""
+                   sample_dt_s: float = SAMPLE_DT_S,
+                   ceiling_drive: bool = False,
+                   drive_candidates: tuple = CEILING_DRIVE_CANDIDATES,
+                   drive_max_time_s: float = 3000.0,
+                   _peak_probe=None) -> dict:
+    """Solve one imported EXTRUDED part; write the Studio's artifact pair.
+
+    ceiling_drive (Matt path A: the ceiling-coupled solve is the standard path):
+    when True, ALSO run the ceiling-feasible drive selection for THIS part and
+    emit the PINNED contract fields (recommended_power_density_w_per_m3 etc.)
+    into studio_solve_results.json. Default False preserves the exact legacy
+    output (no new fields, no extra forwards); the CLI turns it on by default.
+    `_peak_probe` injects a stubbed drive-selection probe for wiring tests.
+    """
     t_start = time.perf_counter()
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -690,6 +889,25 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
         ],
         "wall_seconds": time.perf_counter() - t_start,
     }
+
+    # PRODUCER (path A): fold in the ceiling-feasible recommended drive. Off by
+    # default so the legacy artifact is byte-identical; the CLI/Studio turns it
+    # on. The drive is measured on THIS part's own solve mesh (an arbitrary
+    # extruded part has no pre-registered hold-out) and is valid ONLY in the
+    # chamber it was solved in -- carried as chamber_tag so the Studio verifies
+    # like-for-like.
+    if ceiling_drive:
+        rec = recommended_drive_for_part(
+            tc.msh, rings, z_lo, z_hi, candidates=drive_candidates,
+            max_time_s=drive_max_time_s, peak_probe=_peak_probe)
+        rec["drive_probe_mesh"] = {"which": "solve_mesh",
+                                   "n_nodes_in_part": info.get("n_nodes_in_part")}
+        _merge_recommended_drive(doc, rec)
+        print(f"[studio_solve] recommended drive: "
+              f"frac={doc['recommended_drive_frac']} "
+              f"pw={doc['recommended_power_density_w_per_m3']} "
+              f"reason={doc['recommended_drive_reason']}", flush=True)
+
     (out / "studio_solve_results.json").write_text(
         json.dumps(doc, indent=1, default=G._jsonable))
     print(f"[studio_solve] DONE solved_label={solved_label} "
@@ -708,6 +926,13 @@ def main() -> int:
     ap.add_argument("--warm-start", default=None,
                     help="npz with a (n,n,n) sat volume (recorded deviation)")
     ap.add_argument("--max-time-s", type=float, default=MAX_TIME_S)
+    ap.add_argument("--ceiling-drive", action=argparse.BooleanOptionalAction,
+                    default=True,
+                    help="run the ceiling-feasible drive selection and emit the "
+                         "recommended_power_density_w_per_m3 contract (path A, "
+                         "default on); --no-ceiling-drive for the legacy output")
+    ap.add_argument("--drive-max-time-s", type=float, default=3000.0,
+                    help="densify horizon for the uniform drive-probe forwards")
     ap.add_argument("--make-tube", default=None, metavar="OUT_NPZ",
                     help="write the validation tube part and exit")
     ap.add_argument("--n", type=int, default=32)
@@ -721,7 +946,9 @@ def main() -> int:
     if not args.part_npz or not args.out_dir:
         ap.error("part_npz and --out-dir are required")
     solve_extruded(args.part_npz, args.out_dir, budget_fwd_equiv=args.budget,
-                   warm_start_sat=args.warm_start, max_time_s=args.max_time_s)
+                   warm_start_sat=args.warm_start, max_time_s=args.max_time_s,
+                   ceiling_drive=args.ceiling_drive,
+                   drive_max_time_s=args.drive_max_time_s)
     return 0
 
 
