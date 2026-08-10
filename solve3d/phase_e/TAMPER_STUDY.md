@@ -223,8 +223,126 @@ At the time of writing both heavy slots are full (pid 27889 adaptive probe, pid
 
 ---
 
+## Run C built: two-sided actuator, FD gate, drive re-probe, launch command
+
+Matt gave GO on run C (the two-sided rescue). Built FD-gate-first; the heavy
+solve is STOPPED for the coordinator to launch (permission-gated).
+
+### The two-sided actuator (files / flag)
+
+- `solve3d/two_sided.py` — the per-node dopant cap. `design_bounds(max_sat)`
+  returns the L-BFGS-B box `(0.0, max_sat)`. **Default `max_sat = 1.0` is the
+  one-sided box, byte-identical to every existing B1–B4 result**; two-sided is
+  opt-in via `max_sat > 1.0`.
+- **The cap is physical, not invented.** `s` scales the nominal doped ink dose;
+  `s=1.0` = single-pass nominal (`sigma_doped = 0.04 S/m`). `s>1.0` is realized
+  as MULTIPLE ink passes — the rasterizer already reads "sat>1 ⇒ double pass"
+  (`stl_compensation_tool/webapp/meteor_bridge.py`). `MAX_SAT_DEFAULT_TWO_SIDED
+  = 2.0` is one extra full pass (a double dose). Three reasons it is defensible:
+  (1) printing realizability — a double dose is the concrete multi-pass op;
+  (2) conductivity guard — `sigma(2) = 0.08 S/m` stays far under the sigma-
+  coupling numerical clip (`SIGMA_COUPLING_CLIP_HI·sigma_doped = 1.0 S/m`), so a
+  boosted node never rides the clip and the gradient stays live; (3) dopant
+  physics — `sigma_doped` is already over-critical (> sigma* ≈ 0.030), so the
+  sigma gain per added dose is sublinear and 2× is a bounded actuation.
+- Threaded into `stage_b4.run_solve_al_b4(..., max_sat=1.0)` (`--max-sat` CLI;
+  recorded in the output as `actuator: one_sided|two_sided`, `design_bounds`) and
+  into the Tamper driver `solve3d/phase_e/run_tamper_rescue.py`.
+
+**The gradient machinery did NOT need to change.** `design_to_sigma` is linear
+(`sigma = virgin + s·(doped − virgin)`) and the density/AL adjoints flow through
+the constant `design_vjp`; the only clamp in the path is the sigma-coupling clip,
+which sits at 25× doped and never bites for `max_sat ≤ ~12`. The "cap at 1.0" was
+purely the L-BFGS-B upper bound. **This was proven, not assumed** — see the FD
+gate.
+
+### FD-gate numbers (two-sided active)
+
+`solve3d/tests/test_two_sided.py::test_al_grad_two_sided_matches_fd_at_boosted_node`.
+The combined AL gradient `dL/dv = dJ_shape/dv + max(0,λ+μg)·dKS_peak/dv` is
+central-FD-checked with the AL hinge ACTIVE and **7 nodes boosted to sat = 1.5**
+(the ceiling-sensitive nodes + the coldest/core-feed node — the branch a correct
+one-sided gate never exercises):
+
+- **worst relative error = 1.57e-8** at the frozen 1e-6 tolerance, FD step h=1e-4.
+- **mutation bites**: dropping the AL/ceiling term changes the boosted node's
+  gradient by rel 1.0 — the above-1.0 branch is load-bearing, not a no-op.
+- sigma at the boosted nodes = 0.06 S/m > sigma_doped 0.04 (the actuator feeds
+  the core), confirmed under the coupling clip.
+- 6/6 tests green; existing B3/B4 gates 20/20 green (default one-sided unchanged).
+- Construction re-confirmed on the REAL Tamper geometry (`run_tamper_rescue
+  --validate`: n_design=20106, sigma(1.5)=0.06 > doped, two-sided boosts core).
+  Gradient correctness is geometry-agnostic (proven on the coarse case); the
+  per-geometry FD re-gate at the production march horizon is the coordinator's
+  heavy pre-launch step, per the existing B-stage convention.
+
+### Drive re-probe (does two-sided open a feasible window?)
+
+`tamper_twosided_reprobe.py` (EQS-only, light). Fixed-point flatten the deposited
+power toward its mean under the saturation cap; compare the achievable **rim/core
+power ratio** (the crisp feasibility number: fusing the core needs a ~133 K rise,
+the rim must stay under ~200 K, so a single drive is feasible only if rim/core <
+200/133 ≈ **1.5**):
+
+| map | core Q | rim Q | rim/core | peak/mean | verdict |
+|---|---:|---:|---:|---:|---|
+| uniform s=1 | 0.61× | 1.49× | **2.42** | 9.4× | infeasible |
+| flatten, cap 1.0 (one-sided) | 0.91× | 1.15× | 1.26 | 1.4× | under 1.5 |
+| flatten, cap 2.0 (two-sided) | 0.87× | 1.18× | 1.35 | 1.6× | under 1.5 |
+| flatten, cap 3.0 | 0.80× | 1.24× | 1.54 | 2.0× | ~threshold |
+
+**Grading has the authority to flatten the ~3× radial gradient below the ~1.5
+feasibility threshold** and to collapse the peak/mean from 9.4× to ~1.5× (de-
+doping the rim slivers cuts their field-concentrated Q — the Tamper peak IS
+dopant-reducible, unlike the square's conserved peak in STAGE_A_REPORT). The
+two-sided map boosts the core to mean sat 1.9 and pulls the rim to mean 0.54.
+
+**Honest read — expected to OPEN a window, not guaranteed to fully close it.** In
+this steady EQS proxy one-sided and two-sided flatten similarly, because fixed-
+power renormalization lets rim-pulling feed the core. Two-sided's real advantage —
+directly feeding the core (sat→1.9) rather than relying on renorm, which matters
+when the ceiling AND densification must hold together — shows up only in the
+transient densifying march, which the proxy does not capture. And the ceiling is
+on the **transient** peak; if the bilateral rim overshoot persists at the density-
+feasible drive, that is the honest **"two-sided AND Stage C dwell"** finding
+(dwell was the study's co-recommendation for the transient bilateral rim spot),
+not a failure.
+
+### Launch command (coordinator launches; permission-gated)
+
+The Tamper is an arbitrary STL (not an extruded part → `studio_solve` refuses it;
+not a registered B-stage shape). The faithful "reuse B1–B4, no adjoint rebuild"
+vehicle is `solve3d/phase_e/run_tamper_rescue.py`, which assembles the Tamper
+tc+chain into the existing `density_adjoint.Case` + `stage_b3.ALCase` and drives
+the SAME `b3.al_objective_and_grad` + checkpointed L-BFGS-B with the two-sided box.
+
+```
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+heatr3d_d1_spike/env/bin/python -m solve3d.phase_e.run_tamper_rescue \
+    --solve --drive-a 1.2 --max-sat 2.0
+```
+
+- **Drive**: `drive_a ≈ 1.2` is a first-order start — well above the one-sided-
+  infeasible 0.86× (§Q2), because flattening lets the drive rise before the rim
+  hits the ceiling. The backed-off drive that lands the SHAPED true peak at
+  T_eff = 235 (250 − 15 headroom) should be pinned by a shaped-map drive probe;
+  1.2 is the seed, not the final.
+- **Acceptance** (unchanged from B4): the TRUE trajectory peak
+  (`standing_gates.peak_T_c`, NOT `part_max_T_c` — the field that bit us) ≤ 250
+  AND densified (below-floor ≤ floor) on the hold-out.
+- **Pre-launch**: the per-geometry FD gate + `_march` fidelity on the coarse
+  Tamper (the B-stage no-ungated-gradient rule) — a modest solve, run before the
+  multi-hour AL.
+
+---
+
 ## Artifacts
 
+- `two_sided.py` (module), `tests/test_two_sided.py` (6 pass: cap logic + default
+  byte-identity + two-sided AL-grad FD gate 1.57e-8) — under `solve3d/`.
+- `run_tamper_rescue.py` — the Tamper two-sided rescue driver (`--validate` light,
+  `--solve` heavy/STOP).
+- `tamper_twosided_reprobe.py` — the EQS flattening / feasibility re-probe (light).
 - `results/fig_tamper_study.png` — (a) radial Q gradient, (b) feasibility scissors.
 - `tamper_qrf_probe.py`, `tamper_qrf_profiles.py` — EQS-only hot-spot probes (light).
 - `tamper_feasibility.py` — tested pure core of the drive estimate.

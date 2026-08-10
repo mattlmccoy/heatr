@@ -45,6 +45,7 @@ from solve3d import stage_a
 from solve3d import stage_a_phase2 as p2
 from solve3d import stage_b
 from solve3d import stage_b3 as b3
+from solve3d import two_sided
 
 RESULTS = Path(__file__).resolve().parent / "results"
 
@@ -410,7 +411,8 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
                     holdout_nodes: int = stage_b.SOLVE_HOLDOUT_NODES,
                     holdout_lc0: float = stage_b.SOLVE_HOLDOUT_LC0_M,
                     shape: str = "square",
-                    delta_ema: float = b3.DELTA_EMA) -> dict:
+                    delta_ema: float = b3.DELTA_EMA,
+                    max_sat: float = 1.0) -> dict:
     """The outer augmented-Lagrangian solve at the BACKED-OFF drive with the
     EFFECTIVE ceiling T_eff = ceiling - delta_headroom as the restoration-shift
     target. Two coupled B4 changes vs b3.run_solve_al, NO new physics:
@@ -492,7 +494,8 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
 
         ckpt = RESULTS / f"ckpt_stage_b4_{shape}_outer{k}.npz"
         res = ck.run_with_checkpoint(fg, v, int(inner_budget), ckpt,
-                                     bounds=(0.0, 1.0), scale_first_step=True,
+                                     bounds=two_sided.design_bounds(max_sat),
+                                     scale_first_step=True,
                                      on_eval=on_eval)
         v = np.asarray(res["best_v"], float)
 
@@ -559,6 +562,10 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
         "part": shape,
         "drive_a": float(drive_a),
         "power_density_w_per_m3": float(pw),
+        "max_sat": float(max_sat),
+        "actuator": ("two_sided" if two_sided.is_two_sided(max_sat)
+                     else "one_sided"),
+        "design_bounds": list(two_sided.design_bounds(max_sat)),
         "ceiling_c": ceiling_c,
         "targets": targets,
         "preconditions": pre,
@@ -629,6 +636,11 @@ def main() -> int:
     ap.add_argument("--delta-ema", type=float, default=b3.DELTA_EMA,
                     help="restoration-shift EMA damping; lower it (e.g. 0.3) for "
                          "SHARP shapes (cone) that oscillate at the 0.5 default")
+    ap.add_argument("--max-sat", type=float, default=1.0,
+                    help="two-sided dopant cap: upper saturation bound. 1.0 "
+                         "(default) = one-sided (byte-identical to B1-B4). >1.0 "
+                         "opens the boost branch (2.0 = double dose; see "
+                         "solve3d/two_sided.py for the physical cap rationale)")
     a = ap.parse_args()
     if a.reselect:
         reselect_drive_probe(shape=a.shape)
@@ -641,7 +653,7 @@ def main() -> int:
             raise SystemExit("--solve requires --drive-a X (from the probe)")
         run_solve_al_b4(drive_a=a.drive_a, outer_max=a.outer_max,
                         inner_budget=a.inner_budget, shape=a.shape,
-                        delta_ema=a.delta_ema)
+                        delta_ema=a.delta_ema, max_sat=a.max_sat)
     return 0
 
 
