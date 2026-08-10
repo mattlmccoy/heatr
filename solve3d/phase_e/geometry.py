@@ -33,8 +33,31 @@ META = ROOT / "shape_library_3d" / "meta"
 CUBE_A_M = 16.119919540164695e-3
 PYR_B_M = 23.248947030192525e-3          # square base side
 PYR_H_M = 23.248947030192525e-3          # height, apex up
+
+# Curved library primitives (cone/sphere/cylinder). All library shapes share the
+# EQUAL-VOLUME invariant V0 = 4188.79 mm^3 (the 20 mm sphere). A faceted STL of a
+# curved solid cannot match an analytic solid on BOTH bbox and volume, so we size
+# each curved primitive to V0 EXACTLY (preserving the pre-registered 1e-9 volume
+# check) and accept the ~0.07 % bbox artifact against the meta bbox -- sub-voxel,
+# and exactly what the fidelity pre-gate measures. Each is a z-axis body of
+# revolution centred on the origin, matching the library STL after voxelize_stl
+# re-centres it. Cone apex UP (base at z=-h/2), like the pyramid.
+V0_M3 = 4188.790204786391e-9
+SPH_R_M = (3.0 * V0_M3 / (4.0 * np.pi)) ** (1.0 / 3.0)          # 10.000 mm
+CONE_R_M = (3.0 * V0_M3 / (2.0 * np.pi)) ** (1.0 / 3.0)         # cubic bbox 2r=h
+CONE_H_M = 2.0 * CONE_R_M
+CYL_R_M = (V0_M3 / (2.0 * np.pi)) ** (1.0 / 3.0)               # cubic bbox 2r=h
+CYL_H_M = 2.0 * CYL_R_M
+
 L_DOMAIN = fwd.L_DOMAIN
-SHAPES = ("pyramid", "cube")
+SHAPES = ("pyramid", "cube", "cone", "sphere", "cylinder")
+CURVED_SHAPES = ("cone", "sphere", "cylinder")
+
+# Half-extent of each solid's bounding box (for the mesh refinement window).
+_HALF_BBOX_M = {
+    "cube": CUBE_A_M / 2.0, "pyramid": PYR_B_M / 2.0,
+    "cone": CONE_R_M, "sphere": SPH_R_M, "cylinder": CYL_R_M,
+}
 
 
 def _expected_volume_m3(shape: str, precomp_coeffs=None) -> float:
@@ -84,6 +107,24 @@ def in_part_predicate(shape: str, *, precomp_coeffs=None):
             return ((np.abs(mp[2]) <= h / 2.0) & (np.abs(mp[0]) <= s)
                     & (np.abs(mp[1]) <= s))
         return pred
+    if shape == "sphere":
+        R2 = SPH_R_M ** 2
+        return lambda mp: (mp[0] ** 2 + mp[1] ** 2 + mp[2] ** 2) <= R2
+    if shape == "cone":
+        R, h = CONE_R_M, CONE_H_M
+
+        def pred_cone(mp):
+            z = mp[2]
+            # circular section radius at height z; full R at the base (z=-h/2),
+            # zero at the apex (z=+h/2)
+            rz = R * (h / 2.0 - z) / h
+            return ((np.abs(z) <= h / 2.0)
+                    & ((mp[0] ** 2 + mp[1] ** 2) <= np.maximum(rz, 0.0) ** 2))
+        return pred_cone
+    if shape == "cylinder":
+        R2, h = CYL_R_M ** 2, CYL_H_M
+        return lambda mp: ((np.abs(mp[2]) <= h / 2.0)
+                           & ((mp[0] ** 2 + mp[1] ** 2) <= R2))
     raise ValueError(f"unknown Phase E shape {shape!r}")
 
 
@@ -109,19 +150,46 @@ def nominal_volume_m3(shape: str, *, precomp_coeffs=None) -> float:
     pre-compensated run cannot be compared against the nominal library number
     by accident.
     """
-    v = CUBE_A_M ** 3 if shape == "cube" else PYR_B_M ** 2 * PYR_H_M / 3.0
+    if shape == "cube":
+        v = CUBE_A_M ** 3
+    elif shape == "pyramid":
+        v = PYR_B_M ** 2 * PYR_H_M / 3.0
+    elif shape == "sphere":
+        v = 4.0 / 3.0 * np.pi * SPH_R_M ** 3
+    elif shape == "cone":
+        v = np.pi * CONE_R_M ** 2 * CONE_H_M / 3.0
+    elif shape == "cylinder":
+        v = np.pi * CYL_R_M ** 2 * CYL_H_M
+    else:
+        raise ValueError(f"unknown Phase E shape {shape!r}")
     if precomp_coeffs is None or precomp_coeffs.is_identity:
         return float(v)
     return float(v * precomp_coeffs.xy_scale ** 2 * precomp_coeffs.z_scale)
 
 
 def _add_solid(occ, shape: str, precomp_coeffs=None) -> int:
-    sx, _sy, sz = (1.0, 1.0, 1.0) if precomp_coeffs is None else \
+    identity = precomp_coeffs is None or precomp_coeffs.is_identity
+    if not identity and shape in CURVED_SHAPES:
+        raise NotImplementedError(
+            f"anisotropic pre-compensation of the curved primitive {shape!r} is "
+            "not built (the campaign runs curved shapes nominal; cube/pyramid "
+            "carry the precomp-tested path)")
+    sx, _sy, sz = (1.0, 1.0, 1.0) if identity else \
         tuple(float(v) for v in precomp_coeffs.factors)
     if shape == "cube":
         a = CUBE_A_M * sx
         c = CUBE_A_M * sz
         return occ.addBox(-a / 2, -a / 2, -c / 2, a, a, c)
+    if shape == "sphere":
+        return occ.addSphere(0.0, 0.0, 0.0, SPH_R_M)
+    if shape == "cone":
+        # apex UP: base disc at z=-h/2 (radius R), apex at z=+h/2 (radius 0)
+        return occ.addCone(0.0, 0.0, -CONE_H_M / 2.0, 0.0, 0.0, CONE_H_M,
+                           CONE_R_M, 0.0)
+    if shape == "cylinder":
+        return occ.addCylinder(0.0, 0.0, -CYL_H_M / 2.0, 0.0, 0.0, CYL_H_M,
+                               CYL_R_M)
+    # pyramid
     b2, h = PYR_B_M / 2.0 * sx, PYR_H_M / 2.0 * sz
     p = [occ.addPoint(-b2, -b2, -h), occ.addPoint(b2, -b2, -h),
          occ.addPoint(b2, b2, -h), occ.addPoint(-b2, b2, -h),
@@ -194,7 +262,10 @@ def build_mesh(shape: str, lc_part: float, lc_bed_factor: float = 4.0,
         # would quietly coarsen the mesh at the part boundary
         _s = 1.0 if precomp_coeffs is None else max(
             float(precomp_coeffs.xy_scale), float(precomp_coeffs.z_scale))
-        half = max(PYR_B_M, CUBE_A_M) / 2.0 * _s
+        # the refinement window must enclose THIS shape's bbox (cone/cylinder
+        # reach beyond the pyramid/cube half-extent). Cone R == h/2, so its
+        # half-extent covers the z apex reach too.
+        half = _HALF_BBOX_M[shape] * _s
         f = gmsh.model.mesh.field
         t = f.add("Box")
         pad = 0.02 * half

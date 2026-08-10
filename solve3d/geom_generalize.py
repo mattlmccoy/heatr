@@ -135,7 +135,9 @@ def run_probe(shape: str, drives: tuple) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--shape", required=True, choices=["cube", "pyramid", "square"])
+    ap.add_argument("--shape", required=True,
+                    choices=["cube", "pyramid", "square", "cone", "sphere",
+                             "cylinder"])
     ap.add_argument("--gate", action="store_true", help="run the per-geometry FD gate")
     ap.add_argument("--probe", action="store_true", help="run the drive-backoff probe")
     ap.add_argument("--drives", type=str, default="0.20,0.24,0.28",

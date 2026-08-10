@@ -17,17 +17,26 @@ def _meta(shape: str) -> dict:
     return json.loads((ROOT / "shape_library_3d" / "meta" / f"{shape}.json").read_text())
 
 
-@pytest.mark.parametrize("shape", ["pyramid", "cube"])
+@pytest.mark.parametrize("shape", ["pyramid", "cube", "cone", "sphere",
+                                   "cylinder"])
 def test_occ_solid_volume_matches_the_library_stl(shape):
     """The check that proves the analytic solid IS the library shape, at the
-    pre-registered 1e-9 relative tolerance."""
+    pre-registered 1e-9 relative tolerance.
+
+    Polyhedra (cube/pyramid) match the STL exactly because the facets ARE the
+    surface. Curved primitives (cone/sphere/cylinder) are sized to the library's
+    EQUAL-VOLUME invariant (4188.79 mm^3), so the analytic volume still matches
+    the recorded volume at 1e-9; only the bbox differs from the faceted STL by
+    the tessellation artifact (~0.07 %, sub-voxel, measured by the fidelity gate).
+    """
     from solve3d.phase_e import geometry
     v = geometry.occ_volume_m3(shape)
     want = _meta(shape)["actual_volume_mm3"] * 1e-9
     assert abs(v - want) / want <= 1e-9, (shape, v, want)
 
 
-@pytest.mark.parametrize("shape", ["pyramid", "cube"])
+@pytest.mark.parametrize("shape", ["pyramid", "cube", "cone", "sphere",
+                                   "cylinder"])
 def test_predicate_volume_agrees_with_the_solid(shape):
     """The in-part predicate feeds materials, chi and the nominal masks. If it
     disagrees with the meshed solid the whole campaign scores the wrong body.
@@ -65,10 +74,50 @@ def test_pyramid_cross_section_shrinks_to_a_point_at_the_apex():
     assert not pred(np.array([[wide], [0.0], [+h / 2 - eps]]))[0]  # narrow at apex
 
 
-@pytest.mark.parametrize("shape", ["pyramid", "cube"])
+def test_cone_cross_section_shrinks_to_a_point_at_the_apex():
+    """Apex up (matching the library STL after centering): full circular section
+    at the base, vanishing at the top. A cone built upside down would pass the
+    volume check but mirror the geometry against the STL voxel part."""
+    from solve3d.phase_e import geometry
+    h = geometry.CONE_H_M
+    R = geometry.CONE_R_M
+    pred = geometry.in_part_predicate("cone")
+    eps = 1e-4
+    assert pred(np.array([[0.0], [0.0], [-h / 2 + eps]]))[0]       # axis@base in
+    assert pred(np.array([[0.0], [0.0], [+h / 2 - eps]]))[0]       # axis@apex in
+    assert pred(np.array([[R * 0.9], [0.0], [-h / 2 + eps]]))[0]   # wide at base
+    assert not pred(np.array([[R * 0.9], [0.0], [+h / 2 - eps]]))[0]  # narrow apex
+
+
+def test_cylinder_is_a_z_axis_body_of_revolution():
+    from solve3d.phase_e import geometry
+    h, R = geometry.CYL_H_M, geometry.CYL_R_M
+    pred = geometry.in_part_predicate("cylinder")
+    eps = 1e-4
+    # full radius at both flat faces, nothing beyond the wall or the flat caps
+    assert pred(np.array([[R * 0.99], [0.0], [-h / 2 + eps]]))[0]
+    assert pred(np.array([[R * 0.99], [0.0], [+h / 2 - eps]]))[0]
+    assert not pred(np.array([[R * 1.01], [0.0], [0.0]]))[0]        # past wall
+    assert not pred(np.array([[0.0], [0.0], [h / 2 + eps]]))[0]     # past cap
+
+
+def test_sphere_predicate_is_the_ball():
+    from solve3d.phase_e import geometry
+    R = geometry.SPH_R_M
+    pred = geometry.in_part_predicate("sphere")
+    assert pred(np.array([[0.0], [0.0], [0.0]]))[0]
+    assert pred(np.array([[R * 0.99], [0.0], [0.0]]))[0]
+    assert not pred(np.array([[R * 0.99], [R * 0.99], [0.0]]))[0]   # corner out
+
+
+@pytest.mark.parametrize("shape", ["pyramid", "cube", "cone", "sphere",
+                                   "cylinder"])
 def test_mesh_conforms_and_carries_the_right_part_volume(shape):
     from solve3d.phase_e import geometry
     msh, info = geometry.build_mesh(shape, lc_part=0.0020)
     want = geometry.occ_volume_m3(shape)
-    assert abs(info.part_volume_m3 - want) / want < 1e-6, (shape, info.part_volume_m3)
+    # curved primitives lose a little volume to the linear tets that facet the
+    # surface at this lc; polyhedra are exact. 0.5 % covers the curved case.
+    tol = 1e-6 if shape in ("cube", "pyramid") else 5e-3
+    assert abs(info.part_volume_m3 - want) / want < tol, (shape, info.part_volume_m3)
     assert info.n_nodes_in_part > 200

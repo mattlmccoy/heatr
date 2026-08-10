@@ -74,3 +74,30 @@ def test_drive_probe_pick_selects_in_band():
     peaks2 = {0.34: 228.5, 0.36: 231.0, 0.38: 236.0}
     pick2 = b4.pick_backed_off_drive(peaks2, band=(228.0, 232.0))
     assert pick2["drive_a"] == 0.36
+
+
+def test_cli_delta_ema_flows_into_run_solve_al_b4(monkeypatch):
+    """Sharp shapes (cone) oscillated at the default DELTA_EMA=0.5; the launch
+    command must be able to lower it. --delta-ema must reach run_solve_al_b4."""
+    import sys
+    captured = {}
+
+    def fake_solve(**kw):
+        captured.update(kw)
+        return {}
+
+    monkeypatch.setattr(b4, "run_solve_al_b4", fake_solve)
+    monkeypatch.setattr(sys, "argv",
+                        ["stage_b4", "--solve", "--shape", "cone",
+                         "--drive-a", "0.57", "--delta-ema", "0.3"])
+    b4.main()
+    assert captured["shape"] == "cone"
+    assert captured["drive_a"] == 0.57
+    assert captured["delta_ema"] == 0.3
+
+
+def test_run_solve_al_b4_default_delta_ema_is_the_frozen_value():
+    import inspect
+    from solve3d import stage_b3 as b3
+    sig = inspect.signature(b4.run_solve_al_b4)
+    assert sig.parameters["delta_ema"].default == b3.DELTA_EMA

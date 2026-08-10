@@ -67,7 +67,7 @@ FILTER_RADIUS_M = 1.0e-3          # the frozen phase-2 design-chain filter radiu
 # adjoint.TransientCase with the SAME drive, horizon and design chain, so every
 # downstream read (density co-state, AL, arbiter) is geometry-agnostic.
 ANCHOR_SHAPES = ("square", "circle")
-PHASE_E_SHAPES = ("cube", "pyramid")
+PHASE_E_SHAPES = ("cube", "pyramid", "cone", "sphere", "cylinder")
 
 
 def geometry_family(shape: str) -> str:

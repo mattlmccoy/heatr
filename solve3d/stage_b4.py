@@ -257,7 +257,8 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
                     inner_budget: int = b3.INNER_BUDGET,
                     holdout_nodes: int = stage_b.SOLVE_HOLDOUT_NODES,
                     holdout_lc0: float = stage_b.SOLVE_HOLDOUT_LC0_M,
-                    shape: str = "square") -> dict:
+                    shape: str = "square",
+                    delta_ema: float = b3.DELTA_EMA) -> dict:
     """The outer augmented-Lagrangian solve at the BACKED-OFF drive with the
     EFFECTIVE ceiling T_eff = ceiling - delta_headroom as the restoration-shift
     target. Two coupled B4 changes vs b3.run_solve_al, NO new physics:
@@ -357,7 +358,7 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
         lam = b3.multiplier_update(lam=lam, mu=mu, g=g_con)
         shift = b3.restoration_shift(ceiling=t_eff, true_peak=true_peak,
                                      ks_peak=ks_solve, prev_delta=delta,
-                                     ema=b3.DELTA_EMA)
+                                     ema=float(delta_ema))
         delta, t_target = shift["delta"], shift["t_target"]
         viol_now = abs(true_peak - t_eff)         # converge dolfinx peak to T_eff
         mu = b3.mu_escalation(mu=mu, viol_prev=viol_prev, viol_now=viol_now,
@@ -411,7 +412,7 @@ def run_solve_al_b4(drive_a: float, delta_headroom: float = DELTA_HEADROOM_C,
         "preconditions": pre,
         "outer_loop": {"outer_max": int(outer_max), "inner_budget": int(inner_budget),
                        "lam0": b3.LAM0, "mu0": b3.MU0, "mu_factor": b3.MU_FACTOR,
-                       "mu_shrink": b3.MU_SHRINK, "delta_ema": b3.DELTA_EMA,
+                       "mu_shrink": b3.MU_SHRINK, "delta_ema": float(delta_ema),
                        "converge_tol_c": b3.CONVERGE_TOL_C,
                        "converged": bool(converged)},
         "solve_mesh": {"target_nodes": stage_b.SOLVE_TARGET_NODES,
@@ -466,6 +467,9 @@ def main() -> int:
                     help="geometry: square (default) | cube | pyramid")
     ap.add_argument("--outer-max", type=int, default=b3.OUTER_MAX)
     ap.add_argument("--inner-budget", type=int, default=b3.INNER_BUDGET)
+    ap.add_argument("--delta-ema", type=float, default=b3.DELTA_EMA,
+                    help="restoration-shift EMA damping; lower it (e.g. 0.3) for "
+                         "SHARP shapes (cone) that oscillate at the 0.5 default")
     a = ap.parse_args()
     if a.probe:
         drive_probe(shape=a.shape)
@@ -473,7 +477,8 @@ def main() -> int:
         if a.drive_a is None:
             raise SystemExit("--solve requires --drive-a X (from the probe)")
         run_solve_al_b4(drive_a=a.drive_a, outer_max=a.outer_max,
-                        inner_budget=a.inner_budget, shape=a.shape)
+                        inner_budget=a.inner_budget, shape=a.shape,
+                        delta_ema=a.delta_ema)
     return 0
 
 

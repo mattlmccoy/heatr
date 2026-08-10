@@ -1,0 +1,61 @@
+{
+  "what": "Shape-library campaign fidelity PRE-GATE (step 1): DG0->voxel transfer mass-move per candidate grid, gated on the worst axis ramp at the 2% Phase-C staircase threshold. Pick the faithful grid (argmin worst-axis) or flag transfer_limited. Probe fields vary O(1) across the part like a shaped dopant map; radial is reported, not gated (pathologically conservative on convex parts).",
+  "stage": "fidelity_pre_gate",
+  "shape": "pyramid",
+  "chamber_m": 0.06,
+  "n_design_cells": 8931,
+  "candidate_grids": [
+    64,
+    80,
+    96
+  ],
+  "part_voxels": {
+    "64": 4624,
+    "80": 9020,
+    "96": 18316
+  },
+  "per_grid_mass_move_by_field": {
+    "64": {
+      "xramp": 0.00014717762752086659,
+      "yramp": 0.0011498934196759664,
+      "zramp": 0.012336167815981468,
+      "radial": 0.030899999999999997
+    },
+    "80": {
+      "xramp": 0.0009034103577033982,
+      "yramp": 0.005821895847072271,
+      "zramp": 0.0013024526485372204,
+      "radial": 0.0291
+    },
+    "96": {
+      "xramp": 0.0018650195325074375,
+      "yramp": 0.006963959832532532,
+      "zramp": 0.045700000000000005,
+      "radial": 0.0233
+    }
+  },
+  "gate_fields": [
+    "xramp",
+    "yramp",
+    "zramp"
+  ],
+  "reported_not_gated_fields": [
+    "radial"
+  ],
+  "gate": 0.02,
+  "selection": {
+    "chosen_grid": 80,
+    "chosen_worst_axis_move": 0.005821895847072271,
+    "faithful": true,
+    "transfer_limited": false,
+    "gate": 0.02,
+    "per_grid_worst_axis": {
+      "64": 0.012336167815981468,
+      "80": 0.005821895847072271,
+      "96": 0.045700000000000005
+    }
+  },
+  "chosen_grid": 80,
+  "transfer_limited": false,
+  "calibration_note": "worst-axis argmin reproduces the PINNED pyramid faithful grid (n80); absolute per-grid value is a conservative screen, not the solved-map mass-move."
+}
