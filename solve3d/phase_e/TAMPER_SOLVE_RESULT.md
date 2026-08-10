@@ -25,7 +25,8 @@ the dense-iff-in-bounds objective at once.
 | In-bounds under-density deficit J | 4.0438e-6 | 2.4099e-6 | -40.4% |
 | In-bounds below-floor fraction | 0.9396 (94.0%) | 0.7225 (72.2%) | much more reaches floor |
 | Mean melt fraction (part) | 0.0975 | 0.3384 | 3.47x more densification |
-| Peak T | 201.5 C | 208.4 C | both under 250 ceiling |
+| In-part end-state max (part_max_T_c) | 201.5 C | 208.4 C | in-part only; NOT the ceiling quantity |
+| **TRUE peak (standing_gates.peak_T_c, trajectory max)** | **279.8 C** | **281.9 C** | **peak_over_ceiling=TRUE, OVER 250 on BOTH arms** |
 | sigma_T diagnostic | 27.94 C | 27.50 C | marginal (not the story) |
 | Optimized stop time | 264.5 s | 359.4 s | longer bake |
 
@@ -35,6 +36,19 @@ raised in-bounds densification ~3.5x. sigma_T barely moved and is not the metric
 of merit here.
 
 ## Honest scope
+
+CORRECTION (2026-08-10): an earlier version of this doc said "Peak T 201.5/208.4 C,
+both under 250 ceiling." That was a DATA-CONTRACT ERROR - it read part_max_T_c (the
+IN-PART end-state max), not the ceiling quantity. The artifact's own
+standing_gates.peak_T_c (peak_source=trajectory_maximum) is 279.8 C (uniform) /
+281.9 C (shaped) with peak_over_ceiling=TRUE. So this Tamper solve is OVER the 250 C
+ceiling on BOTH arms by ~30 C. It is NOT a shippable/closed result. It was a
+dense-iff-in-bounds SHAPE solve WITHOUT the ceiling coupling (it predates B1-B4).
+
+So the honest Tamper story: a real complex part, shape-solved, lands BOTH over the
+ceiling (~282 C) AND 72% under the density floor - the exact dual problem (too hot
+AND not dense enough) that MOTIVATED the ceiling-coupled B1-B4 work. The -45% shape
+improvement over uniform is real, but it is an over-ceiling, under-dense solve.
 
 The solved map is a large improvement but NOT a fully dense part: 72% of the
 in-bounds region is still below the density floor (mean melt fraction 34%). The
