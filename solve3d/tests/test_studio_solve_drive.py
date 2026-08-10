@@ -10,6 +10,13 @@ studio_solve_results.json:
   ceiling_c, thermal_config_path      provenance (the shared 250 C source)
   recommended_drive_reason            a string; on honest-null says why
 
+Feasibility is judged against the EFFECTIVE ceiling T_eff = ceiling_c -
+DELTA_HEADROOM_C (15 C), NOT the raw ceiling: the deployed job runs a SHAPED
+dopant map at the recommended drive, and the shape-optimal dopant RELOCATES the
+peak +11-13 C (the B4 finding). A drive whose UNIFORM peak is 248 C sits under
+250 but over T_eff=235, so the shaped map would land ~261 C and fail the
+cross-engine is_sendable gate -- it is NOT feasible.
+
 These tests pin the CONTRACT and the honest-null (the false-green refusal): a
 drive-limited part emits NULL power + a reason, never a cooking drive. They use
 pure logic and a stubbed drive-selection probe -- no heavy solve, no mesh.
@@ -65,9 +72,81 @@ def test_recommended_power_is_frac_times_baseline():
 
 def test_picks_highest_feasible_drive():
     rec = _rec(_feasible())
-    # 0.42 is over ceiling; 0.38 is the highest feasible (most throughput)
-    assert rec["recommended_drive_frac"] == 0.38
-    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.38 * BASELINE)
+    # T_eff = 250 - 15 = 235. Feasible: 0.30 (210) and 0.34 (235). 0.38 (248)
+    # is under 250 but OVER T_eff, so NOT feasible; 0.42 (262) is over both.
+    # Highest T_eff-feasible drive is 0.34.
+    assert rec["recommended_drive_frac"] == 0.34
+    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.34 * BASELINE)
+
+
+def test_uniform_peak_under_ceiling_but_over_t_eff_is_not_feasible():
+    """REGRESSION (the B4 bug): a uniform peak of 248 C is under the raw 250
+    ceiling but over T_eff=235. Judging against 250 would recommend it and ship a
+    map that relocates to ~261 C. It must be REFUSED -> honest-null."""
+    rec = _rec({0.38: {"true_peak_c": 248.0, "reached_rho": True,
+                       "achieved_rho": 0.98}})
+    assert rec["recommended_power_density_w_per_m3"] is None
+    assert rec["recommended_drive_frac"] is None
+    assert "drive_limited" in rec["recommended_drive_reason"]
+
+
+def test_t_eff_fallback_is_ceiling_minus_headroom_when_no_t_warning():
+    """No explicit t_eff_c (older config path) -> T_eff = ceiling - 15."""
+    rec = _rec(_feasible())
+    assert rec["delta_headroom_c"] == 15.0
+    assert rec["t_eff_c"] == pytest.approx(250.0 - 15.0)
+    assert rec["ceiling_c"] == 250.0            # the REAL ceiling still carried
+    assert rec["t_eff_source"].startswith("ceiling_minus")
+    assert "T_eff" in rec["recommended_drive_reason"]
+    assert "235" in rec["recommended_drive_reason"]
+
+
+def test_explicit_t_eff_is_used_and_cites_t_warning():
+    """When t_eff_c is passed (from thermal_config.T_warning_C), it is the
+    selection target and the provenance/reason cite T_warning_C."""
+    rec = ss.select_recommended_drive(
+        _feasible(), baseline=BASELINE, ceiling_c=250.0, chamber_tag="ch060",
+        thermal_config_path=TCFG_PATH, rho_target=0.98, t_eff_c=235.0)
+    assert rec["t_eff_c"] == 235.0
+    assert rec["ceiling_c"] == 250.0
+    assert rec["delta_headroom_c"] == pytest.approx(15.0)
+    assert rec["t_eff_source"] == "thermal_config.T_warning_C"
+    assert "T_warning_C" in rec["recommended_drive_reason"]
+    # feasibility unchanged: 248 still over 235 -> 0.34 wins
+    assert rec["recommended_drive_frac"] == 0.34
+
+
+def test_recommended_drive_for_part_reads_t_warning_from_thermal_config():
+    """The wiring reads T_warning_C from the SAME thermal_config.json the Studio
+    verify reads T_ceiling_C from -- single source, no drift."""
+    from solve3d import stage_a
+    tcfg = stage_a.thermal_config()
+    assert tcfg["T_warning_C"] == 235.0         # the shared source value
+
+    def cool(drive_a, **kw):
+        return {"drive_a": drive_a, "power_density_w_per_m3": drive_a * BASELINE,
+                "true_peak_c": 210.0 + (drive_a - 0.30) * 430.0,
+                "reached_rho": True, "achieved_rho": 0.98}
+
+    rec = ss.recommended_drive_for_part(
+        msh=None, rings=None, z_lo=0.0, z_hi=0.0,
+        candidates=(0.30, 0.34, 0.38, 0.42), baseline=BASELINE,
+        chamber_tag="ch060", thermal_config_path=TCFG_PATH,
+        max_time_s=1.0, peak_probe=cool)          # ceiling_c/rho from config
+    assert rec["ceiling_c"] == 250.0
+    assert rec["t_eff_c"] == 235.0
+    assert rec["t_eff_source"] == "thermal_config.T_warning_C"
+    assert "T_warning_C" in rec["recommended_drive_reason"]
+
+
+def test_delta_headroom_is_single_source_with_stage_b4():
+    from solve3d import stage_b4
+    assert ss.DELTA_HEADROOM_C == stage_b4.DELTA_HEADROOM_C
+    # and the config's T_warning_C equals ceiling - the B4 headroom
+    from solve3d import stage_a
+    tcfg = stage_a.thermal_config()
+    assert tcfg["T_warning_C"] == pytest.approx(
+        tcfg["T_ceiling_C"] - stage_b4.DELTA_HEADROOM_C)
 
 
 # ---- (a) full contract present with correct types when feasible --------- #
@@ -117,7 +196,8 @@ def test_chamber_and_provenance_ride_through(peaks):
 # ---- wiring: recommended_drive_for_part with a stubbed probe ------------- #
 def test_recommended_drive_for_part_wires_probe_and_selects():
     def cool_ramp(drive_a, **kw):
-        # peak rises with drive; 0.30/0.34/0.38 feasible, 0.42 over ceiling
+        # peak rises with drive: 0.30->210, 0.34->227.2, 0.38->244.4, 0.42->261.6
+        # T_eff=235 -> feasible are 0.30 and 0.34; highest feasible is 0.34
         return {"drive_a": drive_a,
                 "power_density_w_per_m3": drive_a * BASELINE,
                 "true_peak_c": 210.0 + (drive_a - 0.30) * 430.0,
@@ -128,8 +208,8 @@ def test_recommended_drive_for_part_wires_probe_and_selects():
         candidates=(0.30, 0.34, 0.38, 0.42), baseline=BASELINE, ceiling_c=250.0,
         chamber_tag="ch060", thermal_config_path=TCFG_PATH, rho_target=0.98,
         max_time_s=1.0, peak_probe=cool_ramp)
-    assert rec["recommended_drive_frac"] == 0.38
-    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.38 * BASELINE)
+    assert rec["recommended_drive_frac"] == 0.34
+    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.34 * BASELINE)
     assert len(rec["candidates"]) == 4
 
 

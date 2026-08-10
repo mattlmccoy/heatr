@@ -80,6 +80,17 @@ DRIVE_BASELINE_W_PER_M3 = float(
 # B4 square result (0.34x) widened so an arbitrary part can find feasibility.
 CEILING_DRIVE_CANDIDATES = (0.26, 0.30, 0.34, 0.38, 0.42)
 
+# EFFECTIVE-ceiling headroom for the SHAPED-map peak relocation. The recommended
+# drive is measured on the UNIFORM map, but the deployed job prints a SHAPED
+# (shape-optimal) dopant that RELOCATES the peak +11-13 C (the B4 finding:
+# reloc_phase2_square_heatr3d.json, 11 dolfinx / 13 heatr3d, rounded up). So a
+# drive is feasible only if its UNIFORM peak sits under T_eff = ceiling - 15,
+# leaving room for the shaped map to relocate up and still clear the real
+# ceiling on BOTH engines. Mirrors stage_b4.DELTA_HEADROOM_C (single source
+# guarded by test_delta_headroom_is_single_source_with_stage_b4); imported
+# lazily to keep this module light. See solve3d/stage_b4.py lines 14-22.
+DELTA_HEADROOM_C = 15.0
+
 # Phase C anchor: circle d=20 mm, full height -> in-part node density.
 _ANCHOR_VOLUME_M3 = float(np.pi * 0.010 ** 2 * 0.060)
 SOLVE_NODE_DENSITY = 23040 / _ANCHOR_VOLUME_M3      # phase_a_coarse
@@ -101,15 +112,30 @@ def prereg() -> dict:
 # --------------------------------------------------------------------------- #
 def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
                              ceiling_c: float, chamber_tag: str,
-                             thermal_config_path: str, rho_target: float) -> dict:
+                             thermal_config_path: str, rho_target: float,
+                             t_eff_c: float | None = None,
+                             delta_headroom: float = DELTA_HEADROOM_C) -> dict:
     """Pick the ceiling-feasible drive from MEASURED uniform end-state peaks.
 
     `peaks_by_drive` maps a drive multiplier `a` to a dict with at least
     `true_peak_c`, `reached_rho` and `achieved_rho` (as measured by a uniform
-    densify on THIS part's mesh at power a * baseline). A drive is FEASIBLE iff
-    it both densifies (`reached_rho`) AND keeps the true end-state peak at or
-    under the real ceiling. The HIGHEST feasible drive is recommended (most part
-    throughput). Pure logic; no physics.
+    densify on THIS part's mesh at power a * baseline).
+
+    Feasibility is judged against the WARNING band T_eff (thermal_config.json's
+    `T_warning_C` = 235 C), NOT the raw degradation ceiling (`T_ceiling_C` = 250).
+    The deployed job prints a SHAPED dopant map at the recommended drive, and the
+    shape-optimal dopant RELOCATES the peak +11-13 C (the B4 finding); the ~15 C
+    gap between T_warning and T_ceiling IS that relocation headroom. Judging the
+    UNIFORM peak against the raw ceiling would recommend a drive whose shaped map
+    then cooks (~+13 C over) and fails the cross-engine is_sendable gate --
+    exactly the bug B4 solved. So a drive is FEASIBLE iff it densifies
+    (`reached_rho`) AND its uniform peak <= T_eff. The HIGHEST feasible drive is
+    recommended (most part throughput). Pure logic; no physics.
+
+    Single-source: the caller passes `t_eff_c` read from `T_warning_C` of the
+    SAME thermal_config.json the Studio verify reads `T_ceiling_C` from, so the
+    two lanes cannot drift. When `t_eff_c` is None (older config without the
+    field), it falls back to `ceiling_c - delta_headroom` (also 235).
 
     HONEST-NULL (the false-green refusal): if no drive is feasible the part is
     drive-limited -- `recommended_power_density_w_per_m3` and
@@ -121,21 +147,32 @@ def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
     ceiling_c = float(ceiling_c)
     baseline = float(baseline)
     rho_target = float(rho_target)
+    if t_eff_c is not None:
+        t_eff = float(t_eff_c)
+        t_eff_source = "thermal_config.T_warning_C"
+        t_eff_label = "T_warning_C"
+    else:
+        t_eff = ceiling_c - float(delta_headroom)
+        t_eff_source = "ceiling_minus_delta_headroom (T_warning_C absent)"
+        t_eff_label = "T_eff"
+    delta_headroom = ceiling_c - t_eff              # the actual gap in use
     candidates = []
     feasible = []
     for a in sorted(peaks_by_drive):
         rec = peaks_by_drive[a]
         peak = float(rec["true_peak_c"])
         reached = bool(rec["reached_rho"])
-        under = bool(peak <= ceiling_c)
-        is_feasible = bool(reached and under)
+        under_t_eff = bool(peak <= t_eff)
+        under_ceiling = bool(peak <= ceiling_c)     # vs the REAL ceiling (info)
+        is_feasible = bool(reached and under_t_eff)
         candidates.append({
             "drive_a": float(a),
             "power_density_w_per_m3": float(a) * baseline,
             "true_peak_c": peak,
             "reached_rho": reached,
             "achieved_rho": float(rec.get("achieved_rho", float("nan"))),
-            "under_ceiling": under,
+            "under_t_eff": under_t_eff,
+            "under_ceiling": under_ceiling,
             "feasible": is_feasible,
         })
         if is_feasible:
@@ -143,10 +180,17 @@ def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
 
     out = {
         "chamber_tag": str(chamber_tag),
-        "ceiling_c": ceiling_c,
+        "ceiling_c": ceiling_c,                     # the REAL degradation ceiling
+        "delta_headroom_c": delta_headroom,
+        "t_eff_c": t_eff,                           # what the drive is picked against
+        "t_eff_source": t_eff_source,
         "thermal_config_path": str(thermal_config_path),
         "baseline_power_density_w_per_m3": baseline,
         "rho_target": rho_target,
+        "headroom_note": ("uniform peak judged against T_warning_C (235); the "
+                          "~15 C gap to T_ceiling_C (250) is the shaped-map "
+                          "peak-relocation headroom (B4). The REAL ceiling "
+                          "(T_ceiling_C) still governs is_shippable/is_sendable."),
         "candidates": candidates,
     }
     if feasible:
@@ -155,27 +199,32 @@ def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
         out["recommended_drive_frac"] = float(a)
         out["recommended_power_density_w_per_m3"] = float(a) * baseline
         out["recommended_drive_reason"] = (
-            "ceiling_feasible: uniform end-state peak %.2f C <= %.1f C at %.3fx "
-            "(highest drive that densifies to rho>=%.2f and stays under the "
-            "ceiling in %s)" % (peak, ceiling_c, a, rho_target, chamber_tag))
+            "ceiling_feasible_with_headroom: uniform peak %.2f C <= %s %.1f C "
+            "(= %.0f - %.0f headroom for dopant peak relocation) at %.3fx "
+            "(highest drive that densifies to rho>=%.2f and leaves relocation "
+            "room under the %.0f C ceiling in %s)"
+            % (peak, t_eff_label, t_eff, ceiling_c, delta_headroom, a,
+               rho_target, ceiling_c, chamber_tag))
         return out
 
-    # honest-null: distinguish "cooks" from "never densifies" in the reason
-    n_over = sum(1 for c in candidates if c["reached_rho"] and not c["under_ceiling"])
+    # honest-null: distinguish "cooks after relocation" from "never densifies"
+    n_over = sum(1 for c in candidates if c["reached_rho"] and not c["under_t_eff"])
     n_cold = sum(1 for c in candidates if not c["reached_rho"])
     if n_over and not n_cold:
-        why = ("every drive that densifies to rho>=%.2f exceeds the ceiling"
-               % rho_target)
+        why = ("every drive that densifies to rho>=%.2f has a uniform peak over "
+               "%s %.1f C (would relocate over the ceiling)"
+               % (rho_target, t_eff_label, t_eff))
     elif n_cold and not n_over:
         why = "no drive reaches rho>=%.2f within the horizon" % rho_target
     else:
-        why = ("no drive both densifies to rho>=%.2f and stays under the ceiling"
-               % rho_target)
+        why = ("no drive both densifies to rho>=%.2f and keeps its uniform peak "
+               "under %s %.1f C" % (rho_target, t_eff_label, t_eff))
     out["recommended_drive_frac"] = None
     out["recommended_power_density_w_per_m3"] = None
     out["recommended_drive_reason"] = (
-        "drive_limited: no feasible drive reaches rho_target under %.0fC (%s)"
-        % (ceiling_c, why))
+        "drive_limited: no feasible drive reaches rho_target under %.0fC "
+        "(%s %.1f C = %.0f - %.0f headroom for dopant peak relocation) (%s)"
+        % (ceiling_c, t_eff_label, t_eff, ceiling_c, delta_headroom, why))
     return out
 
 
@@ -236,6 +285,12 @@ def recommended_drive_for_part(msh, rings: list, z_lo: float, z_hi: float, *,
         rho_target = float(tcfg["rho_target"]["practical_ideal"])
     if chamber_tag is None:
         chamber_tag = chamber_mod.chamber_tag(L_DOMAIN)
+    # SELECTION TARGET: the warning band T_warning_C (235) read from the SAME
+    # thermal_config.json the Studio verify reads T_ceiling_C (250) from -- single
+    # source, so the two lanes cannot drift. Fallback for an older config without
+    # the field: ceiling - DELTA_HEADROOM (also 235).
+    t_eff_c = tcfg.get("T_warning_C")
+    t_eff_c = float(t_eff_c) if t_eff_c is not None else None
     probe = peak_probe if peak_probe is not None else _uniform_end_state_peak
 
     peaks = {}
@@ -250,7 +305,8 @@ def recommended_drive_for_part(msh, rings: list, z_lo: float, z_hi: float, *,
               f"rho={rec['achieved_rho']:.3f}", flush=True)
     return select_recommended_drive(
         peaks, baseline=baseline, ceiling_c=ceiling_c, chamber_tag=chamber_tag,
-        thermal_config_path=thermal_config_path, rho_target=rho_target)
+        thermal_config_path=thermal_config_path, rho_target=rho_target,
+        t_eff_c=t_eff_c)
 
 
 _RECOMMENDED_DRIVE_FIELDS = (
