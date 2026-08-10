@@ -283,3 +283,22 @@ def test_recommended_drive_for_part_calls_probe_with_real_signature():
         max_time_s=1.0, peak_probe=real_sig_probe)
     assert seen == [0.30, 0.34, 0.38, 0.42]        # every candidate reached the probe
     assert rec["recommended_drive_frac"] == 0.34   # highest feasible under T_eff=235
+
+
+def test_widened_ladder_reaches_compact_shape_feasible_drive():
+    """Regression for the live-cube honest-null: a compact shape whose feasible
+    drive is ABOVE the old 0.42x cap (cube/pyramid ~0.57-0.585x) must now be
+    reachable, not honest-nulled. Uses the DEFAULT (widened) candidate ladder."""
+    def compact(msh, rings, z_lo, z_hi, drive_a, *, baseline, rho_target,
+                max_time_s, sample_dt_s):
+        # uniform peak under T_eff=235 up to 0.58x, over at 0.66x; densifies throughout
+        peak = 233.0 + (float(drive_a) - 0.58) * 100.0
+        return {"drive_a": float(drive_a),
+                "power_density_w_per_m3": float(drive_a) * BASELINE,
+                "true_peak_c": peak, "reached_rho": True, "achieved_rho": 0.98}
+    rec = ss.recommended_drive_for_part(
+        msh=object(), rings=None, z_lo=0.0, z_hi=0.0,   # default (widened) candidates
+        baseline=BASELINE, chamber_tag="ch060", thermal_config_path=TCFG_PATH,
+        max_time_s=1.0, peak_probe=compact)
+    assert rec["recommended_drive_frac"] == 0.58                 # highest feasible, above old 0.42 cap
+    assert rec["recommended_power_density_w_per_m3"] is not None  # NOT honest-null

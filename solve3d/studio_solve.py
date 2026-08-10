@@ -78,7 +78,15 @@ DRIVE_BASELINE_W_PER_M3 = float(
 # candidate drive multipliers, low -> high; the HIGHEST feasible one is picked
 # (most part throughput while staying under the ceiling). A ladder around the
 # B4 square result (0.34x) widened so an arbitrary part can find feasibility.
-CEILING_DRIVE_CANDIDATES = (0.26, 0.30, 0.34, 0.38, 0.42)
+CEILING_DRIVE_CANDIDATES = (0.26, 0.34, 0.42, 0.50, 0.58, 0.66)
+# Widened 2026-08-10: the old (0.26..0.42) cap was square-calibrated (0.34x) and
+# honest-nulled COMPACT shapes whose feasible drive is higher (cube/pyramid
+# 0.57-0.585x heat less per power-density). The live cube acceptance surfaced this
+# (honest-null at the cap, though verify_stage_b4_cube proves it ships at 0.57x).
+# 0.26..0.66 keeps a low rung for hot/large parts and reaches the compact feasible
+# band. FOLLOW-UP: replace the fixed ladder with the campaign's ADAPTIVE secant
+# probe (stage_b4.adaptive_drive_probe) to hit each shape's just-under-T_eff drive
+# in fewer forwards without under-driving; the fixed ladder is the interim fix.
 
 # EFFECTIVE-ceiling headroom for the SHAPED-map peak relocation. The recommended
 # drive is measured on the UNIFORM map, but the deployed job prints a SHAPED
