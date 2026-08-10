@@ -273,9 +273,12 @@ def recommended_drive_for_part(msh, rings: list, z_lo: float, z_hi: float, *,
 
     Measures the uniform end-state peak at each candidate drive (via
     `peak_probe`, defaulting to the real densify probe on `msh`), then picks the
-    highest feasible drive or honest-nulls. `peak_probe(drive_a, msh=..,
-    rings=.., z_lo=.., z_hi=.., baseline=.., rho_target=.., max_time_s=..,
-    sample_dt_s=..)` is injectable so the contract is testable without physics.
+    highest feasible drive or honest-nulls. The probe is called ALL-KEYWORD
+    (`peak_probe(msh=.., rings=.., z_lo=.., z_hi=.., drive_a=.., baseline=..,
+    rho_target=.., max_time_s=.., sample_dt_s=..)`) so it binds to the real
+    `_uniform_end_state_peak(msh, rings, z_lo, z_hi, drive_a, *, ...)` signature;
+    an injected stub must accept the SAME keyword names (msh first, drive_a a
+    named arg). Injectable so the contract is testable without physics.
     """
     from solve3d import chamber as chamber_mod
     tcfg = stage_a.thermal_config()
@@ -295,7 +298,7 @@ def recommended_drive_for_part(msh, rings: list, z_lo: float, z_hi: float, *,
 
     peaks = {}
     for a in candidates:
-        rec = probe(float(a), msh=msh, rings=rings, z_lo=z_lo, z_hi=z_hi,
+        rec = probe(msh=msh, rings=rings, z_lo=z_lo, z_hi=z_hi, drive_a=float(a),
                     baseline=baseline, rho_target=rho_target,
                     max_time_s=max_time_s, sample_dt_s=sample_dt_s)
         peaks[float(a)] = rec

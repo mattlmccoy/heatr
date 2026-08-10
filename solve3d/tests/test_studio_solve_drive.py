@@ -257,3 +257,29 @@ def test_module_baseline_matches_stage_a():
     from solve3d import stage_a
     got = stage_a.recommended_power_settings(1.0)["power_density_w_per_m3"]
     assert ss.DRIVE_BASELINE_W_PER_M3 == pytest.approx(got)
+
+
+def test_recommended_drive_for_part_calls_probe_with_real_signature():
+    """Regression for the acceptance-test bug: the ladder call site must invoke
+    the probe so a stub matching the REAL _uniform_end_state_peak signature
+    (msh first, drive_a keyword-reachable) works -- not only a (drive_a, **kw)
+    stub. The old positional call `probe(float(a), msh=msh, ...)` bound float(a)
+    to msh AND passed msh=msh -> TypeError: multiple values for 'msh'. The unit
+    stubs hid it (drive-first); the first real --ceiling-drive run surfaced it."""
+    seen = []
+
+    def real_sig_probe(msh, rings, z_lo, z_hi, drive_a, *, baseline,
+                       rho_target, max_time_s, sample_dt_s):
+        seen.append(float(drive_a))
+        return {"drive_a": float(drive_a),
+                "power_density_w_per_m3": float(drive_a) * BASELINE,
+                "true_peak_c": 210.0 + (float(drive_a) - 0.30) * 430.0,
+                "reached_rho": True, "achieved_rho": 0.98}
+
+    rec = ss.recommended_drive_for_part(
+        msh=object(), rings=None, z_lo=0.0, z_hi=0.0,
+        candidates=(0.30, 0.34, 0.38, 0.42), baseline=BASELINE,
+        chamber_tag="ch060", thermal_config_path=TCFG_PATH,
+        max_time_s=1.0, peak_probe=real_sig_probe)
+    assert seen == [0.30, 0.34, 0.38, 0.42]        # every candidate reached the probe
+    assert rec["recommended_drive_frac"] == 0.34   # highest feasible under T_eff=235
