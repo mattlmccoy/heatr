@@ -1,0 +1,18 @@
+Phase C field re-export reproduction gate (rtol 1e-09)
+  uniform  J_symmetric                          9.855033669884453e-08 vs 9.855033669884453e-08  rel=0.000e+00 OK
+  uniform  J_asymmetric                         1.1511359005643762e-07 vs 1.1511359005643762e-07  rel=0.000e+00 OK
+  uniform  argmin_symmetric                     7279.0 vs 7279.0  rel=0.000e+00 OK
+  uniform  argmin_asymmetric                    7172.0 vs 7172.0  rel=0.000e+00 OK
+  uniform  J_out_of_bounds                      2.7419553229641498e-08 vs 2.7419553229641498e-08  rel=0.000e+00 OK
+  uniform  J_in_bounds_deficit                  8.769403682679613e-08 vs 8.769403682679613e-08  rel=0.000e+00 OK
+  uniform  out_of_part_melt_fraction_of_part    0.00238498203886267 vs 0.00238498203886267  rel=0.000e+00 OK
+  uniform  in_bounds_below_floor_fraction       0.08423965346900332 vs 0.08423965346900332  rel=0.000e+00 OK
+  solved   J_symmetric                          9.491814369786978e-08 vs 9.491814369786978e-08  rel=0.000e+00 OK
+  solved   J_asymmetric                         1.0283280687027586e-07 vs 1.0283280687027586e-07  rel=0.000e+00 OK
+  solved   argmin_symmetric                     7273.0 vs 7273.0  rel=0.000e+00 OK
+  solved   argmin_asymmetric                    7170.0 vs 7170.0  rel=0.000e+00 OK
+  solved   J_out_of_bounds                      2.1265418490449242e-08 vs 2.1265418490449242e-08  rel=0.000e+00 OK
+  solved   J_in_bounds_deficit                  8.156738837982663e-08 vs 8.156738837982663e-08  rel=0.000e+00 OK
+  solved   out_of_part_melt_fraction_of_part    0.0022676046529119453 vs 0.0022676046529119453  rel=0.000e+00 OK
+  solved   in_bounds_below_floor_fraction       0.08206148388886499 vs 0.08206148388886499  rel=0.000e+00 OK
+ALL PASS
