@@ -172,7 +172,8 @@ def test_fast_march_optin_is_bit_identical_and_labeled(box20_stl, tmp_path):
     """march_fast opt-in (engine-lane blessing, adoption terms 2026-08-03):
     results must be BIT-IDENTICAL to the reference march, and the run must
     record the numba env provenance (the scipy-downgrade lesson)."""
-    ref = run_densify(str(box20_stl), tmp_path / "ref", n=16, max_time_s=2.0)
+    ref = run_densify(str(box20_stl), tmp_path / "ref", n=16, max_time_s=2.0,
+                      fast_march=False)                    # explicit reference
     fast = run_densify(str(box20_stl), tmp_path / "fast", n=16,
                        max_time_s=2.0, fast_march=True)
     with np.load(tmp_path / "ref" / "fields.npz") as a, \
@@ -184,6 +185,35 @@ def test_fast_march_optin_is_bit_identical_and_labeled(box20_stl, tmp_path):
     assert ref.get("engine_march", "heatr3d") == "heatr3d"
 
 
+def test_fast_march_is_the_default(box20_stl, tmp_path):
+    """Matt flipped fast_march ON by default (2026-08-10, bit-identical +
+    engine-lane blessed): a run with no fast_march argument now takes the
+    fast path (march_fast + EQS cache active), so every live Grade-and-Print
+    densify/verify march is ~6x faster with no accuracy change."""
+    res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0)
+    assert res["engine_march"] == "march_fast"
+    assert res["eqs_cache"]["enabled"] is True
+
+
+def test_fast_march_falls_back_when_unavailable(box20_stl, tmp_path, monkeypatch):
+    """Default-on must not hard-break an environment without numba/engine_speed:
+    if the fast-path import fails, fall back to the bit-identical reference
+    march and RECORD that it fell back (never silent, never a hard error)."""
+    import builtins
+    real_import = builtins.__import__
+
+    def _blocked(name, *a, **k):
+        if name.startswith("engine_speed"):
+            raise ImportError("simulated: engine_speed unavailable")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", _blocked)
+    res = run_densify(str(box20_stl), tmp_path / "fb", n=16, max_time_s=2.0)
+    assert "gates" in res and res["sim_time_s"] > 0       # the march still ran
+    assert res["engine_march"] == "heatr3d"               # fell back to reference
+    assert res["eqs_cache"]["enabled"] is False
+
+
 # --------------------------------------------------------------------------- #
 # RECORDED ACCELERATION (engine-lane requirement)
 #
@@ -191,11 +221,13 @@ def test_fast_march_optin_is_bit_identical_and_labeled(box20_stl, tmp_path):
 # produces quoted numbers must say, in its own results dict, whether an EQS
 # cache was active and how many solves it actually avoided.
 # --------------------------------------------------------------------------- #
-def test_default_run_records_eqs_cache_explicitly_disabled(box20_stl, tmp_path):
+def test_reference_run_records_eqs_cache_explicitly_disabled(box20_stl, tmp_path):
     """Absent is not good enough -- a reader must be able to tell 'no cache'
-    from 'nobody recorded it'."""
-    res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0)
-    assert "eqs_cache" in res, "eqs_cache provenance missing from a default run"
+    from 'nobody recorded it'. The reference (non-fast) path has no cache and
+    must say so explicitly."""
+    res = run_densify(str(box20_stl), tmp_path / "out", n=16, max_time_s=2.0,
+                      fast_march=False)
+    assert "eqs_cache" in res, "eqs_cache provenance missing from a run"
     assert res["eqs_cache"]["enabled"] is False
     on_disk = json.loads((tmp_path / "out" / "results.json").read_text())
     assert on_disk["eqs_cache"]["enabled"] is False

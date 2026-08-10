@@ -47,7 +47,7 @@ def recommended_drive(grade_dir: str | Path) -> float | None:
 def run_job(mesh_path: str, grade_dir: str | Path, arm: str = "uncorrected",
             n: int = 64, max_time_s: float = 1500.0,
             stop_mean_rho: float | None = 0.98,
-            fast_march: bool = False,
+            fast_march: bool = True,
             precomp: bool = True) -> Dict[str, Any]:
     """One densify arm. fast_march defaults OFF (the blessed opt-in terms).
 
@@ -154,15 +154,15 @@ def main() -> int:
     ap.add_argument("--no-precomp", action="store_true",
                     help="escape hatch: skip the Level 0 material-shrinkage "
                          "pre-compensation (recorded as enabled false)")
-    ap.add_argument("--fast-march", action="store_true",
-                    help="opt in to the bit-identical numba march + the "
-                         "per-job EQS solution store (default off)")
+    ap.add_argument("--no-fast-march", action="store_true",
+                    help="escape hatch: use the slower reference march instead "
+                         "of the bit-identical numba march (default: fast on)")
     args = ap.parse_args()
     stop = args.stop_mean_rho if args.stop_mean_rho > 0 else None
     try:
         res = run_job(args.mesh, args.grade_dir, arm=args.arm, n=args.n,
                       max_time_s=args.max_time_s, stop_mean_rho=stop,
-                      fast_march=args.fast_march,
+                      fast_march=not args.no_fast_march,
                       precomp=not args.no_precomp)
     except Exception as e:
         # one clean line for the UI; the traceback stays in the log

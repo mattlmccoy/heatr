@@ -162,7 +162,7 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
                 stop_mean_rho: Optional[float] = 0.98,
                 power_density_w_per_m3: Optional[float] = None,
                 correction_engine: Optional[str] = None,
-                fast_march: bool = False,
+                fast_march: bool = True,
                 eqs_store_dir: Optional[str | Path] = None,
                 shrinkage_precomp: Optional[Dict[str, Any]] = None
                 ) -> Dict[str, Any]:
@@ -222,40 +222,50 @@ def run_densify(mesh_path: str, out_dir: str | Path, n: int = 64,
     # constructed below. "absent" and "off" must never be confusable.
     eqs_cache_record: Dict[str, Any] = {"enabled": False}
     if fast_march:
-        # engine-lane blessed opt-in (2026-08-03): bit-identical by gate,
-        # so results carry no caveat; env pins recorded (the
-        # scipy-downgrade lesson)
-        import llvmlite
-        import numba
-        from engine_speed.eqs_cache import EqsCache
-        from engine_speed.march_fast import march_fast as _march
-        engine_march = "march_fast"
-        env_provenance = {"numba": numba.__version__,
-                          "llvmlite": llvmlite.__version__}
-        cache = EqsCache(store_dir=eqs_store_dir)
-        r = _march(grid, part, p, sat=sat, max_time_s=float(max_time_s),
-                   densify=True, stop_mean_rho=stop_mean_rho, verbose=True,
-                   eqs_cache=cache)
-        st = cache.stats
-        eqs_cache_record = {
-            "enabled": True,
-            "store": (str(eqs_store_dir) if eqs_store_dir is not None else None),
-            # hits = solves avoided, from either tier; misses = solves actually
-            # performed. The two always sum to the number of EQS solves asked for.
-            "hits": int(st["solution_hits"] + st["disk_hits"]),
-            "misses": int(st["solution_misses"]),
-            "memory_hits": int(st["solution_hits"]),
-            "disk_hits": int(st["disk_hits"]),
-            # a nonzero count here means a stored field was REFUSED as corrupt
-            # and re-solved -- visible, never silent
-            "disk_corrupt": int(st["disk_corrupt"]),
-        }
-    else:
+        # DEFAULT since 2026-08-10 (Matt's flip): march_fast is bit-identical
+        # by gate and engine-lane blessed, so results carry no caveat; env pins
+        # recorded (the scipy-downgrade lesson). GRACEFUL FALLBACK: if the fast
+        # path is unavailable (no numba / engine_speed), fall back to the
+        # bit-identical reference march rather than hard-fail - default-on must
+        # never break an environment that lacks the accelerator.
+        try:
+            import llvmlite
+            import numba
+            from engine_speed.eqs_cache import EqsCache
+            from engine_speed.march_fast import march_fast as _march
+        except ImportError as exc:
+            logger.warning("fast_march unavailable (%s); falling back to the "
+                           "reference march (bit-identical, slower)", exc)
+            fast_march = False
+            env_provenance = {"fast_march_fallback": str(exc)}
+        else:
+            engine_march = "march_fast"
+            env_provenance = {"numba": numba.__version__,
+                              "llvmlite": llvmlite.__version__}
+            cache = EqsCache(store_dir=eqs_store_dir)
+            r = _march(grid, part, p, sat=sat, max_time_s=float(max_time_s),
+                       densify=True, stop_mean_rho=stop_mean_rho, verbose=True,
+                       eqs_cache=cache)
+            st = cache.stats
+            eqs_cache_record = {
+                "enabled": True,
+                "store": (str(eqs_store_dir) if eqs_store_dir is not None else None),
+                # hits = solves avoided, from either tier; misses = solves
+                # actually performed. The two sum to the EQS solves asked for.
+                "hits": int(st["solution_hits"] + st["disk_hits"]),
+                "misses": int(st["solution_misses"]),
+                "memory_hits": int(st["solution_hits"]),
+                "disk_hits": int(st["disk_hits"]),
+                # a nonzero count here means a stored field was REFUSED as
+                # corrupt and re-solved -- visible, never silent
+                "disk_corrupt": int(st["disk_corrupt"]),
+            }
+    if not fast_march:
         if eqs_store_dir is not None:
             logger.warning(
-                "eqs_store_dir=%s was given without fast_march=True; the "
-                "reference march does not take a cache, so it is IGNORED "
-                "and results.json records eqs_cache disabled.", eqs_store_dir)
+                "eqs_store_dir=%s given but the reference march does not take "
+                "a cache, so it is IGNORED and results.json records eqs_cache "
+                "disabled.", eqs_store_dir)
         # verbose march lines feed the Studio's live progress bars
         r = H.run(grid, part, p, sat=sat, max_time_s=float(max_time_s),
                   densify=True, stop_mean_rho=stop_mean_rho, verbose=True)

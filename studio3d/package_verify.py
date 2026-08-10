@@ -70,7 +70,7 @@ def verify_package(pkg_dir: str | Path, mesh_path: str, n: int,
                    tiff_job_dir: str | Path,
                    max_time_s: float = 1500.0,
                    stop_mean_rho: float | None = 0.98,
-                   fast_march: bool = False,
+                   fast_march: bool = True,
                    eqs_store_dir: str | Path | None = None,
                    precomp: bool = True,
                    grade_dir: str | Path | None = None) -> Dict[str, Any]:
@@ -186,10 +186,14 @@ def main() -> int:
     ap.add_argument("--no-precomp", action="store_true",
                     help="escape hatch: verify the nominal mesh (recorded as "
                          "enabled false)")
+    ap.add_argument("--no-fast-march", action="store_true",
+                    help="escape hatch: reference march instead of the "
+                         "bit-identical numba march (default: fast on)")
     args = ap.parse_args()
     rec = verify_package(args.pkg_dir, args.mesh, n=args.n,
                          tiff_job_dir=args.job_dir,
                          max_time_s=args.max_time_s,
+                         fast_march=not args.no_fast_march,
                          precomp=not args.no_precomp,
                          grade_dir=args.grade_dir)
     print("VERIFY " + json.dumps({"run": rec["run"],
