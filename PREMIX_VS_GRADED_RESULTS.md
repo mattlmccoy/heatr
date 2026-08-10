@@ -40,6 +40,24 @@ part sat 0.107 → 1.5, two-sided), flattening the temperature so the *whole* pa
 ceiling instead of one spot burning while the bulk stays cold. Premix does the opposite of useful — it
 adds conductivity to the large surrounding **bed**, which parasitically absorbs the power.
 
+## The grading win is PRINTABLE — it survives 2/4-bpp quantization (2026-08-10)
+
+RFAM prints 2/4 bits-per-pixel, so the continuous adjoint map must be quantized. Quantizing the A15
+map (`quantize_sat.py`, TDD 4/4) and re-scoring in `run_sim` at the ceiling
+(`premix_graded_quantization.py`, figure `fig_graded_quantization.png`):
+
+| graded variant | levels in part | part mean φ | part peak/mean |
+|---|---:|---:|---:|
+| continuous | ∞ | 1.000 | 1.035 |
+| **4-bpp** | 15 | 1.000 | **1.035** (identical) |
+| **2-bpp** | 4 | 1.000 | 1.072 |
+
+- **4-bpp is indistinguishable from continuous** (1.035) — no erosion.
+- **2-bpp** (only 4 levels) erodes uniformity slightly (1.035 → 1.072) but still **retains ~⅔ of the
+  win** vs uniform's 1.147 and crushes premix's 1.251; fusion stays φ=1.000.
+- So the grading benefit is not a continuous-map artifact — it is realizable on the actual 2/4-bpp
+  printer. (A double pass realizes the s>1 cells; see `printing-constraints-and-ink`.)
+
 ## Caveats / honest scope
 - The graded map is **continuous** and uses **two-sided** actuation (sat up to 1.5 = σ up to 1.5·σ_d0).
   A printed realization quantizes to 2/4 bpp and needs a double pass for s>1 (`printing-constraints-and-ink`);

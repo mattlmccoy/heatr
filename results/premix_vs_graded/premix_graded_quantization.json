@@ -1,0 +1,18 @@
+{
+  "graded_4bpp": {
+    "n_bits": 4,
+    "n_levels_in_part": 15,
+    "drive_to_ceiling_W": 796.2890625,
+    "part_peak_T_C": 247.69107819382475,
+    "part_mean_phi": 1.0,
+    "part_peak_to_mean": 1.035127927038528
+  },
+  "graded_2bpp": {
+    "n_bits": 2,
+    "n_levels_in_part": 4,
+    "drive_to_ceiling_W": 766.2109375,
+    "part_peak_T_C": 252.33123790485493,
+    "part_mean_phi": 1.0,
+    "part_peak_to_mean": 1.0721289794897442
+  }
+}
