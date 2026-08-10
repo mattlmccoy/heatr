@@ -50,6 +50,28 @@ contention. Engineer builds + FD-gates + probes (light); I launch heavy solves.
 | pipe | thin wall | - | - | - | - | - | - | - | queued |
 | lattice | thin struts | - | - | - | - | - | - | - | queued |
 
+## ORIENTATION (Matt 2026-08-10) - CAMPAIGN GATE
+
+Matt caught it: the field + build axis is Y (electrodes at y=+-L/2, open build/
+convection face y=+L/2, hardcoded in forward._electrode_dofs for EVERY mesh incl.
+the 3-D solids). But the phase_e primitives were built as Z-AXIS bodies of
+revolution (cone apex->+Z, cylinder axis->Z), so every non-symmetric shape solved
+SIDEWAYS relative to how it builds/heats. Affects the running de-risk (cone stopped
+9 min in) AND the already-"closed" PYRAMID (apex-sideways -> must re-solve).
+Cube/sphere/square ~symmetric, unaffected (cube acceptance still valid).
+
+- OPTION 1 (DOING NOW, Matt's call): FIXED natural-up-along-Y. Reorient each shape's
+  natural axis/height to +Y (cone apex-up +Y, cylinder standing axis +Y, pyramid
+  apex-up +Y). Redo the cheap FD-gates + drive probes per shape at the corrected
+  orientation. Re-solve pyramid. THEN resume the campaign.
+- OPTION 2 (DEFERRED, "keep in mind, don't forget" - Matt): PER-PART orientation
+  OPTIMIZATION - treat orientation as an actuator (it changes heating uniformity,
+  same lever as ORIENTATION_OPTIMIZATION_REPORT.md + the turntable/dwell work) and
+  search per part for the orientation giving the best process outcome. The real
+  "most ideal for this process"; belongs in the deployed tool as an orientation
+  step. Do NOT fold into every campaign solve (compute blow-up). This is a distinct
+  future capability - see [[dwell-schedule-and-planner-architecture]].
+
 ## Decisions / notes
 - 2026-08-10: de-risk on cone+sphere+cylinder first (Matt). Full 9 remaining after harness proves out.
 - 2026-08-10: HARNESS BUILT + de-risked on all three. `solve3d/shape_campaign.py`
