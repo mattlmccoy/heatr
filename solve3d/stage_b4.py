@@ -90,24 +90,46 @@ def power_density_for_drive_a(a: float) -> float:
                  ["power_density_w_per_m3"])
 
 
-def pick_backed_off_drive(peaks: dict, band: tuple = UNIFORM_TARGET_BAND_C) -> dict:
+def pick_backed_off_drive(peaks: dict, t_eff: float = None,
+                          band: tuple = UNIFORM_TARGET_BAND_C) -> dict:
     """Select the backed-off drive from measured uniform peaks.
 
-    `peaks` maps drive_a -> uniform_dolfinx_peak_c. Prefer the HIGHEST drive whose
-    uniform peak lands in `band` (~228-232 C): the highest such drive keeps the
-    most part throughput while leaving the AL room to shape UP toward T_eff=235 and
-    still stay feasible. If none land in band, fall back to the drive whose peak is
-    closest to the band centre (reported honestly, not silently)."""
+    `peaks` maps drive_a -> uniform_dolfinx_peak_c. CORRECTED rule (2026-08-10):
+    the augmented Lagrangian shapes the peak UP from the uniform start toward
+    T_eff, so the uniform peak MUST be UNDER T_eff for the AL to have room to
+    reach it -- a drive whose uniform peak is already OVER T_eff starts the AL
+    past its target and cannot converge to it. So:
+
+      * pick the HIGHEST drive whose uniform peak <= T_eff (most part throughput
+        while still leaving the AL a feasible region to shape up into), OR
+      * if NO candidate is under T_eff, HONEST-NULL: the shape is drive-limited at
+        this ladder; report the least-over drive as EVIDENCE ONLY (drive_limited
+        =True, under_t_eff=False), never as a silently over-ceiling pick.
+
+    The earlier version chose the drive closest to the band centre when none
+    landed in-band; that could pick an OVER-T_eff drive when it happened to sit
+    closer to the centre than a comfortably-under one (the cylinder: 0.60x=236.54
+    is closer to 230 than 0.55x=222.78, but 236.54 is over T_eff). `band` is kept
+    only for the reporting field; the SELECTION is the T_eff feasibility rule."""
+    if t_eff is None:
+        t_eff = t_ceiling_eff(float(stage_a.thermal_config()["T_ceiling_C"]),
+                              DELTA_HEADROOM_C)
+    t_eff = float(t_eff)
+    under = {a: p for a, p in peaks.items() if float(p) <= t_eff}
+    if under:
+        a = max(under)                         # highest feasible (under T_eff)
+        drive_limited = False
+        under_flag = True
+    else:                                      # honest-null: drive-limited
+        a = min(peaks, key=lambda k: float(peaks[k]))   # least-over, evidence
+        drive_limited = True
+        under_flag = False
     lo, hi = float(band[0]), float(band[1])
-    in_band = {a: p for a, p in peaks.items() if lo <= float(p) <= hi}
-    if in_band:
-        a = max(in_band)                       # highest drive in band
-        return {"drive_a": float(a), "uniform_peak_c": float(peaks[a]),
-                "in_band": True, "band_c": [lo, hi]}
-    ctr = 0.5 * (lo + hi)
-    a = min(peaks, key=lambda k: abs(float(peaks[k]) - ctr))
-    return {"drive_a": float(a), "uniform_peak_c": float(peaks[a]),
-            "in_band": False, "band_c": [lo, hi]}
+    peak = float(peaks[a])
+    return {"drive_a": float(a), "uniform_peak_c": peak,
+            "under_t_eff": bool(under_flag), "drive_limited": bool(drive_limited),
+            "shaping_room_c": float(t_eff - peak), "t_eff_c": t_eff,
+            "in_band": bool(lo <= peak <= hi), "band_c": [lo, hi]}
 
 
 # --------------------------------------------------------------------------- #
@@ -187,44 +209,101 @@ def drive_probe(candidates: tuple = DRIVE_CANDIDATES,
     MEASURED)."""
     ceiling_c = float(stage_a.thermal_config()["T_ceiling_C"])
     t_eff = t_ceiling_eff(ceiling_c, delta_headroom)
-    peaks = {}
     records = []
     for a in candidates:
         pw = power_density_for_drive_a(a)
         rec = stage_b.uniform_holdout_peak(power_density=pw, drive_a=a, shape=shape)
         tp = float(rec["true_peak_c"])
-        peaks[float(a)] = tp
         records.append({"drive_a": float(a), "power_density_w_per_m3": float(pw),
                         "uniform_true_peak_c": tp,
-                        "under_t_eff": bool(tp < t_eff),
+                        "under_t_eff": bool(tp <= t_eff),
                         "margin_to_t_eff_c": float(t_eff - tp)})
         print(f"[B4 probe {shape} drive={a:.2f}x pw={pw:.1f}] uniform peak={tp:.2f}C "
               f"(T_eff={t_eff:.1f}, margin={t_eff - tp:+.2f}C)", flush=True)
-    pick = pick_backed_off_drive(peaks, band=band)
+    return _finalize_drive_probe(shape, records, t_eff, ceiling_c,
+                                 delta_headroom, band)
+
+
+def _fidelity_grid_for_shape(shape: str):
+    """The fidelity pre-gate's chosen voxel grid for `shape` (the grid the
+    cross-engine verify transfers the solved map onto). Read from
+    fidelity_<shape>.json if the pre-gate has run; None otherwise."""
+    import json as _json
+    f = RESULTS / f"fidelity_{shape}.json"
+    if not f.exists():
+        return None
+    try:
+        return int(_json.loads(f.read_text()).get("chosen_grid"))
+    except (ValueError, TypeError):
+        return None
+
+
+def _finalize_drive_probe(shape: str, records: list, t_eff: float,
+                          ceiling_c: float, delta_headroom: float,
+                          band: tuple) -> dict:
+    """Build + write the canonical drive-probe JSON from MEASURED candidate
+    records (no forwards here). Separated from drive_probe so a corrected
+    RE-SELECTION can be applied to already-measured peaks without re-probing."""
+    peaks = {float(r["drive_a"]): float(r["uniform_true_peak_c"])
+             for r in records}
+    pick = pick_backed_off_drive(peaks, t_eff=t_eff, band=band)
+    grid = _fidelity_grid_for_shape(shape)
     doc = {
         "what": "Stage B4 drive-backoff probe: uniform (s=1) dolfinx hold-out peak "
-                "at candidate drives, to pick the backed-off drive whose uniform "
-                "peak sits a few C UNDER T_eff so the AL has a feasible region to "
-                "shape up into. Peaks are MEASURED via stage_b.uniform_holdout_peak "
-                "(the same arbiter the AL restoration shift reads).",
+                "at candidate drives. Pick the HIGHEST drive whose uniform peak is "
+                "UNDER T_eff so the AL (which shapes the peak UP) has a feasible "
+                "region to reach T_eff; over-T_eff drives are rejected. Peaks are "
+                "MEASURED via stage_b.uniform_holdout_peak (the AL's own arbiter).",
         "stage": "B4_drive_backoff_probe",
         "part": shape,
         "ceiling_c": ceiling_c,
         "delta_headroom_c": float(delta_headroom),
         "t_ceiling_eff_c": t_eff,
+        "t_eff_c": t_eff,
         "target_band_c": list(band),
-        "candidates": records,
+        # canonical launch fields (read by the campaign + launch commands)
+        "chosen_drive_a": pick["drive_a"],
+        "uniform_true_peak_c": pick["uniform_peak_c"],
+        "shaping_room_c": pick["shaping_room_c"],
+        "drive_limited": pick["drive_limited"],
+        "grid": grid,
+        "all_candidates": records,
+        "candidates": records,             # kept for back-compat
         "pick": pick,
-        "rule": "pick the HIGHEST drive whose uniform peak is in-band (~228-232), "
-                "leaving AL room to shape UP toward T_eff=235 while staying feasible",
+        "rule": "pick the HIGHEST drive whose uniform peak <= T_eff (the AL shapes "
+                "UP toward T_eff, so uniform must start under it); honest-null "
+                "(drive_limited) if none is under T_eff -- never an over-T_eff pick",
     }
     name = ("stage_b4_drive_probe.json" if shape == "square"
             else f"stage_b4_drive_probe_{shape}.json")
     stage_b._write_json(RESULTS / name, doc)
-    print(f"[B4 probe {shape}] PICK drive={pick['drive_a']:.2f}x "
-          f"uniform={pick['uniform_peak_c']:.2f}C in_band={pick['in_band']}",
-          flush=True)
+    print(f"[B4 probe {shape}] PICK drive={pick['drive_a']:.3f}x "
+          f"uniform={pick['uniform_peak_c']:.2f}C under_t_eff={pick['under_t_eff']} "
+          f"drive_limited={pick['drive_limited']} grid={grid}", flush=True)
     return doc
+
+
+def reselect_drive_probe(shape: str, delta_headroom: float = DELTA_HEADROOM_C,
+                         band: tuple = UNIFORM_TARGET_BAND_C) -> dict:
+    """Re-apply the corrected selection to the ALREADY-MEASURED candidates in
+    stage_b4_drive_probe_<shape>.json and rewrite it -- no re-probe. Use after a
+    selection-rule fix so the persisted pick reflects the measured peaks under the
+    new rule (the 0.55/0.60 uniform peaks are data and stay untouched)."""
+    import json as _json
+    name = ("stage_b4_drive_probe.json" if shape == "square"
+            else f"stage_b4_drive_probe_{shape}.json")
+    old = _json.loads((RESULTS / name).read_text())
+    records = old.get("all_candidates") or old["candidates"]
+    ceiling_c = float(old.get("ceiling_c",
+                              stage_a.thermal_config()["T_ceiling_C"]))
+    t_eff = t_ceiling_eff(ceiling_c, delta_headroom)
+    # refresh the per-record under_t_eff / margin under the corrected <= rule
+    for r in records:
+        tp = float(r["uniform_true_peak_c"])
+        r["under_t_eff"] = bool(tp <= t_eff)
+        r["margin_to_t_eff_c"] = float(t_eff - tp)
+    return _finalize_drive_probe(shape, records, t_eff, ceiling_c,
+                                 delta_headroom, band)
 
 
 def _preconditions_for_shape(shape: str) -> dict:
@@ -459,6 +538,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--probe", action="store_true",
                     help="B4 drive-backoff probe (uniform peak at candidate drives)")
+    ap.add_argument("--reselect", action="store_true",
+                    help="re-apply the corrected selection to already-MEASURED "
+                         "candidates (rewrites the JSON, no re-probe)")
     ap.add_argument("--solve", action="store_true",
                     help="B4 heavy AL solve at the backed-off drive + T_eff")
     ap.add_argument("--drive-a", type=float, default=None,
@@ -471,7 +553,9 @@ def main() -> int:
                     help="restoration-shift EMA damping; lower it (e.g. 0.3) for "
                          "SHARP shapes (cone) that oscillate at the 0.5 default")
     a = ap.parse_args()
-    if a.probe:
+    if a.reselect:
+        reselect_drive_probe(shape=a.shape)
+    elif a.probe:
         drive_probe(shape=a.shape)
     elif a.solve:
         if a.drive_a is None:

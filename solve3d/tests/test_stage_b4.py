@@ -12,6 +12,7 @@ is_sendable are judged vs the REAL 250 ceiling) and the drive->power mapping.
     heatr3d_d1_spike/env/bin/python -m pytest solve3d/tests/test_stage_b4.py -x -q
 """
 import numpy as np
+import pytest
 
 from solve3d import stage_a, stage_b4 as b4
 
@@ -62,18 +63,45 @@ def test_power_density_for_drive_a_is_a_times_baseline():
     assert b4.power_density_for_drive_a(0.36) < b4.power_density_for_drive_a(0.40)
 
 
-def test_drive_probe_pick_selects_in_band():
-    # pure selection logic: pick the candidate whose uniform peak lands in the
-    # target band (~228-232 C), preferring the highest such drive (most headroom
-    # to shape UP toward T_eff=235 while staying feasible).
+def test_drive_probe_pick_is_highest_drive_under_t_eff():
+    # CORRECTED rule (2026-08-10): the AL shapes the peak UP from the uniform
+    # start, so the uniform peak MUST be under T_eff for the AL to reach it. Pick
+    # the HIGHEST drive whose uniform peak <= T_eff (most throughput, still
+    # feasible). Over-T_eff drives are rejected outright.
+    peaks = {0.55: 226.79, 0.60: 242.0}
+    pick = b4.pick_backed_off_drive(peaks, t_eff=235.0)
+    assert pick["drive_a"] == 0.55           # 0.60 (242) is over T_eff -> out
+    assert pick["under_t_eff"] is True
+    assert pick["drive_limited"] is False
+    assert pick["shaping_room_c"] == pytest.approx(235.0 - 226.79)
+
+
+def test_drive_probe_pick_rejects_over_t_eff_even_when_closer_cylinder_bug():
+    # THE cylinder regression: 0.60x=236.54 sits CLOSER to any band centre than
+    # 0.55x=222.78, but it is OVER T_eff (235). The old closest-to-centre
+    # fallback wrongly picked it; the corrected rule must pick 0.55x.
+    peaks = {0.55: 222.78, 0.60: 236.54}
+    pick = b4.pick_backed_off_drive(peaks, t_eff=235.0)
+    assert pick["drive_a"] == 0.55
+    assert pick["under_t_eff"] is True
+
+
+def test_drive_probe_pick_takes_the_highest_of_several_under_t_eff():
     peaks = {0.34: 224.0, 0.36: 229.5, 0.38: 234.0}
-    pick = b4.pick_backed_off_drive(peaks, band=(228.0, 232.0))
-    assert pick["drive_a"] == 0.36
-    assert pick["uniform_peak_c"] == 229.5
-    # if two are in band, prefer the higher drive (more shaping headroom)
-    peaks2 = {0.34: 228.5, 0.36: 231.0, 0.38: 236.0}
-    pick2 = b4.pick_backed_off_drive(peaks2, band=(228.0, 232.0))
-    assert pick2["drive_a"] == 0.36
+    pick = b4.pick_backed_off_drive(peaks, t_eff=235.0)
+    assert pick["drive_a"] == 0.38           # all under 235 -> highest wins
+    assert pick["shaping_room_c"] == pytest.approx(1.0)
+
+
+def test_drive_probe_pick_honest_null_when_no_drive_is_under_t_eff():
+    # drive-limited: every candidate cooks over T_eff. Report the least-over one
+    # as EVIDENCE only, flagged infeasible -- never a silent over-ceiling pick.
+    peaks = {0.60: 236.54, 0.65: 245.0}
+    pick = b4.pick_backed_off_drive(peaks, t_eff=235.0)
+    assert pick["drive_limited"] is True
+    assert pick["under_t_eff"] is False
+    assert pick["drive_a"] == 0.60           # least-over, as evidence
+    assert pick["shaping_room_c"] < 0.0
 
 
 def test_cli_delta_ema_flows_into_run_solve_al_b4(monkeypatch):
@@ -101,3 +129,31 @@ def test_run_solve_al_b4_default_delta_ema_is_the_frozen_value():
     from solve3d import stage_b3 as b3
     sig = inspect.signature(b4.run_solve_al_b4)
     assert sig.parameters["delta_ema"].default == b3.DELTA_EMA
+
+
+def test_finalize_drive_probe_writes_canonical_launch_fields(tmp_path,
+                                                             monkeypatch):
+    """The canonical JSON the campaign + launch commands read must carry
+    chosen_drive_a, shaping_room_c, drive_limited, grid, t_eff_c and
+    all_candidates -- and reject the over-T_eff drive (cylinder measured peaks)."""
+    monkeypatch.setattr(b4, "RESULTS", tmp_path)
+    records = [
+        {"drive_a": 0.55, "power_density_w_per_m3": 875352.2,
+         "uniform_true_peak_c": 222.78, "under_t_eff": True,
+         "margin_to_t_eff_c": 12.22},
+        {"drive_a": 0.60, "power_density_w_per_m3": 954929.7,
+         "uniform_true_peak_c": 236.54, "under_t_eff": False,
+         "margin_to_t_eff_c": -1.54},
+    ]
+    doc = b4._finalize_drive_probe("cylinder", records, t_eff=235.0,
+                                   ceiling_c=250.0, delta_headroom=15.0,
+                                   band=(228.0, 232.0))
+    assert doc["chosen_drive_a"] == 0.55          # NOT the over-T_eff 0.60
+    assert doc["drive_limited"] is False
+    assert doc["shaping_room_c"] == pytest.approx(235.0 - 222.78)
+    assert doc["t_eff_c"] == 235.0
+    assert len(doc["all_candidates"]) == 2
+    import json
+    written = json.loads((tmp_path / "stage_b4_drive_probe_cylinder.json")
+                         .read_text())
+    assert written["chosen_drive_a"] == 0.55

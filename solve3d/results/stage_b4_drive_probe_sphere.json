@@ -1,0 +1,64 @@
+{
+ "what": "Stage B4 drive-backoff probe: uniform (s=1) dolfinx hold-out peak at candidate drives. Pick the HIGHEST drive whose uniform peak is UNDER T_eff so the AL (which shapes the peak UP) has a feasible region to reach T_eff; over-T_eff drives are rejected. Peaks are MEASURED via stage_b.uniform_holdout_peak (the AL's own arbiter).",
+ "stage": "B4_drive_backoff_probe",
+ "part": "sphere",
+ "ceiling_c": 250.0,
+ "delta_headroom_c": 15.0,
+ "t_ceiling_eff_c": 235.0,
+ "t_eff_c": 235.0,
+ "target_band_c": [
+  228.0,
+  232.0
+ ],
+ "chosen_drive_a": 0.55,
+ "uniform_true_peak_c": 232.96043642073676,
+ "shaping_room_c": 2.0395635792632447,
+ "drive_limited": false,
+ "grid": 64,
+ "all_candidates": [
+  {
+   "drive_a": 0.55,
+   "power_density_w_per_m3": 875352.1870054244,
+   "uniform_true_peak_c": 232.96043642073676,
+   "under_t_eff": true,
+   "margin_to_t_eff_c": 2.0395635792632447
+  },
+  {
+   "drive_a": 0.6,
+   "power_density_w_per_m3": 954929.658551372,
+   "uniform_true_peak_c": 243.34359664065147,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -8.34359664065147
+  }
+ ],
+ "candidates": [
+  {
+   "drive_a": 0.55,
+   "power_density_w_per_m3": 875352.1870054244,
+   "uniform_true_peak_c": 232.96043642073676,
+   "under_t_eff": true,
+   "margin_to_t_eff_c": 2.0395635792632447
+  },
+  {
+   "drive_a": 0.6,
+   "power_density_w_per_m3": 954929.658551372,
+   "uniform_true_peak_c": 243.34359664065147,
+   "under_t_eff": false,
+   "margin_to_t_eff_c": -8.34359664065147
+  }
+ ],
+ "pick": {
+  "drive_a": 0.55,
+  "uniform_peak_c": 232.96043642073676,
+  "under_t_eff": true,
+  "drive_limited": false,
+  "shaping_room_c": 2.0395635792632447,
+  "t_eff_c": 235.0,
+  "in_band": false,
+  "band_c": [
+   228.0,
+   232.0
+  ]
+ },
+ "rule": "pick the HIGHEST drive whose uniform peak <= T_eff (the AL shapes UP toward T_eff, so uniform must start under it); honest-null (drive_limited) if none is under T_eff -- never an over-T_eff pick"
+}

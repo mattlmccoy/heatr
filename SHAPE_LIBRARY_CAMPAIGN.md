@@ -37,9 +37,9 @@ contention. Engineer builds + FD-gates + probes (light); I launch heavy solves.
 | square (anchor) | extrusion | - | 0.34x | 3e-9 | 235.03 | 246.3 | YES | +11.3 | DONE |
 | cube | smooth convex | n64 ok | 0.57x | 3.58e-9 | 235.08 | 246.9 | YES | +11.8 | DONE |
 | pyramid | sharp | n80 only (n64/96 alias) | 0.585x | 2.44e-9 | 235.43 | 244.2 | YES | +8.8 | DONE (converged=False) |
-| **cone** | sharp | n96 (n64/80 alias apex) | probing | 5.95e-9 GREEN | - | - | - | - | READY (drive pending) |
-| **sphere** | smooth convex | n64 ok | probing | 1.45e-9 GREEN | - | - | - | - | READY (drive pending) |
-| **cylinder** | thin/elongated | n64 ok | probing | 1.26e-9 GREEN | - | - | - | - | READY (drive pending) |
+| **cone** | sharp | n96 (n64/80 alias apex) | 0.55x | 5.95e-9 GREEN | - | - | - | - | READY TO LAUNCH |
+| **sphere** | smooth convex | n64 ok | 0.55x | 1.45e-9 GREEN | - | - | - | - | READY TO LAUNCH |
+| **cylinder** | thin/elongated | n64 ok | 0.55x | 1.26e-9 GREEN | - | - | - | - | READY TO LAUNCH |
 | trunc_octahedron | smooth convex | - | - | - | - | - | - | - | queued |
 | icosphere_coarse | smooth convex | - | - | - | - | - | - | - | queued |
 | uv_sphere | smooth convex | - | - | - | - | - | - | - | queued |
@@ -79,5 +79,25 @@ contention. Engineer builds + FD-gates + probes (light); I launch heavy solves.
   combined AL gradient, the density co-state, and the march fidelity all pass at
   1e-6 with the drop-lambda_rho mutation biting (cone 3.41% / sphere 1.06% /
   cylinder 2.13% mutation) -- the density co-state is load-bearing on each mesh.
+- DRIVE PROBE (step 2): uniform hold-out peaks MEASURED at 0.55x / 0.60x (9000-node
+  dolfinx arbiter, the AL's own hold-out; distinct from the voxel fidelity grid).
+  All three pick 0.55x: cone 226.79C (room 8.21), sphere 232.96C (room 2.04),
+  cylinder 222.78C (room 12.22). 0.60x cooks over T_eff=235 for all three
+  (242.0 / 243.3 / 236.5) and is rejected.
+- SELECTION RULE CORRECTED (2026-08-10): pick the HIGHEST drive whose uniform peak
+  is UNDER T_eff (the AL shapes the peak UP, so uniform must start under T_eff);
+  over-T_eff drives are rejected, honest-null if none is under. The prior
+  closest-to-band-centre fallback wrongly picked cylinder 0.60x (236.5, OVER
+  T_eff) because it sat nearer the band centre than 0.55x. Fixed + regression-
+  tested; canonical probe JSONs carry chosen_drive_a / uniform_true_peak_c /
+  shaping_room_c / grid / t_eff_c / all_candidates.
+- UNDER-DRIVEN CAVEAT (de-risk only): the coarse 2-point ladder leaves cone
+  (8C under) and cylinder (12C under) under-driven; only sphere (2C under) is
+  well-tuned. Fine for de-risk (feasible, validates the path -- under-driven just
+  shows more shaping margin). For the 9-shape run, make the drive ladder ADAPTIVE:
+  probe UP in finer steps to the highest drive that is JUST under T_eff (~2-3C),
+  as square 0.34 / cube 0.57 landed.
+- DELTA_EMA: cone (sharp apex) launch with --delta-ema 0.3 (the pyramid oscillated
+  at the 0.5 default, converged=False); sphere/cylinder keep 0.5.
 - Offset is NOT a stable constant (pyramid +8.8 vs square/cube +11-12, confounded by grid/aliasing/convergence). The campaign's matched-grid offsets replace the walked-back claim. See [[thermal-ceiling-loop-closed]].
 - Expected transfer-limited candidates (fidelity gate may flag): cone (apex), lattice (struts), open_cylinder/pipe (walls). Honest flag > forced grid-confounded verify.
