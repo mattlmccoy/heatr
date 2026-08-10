@@ -42,26 +42,30 @@ SHAPES = [
 ]
 
 
-def _shape_icon(ax, kind, cx, cy, s):
-    """A tiny glyph so the shape reads at a glance (data coords)."""
-    col = st.ACCENT
-    if kind == "SQUARE":
-        ax.add_patch(plt.Rectangle((cx - s, cy - 1.4 * s), 2 * s, 2.8 * s,
-                     fill=False, ec=col, lw=1.6))
-    elif kind == "CUBE":
-        ax.add_patch(plt.Rectangle((cx - s, cy - s), 1.7 * s, 1.7 * s,
-                     fill=False, ec=col, lw=1.6))
-        d = 0.7 * s
-        ax.add_patch(Polygon([(cx - s, cy + s), (cx - s + d, cy + s + d),
-                              (cx + 0.7 * s + d, cy + s + d), (cx + 0.7 * s, cy + s)],
-                     closed=True, fill=False, ec=col, lw=1.2))
-        ax.add_patch(Polygon([(cx + 0.7 * s, cy + s), (cx + 0.7 * s + d, cy + s + d),
-                              (cx + 0.7 * s + d, cy - s + d), (cx + 0.7 * s, cy - s)],
-                     closed=True, fill=False, ec=col, lw=1.2))
-    elif kind == "PYRAMID":
-        ax.add_patch(Polygon([(cx - s, cy - 1.4 * s), (cx + s, cy - 1.4 * s),
-                              (cx, cy + 1.6 * s)], closed=True,
-                     fill=False, ec=col, lw=1.6))
+def _poly(iax, pts, lw=1.7, alpha=1.0):
+    iax.add_patch(Polygon(pts, closed=True, fill=False, ec=st.ACCENT,
+                          lw=lw, alpha=alpha, joinstyle="round"))
+
+
+def draw_icon(iax, kind):
+    """3-D shape glyph in an equal-box inset (0..1 coords, undistorted)."""
+    iax.set_xlim(0, 1)
+    iax.set_ylim(0, 1)
+    iax.axis("off")
+    if kind == "SQUARE":              # tall square PRISM (full-height column)
+        _poly(iax, [(0.28, 0.05), (0.60, 0.05), (0.60, 0.72), (0.28, 0.72)])          # front
+        _poly(iax, [(0.28, 0.72), (0.44, 0.90), (0.76, 0.90), (0.60, 0.72)], lw=1.3)  # top
+        _poly(iax, [(0.60, 0.05), (0.76, 0.23), (0.76, 0.90), (0.60, 0.72)], lw=1.3)  # side
+    elif kind == "CUBE":              # equal-sided iso cube
+        _poly(iax, [(0.16, 0.12), (0.56, 0.12), (0.56, 0.52), (0.16, 0.52)])          # front
+        _poly(iax, [(0.16, 0.52), (0.40, 0.76), (0.80, 0.76), (0.56, 0.52)], lw=1.3)  # top
+        _poly(iax, [(0.56, 0.12), (0.80, 0.36), (0.80, 0.76), (0.56, 0.52)], lw=1.3)  # side
+    elif kind == "PYRAMID":           # square-base pyramid in perspective
+        b = [(0.14, 0.24), (0.50, 0.10), (0.86, 0.24), (0.50, 0.40)]                  # base diamond
+        apex = (0.52, 0.90)
+        _poly(iax, b, lw=1.2, alpha=0.75)
+        _poly(iax, [b[0], apex, b[2]])          # front two faces
+        iax.plot([b[3][0], apex[0]], [b[3][1], apex[1]], color=st.ACCENT, lw=1.2, alpha=0.75)
 
 
 def main() -> None:
@@ -99,7 +103,10 @@ def main() -> None:
         ax.text(x - 0.13, dpk, f"{dpk:.1f}", color=st.ACCENT, fontsize=9.5,
                 ha="right", va="center")
         ax.text(x, dpk - 1.6, f"offset +{off:.1f}", color=st.DIM, fontsize=8, ha="center", va="top")
-        _shape_icon(ax, name, x, 253.4, 0.12)
+        # icon in a near-square inset (undistorted) in the empty over-ceiling band
+        fx = (x - (-0.5)) / 3.2                      # data-x -> axes fraction
+        iax = ax.inset_axes([fx - 0.028, 0.855, 0.056, 0.125])   # ~square in px
+        draw_icon(iax, name)
 
     ax.set_xticks(xs)
     ax.set_xticklabels([f"{n}\ndrive {d}  ·  verify {g}" for n, d, g, _, _ in SHAPES],
