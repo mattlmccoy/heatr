@@ -1,0 +1,30 @@
+{
+ "what": "3-D symmetry-consistency retro-check of published stage_b4 dopant maps (geo-prewarp contribution to SYMMETRY_GATE_REPORT.md)",
+ "method": "vol-weighted variance fraction of the group-symmetric component of s_map; group elements matched node->mirrored-node by KDTree; frac = ||P s - mean||^2 / ||s - mean||^2. PASS iff >= 0.8.",
+ "field_symmetry_basis": "forward.py: electrodes at y=+/-L/2 (l.275/277) => EQS |E|^2 symmetric in x,y,z; convection ONE-SIDED on top face y=+L/2 (l.111,564) => thermal+objective NOT y-mirror symmetric. CORRECT group for a centered part = {x,z mirrors} (+ build-axis rotation for a body of revolution); y EXCLUDED.",
+ "group_correction_is_load_bearing": "square scores 0.860 under the correct x,z group but 0.699 under the full x,y,z group. A gate that includes y-mirror would FALSE-REJECT the square at a 0.8 threshold, because its top/bottom asymmetry is PHYSICAL (one-sided convection), not residue. This is why the group must intersect the CONVECTION-boundary symmetry, not just electrode+part+objective.",
+ "results": {
+  "cube": {
+   "n_nodes": 9183,
+   "frac_xz_corrected": 0.9121,
+   "frac_full_xyz": 0.9063,
+   "median_match_dist_m": 0.000355,
+   "verdict": "PASS"
+  },
+  "square": {
+   "n_nodes": 11850,
+   "frac_xz_corrected": 0.8601,
+   "frac_full_xyz": 0.6994,
+   "median_match_dist_m": 0.000589,
+   "verdict": "PASS"
+  },
+  "pyramid": {
+   "n_nodes": 8931,
+   "frac_xz_corrected": 0.3545,
+   "frac_full_xyz": 0.3515,
+   "median_match_dist_m": 0.003351,
+   "verdict": "FAIL_residue"
+  }
+ },
+ "conclusion": "cube + square are spatially SOUND under the required group. pyramid (0.354) is mostly numerical residue, the SAME defect class as the Phase C cylinder (0.25) - budget-limited stop (converged=False, AL damped-oscillated on the sharp apex) fitting coarse-mesh discretization-frame error. Pyramid must be re-solved (symmetric-subspace or higher budget) before it can be cited/shipped."
+}
