@@ -5,17 +5,28 @@ studio3d/package_verify.verify_package) reads the PINNED fields written into
 studio_solve_results.json:
 
   recommended_power_density_w_per_m3  absolute W/m3 = frac * baseline, or NULL
-  recommended_drive_frac              the chosen a (e.g. 0.34), or NULL
+  recommended_drive_frac              the chosen a (e.g. 0.58), or NULL
   chamber_tag                         the chamber the drive is valid in
   ceiling_c, thermal_config_path      provenance (the shared 250 C source)
   recommended_drive_reason            a string; on honest-null says why
 
-Feasibility is judged against the EFFECTIVE ceiling T_eff = ceiling_c -
-DELTA_HEADROOM_C (15 C), NOT the raw ceiling: the deployed job runs a SHAPED
-dopant map at the recommended drive, and the shape-optimal dopant RELOCATES the
-peak +11-13 C (the B4 finding). A drive whose UNIFORM peak is 248 C sits under
-250 but over T_eff=235, so the shaped map would land ~261 C and fail the
-cross-engine is_sendable gate -- it is NOT feasible.
+POLICY (2026-08-10, approved by Matt after the cube false-null). The cheap
+UNIFORM drive sweep only BRACKETS the densification onset, gated against the
+REAL degradation ceiling T_ceiling_C = 250 C -- NOT the warning band. A drive is
+FEASIBLE iff it densifies (`reached_rho`) AND its uniform peak <= the real
+ceiling. The HIGHEST feasible drive is handed to the heavy shaped solve, which
+targets T_eff = ceiling - cross-engine reserve (235 C) BY CONSTRUCTION, and the
+cross-engine `is_sendable` gate (shaped peak vs 250 on BOTH engines) is the FINAL
+arbiter; if it fails, the Studio lane backs off down the emitted candidate
+ladder.
+
+WHY THE CHANGE. The old rule judged the UNIFORM peak against T_eff=235, baking
+in the SQUARE's +11-13 C upward relocation as if universal. It false-nulled
+COMPACT shapes whose dopant is ceiling-neutral: the cube densifies at 0.58x with
+uniform peak 243.6 C -- under the real 250 ceiling, over 235 -- and its SHAPED
+map ships (235.08 dolfinx / 246.9 heatr3d, both < 250, verify_stage_b4_cube).
+The relocation sign is shape-dependent (square +11-13 up, cube ~0), so a fixed
+uniform<=235 reserve is wrong; shaped-is_sendable<=250 is the honest arbiter.
 
 These tests pin the CONTRACT and the honest-null (the false-green refusal): a
 drive-limited part emits NULL power + a reason, never a cooking drive. They use
@@ -39,11 +50,24 @@ def _rec(peaks):
 
 
 def _feasible():
+    # 0.38 (248) is UNDER the real 250 ceiling -> feasible under the new policy;
+    # 0.42 (262) is over 250 -> not. Highest feasible is 0.38.
     return {
         0.30: {"true_peak_c": 210.0, "reached_rho": True, "achieved_rho": 0.98},
         0.34: {"true_peak_c": 235.0, "reached_rho": True, "achieved_rho": 0.98},
         0.38: {"true_peak_c": 248.0, "reached_rho": True, "achieved_rho": 0.98},
         0.42: {"true_peak_c": 262.0, "reached_rho": True, "achieved_rho": 0.99},
+    }
+
+
+def _cube_like():
+    """The real cube data: densifies throughout, uniform peak crosses the REAL
+    250 ceiling between 0.58x (243.6, ships) and 0.66x (251.7, over)."""
+    return {
+        0.42: {"true_peak_c": 200.4, "reached_rho": True, "achieved_rho": 0.71},
+        0.50: {"true_peak_c": 221.1, "reached_rho": True, "achieved_rho": 0.89},
+        0.58: {"true_peak_c": 243.6, "reached_rho": True, "achieved_rho": 0.98},
+        0.66: {"true_peak_c": 251.7, "reached_rho": True, "achieved_rho": 0.98},
     }
 
 
@@ -70,40 +94,77 @@ def test_recommended_power_is_frac_times_baseline():
     assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.34 * BASELINE)
 
 
-def test_picks_highest_feasible_drive():
+def test_picks_highest_densifying_drive_under_real_ceiling():
+    """NEW POLICY: gate the densification bracket against the REAL 250 ceiling.
+    Feasible: 0.30 (210), 0.34 (235), 0.38 (248) -- all densify AND under 250.
+    0.42 (262) is over 250 -> not. Highest feasible is 0.38 (was 0.34 under the
+    old uniform<=235 rule, which is the false-null this fixes)."""
     rec = _rec(_feasible())
-    # T_eff = 250 - 15 = 235. Feasible: 0.30 (210) and 0.34 (235). 0.38 (248)
-    # is under 250 but OVER T_eff, so NOT feasible; 0.42 (262) is over both.
-    # Highest T_eff-feasible drive is 0.34.
-    assert rec["recommended_drive_frac"] == 0.34
-    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.34 * BASELINE)
+    assert rec["recommended_drive_frac"] == 0.38
+    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.38 * BASELINE)
 
 
-def test_uniform_peak_under_ceiling_but_over_t_eff_is_not_feasible():
-    """REGRESSION (the B4 bug): a uniform peak of 248 C is under the raw 250
-    ceiling but over T_eff=235. Judging against 250 would recommend it and ship a
-    map that relocates to ~261 C. It must be REFUSED -> honest-null."""
+def test_uniform_peak_under_real_ceiling_is_feasible():
+    """REGRESSION for the cube false-null: a uniform peak of 248 C is under the
+    real 250 ceiling. The OLD rule judged it against T_eff=235 and honest-nulled;
+    the NEW rule brackets against 250, so 0.38x is feasible and handed to the
+    shaped solve (is_sendable arbitrates). It must NOT honest-null."""
     rec = _rec({0.38: {"true_peak_c": 248.0, "reached_rho": True,
                        "achieved_rho": 0.98}})
+    assert rec["recommended_drive_frac"] == 0.38
+    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.38 * BASELINE)
+
+
+def test_uniform_peak_over_real_ceiling_is_not_feasible():
+    """A uniform peak OVER the real 250 ceiling is over-driven even before
+    grading -> honest-null (the false-green refusal still bites at the real
+    ceiling)."""
+    rec = _rec({0.42: {"true_peak_c": 262.0, "reached_rho": True,
+                       "achieved_rho": 0.99}})
     assert rec["recommended_power_density_w_per_m3"] is None
     assert rec["recommended_drive_frac"] is None
     assert "drive_limited" in rec["recommended_drive_reason"]
+    assert "250" in rec["recommended_drive_reason"]
 
 
-def test_t_eff_fallback_is_ceiling_minus_headroom_when_no_t_warning():
-    """No explicit t_eff_c (older config path) -> T_eff = ceiling - 15."""
+def test_cube_like_part_ships_at_058x_not_honest_nulled():
+    """The exact cube regression: densifies throughout, uniform peak 243.6 C at
+    0.58x (under 250, over 235) and 251.7 C at 0.66x (over 250). The OLD rule
+    honest-nulled the whole part (243.6 > 235). The NEW rule recommends 0.58x
+    (highest densifying under the real ceiling)."""
+    rec = _rec(_cube_like())
+    assert rec["recommended_drive_frac"] == 0.58
+    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.58 * BASELINE)
+
+
+def test_reason_documents_is_sendable_as_final_arbiter():
+    """The feasible reason must tell the downstream consumer that the shaped
+    solve + cross-engine is_sendable gate is the FINAL arbiter (so it verifies
+    and backs off), not that the uniform peak alone certifies the drive."""
+    rec = _rec(_cube_like())
+    reason = rec["recommended_drive_reason"].lower()
+    assert "is_sendable" in reason
+    assert "arbiter" in reason or "final" in reason
+
+
+def test_t_eff_carried_as_shaped_solve_target_not_picker_gate():
+    """t_eff_c (235) is STILL carried, but now as the SHAPED-SOLVE TARGET handed
+    downstream, not the picker's feasibility gate. The picker gates on the real
+    ceiling (250); the candidates record BOTH flags for transparency."""
     rec = _rec(_feasible())
-    assert rec["delta_headroom_c"] == 15.0
-    assert rec["t_eff_c"] == pytest.approx(250.0 - 15.0)
-    assert rec["ceiling_c"] == 250.0            # the REAL ceiling still carried
-    assert rec["t_eff_source"].startswith("ceiling_minus")
-    assert "T_eff" in rec["recommended_drive_reason"]
-    assert "235" in rec["recommended_drive_reason"]
+    assert rec["ceiling_c"] == 250.0                 # the picker gate
+    assert rec["t_eff_c"] == pytest.approx(235.0)     # the shaped-solve target
+    assert rec["delta_headroom_c"] == pytest.approx(15.0)
+    # each candidate carries both the ceiling test (the gate) and the T_eff info
+    for c in rec["candidates"]:
+        assert "under_ceiling" in c and "under_t_eff" in c
+        assert c["feasible"] == bool(c["reached_rho"] and c["under_ceiling"])
 
 
-def test_explicit_t_eff_is_used_and_cites_t_warning():
-    """When t_eff_c is passed (from thermal_config.T_warning_C), it is the
-    selection target and the provenance/reason cite T_warning_C."""
+def test_explicit_t_eff_carried_and_cites_t_warning():
+    """When t_eff_c is passed (from thermal_config.T_warning_C) it is carried as
+    the shaped-solve target and cited as T_warning_C; feasibility still gates on
+    the real 250 ceiling, so 0.38 wins."""
     rec = ss.select_recommended_drive(
         _feasible(), baseline=BASELINE, ceiling_c=250.0, chamber_tag="ch060",
         thermal_config_path=TCFG_PATH, rho_target=0.98, t_eff_c=235.0)
@@ -112,18 +173,19 @@ def test_explicit_t_eff_is_used_and_cites_t_warning():
     assert rec["delta_headroom_c"] == pytest.approx(15.0)
     assert rec["t_eff_source"] == "thermal_config.T_warning_C"
     assert "T_warning_C" in rec["recommended_drive_reason"]
-    # feasibility unchanged: 248 still over 235 -> 0.34 wins
-    assert rec["recommended_drive_frac"] == 0.34
+    assert rec["recommended_drive_frac"] == 0.38     # gated on 250, not 235
 
 
 def test_recommended_drive_for_part_reads_t_warning_from_thermal_config():
     """The wiring reads T_warning_C from the SAME thermal_config.json the Studio
-    verify reads T_ceiling_C from -- single source, no drift."""
+    verify reads T_ceiling_C from -- single source, no drift. The shaped-solve
+    target is carried; the drive is gated on the real ceiling."""
     from solve3d import stage_a
     tcfg = stage_a.thermal_config()
     assert tcfg["T_warning_C"] == 235.0         # the shared source value
 
-    def cool(drive_a, **kw):
+    def ramp(drive_a, **kw):
+        # 0.30->210, 0.34->227.2, 0.38->244.4, 0.42->261.6 ; under 250 up to 0.38
         return {"drive_a": drive_a, "power_density_w_per_m3": drive_a * BASELINE,
                 "true_peak_c": 210.0 + (drive_a - 0.30) * 430.0,
                 "reached_rho": True, "achieved_rho": 0.98}
@@ -132,11 +194,12 @@ def test_recommended_drive_for_part_reads_t_warning_from_thermal_config():
         msh=None, rings=None, z_lo=0.0, z_hi=0.0,
         candidates=(0.30, 0.34, 0.38, 0.42), baseline=BASELINE,
         chamber_tag="ch060", thermal_config_path=TCFG_PATH,
-        max_time_s=1.0, peak_probe=cool)          # ceiling_c/rho from config
+        max_time_s=1.0, peak_probe=ramp)          # ceiling_c/rho from config
     assert rec["ceiling_c"] == 250.0
     assert rec["t_eff_c"] == 235.0
     assert rec["t_eff_source"] == "thermal_config.T_warning_C"
     assert "T_warning_C" in rec["recommended_drive_reason"]
+    assert rec["recommended_drive_frac"] == 0.38    # gated on the real ceiling
 
 
 def test_delta_headroom_is_single_source_with_stage_b4():
@@ -195,9 +258,8 @@ def test_chamber_and_provenance_ride_through(peaks):
 
 # ---- wiring: recommended_drive_for_part with a stubbed probe ------------- #
 def test_recommended_drive_for_part_wires_probe_and_selects():
-    def cool_ramp(drive_a, **kw):
-        # peak rises with drive: 0.30->210, 0.34->227.2, 0.38->244.4, 0.42->261.6
-        # T_eff=235 -> feasible are 0.30 and 0.34; highest feasible is 0.34
+    def ramp(drive_a, **kw):
+        # 0.30->210, 0.34->227.2, 0.38->244.4, 0.42->261.6 ; under 250 up to 0.38
         return {"drive_a": drive_a,
                 "power_density_w_per_m3": drive_a * BASELINE,
                 "true_peak_c": 210.0 + (drive_a - 0.30) * 430.0,
@@ -207,9 +269,9 @@ def test_recommended_drive_for_part_wires_probe_and_selects():
         msh=None, rings=None, z_lo=0.0, z_hi=0.0,
         candidates=(0.30, 0.34, 0.38, 0.42), baseline=BASELINE, ceiling_c=250.0,
         chamber_tag="ch060", thermal_config_path=TCFG_PATH, rho_target=0.98,
-        max_time_s=1.0, peak_probe=cool_ramp)
-    assert rec["recommended_drive_frac"] == 0.34
-    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.34 * BASELINE)
+        max_time_s=1.0, peak_probe=ramp)
+    assert rec["recommended_drive_frac"] == 0.38    # highest densifying under 250
+    assert rec["recommended_power_density_w_per_m3"] == pytest.approx(0.38 * BASELINE)
     assert len(rec["candidates"]) == 4
 
 
@@ -282,23 +344,26 @@ def test_recommended_drive_for_part_calls_probe_with_real_signature():
         chamber_tag="ch060", thermal_config_path=TCFG_PATH,
         max_time_s=1.0, peak_probe=real_sig_probe)
     assert seen == [0.30, 0.34, 0.38, 0.42]        # every candidate reached the probe
-    assert rec["recommended_drive_frac"] == 0.34   # highest feasible under T_eff=235
+    assert rec["recommended_drive_frac"] == 0.38   # highest densifying under 250
 
 
-def test_widened_ladder_reaches_compact_shape_feasible_drive():
-    """Regression for the live-cube honest-null: a compact shape whose feasible
-    drive is ABOVE the old 0.42x cap (cube/pyramid ~0.57-0.585x) must now be
-    reachable, not honest-nulled. Uses the DEFAULT (widened) candidate ladder."""
-    def compact(msh, rings, z_lo, z_hi, drive_a, *, baseline, rho_target,
-                max_time_s, sample_dt_s):
-        # uniform peak under T_eff=235 up to 0.58x, over at 0.66x; densifies throughout
-        peak = 233.0 + (float(drive_a) - 0.58) * 100.0
+def test_cube_like_ship_via_wiring_default_candidates():
+    """Regression for the live-cube honest-null via the full wiring on the
+    DEFAULT candidate ladder: a compact shape that densifies throughout with
+    uniform peak 243.6 C at 0.58x (under 250) and 251.7 C at 0.66x (over 250)
+    must recommend 0.58x, not honest-null."""
+    def cube(msh, rings, z_lo, z_hi, drive_a, *, baseline, rho_target,
+             max_time_s, sample_dt_s):
+        table = {0.26: 146.2, 0.34: 180.8, 0.42: 200.4, 0.50: 221.1,
+                 0.58: 243.6, 0.66: 251.7}
+        peak = table.get(round(float(drive_a), 2), 300.0)
         return {"drive_a": float(drive_a),
                 "power_density_w_per_m3": float(drive_a) * BASELINE,
-                "true_peak_c": peak, "reached_rho": True, "achieved_rho": 0.98}
+                "true_peak_c": peak, "reached_rho": bool(drive_a >= 0.50),
+                "achieved_rho": 0.98 if drive_a >= 0.58 else 0.80}
     rec = ss.recommended_drive_for_part(
         msh=object(), rings=None, z_lo=0.0, z_hi=0.0,   # default (widened) candidates
         baseline=BASELINE, chamber_tag="ch060", thermal_config_path=TCFG_PATH,
-        max_time_s=1.0, peak_probe=compact)
-    assert rec["recommended_drive_frac"] == 0.58                 # highest feasible, above old 0.42 cap
+        max_time_s=1.0, peak_probe=cube)
+    assert rec["recommended_drive_frac"] == 0.58                 # highest densifying under 250
     assert rec["recommended_power_density_w_per_m3"] is not None  # NOT honest-null
