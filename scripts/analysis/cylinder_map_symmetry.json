@@ -1,0 +1,117 @@
+{
+ "source_map": "solve3d/results/phase_c_map_solve_filter_only_asymmetric_scaled.npz",
+ "group_used": "xz_corrected",
+ "group_elements": [
+  "identity",
+  "x_mirror",
+  "z_mirror",
+  "xz_mirror"
+ ],
+ "group_justification": "part INTERSECT chamber INTERSECT electrode-field INTERSECT objective INTERSECT convection-boundary symmetry; the y-mirror is excluded because convection acts on the top face y = +L/2 only (forward.py l.111, l.563-577), and no rotation about the cylinder axis survives because the electrodes at y = +/- L/2 fix the field direction",
+ "filter_radius_m": 0.001,
+ "slab_half_m": 0.0005,
+ "diagnostics": {
+  "raw_full_3d": {
+   "label": "raw solved map, all part cells",
+   "n_cells": 105191,
+   "mean": 0.9334410061028607,
+   "min": 0.6833835718234699,
+   "max": 0.9999837652694947,
+   "std_vol_weighted": 0.04507837823152349,
+   "symmetric_variance_fraction_by_group": {
+    "xz_corrected": 0.4256794308831816,
+    "x_only": 0.6189962854223366,
+    "full_xyz": 0.2776492448102035
+   },
+   "group_match_max_dist_m": {
+    "xz_corrected": 0.0007725862558968065,
+    "x_only": 0.0007459092338114413,
+    "full_xyz": 0.0008049615007755647
+   },
+   "field_frame_R2_all_invariant_modes": 0.27660380383981886,
+   "field_frame_R2_electrode_cos_modes_only": 0.2059575504042751,
+   "field_frame_R2_radial_axial_m0_only": 0.15671964143226524,
+   "rms_radial_axial_m0_component": 0.017845552482420084,
+   "rms_azimuthal_modulation_m2_m4": 0.010002719348490466,
+   "rms_convection_odd_in_y_component": 0.01198154575812476,
+   "n_basis_modes": 60
+  },
+  "raw_midheight_slab": {
+   "label": "raw solved map, |z| <= 0.5 mm slab",
+   "n_cells": 1713,
+   "mean": 0.931611035428078,
+   "min": 0.7942483000088145,
+   "max": 0.9996720982017935,
+   "std_vol_weighted": 0.04839783659582023,
+   "symmetric_variance_fraction_by_group": {
+    "xz_corrected": 0.49885757665980945,
+    "x_only": 0.5017610399512399,
+    "full_xyz": 0.2517930722720606
+   },
+   "group_match_max_dist_m": {
+    "xz_corrected": 0.0007673796667771648,
+    "x_only": 0.0007542485935877446,
+    "full_xyz": 0.0007673796667771648
+   },
+   "field_frame_R2_all_invariant_modes": 0.46261793473538615,
+   "field_frame_R2_electrode_cos_modes_only": 0.24297444358996367,
+   "field_frame_R2_radial_axial_m0_only": 0.07605958059148721,
+   "rms_radial_axial_m0_component": 0.013347591665064072,
+   "rms_azimuthal_modulation_m2_m4": 0.019773040417434364,
+   "rms_convection_odd_in_y_component": 0.022682196993444186,
+   "n_basis_modes": 20
+  }
+ },
+ "delivered": {
+  "label": "group-projected then 1.0 mm filtered",
+  "n_cells": 105191,
+  "mean": 0.933439748305557,
+  "min": 0.8478095807088559,
+  "max": 0.9919486745262042,
+  "std_vol_weighted": 0.02483702151905606,
+  "symmetric_variance_fraction_by_group": {
+   "xz_corrected": 0.9955867969278108,
+   "x_only": 0.998112154684413,
+   "full_xyz": 0.6511223461246404
+  },
+  "group_match_max_dist_m": {
+   "xz_corrected": 0.0007725862558968065,
+   "x_only": 0.0007459092338114413,
+   "full_xyz": 0.0008049615007755647
+  },
+  "field_frame_R2_all_invariant_modes": 0.7331523395055084,
+  "field_frame_R2_electrode_cos_modes_only": 0.5339787186438729,
+  "field_frame_R2_radial_axial_m0_only": 0.42974594255867815,
+  "rms_radial_axial_m0_component": 0.016281912110040157,
+  "rms_azimuthal_modulation_m2_m4": 0.008018657537715504,
+  "rms_convection_odd_in_y_component": 0.011084482521827648,
+  "n_basis_modes": 60,
+  "variance_fraction_of_raw_map_retained": 0.3035725242697224,
+  "dopant_rel_move_vs_raw": 1.3474845182662857e-06
+ },
+ "delivered_midheight_slab": {
+  "label": "delivered map, |z| <= 0.5 mm slab",
+  "n_cells": 1713,
+  "mean": 0.9319742341075007,
+  "min": 0.8496207032243221,
+  "max": 0.9865951582836198,
+  "std_vol_weighted": 0.029419098087651942,
+  "symmetric_variance_fraction_by_group": {
+   "xz_corrected": 0.9965626026270838,
+   "x_only": 0.9962439979206408,
+   "full_xyz": 0.4672535489232761
+  },
+  "group_match_max_dist_m": {
+   "xz_corrected": 0.0007673796667771648,
+   "x_only": 0.0007542485935877446,
+   "full_xyz": 0.0007673796667771648
+  },
+  "field_frame_R2_all_invariant_modes": 0.95182458524051,
+  "field_frame_R2_electrode_cos_modes_only": 0.45087566665251266,
+  "field_frame_R2_radial_axial_m0_only": 0.18064219949409155,
+  "rms_radial_axial_m0_component": 0.012503711959674332,
+  "rms_azimuthal_modulation_m2_m4": 0.015293219466573601,
+  "rms_convection_odd_in_y_component": 0.020822174222858026,
+  "n_basis_modes": 20
+ }
+}

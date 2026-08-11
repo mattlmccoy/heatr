@@ -1,0 +1,35 @@
+{
+ "mesh_match": {
+  "t": "2026-08-10 21:26:57",
+  "payload": {
+   "max_centroid_dev_m": 0.0,
+   "n_design": 105191
+  }
+ },
+ "score_coarse": {
+  "t": "2026-08-10 21:31:49",
+  "payload": {
+   "J_symmetric": 9.523960860436205e-08,
+   "J_asymmetric": 1.0712930132042473e-07,
+   "argmin_asymmetric": 7168,
+   "J_out_of_bounds": 2.443220824292832e-08,
+   "J_in_bounds_deficit": 8.26970930774964e-08,
+   "map_stats": {
+    "mean": 0.933439748305557,
+    "min": 0.8478095807088559,
+    "max": 0.9919486745262042
+   }
+  }
+ },
+ "acceptance": {
+  "t": "2026-08-10 22:34:58",
+  "payload": {
+   "in_grid_margin_rel": 0.0693600879974152,
+   "holdout_pass": true,
+   "smoothing_pass": true,
+   "solved_label": true,
+   "uniform_at_score_mesh": 8.27324795501214e-08,
+   "solved_at_score_mesh": 7.641568876292294e-08
+  }
+ }
+}

@@ -292,6 +292,54 @@
    "scale_first_step": true,
    "objective_scale_applied": 266208014.31551674,
    "deviation_note": "objective rescaled by 1/|g0| (a constant) so L-BFGS-B's first step is O(1); pure reparameterization, minimizer unchanged. RECORDED DEVIATION, run as an ADDITIONAL arm without displacing the pre-registered one."
+  },
+  "symmetrized_filter_only_asymmetric_scaled": {
+   "arm": "symmetrized_filter_only_asymmetric_scaled",
+   "wall_forward_s": 271.0221005420899,
+   "n_steps": 10000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 9.523960860436205e-08,
+   "argmin_symmetric": 7272,
+   "at_horizon_symmetric": false,
+   "J_asymmetric": 1.0712930132042473e-07,
+   "argmin_asymmetric": 7168,
+   "t_stop_s": 358.40000000000003,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 9.00267555503749e-08,
+   "J_out_of_bounds": 2.443220824292832e-08,
+   "J_in_bounds_deficit": 8.26970930774964e-08,
+   "out_of_part_melt_fraction_of_part": 0.002329641206003245,
+   "in_bounds_below_floor_fraction": 0.08341420816987268,
+   "part_mean_phi": 0.9195623718869453,
+   "sigma_T_diagnostic_c": 21.23451618080832,
+   "in_part_melt_frac_phi08": 0.9326796450042943,
+   "in_part_melt_frac_phi09": 0.9225164614944174,
+   "bed_melt_frac_phi08": 0.0,
+   "bed_melt_frac_phi09": 0.0,
+   "eval_missed": 0,
+   "map_stats": {
+    "mean": 0.933439748305557,
+    "min": 0.8478095807088559,
+    "max": 0.9919486745262042
+   },
+   "status": "not_a_solve: projection of the solved map onto the mirror-symmetric subspace",
+   "objective_optimized": "asymmetric",
+   "w_ratio": null,
+   "beta": 0.0,
+   "budget_gradient_evaluations": 0,
+   "gradient_evaluations_used": 0,
+   "forward_equivalents_spent": 1.0,
+   "derived_from_arm": "solve_filter_only_asymmetric_scaled",
+   "construction": "s_sym_i = mean over the 4-element group {identity, x-mirror, z-mirror, xz-mirror} of the source map at the nearest centroid to the reflected point, then the 1.0 mm pre-registered design filter applied once to clean the nearest-centroid matching artefacts, then clipped to [0, 1].",
+   "symmetry_group": [
+    "identity",
+    "x_mirror",
+    "z_mirror",
+    "xz_mirror"
+   ],
+   "symmetry_group_justification": "part INTERSECT chamber INTERSECT electrode-field INTERSECT objective INTERSECT convection-boundary symmetry. The cylinder axis is z (mesh_gmsh occ.addCylinder(0,0,-L/2, 0,0,L, half); in_part_predicate('circle') has no z condition) and the part spans the full chamber, so the part admits all three mirrors. The electrodes sit at y = +/- L/2 (forward.py l.274-278) and the deposited power goes as |E|^2, which is even in y, but they fix the field direction so NO rotation about the cylinder axis survives. Convection acts on the top face y = +L/2 ONLY (forward.py l.111, l.563-577), which BREAKS the y-mirror in the thermal field and therefore in the objective. The y-mirror is excluded: the map's odd-in-y content is physical, not residue.",
+   "deviation_note": "RECORDED DEVIATION. The continuum optimum of a group-invariant objective over a group-invariant admissible set lies in the group-invariant subspace, so any content of a solved map outside that subspace is discretization noise. The 12-evaluation solved map retains only 49.9 percent of its mid-height-slab variance under this projection (42.6 percent over the full part), so about half of its structure is mesh-frame fitting. This arm delivers the invariant part. It is an ADDITIONAL arm and does not displace the pre-registered solve arm.",
+   "source_arm_J_asymmetric": 1.0283280687027586e-07
   }
  }
 }
