@@ -25,7 +25,8 @@
    "certified": false,
    "trust_badge": "solve3d direct solve | forward physical, beats uniform +46%, hold-out band exceeded at corners (uncertified) | sim-only",
    "source": "solve3d/phase_e/results/phase_e_gate_cube.json",
-   "note": "Phase E cube solve: nominal geometry (predates Level 0 pre-comp), so anchor jobs run precomp OFF. solved_label false (mesh hold-out J_rel 0.226 vs band 0.096); forward physical, beats uniform in-grid +46.1%."
+   "symmetry": {"fraction": 0.9121, "detected_group": ["identity", "mirror_x", "mirror_z", "mirror_xz"], "verdict": "PASS", "source": "solve3d/results/symmetry_retro_3d.json#cube"},
+   "note": "Phase E cube solve: nominal geometry (predates Level 0 pre-comp), so anchor jobs run precomp OFF. solved_label false (mesh hold-out J_rel 0.226 vs band 0.096); forward physical, beats uniform in-grid +46.1%. Symmetry PASS (fraction 0.9121) under the per-part group {x,z}."
   },
   {
    "name": "phase_e_pyramid_n64",
@@ -38,10 +39,8 @@
    "certified": false,
    "trust_badge": "solve3d direct solve | forward physical, beats uniform +58%, hold-out band exceeded at corners/apex (uncertified) | sim-only",
    "source": "solve3d/phase_e/results/phase_e_gate_pyramid.json",
-   "held": true,
-   "held_reason": "SYMMETRY RESIDUE: the 3-D symmetry-consistency retro-check (solve3d/results/symmetry_retro_3d.json, 2026-08-10) scored this map 0.3545 symmetric-variance-fraction under the physically-correct {x,z}-mirror group (verdict FAIL_residue, threshold 0.8) - about 65 percent is numerical residue, same defect class as the Phase C cylinder. The solve was converged=False on the sharp apex (apex aliasing also exceeds the 2 percent DG0-to-voxel transfer gate at n64/n96). Must be re-solved (symmetric-subspace or higher budget, symmetry >= 0.8) before it is served, cited, or shipped. Held (not deleted) so the record stays auditable and re-solvable.",
-   "symmetry": {"frac_xz_corrected": 0.3545, "verdict": "FAIL_residue", "threshold": 0.8, "source": "solve3d/results/symmetry_retro_3d.json"},
-   "note": "Phase E pyramid solve: nominal geometry (predates Level 0 pre-comp), so anchor jobs run precomp OFF. solved_label false (mesh hold-out J_rel 0.151 vs band 0.077); forward physical, beats uniform in-grid +58.0%. HELD 2026-08-10 for symmetry residue (see held_reason)."
+   "symmetry": {"fraction": 0.9917, "detected_group": ["identity", "mirror_x"], "verdict": "PASS", "source": "solve3d/results/symmetry_retro_3d.json#pyramid"},
+   "note": "Phase E pyramid solve: nominal geometry (predates Level 0 pre-comp), so anchor jobs run precomp OFF. solved_label false (mesh hold-out J_rel 0.151 vs band 0.077); forward physical, beats uniform in-grid +58.0%. Symmetry PASS (fraction 0.9917) under the PER-PART group {x}: the apex is along z, so the part has no z-mirror (and y is excluded by one-sided top convection). An earlier blanket {x,z} score of 0.354 was a FALSE-rejection (it forced a z-mirror the pyramid does not have) and was corrected via per-part group detection (solve3d ea985c3); briefly held 2026-08-10 on that wrong number, un-held once corrected. The solve was converged=False (AL damped-oscillating on the apex) - a solve-QUALITY caveat, carried in certified:false, NOT symmetry residue."
   }
  ]
 }

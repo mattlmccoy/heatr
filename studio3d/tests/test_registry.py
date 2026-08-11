@@ -113,11 +113,13 @@ def test_cube_pyramid_anchors_registered():
     solve3d_solved. solved_label is false for both (hold-out band exceeded at
     corners) - a descriptive label, not a gate.
 
-    BOTH records stay in the registry, but only the CUBE is SERVED. The
-    pyramid was HELD 2026-08-10 for symmetry residue (symmetry_retro_3d.json:
-    pyramid 0.3545 FAIL vs cube 0.9121 PASS), so find_solved_map skips it -
-    shipping a ~65 percent-residue map would be a false-green. The record is
-    held, not deleted, so it is auditable and re-solvable."""
+    BOTH the cube and pyramid are SERVED (both symmetry PASS). The pyramid was
+    briefly held 2026-08-10 on a wrong blanket-{x,z} symmetry score (0.354);
+    under its correct PER-PART group {x} (apex along z, so no z-mirror) the map
+    is 0.9917 PASS, not residue, so the hold was lifted (solve3d ea985c3). Its
+    converged=False solve is a separate quality caveat carried in
+    certified:false. The cylinder stays held (genuine residue) - see
+    test_held_cylinder_residue_map_is_not_served."""
     import json
     from studio3d.runner import voxelize_stl
 
@@ -138,18 +140,15 @@ def test_cube_pyramid_anchors_registered():
         assert "uncertified" in e["trust_badge"]
         assert (ROOT / e["artifact"]).exists(), f"{shape} artifact missing"
 
-    # the SOUND cube is served for a 60 mm job of that exact shape
-    cube = voxelize_stl(str(ROOT / "shape_library_3d/stl/cube.stl"), 64)
-    hit = find_solved_map(cube, registry_path=reg_path, chamber_m=0.060)
-    assert hit is not None and hit["name"] == "phase_e_cube_n64"
-
-    # the HELD residue pyramid is NOT served, despite an exact hash match
-    pyr = voxelize_stl(str(ROOT / "shape_library_3d/stl/pyramid.stl"), 64)
-    assert find_solved_map(pyr, registry_path=reg_path, chamber_m=0.060) is None
-    pe = by_name["phase_e_pyramid_n64"]
-    assert pe["held"] is True
-    assert pe["symmetry"]["verdict"] == "FAIL_residue"
-    assert pe["symmetry"]["frac_xz_corrected"] < pe["symmetry"]["threshold"]
+    # both SOUND anchors (cube + pyramid, symmetry PASS) are served for a
+    # 60 mm job of that exact shape; neither is held
+    for shape in ("cube", "pyramid"):
+        name = f"phase_e_{shape}_n64"
+        part = voxelize_stl(str(ROOT / f"shape_library_3d/stl/{shape}.stl"), 64)
+        hit = find_solved_map(part, registry_path=reg_path, chamber_m=0.060)
+        assert hit is not None and hit["name"] == name
+        assert by_name[name].get("held") is not True
+        assert by_name[name]["symmetry"]["verdict"] == "PASS"
 
 
 def test_cube_registry_map_consumed_end_to_end(tmp_path):
