@@ -3,19 +3,30 @@
 Light (white-background) style, colorblind-safe colormaps, no title inside the
 image. Reads ONLY stored artifacts:
 
-  solve3d/results/phase_c_map_solve_filter_only_asymmetric_scaled.npz  (solved map)
+  solve3d/results/phase_c_map_<ARM>.npz                 (delivered map)
   solve3d/results/phase_c_baselines.json                (uniform arm scalars)
-  solve3d/results/phase_c_solves.json                   (solved arm scalars, trajectory)
+  solve3d/results/phase_c_solves.json                   (delivered arm scalars)
   solve3d/results/phase_c_gate.json                     (mesh hold-out)
-  fgm_solve_campaign/figs_3d/phase_c_cylinder_fields.npz  (read-state fields,
-      re-exported by export_phase_c_fields.py; every scalar reproduces the
-      recorded Phase C JSON bit-for-bit, see phase_c_cylinder_fields_gate.txt)
+  fgm_solve_campaign/figs_3d/phase_c_cylinder_fields<SUF>.npz  (read-state
+      fields; every scalar reproduces the recorded Phase C JSON bit-for-bit,
+      see the matching _gate.txt)
+
+DELIVERED ARM. The default arm is the MIRROR-SYMMETRIZED map
+(symmetrized_filter_only_asymmetric_scaled). The Phase C case is a centred
+cylinder with the electrodes at y = +/- L/2, so the problem is invariant under
+x -> -x and y -> -y; the 12-evaluation solve's map was only 25 percent
+mirror-symmetric on the mid-height slab, and the antisymmetric remainder is
+mesh-frame fitting. Panel (f) still shows the SOURCE solve trajectory, because
+the delivered map is the symmetric part of that solve's last-best iterate and
+not a new solve; the delivered point is marked separately on the same axes.
+Set PHASE_C_ARM=solve_filter_only_asymmetric_scaled to render the raw arm.
 
     ./.venv312/bin/python fgm_solve_campaign/figs_3d/render_fig_cylinder_3d_solve.py
 """
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import matplotlib
@@ -28,6 +39,11 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 RES = ROOT / "solve3d" / "results"
 OUT = HERE / "fig_cylinder_3d_solve.png"
+
+ARM = os.environ.get("PHASE_C_ARM", "symmetrized_filter_only_asymmetric_scaled")
+IS_SYM = ARM.startswith("symmetrized")
+FIELDS = HERE / ("phase_c_cylinder_fields_sym.npz" if IS_SYM
+                 else "phase_c_cylinder_fields.npz")
 
 BG, FG, DIM = "#ffffff", "#1a1a1a", "#5a5f66"
 C_UNI, C_SOL = "#8a9099", "#0277bd"
@@ -51,11 +67,13 @@ def load() -> dict:
     base = json.loads((RES / "phase_c_baselines.json").read_text())
     solves = json.loads((RES / "phase_c_solves.json").read_text())
     gate = json.loads((RES / "phase_c_gate.json").read_text())
+    sol = solves["arms"][ARM]
+    src = solves["arms"][sol.get("derived_from_arm", ARM)]
     return {"uni": base["arms"]["uniform_baseline"],
-            "sol": solves["arms"]["solve_filter_only_asymmetric_scaled"],
-            "gate": gate["arms"]["solve_filter_only_asymmetric_scaled"],
+            "sol": sol, "src": src,
+            "gate": gate["arms"][ARM],
             "mesh": base["mesh"],
-            "f": np.load(HERE / "phase_c_cylinder_fields.npz", allow_pickle=False)}
+            "f": np.load(FIELDS, allow_pickle=False)}
 
 
 def dopant_midplane(centroids: np.ndarray, s: np.ndarray,
@@ -133,7 +151,8 @@ def main() -> int:
     ext_d = [-10.5, 10.5, -10.5, 10.5]
     vmin = float(np.nanmin(img_sol))
     titles = ["(a) uniform dopant, $s=1$ everywhere",
-              "(b) solved dopant map"]
+              "(b) solved dopant map, symmetrized in $x$ and $z$" if IS_SYM
+              else "(b) solved dopant map"]
     for j, img in enumerate([img_uni, img_sol]):
         ax = fig.add_subplot(gs[0, j])
         im = ax.imshow(img, origin="lower", extent=ext_d, cmap="viridis",
@@ -216,18 +235,26 @@ def main() -> int:
 
     # ---- row 3 right: the solve trajectory -------------------------------- #
     ax2 = fig.add_subplot(gs[2, 1])
-    ev = np.array([t["eval"] for t in s["trajectory"]])
-    Jt = np.array([t["J"] for t in s["trajectory"]])
+    ev = np.array([t["eval"] for t in d["src"]["trajectory"]])
+    Jt = np.array([t["J"] for t in d["src"]["trajectory"]])
     ax2.axhline(1.0, color=C_UNI, lw=1.1, ls="--")
     ax2.text(12.4, 1.002, "uniform", color=DIM, fontsize=6.8, ha="right")
     ax2.plot(ev, Jt / ref, "o-", color=C_SOL, lw=1.3, ms=3.0)
     ax2.annotate("budget limit,\nstill descending",
-                 xy=(ev[-1], Jt[-1] / ref), xytext=(7.2, 0.952),
+                 xy=(ev[-1], Jt[-1] / ref), xytext=(5.0, 0.8815),
                  fontsize=6.8, color=FG, ha="center",
                  arrowprops=dict(arrowstyle="->", color=DIM, lw=0.7))
+    if IS_SYM:
+        ax2.plot([ev[-1]], [s["J_asymmetric"] / ref], "D", color="#b1420a",
+                 ms=4.2, zorder=5)
+        ax2.annotate("delivered map:\nsymmetric part only",
+                     xy=(ev[-1], s["J_asymmetric"] / ref), xytext=(6.9, 0.973),
+                     fontsize=6.6, color="#b1420a", ha="center",
+                     arrowprops=dict(arrowstyle="->", color="#b1420a", lw=0.7))
     ax2.set_xlabel("gradient evaluation", labelpad=1)
     ax2.set_ylabel("$J$ / $J_{\\mathrm{uniform}}$", labelpad=1)
-    ax2.set_xlim(0.4, 12.6); ax2.set_xticks([1, 4, 8, 12])
+    ax2.set_xlim(0.4, 13.4); ax2.set_xticks([1, 4, 8, 12])
+    ax2.set_ylim(0.868, 1.012)
     ax2.set_title("(f) solve trajectory, 12 of 12 evaluations", pad=3)
     for sp in ("top", "right"):
         ax2.spines[sp].set_visible(False)

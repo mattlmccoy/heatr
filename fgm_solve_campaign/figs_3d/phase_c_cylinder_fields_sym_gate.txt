@@ -1,0 +1,10 @@
+Phase C SYMMETRIZED-arm field export reproduction gate (rtol 1e-9)
+  sym      J_symmetric                          9.523960860436205e-08 vs 9.523960860436205e-08  rel=0.000e+00 OK
+  sym      J_asymmetric                         1.0712930132042473e-07 vs 1.0712930132042473e-07  rel=0.000e+00 OK
+  sym      argmin_symmetric                     7272.0 vs 7272.0  rel=0.000e+00 OK
+  sym      argmin_asymmetric                    7168.0 vs 7168.0  rel=0.000e+00 OK
+  sym      J_out_of_bounds                      2.443220824292832e-08 vs 2.443220824292832e-08  rel=0.000e+00 OK
+  sym      J_in_bounds_deficit                  8.26970930774964e-08 vs 8.26970930774964e-08  rel=0.000e+00 OK
+  sym      out_of_part_melt_fraction_of_part    0.002329641206003245 vs 0.002329641206003245  rel=0.000e+00 OK
+  sym      in_bounds_below_floor_fraction       0.08341420816987268 vs 0.08341420816987268  rel=0.000e+00 OK
+ALL PASS
