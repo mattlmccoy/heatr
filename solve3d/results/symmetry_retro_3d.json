@@ -24,6 +24,16 @@
    "frac_full_xyz": 0.3515,
    "median_match_dist_m": 0.003351,
    "verdict": "FAIL_residue"
+  },
+  "cylinder_phase_c": {
+   "n_nodes": 105191,
+   "axis": "Z (longest extent 0.0597 m ~ full chamber; NOT Y - the campaign lane assumed Y)",
+   "required_group": "{x,z mirrors} (Klein-4): part is axisymmetric about Z but the FIELD (electrodes y=+/-L/2) is only mirror-symmetric, so part INTERSECT field = mirrors; y excluded by one-sided top convection",
+   "frac_xz_corrected": 0.4258,
+   "frac_full_xyz": 0.2772,
+   "frac_rot_about_z_diagnostic": 0.2047,
+   "median_match_note": "max_match_dist 7.8e-04 m",
+   "verdict": "FAIL_residue"
   }
  },
  "conclusion": "cube + square are spatially SOUND under the required group. pyramid (0.354) is mostly numerical residue, the SAME defect class as the Phase C cylinder (0.25) - budget-limited stop (converged=False, AL damped-oscillated on the sharp apex) fitting coarse-mesh discretization-frame error. Pyramid must be re-solved (symmetric-subspace or higher budget) before it can be cited/shipped."
