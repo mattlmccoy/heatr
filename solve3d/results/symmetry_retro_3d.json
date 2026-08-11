@@ -1,40 +1,75 @@
 {
- "what": "3-D symmetry-consistency retro-check of published stage_b4 dopant maps (geo-prewarp contribution to SYMMETRY_GATE_REPORT.md)",
- "method": "vol-weighted variance fraction of the group-symmetric component of s_map; group elements matched node->mirrored-node by KDTree; frac = ||P s - mean||^2 / ||s - mean||^2. PASS iff >= 0.8.",
- "field_symmetry_basis": "forward.py: electrodes at y=+/-L/2 (l.275/277) => EQS |E|^2 symmetric in x,y,z; convection ONE-SIDED on top face y=+L/2 (l.111,564) => thermal+objective NOT y-mirror symmetric. CORRECT group for a centered part = {x,z mirrors} (+ build-axis rotation for a body of revolution); y EXCLUDED.",
- "group_correction_is_load_bearing": "square scores 0.860 under the correct x,z group but 0.699 under the full x,y,z group. A gate that includes y-mirror would FALSE-REJECT the square at a 0.8 threshold, because its top/bottom asymmetry is PHYSICAL (one-sided convection), not residue. This is why the group must intersect the CONVECTION-boundary symmetry, not just electrode+part+objective.",
+ "what": "3-D symmetry-consistency retro-check, PER-PART detected group (containment detector, k=2.0 thr=0.90)",
+ "method": "symmetry_gate_record: mirrors perpendicular to build-axis-y accepted iff containment>=0.90@2NN; y excluded a priori (one-sided top convection); vol-weighted variance fraction; PASS iff fraction>=0.8 (or price<=1%).",
+ "correction_2026_08_10": "SUPERSEDES the earlier blanket-{x,z} retro. That version applied {x,z} to EVERY shape and FALSE-REJECTED the pyramid (apex along z has NO z-mirror; true group {x}, fraction 0.9917 PASS, not 0.354). Same false-rejection class the 2-D report Sec 3.2 warns of. cube/square/cylinder unchanged (all genuinely {x,z}).",
  "results": {
   "cube": {
+   "map": "map_stage_b4_cube.npz",
    "n_nodes": 9183,
-   "frac_xz_corrected": 0.9121,
-   "frac_full_xyz": 0.9063,
-   "median_match_dist_m": 0.000355,
-   "verdict": "PASS"
+   "detected_group": [
+    "identity",
+    "mirror_x",
+    "mirror_z",
+    "mirror_xz"
+   ],
+   "fraction": 0.9121,
+   "verdict": "PASS",
+   "sendable": true,
+   "max_match_dist_m": 0.001018,
+   "reductions": [
+    "mirror_y"
+   ]
   },
   "square": {
+   "map": "map_stage_b4_square.npz",
    "n_nodes": 11850,
-   "frac_xz_corrected": 0.8601,
-   "frac_full_xyz": 0.6994,
-   "median_match_dist_m": 0.000589,
-   "verdict": "PASS"
+   "detected_group": [
+    "identity",
+    "mirror_x",
+    "mirror_z",
+    "mirror_xz"
+   ],
+   "fraction": 0.8601,
+   "verdict": "PASS",
+   "sendable": true,
+   "max_match_dist_m": 0.001639,
+   "reductions": [
+    "mirror_y"
+   ]
   },
   "pyramid": {
+   "map": "map_stage_b4_pyramid.npz",
    "n_nodes": 8931,
-   "frac_xz_corrected": 0.3545,
-   "frac_full_xyz": 0.3515,
-   "median_match_dist_m": 0.003351,
-   "verdict": "FAIL_residue"
+   "detected_group": [
+    "identity",
+    "mirror_x"
+   ],
+   "fraction": 0.9917,
+   "verdict": "PASS",
+   "sendable": true,
+   "max_match_dist_m": 0.000936,
+   "reductions": [
+    "mirror_y",
+    "mirror_z"
+   ]
   },
   "cylinder_phase_c": {
+   "map": "phase_c_map_solve_filter_only_asymmetric_scaled.npz",
    "n_nodes": 105191,
-   "axis": "Z (longest extent 0.0597 m ~ full chamber; NOT Y - the campaign lane assumed Y)",
-   "required_group": "{x,z mirrors} (Klein-4): part is axisymmetric about Z but the FIELD (electrodes y=+/-L/2) is only mirror-symmetric, so part INTERSECT field = mirrors; y excluded by one-sided top convection",
-   "frac_xz_corrected": 0.4258,
-   "frac_full_xyz": 0.2772,
-   "frac_rot_about_z_diagnostic": 0.2047,
-   "median_match_note": "max_match_dist 7.8e-04 m",
-   "verdict": "FAIL_residue"
+   "detected_group": [
+    "identity",
+    "mirror_x",
+    "mirror_z",
+    "mirror_xz"
+   ],
+   "fraction": 0.4258,
+   "verdict": "FAIL",
+   "sendable": false,
+   "max_match_dist_m": 0.000777,
+   "reductions": [
+    "mirror_y"
+   ]
   }
  },
- "conclusion": "cube + square are spatially SOUND under the required group. pyramid (0.354) is mostly numerical residue, the SAME defect class as the Phase C cylinder (0.25) - budget-limited stop (converged=False, AL damped-oscillated on the sharp apex) fitting coarse-mesh discretization-frame error. Pyramid must be re-solved (symmetric-subspace or higher budget) before it can be cited/shipped."
+ "conclusion": "cube/square SOUND; PYRAMID SOUND (x-symmetric 0.99, NOT residue - correction); cylinder 0.426 is the ONLY confirmed 3-D residue instance (genuinely {x,z}-symmetric part, map only 43% symmetric)."
 }
