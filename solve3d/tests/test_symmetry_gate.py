@@ -81,3 +81,198 @@ def test_verdict_pass_fail_at_threshold():
     assert sg.symmetry_verdict(0.912) == "PASS"
     assert sg.symmetry_verdict(0.354) == "FAIL"
     assert sg.symmetry_verdict(0.80) == "PASS"
+
+
+# ---- the conformant gate RECORD (SYMMETRY_GATE_REPORT.md 3.4/3.5/4) --------- #
+# Group detection on the mesh: mirrors PERPENDICULAR to the build axis, each
+# ACCEPTED only if it maps the in-part node set onto itself (else -> reductions);
+# the build-axis mirror is excluded a priori (one-sided top convection). Verdict
+# PASS iff fraction>=0.8 OR projection-price<=1%; VACUOUS_PASS for a trivial group.
+def _grid_part():
+    # a small centered symmetric point cloud in x-z (build axis y), all in-part
+    xs = np.array([-2.0, -1.0, 1.0, 2.0])
+    zs = np.array([-2.0, -1.0, 1.0, 2.0])
+    pts = np.array([[x, 0.0, z] for x in xs for z in zs])
+    return pts
+
+
+def test_record_centered_symmetric_map_passes_and_is_sendable():
+    coords = _grid_part()
+    # map symmetric under x and z mirrors: value depends on |x|,|z| only
+    s = np.array([abs(x) + abs(z) for x, _, z in coords])
+    rec = sg.symmetry_gate_record(s, coords, np.ones(len(s)),
+                                  in_part=np.ones(len(s), bool), build_axis="y")
+    assert rec["fraction"] == pytest.approx(1.0, abs=1e-9)
+    assert set(rec["group"]) == {"identity", "mirror_x", "mirror_z", "mirror_xz"}
+    assert rec["build_axis"] == "y"
+    assert rec["convective_faces"] == ["y=+L/2"]
+    assert rec["vacuous"] is False
+    assert rec["verdict"] == "PASS"
+    assert rec["sendable"] is True
+    # y-mirror is excluded a priori by one-sided convection -> in reductions
+    assert any("mirror_y" in r["element"] and "convection" in r["reason"].lower()
+               for r in rec["reductions"])
+
+
+def _wedge_part():
+    """Symmetric in z per column, but a WEDGE in x: the z cross-section GROWS with
+    x, so the x-mirror sends the wide +x columns onto the narrow -x columns
+    (macroscopically off the part) while the z-mirror is exact. This exercises a
+    GENUINE accept (z) and a GENUINE reject (x) in one fixture -- unlike a dropped
+    grid column, whose mirror image lands ~1 NN into the gap and is NOT a clean
+    reject under a containment criterion (calibration note, 2026-08-10)."""
+    colz = {-3.0: [0.0], -2.0: [0.0], -1.0: [-1.0, 0.0, 1.0],
+            1.0: [-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
+            2.0: [-5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+            3.0: [-6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0,
+                  1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}
+    return np.array([[x, 0.0, z] for x, zs in colz.items() for z in zs])
+
+
+def test_record_accepts_symmetric_mirror_and_rejects_the_wedge_mirror():
+    coords = _wedge_part()
+    s = np.ones(len(coords))
+    rec = sg.symmetry_gate_record(s, coords, np.ones(len(coords)),
+                                  in_part=np.ones(len(coords), bool),
+                                  build_axis="y")
+    # z-mirror is a real part symmetry -> accepted; x-mirror is the wedge -> rejected
+    assert "mirror_z" in rec["group"]
+    assert "mirror_x" not in rec["group"]
+    assert any("mirror_x" in r["element"] for r in rec["reductions"])
+    # the accepted (z) mirror is exact on this integer grid -> zero slop
+    assert rec["max_match_dist"] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_record_asymmetric_part_is_vacuous_pass():
+    # a right-triangle wedge in BOTH x and z: neither mirror maps the part onto
+    # itself (its images land macroscopically off the part) -> trivial group ->
+    # vacuous pass (stated). A tiny L-corner does NOT work: with only a few nodes
+    # every mirror image lands within a couple NN and is spuriously accepted.
+    coords = np.array([[float(x), 0.0, float(z)]
+                       for x in range(8) for z in range(8 - x)])
+    s = np.linspace(0.2, 0.8, len(coords))
+    rec = sg.symmetry_gate_record(s, coords, np.ones(len(coords)),
+                                  in_part=np.ones(len(coords), bool),
+                                  build_axis="y")
+    assert rec["group"] == ["identity"]
+    assert rec["vacuous"] is True
+    assert rec["verdict"] == "VACUOUS_PASS"
+    assert rec["sendable"] is True
+
+
+def test_record_low_fraction_passes_on_price_when_residue_is_inert():
+    coords = _grid_part()
+    # a map with real asymmetric content -> fraction < 0.8
+    rng = np.array([0.1, 0.9, -0.4, 0.6, 0.2, -0.7, 0.8, -0.3,
+                    0.5, -0.6, 0.35, -0.2, 0.15, 0.44, -0.55, 0.25])
+    s = rng
+    # injected scorer: projected map scores ~identical to solved -> price ~0
+    def scorer(_map):
+        return 5.0        # constant J -> |J(proj)-J(solved)| = 0
+    rec = sg.symmetry_gate_record(s, coords, np.ones(len(s)),
+                                  in_part=np.ones(len(s), bool), build_axis="y",
+                                  scorer=scorer, j_uniform=10.0, j_solved=5.0)
+    assert rec["fraction"] < 0.8
+    assert rec["projection_price"] == pytest.approx(0.0, abs=1e-9)
+    assert rec["verdict"] == "PASS"           # passed on price, not fraction
+    assert rec["sendable"] is True
+
+
+def test_record_low_fraction_and_costly_price_fails():
+    coords = _grid_part()
+    s = np.array([0.1, 0.9, -0.4, 0.6, 0.2, -0.7, 0.8, -0.3,
+                  0.5, -0.6, 0.35, -0.2, 0.15, 0.44, -0.55, 0.25])
+    def scorer(_map):
+        return 9.5        # |J(proj)-J(solved)|=4.5 vs margin |10-5|=5 -> price 0.9 >> 0.01
+    rec = sg.symmetry_gate_record(s, coords, np.ones(len(s)),
+                                  in_part=np.ones(len(s), bool), build_axis="y",
+                                  scorer=scorer, j_uniform=10.0, j_solved=5.0)
+    assert rec["fraction"] < 0.8
+    assert rec["projection_price"] > 0.01
+    assert rec["verdict"] == "FAIL"
+    assert rec["sendable"] is False
+
+
+# ---- REAL-MESH cross-check: the load-bearing acceptance test ---------------- #
+# The record's group DETECTION (containment criterion, k=2.0, threshold=0.90,
+# calibrated 2026-08-10 on these very meshes) must reproduce the retro fractions
+# in solve3d/results/symmetry_retro_3d.json for the shapes whose group is really
+# {x,z}, and must arrive at the physically CORRECT group for the pyramid, whose
+# apex is along z so it is NOT z-symmetric (the retro applied a blanket {x,z} and
+# false-failed it -- the same over-projection failure the 2-D report warns about
+# in its Section 3.2). All maps store IN-PART cells only; weights are the cell
+# volumes; build axis is y (one-sided top convection); no scorer is injected, so
+# a low-fraction shape FAILs on fraction alone.
+from pathlib import Path
+
+_RESULTS = Path(__file__).resolve().parents[1] / "results"
+
+
+def _load_map(name):
+    d = np.load(_RESULTS / name)
+    return (np.asarray(d["s_map"], float), np.asarray(d["centroids"], float),
+            np.asarray(d["volumes"], float))
+
+
+def _real_record(name):
+    s, c, v = _load_map(name)
+    return sg.symmetry_gate_record(s, c, v, in_part=np.ones(len(s), bool),
+                                   build_axis="y")
+
+
+@pytest.mark.parametrize("name,fname,frac,group_has,verdict", [
+    # cube: {id,x,z,xz}, 0.9121 PASS  (reproduces retro exactly)
+    ("cube", "map_stage_b4_cube.npz", 0.9121,
+     {"mirror_x", "mirror_z", "mirror_xz"}, "PASS"),
+    # square: {id,x,z,xz}, 0.8601 PASS (reproduces retro exactly)
+    ("square", "map_stage_b4_square.npz", 0.8601,
+     {"mirror_x", "mirror_z", "mirror_xz"}, "PASS"),
+    # cylinder (axis z, full height): {id,x,z,xz}, 0.4258 FAIL residue
+    ("cylinder", "phase_c_map_solve_filter_only_asymmetric_scaled.npz", 0.4258,
+     {"mirror_x", "mirror_z", "mirror_xz"}, "FAIL"),
+])
+def test_real_mesh_cross_check_reproduces_retro(name, fname, frac, group_has,
+                                                verdict):
+    rec = _real_record(fname)
+    assert rec["fraction"] == pytest.approx(frac, abs=1e-3), name
+    assert group_has.issubset(set(rec["group"])), (name, rec["group"])
+    assert rec["build_axis"] == "y"
+    assert rec["convective_faces"] == ["y=+L/2"]
+    assert rec["verdict"] == verdict, (name, rec["verdict"])
+    # the reported max_match_dist is the exactness lower-bound; mesh-frame slop
+    # is a couple NN, never zero on a real tet mesh, and must be surfaced.
+    assert rec["max_match_dist"] > 0.0
+
+
+def test_real_mesh_pyramid_detects_x_only_group_and_passes():
+    # THE HONEST CORRECTION. The pyramid apex is along z (z cross-section shrinks
+    # to a point), so the z-mirror is NOT a part symmetry and the containment
+    # criterion REJECTS it. Under the correct detected group {id, mirror_x} the
+    # map is 0.9917 symmetric -> PASS. The retro's 0.354 FAIL was an artifact of
+    # projecting onto a z-mirror the pyramid does not have.
+    rec = _real_record("map_stage_b4_pyramid.npz")
+    assert set(rec["group"]) == {"identity", "mirror_x"}
+    assert any("mirror_z" in r["element"] for r in rec["reductions"])
+    assert rec["fraction"] == pytest.approx(0.9917, abs=1e-3)
+    assert rec["verdict"] == "PASS"
+    assert rec["sendable"] is True
+
+
+# ---- studio_solve producer wiring ------------------------------------------ #
+def test_studio_solve_symmetry_gate_helper_emits_conformant_record():
+    # studio_solve pulls in the dolfinx forward; runs only in the spike env.
+    ss = pytest.importorskip("solve3d.studio_solve")
+    # a small centered x/z-symmetric part cloud; map symmetric under x,z mirrors
+    xs = np.array([-2.0, -1.0, 1.0, 2.0])
+    coords = np.array([[x, 0.0, z] for x in xs for z in xs])
+    s = np.array([abs(x) + abs(z) for x, _, z in coords])
+    rec = ss.symmetry_gate_record_for_map(
+        coords, np.ones(len(s)), s,
+        scorer=lambda _m: 1.0, j_uniform=2.0, j_solved=1.0)
+    assert set(rec["group"]) == {"identity", "mirror_x", "mirror_z", "mirror_xz"}
+    assert rec["build_axis"] == "y"
+    assert rec["convective_faces"] == ["y=+L/2"]
+    assert rec["vacuous"] is False
+    assert rec["fraction"] == pytest.approx(1.0, abs=1e-9)
+    assert rec["verdict"] == "PASS"
+    assert rec["sendable"] is True

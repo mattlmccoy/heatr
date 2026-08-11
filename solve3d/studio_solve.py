@@ -62,6 +62,7 @@ from solve3d import (adjoint, design_chain as dc, forward as fwd,
                      objective as obj, shape_metrics as sm, studio_geom as sg)
 from solve3d import gates as G
 from solve3d import stage_a as stage_a
+from solve3d import symmetry_gate as symg
 
 RESULTS = Path(__file__).resolve().parent / "results"
 L_DOMAIN = sg.L_DOMAIN
@@ -680,6 +681,32 @@ def score_arm(tc, s_map: np.ndarray, name: str, grid_cache: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Symmetry-consistency gate (SYMMETRY_GATE_REPORT.md 3.4/3.5/4), 3-D adoption.
+# A budget-limited solve that stopped still-descending on a coarse mesh fits
+# discretization-frame noise; the gate projects the solved map onto the symmetry
+# group the PROBLEM requires ({x,z} mirrors for a centred part; the build-axis y
+# mirror is excluded a priori by the one-sided top convection) and checks how
+# much of the map's volume-weighted variance survives. The group is DETECTED per
+# part by a containment criterion (see symmetry_gate.symmetry_gate_record).
+# --------------------------------------------------------------------------- #
+def symmetry_gate_record_for_map(centroids: np.ndarray, volumes: np.ndarray,
+                                 s_map: np.ndarray,
+                                 scorer=None, j_uniform=None,
+                                 j_solved=None) -> dict:
+    """Assemble the conformant `symmetry_gate` record for a SOLVED map on the
+    solve mesh. Every design cell is in-part; weights are the cell volumes; the
+    build axis is y (convective top face y=+L/2). The projection PRICE (bought
+    only when the surviving-variance fraction < 0.8) needs a `scorer` that scores
+    a projected map's J_asymmetric plus the uniform/solved J_asymmetric margin."""
+    s_map = np.asarray(s_map, float)
+    return symg.symmetry_gate_record(
+        s_map, np.asarray(centroids, float), np.asarray(volumes, float),
+        in_part=np.ones(len(s_map), bool), build_axis="y",
+        convective_faces=["y=+L/2"],
+        scorer=scorer, j_uniform=j_uniform, j_solved=j_solved)
+
+
+# --------------------------------------------------------------------------- #
 # The solve (Phase C run_solve_arm, with STUDIO_SOLVE_PROGRESS lines)
 # --------------------------------------------------------------------------- #
 class _BudgetExhausted(Exception):
@@ -1048,6 +1075,24 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
               f"frac={doc['recommended_drive_frac']} "
               f"pw={doc['recommended_power_density_w_per_m3']} "
               f"reason={doc['recommended_drive_reason']}", flush=True)
+
+    # SYMMETRY-CONSISTENCY GATE on the solved map. The price scorer scores a
+    # symmetry-projected map's J_asymmetric through score_arm; it is invoked ONLY
+    # when the surviving-variance fraction falls below 0.8, so a clean map costs
+    # no extra forward. `sendable` is the gate verdict (FAIL only when the map is
+    # asymmetric residue AND that residue moves the objective).
+    def _price_scorer(projected_map):
+        return score_arm(tc, projected_map, "symmetry_projection_price",
+                         grid_cache)["J_asymmetric"]
+    symrec = symmetry_gate_record_for_map(
+        chain.centroids, chain.volumes, s_best,
+        scorer=_price_scorer, j_uniform=uniform_rec["J_asymmetric"],
+        j_solved=solved_rec["J_asymmetric"])
+    doc["symmetry_gate"] = symrec
+    doc["sendable"] = symrec["sendable"]
+    print(f"[studio_solve] symmetry gate: fraction={symrec['fraction']:.4f} "
+          f"group={symrec['group']} verdict={symrec['verdict']} "
+          f"sendable={symrec['sendable']}", flush=True)
 
     (out / "studio_solve_results.json").write_text(
         json.dumps(doc, indent=1, default=G._jsonable))
