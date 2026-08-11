@@ -251,6 +251,53 @@ def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
     return out
 
 
+def adaptive_drive_peaks(probe, *, ceiling_c: float, a_min: float, a_max: float,
+                         max_evals: int = 4) -> dict:
+    """Secant-probe the uniform end-state peak to find the highest densifying-
+    under-ceiling drive in ~3 evals instead of the fixed 6-point ladder (~37% of
+    the producer wall). `probe(a)` returns a per-drive rec (`true_peak_c`,
+    `reached_rho`, `achieved_rho`, ...) as the fixed ladder's probe does. Returns
+    a peaks_by_drive dict of the EVALUATED points -- feed it straight to
+    select_recommended_drive, which still ARBITRATES the pick.
+
+    SAFETY: the secant only chooses WHICH drives to evaluate; the feasibility
+    gate + highest-feasible pick stay in select_recommended_drive. An imperfect
+    search can only under-drive (a slower but safe print), never over-drive. So
+    this is a pure speed optimization with no correctness surface: a wrong secant
+    step costs a forward, not a cooked part.
+
+    Cases, all within `max_evals`: (a) top-of-range under the ceiling -> whole
+    range feasible, a_max wins; (b) bottom-of-range already over the ceiling ->
+    nothing feasible, honest-null downstream; (c) crossing inside -> secant on
+    peak(a) toward the ceiling, keeping the two evaluated points that bracket it.
+    """
+    ceiling_c = float(ceiling_c)
+    a_min, a_max = float(a_min), float(a_max)
+    evals: dict = {}
+
+    def ev(a: float):
+        a = round(min(max(float(a), a_min), a_max), 3)
+        if a not in evals:
+            evals[a] = probe(a)
+        return a, float(evals[a]["true_peak_c"])
+
+    a_lo, p_lo = ev(a_min)
+    a_hi, p_hi = ev(a_max)
+    # secant toward peak == ceiling only while the crossing is genuinely bracketed
+    while (len(evals) < max_evals and p_lo <= ceiling_c < p_hi
+           and (a_hi - a_lo) > 1e-3 and (p_hi - p_lo) > 1e-9):
+        a_star = a_lo + (ceiling_c - p_lo) * (a_hi - a_lo) / (p_hi - p_lo)
+        a_star = round(min(max(a_star, a_min), a_max), 3)
+        if a_star in evals:                     # no new information -> stop
+            break
+        a_s, p_s = ev(a_star)
+        if p_s <= ceiling_c:
+            a_lo, p_lo = a_s, p_s               # tighten the under-ceiling side up
+        else:
+            a_hi, p_hi = a_s, p_s               # tighten the over-ceiling side down
+    return evals
+
+
 def _uniform_end_state_peak(msh, rings: list, z_lo: float, z_hi: float,
                             drive_a: float, *, baseline: float,
                             rho_target: float, max_time_s: float,
@@ -291,7 +338,9 @@ def recommended_drive_for_part(msh, rings: list, z_lo: float, z_hi: float, *,
                                rho_target: float | None = None,
                                max_time_s: float = 3000.0,
                                sample_dt_s: float = 20.0,
-                               peak_probe=None) -> dict:
+                               peak_probe=None,
+                               adaptive: bool = False,
+                               max_evals: int = 4) -> dict:
     """Run the ceiling-coupled drive selection for the uploaded part.
 
     Measures the uniform end-state peak at each candidate drive (via
@@ -319,16 +368,23 @@ def recommended_drive_for_part(msh, rings: list, z_lo: float, z_hi: float, *,
     t_eff_c = float(t_eff_c) if t_eff_c is not None else None
     probe = peak_probe if peak_probe is not None else _uniform_end_state_peak
 
-    peaks = {}
-    for a in candidates:
+    def one(a: float) -> dict:
         rec = probe(msh=msh, rings=rings, z_lo=z_lo, z_hi=z_hi, drive_a=float(a),
                     baseline=baseline, rho_target=rho_target,
                     max_time_s=max_time_s, sample_dt_s=sample_dt_s)
-        peaks[float(a)] = rec
         print(f"[studio_solve drive={a:.3f}x pw={float(a) * baseline:.1f}] "
               f"uniform peak={rec['true_peak_c']:.2f}C "
               f"reached_rho={rec['reached_rho']} "
               f"rho={rec['achieved_rho']:.3f}", flush=True)
+        return rec
+
+    if adaptive:
+        # secant probe over the candidate range -> ~3 forwards, not the full ladder
+        peaks = adaptive_drive_peaks(
+            one, ceiling_c=ceiling_c, a_min=min(candidates), a_max=max(candidates),
+            max_evals=max_evals)
+    else:
+        peaks = {float(a): one(float(a)) for a in candidates}
     return select_recommended_drive(
         peaks, baseline=baseline, ceiling_c=ceiling_c, chamber_tag=chamber_tag,
         thermal_config_path=thermal_config_path, rho_target=rho_target,

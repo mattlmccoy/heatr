@@ -367,3 +367,86 @@ def test_cube_like_ship_via_wiring_default_candidates():
         max_time_s=1.0, peak_probe=cube)
     assert rec["recommended_drive_frac"] == 0.58                 # highest densifying under 250
     assert rec["recommended_power_density_w_per_m3"] is not None  # NOT honest-null
+
+
+# ---- (B) adaptive drive probe: find the highest feasible drive in ~3 evals - #
+# The fixed 6-point ladder is ~37% of the producer's wall. The adaptive probe
+# secants toward the ceiling crossing so the library runs in fewer forwards.
+# SAFETY: the adaptive search only chooses WHICH drives to evaluate;
+# select_recommended_drive still arbitrates the pick, so an imperfect search can
+# only under-drive (slower print), never over-drive (unsafe).
+def _linear_probe(base=100.0, slope=300.0, onset=0.30):
+    """peak(a) = base + slope*a ; densifies for a >= onset. Records calls.
+    Default crossing peak==250 at a = (250-100)/300 = 0.50."""
+    calls = []
+
+    def probe(a):
+        calls.append(round(float(a), 3))
+        return {"drive_a": float(a), "power_density_w_per_m3": float(a) * BASELINE,
+                "true_peak_c": base + slope * float(a),
+                "reached_rho": bool(a >= onset),
+                "achieved_rho": 0.98 if a >= onset else 0.70}
+    probe.calls = calls
+    return probe
+
+
+def _sel(peaks):
+    return ss.select_recommended_drive(
+        peaks, baseline=BASELINE, ceiling_c=250.0, chamber_tag="ch060",
+        thermal_config_path=TCFG_PATH, rho_target=0.98)
+
+
+def test_adaptive_converges_near_ceiling_crossing_within_budget():
+    probe = _linear_probe()                       # crossing at a=0.50
+    peaks = ss.adaptive_drive_peaks(
+        probe, ceiling_c=250.0, a_min=0.26, a_max=0.66, max_evals=4)
+    assert len(probe.calls) <= 4                   # budget respected
+    rec = _sel(peaks)
+    # finds a feasible drive near the 0.50 crossing, NOT stuck at a_min
+    assert rec["recommended_drive_frac"] is not None
+    assert 0.44 <= rec["recommended_drive_frac"] <= 0.50
+
+
+def test_adaptive_whole_range_feasible_returns_top_of_range():
+    probe = _linear_probe(base=180.0, slope=100.0)  # peak(0.66)=246 < 250, all under
+    peaks = ss.adaptive_drive_peaks(
+        probe, ceiling_c=250.0, a_min=0.26, a_max=0.66, max_evals=4)
+    rec = _sel(peaks)
+    assert rec["recommended_drive_frac"] == 0.66     # highest, whole range feasible
+    assert len(probe.calls) <= 4
+
+
+def test_adaptive_min_drive_over_ceiling_honest_nulls():
+    probe = _linear_probe(base=100.0, slope=800.0)  # peak(0.26)=308 > 250 already
+    peaks = ss.adaptive_drive_peaks(
+        probe, ceiling_c=250.0, a_min=0.26, a_max=0.66, max_evals=4)
+    rec = _sel(peaks)
+    assert rec["recommended_drive_frac"] is None      # fabricates no feasibility
+    assert len(probe.calls) <= 4
+
+
+def test_adaptive_uses_fewer_evals_than_fixed_ladder():
+    probe = _linear_probe()
+    ss.adaptive_drive_peaks(
+        probe, ceiling_c=250.0, a_min=0.26, a_max=0.66, max_evals=4)
+    assert len(probe.calls) < len(ss.CEILING_DRIVE_CANDIDATES)   # < 6
+
+
+def test_recommended_drive_for_part_adaptive_probes_few_and_selects():
+    calls = []
+
+    def ramp(msh, rings, z_lo, z_hi, drive_a, *, baseline, rho_target,
+             max_time_s, sample_dt_s):
+        calls.append(round(float(drive_a), 3))
+        return {"drive_a": float(drive_a),
+                "power_density_w_per_m3": float(drive_a) * BASELINE,
+                "true_peak_c": 100.0 + 300.0 * float(drive_a),   # crossing 0.50
+                "reached_rho": bool(drive_a >= 0.30), "achieved_rho": 0.98}
+
+    rec = ss.recommended_drive_for_part(
+        msh=object(), rings=None, z_lo=0.0, z_hi=0.0, baseline=BASELINE,
+        chamber_tag="ch060", thermal_config_path=TCFG_PATH, max_time_s=1.0,
+        peak_probe=ramp, adaptive=True, max_evals=4)
+    assert len(calls) <= 4                             # fewer than the 6-ladder
+    assert rec["recommended_drive_frac"] is not None
+    assert 0.44 <= rec["recommended_drive_frac"] <= 0.50
