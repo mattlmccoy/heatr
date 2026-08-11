@@ -21,13 +21,22 @@ def _cylinder_part() -> np.ndarray:
         return d["part"].astype(bool)
 
 
-def test_real_cylinder_part_matches_the_phase_c_artifact():
-    entry = find_solved_map(_cylinder_part())
-    assert entry is not None
-    assert entry["engine"] == "solve3d_solved"
-    assert "sim-only" in entry["trust_badge"]
-    assert (ROOT / entry["artifact"]).exists()
-    assert entry["form"] == "dg0"
+def test_held_cylinder_residue_map_is_not_served():
+    """The Phase C cylinder map is REGISTERED but HELD (2026-08-10) for
+    symmetry residue: symmetry_retro_3d.json#cylinder_phase_c scored it 0.4258
+    under the correct {x,z}-mirror group (FAIL_residue, ~57 percent residue).
+    Shipping it would be a false-green, so find_solved_map returns None on an
+    exact match. The record stays for audit + re-solve. (Was
+    test_real_cylinder_part_matches_the_phase_c_artifact, which asserted the
+    opposite before the residue was found.)"""
+    import json
+    assert find_solved_map(_cylinder_part()) is None
+    reg = json.loads((ROOT / "studio3d/solved_registry.json").read_text())
+    cyl = next(e for e in reg["entries"] if e["name"] == "phase_c_cylinder_n64")
+    assert cyl["held"] is True
+    assert cyl["symmetry"]["verdict"] == "FAIL_residue"
+    assert cyl["symmetry"]["frac_xz_corrected"] < cyl["symmetry"]["threshold"]
+    assert (ROOT / cyl["artifact"]).exists()   # held, not deleted
 
 
 def test_non_matching_part_returns_none():
@@ -71,23 +80,55 @@ def test_chamber_tag_is_part_of_the_match_key(tmp_path):
     assert find_solved_map(part, registry_path=reg, chamber_m=0.060) is None
 
 
+def test_held_entry_is_not_served(tmp_path):
+    """A residue / quarantined map (held=true) must NEVER be served, even on
+    an exact hash + chamber match. Shipping a known-residue map is a
+    false-green: the 3-D symmetry-consistency retro-check (solve3d
+    symmetry_retro_3d.json) found the pyramid stage_b4 map is 0.3545 symmetric
+    (FAIL_residue, ~65 percent numerical residue). find_solved_map skips any
+    held entry so build_correction falls through to a fresh solve / honest
+    fallback instead of shipping the residue."""
+    import json
+    part = np.zeros((8, 8, 8), bool)
+    part[2:6, 2:6, 2:6] = True
+    ph = part_hash(part)
+    reg = tmp_path / "reg.json"
+    reg.write_text(json.dumps({"entries": [
+        {"name": "held_residue", "part_sha256": ph, "chamber_m": 0.060,
+         "artifact": "x.npz", "form": "dg0", "engine": "solve3d_solved",
+         "held": True, "held_reason": "symmetry residue 0.3545 FAIL"}]}))
+    assert find_solved_map(part, registry_path=reg, chamber_m=0.060) is None
+    # a non-held entry with the same hash IS served (the skip is held-specific)
+    reg.write_text(json.dumps({"entries": [
+        {"name": "sound", "part_sha256": ph, "chamber_m": 0.060,
+         "artifact": "x.npz", "form": "dg0", "engine": "solve3d_solved"}]}))
+    hit = find_solved_map(part, registry_path=reg, chamber_m=0.060)
+    assert hit is not None and hit["name"] == "sound"
+
+
 def test_cube_pyramid_anchors_registered():
     """Regression anchors (plan 2026-08-06): the cube and pyramid Phase E
-    solved maps are registered so a job of either shape gets its map with no
-    re-solve. Keyed to the NOMINAL-geometry hash at n=64 (the maps predate
-    Level 0 pre-compensation and were solved on nominal geometry), chamber
-    60 mm, engine solve3d_solved. solved_label is false for both (hold-out
-    band exceeded at corners) - carried as a descriptive label, not a gate."""
+    solved maps are registered, keyed to the NOMINAL-geometry hash at n=64
+    (the maps predate Level 0 pre-compensation), chamber 60 mm, engine
+    solve3d_solved. solved_label is false for both (hold-out band exceeded at
+    corners) - a descriptive label, not a gate.
+
+    BOTH records stay in the registry, but only the CUBE is SERVED. The
+    pyramid was HELD 2026-08-10 for symmetry residue (symmetry_retro_3d.json:
+    pyramid 0.3545 FAIL vs cube 0.9121 PASS), so find_solved_map skips it -
+    shipping a ~65 percent-residue map would be a false-green. The record is
+    held, not deleted, so it is auditable and re-solvable."""
     import json
     from studio3d.runner import voxelize_stl
 
-    reg = json.loads((ROOT / "studio3d/solved_registry.json").read_text())
+    reg_path = ROOT / "studio3d/solved_registry.json"
+    reg = json.loads(reg_path.read_text())
     by_name = {e["name"]: e for e in reg["entries"]}
+    # both anchors are still registered with a matching nominal-STL hash
     for shape in ("cube", "pyramid"):
         name = f"phase_e_{shape}_n64"
         assert name in by_name, f"{name} not registered"
         e = by_name[name]
-        # the registered hash matches the real nominal STL voxelized at n=64
         part = voxelize_stl(str(ROOT / f"shape_library_3d/stl/{shape}.stl"), 64)
         assert e["part_sha256"] == part_hash(part)
         assert e["grid_n"] == 64
@@ -95,12 +136,20 @@ def test_cube_pyramid_anchors_registered():
         assert e["engine"] == "solve3d_solved"
         assert e["certified"] is False           # honest: hold-out not passed
         assert "uncertified" in e["trust_badge"]
-        art = ROOT / e["artifact"]
-        assert art.exists(), f"{shape} map artifact missing: {art}"
-        # find_solved_map returns it for a 60 mm job of that exact shape
-        hit = find_solved_map(part, registry_path=ROOT / "studio3d/solved_registry.json",
-                              chamber_m=0.060)
-        assert hit is not None and hit["name"] == name
+        assert (ROOT / e["artifact"]).exists(), f"{shape} artifact missing"
+
+    # the SOUND cube is served for a 60 mm job of that exact shape
+    cube = voxelize_stl(str(ROOT / "shape_library_3d/stl/cube.stl"), 64)
+    hit = find_solved_map(cube, registry_path=reg_path, chamber_m=0.060)
+    assert hit is not None and hit["name"] == "phase_e_cube_n64"
+
+    # the HELD residue pyramid is NOT served, despite an exact hash match
+    pyr = voxelize_stl(str(ROOT / "shape_library_3d/stl/pyramid.stl"), 64)
+    assert find_solved_map(pyr, registry_path=reg_path, chamber_m=0.060) is None
+    pe = by_name["phase_e_pyramid_n64"]
+    assert pe["held"] is True
+    assert pe["symmetry"]["verdict"] == "FAIL_residue"
+    assert pe["symmetry"]["frac_xz_corrected"] < pe["symmetry"]["threshold"]
 
 
 def test_cube_registry_map_consumed_end_to_end(tmp_path):

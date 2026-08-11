@@ -55,6 +55,13 @@ def find_solved_map(part: np.ndarray,
     for entry in reg.get("entries", []):
         if entry.get("part_sha256") != ph:
             continue
+        # A held entry is a quarantined map (e.g. symmetry residue): never
+        # serve it, even on an exact hash+chamber match. Shipping a known-bad
+        # map is a false-green; the chain falls through to a fresh solve or the
+        # honest fallback instead. The record stays in the registry (with its
+        # held_reason) so it is auditable and re-solvable, not silently gone.
+        if entry.get("held"):
+            continue
         entry_ch = float(entry.get("chamber_m", LEGACY_CHAMBER_M))
         if abs(entry_ch - float(chamber_m)) < 1e-9:
             return dict(entry)
