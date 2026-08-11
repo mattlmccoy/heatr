@@ -1,0 +1,109 @@
+{
+ "what": "mean-shift control for the Phase C symmetrized cylinder map",
+ "level": {
+  "t": "2026-08-10 23:00:50",
+  "payload": {
+   "s_bar": 0.933439748305557
+  }
+ },
+ "level_definition": "volume-weighted mean of phase_c_map_symmetrized_filter_only_asymmetric_scaled.npz s_map over part cells",
+ "solve_mesh": {
+  "t": "2026-08-10 23:05:00",
+  "payload": {
+   "arm": "mean_shift_control_solve_mesh",
+   "wall_forward_s": 234.69687645800877,
+   "n_steps": 10000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 9.850529612827652e-08,
+   "argmin_symmetric": 7280,
+   "at_horizon_symmetric": false,
+   "J_asymmetric": 1.1502099438762e-07,
+   "argmin_asymmetric": 7172,
+   "t_stop_s": 358.6,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 9.58959239906436e-08,
+   "J_out_of_bounds": 2.7321529138537715e-08,
+   "J_in_bounds_deficit": 8.769946524908228e-08,
+   "out_of_part_melt_fraction_of_part": 0.0023799224866766578,
+   "in_bounds_below_floor_fraction": 0.08428318946321385,
+   "part_mean_phi": 0.9191916622226693,
+   "sigma_T_diagnostic_c": 21.417088063288833,
+   "in_part_melt_frac_phi08": 0.9327225880332092,
+   "in_part_melt_frac_phi09": 0.9222874320068708,
+   "bed_melt_frac_phi08": 0.0,
+   "bed_melt_frac_phi09": 0.0,
+   "eval_missed": 0,
+   "map_stats": {
+    "mean": 0.933439748305557,
+    "min": 0.933439748305557,
+    "max": 0.933439748305557
+   }
+  }
+ },
+ "transfer_constant_check": {
+  "t": "2026-08-10 23:05:26",
+  "payload": {
+   "n_checked": 2000,
+   "max_abs_dev_from_constant": 4.440892098500626e-16,
+   "verdict": "constant reproduced exactly"
+  }
+ },
+ "score_mesh": {
+  "t": "2026-08-10 23:20:01",
+  "payload": {
+   "arm": "mean_shift_control_score_mesh",
+   "wall_forward_s": 858.1156239579432,
+   "n_steps": 10000,
+   "n_eqs_solves": 1,
+   "J_symmetric": 6.648516899318818e-08,
+   "argmin_symmetric": 7205,
+   "at_horizon_symmetric": false,
+   "J_asymmetric": 8.263316147860495e-08,
+   "argmin_asymmetric": 7108,
+   "t_stop_s": 355.40000000000003,
+   "at_horizon_asymmetric": false,
+   "J_asym_w3_at_same_read": 6.794124159646618e-08,
+   "J_out_of_bounds": 2.0988456974483965e-08,
+   "J_in_bounds_deficit": 6.164470450412098e-08,
+   "out_of_part_melt_fraction_of_part": 0.0016534310168409322,
+   "in_bounds_below_floor_fraction": 0.053303553478022805,
+   "part_mean_phi": 0.9489172133619829,
+   "sigma_T_diagnostic_c": 21.05361781949171,
+   "in_part_melt_frac_phi08": 0.9353850558259375,
+   "in_part_melt_frac_phi09": 0.9245061551674777,
+   "bed_melt_frac_phi08": 0.0,
+   "bed_melt_frac_phi09": 0.0,
+   "eval_missed": 0,
+   "map_stats": {
+    "mean": 0.9334397483055571,
+    "min": 0.933439748305557,
+    "max": 0.933439748305557
+   }
+  }
+ },
+ "split": {
+  "t": "2026-08-10 23:20:01",
+  "payload": {
+   "solve_mesh": {
+    "J_uniform_s1": 1.1511359005643762e-07,
+    "J_uniform_at_level": 1.1502099438762e-07,
+    "J_symmetrized": 1.0712930132042473e-07,
+    "total_margin_rel": 0.0693600879974152,
+    "level_margin_rel": 0.0008043852057105278,
+    "shape_margin_rel": 0.06855570279170468,
+    "level_share_of_total": 0.011597234503804324,
+    "shape_share_of_total": 0.9884027654961958
+   },
+   "score_mesh": {
+    "J_uniform_s1": 8.27324795501214e-08,
+    "J_uniform_at_level": 8.263316147860495e-08,
+    "J_symmetrized": 7.641568876292294e-08,
+    "total_margin_rel": 0.07635200614737513,
+    "level_margin_rel": 0.001200472559948762,
+    "shape_margin_rel": 0.07515153358742636,
+    "level_share_of_total": 0.015722868599308343,
+    "shape_share_of_total": 0.9842771314006916
+   }
+  }
+ }
+}

@@ -123,6 +123,49 @@ centre. That is the sign a heat-loss boundary should produce.
   pre-registered 12 gradient evaluations while still descending, so neither
   number is a converged optimum.
 
+## Mean-shift control: the win is shaping, not level
+
+The delivered map has volume-weighted mean 0.9334, so the margin could in
+principle have come from simply putting less dopant everywhere rather than from
+putting it in the right places. That is now measured, not argued.
+
+**Control arm:** a spatially uniform map at s = 0.933439748305557 on every part
+cell, scored through the exact same `phase_c_run.score_arm` read rule (envelope
+argmin of the asymmetric objective), one forward on each mesh. On the hold-out
+mesh the constant is used directly, and that is legitimate as a measurement,
+not an assumption: `transfer_map_across_meshes` is a row-normalized
+convolution, and re-evaluating a constant through it on 2000 randomly chosen
+destination cells reproduces the constant to a maximum absolute deviation of
+**4.44e-16**, that is to machine precision.
+
+| | solve mesh | hold-out mesh |
+|---|---|---|
+| J, uniform s = 1 | 1.1511359e-07 | 8.2732480e-08 |
+| J, uniform at the level s = 0.9334 | 1.1502099e-07 | 8.2633161e-08 |
+| J, symmetrized map | 1.0712930e-07 | 7.6415689e-08 |
+| **total margin** | **-6.936 %** | **-7.635 %** |
+| of which LEVEL | -0.080 % | -0.120 % |
+| of which SHAPE | **-6.856 %** | **-7.515 %** |
+| shape share of the total | **98.8 %** | **98.4 %** |
+
+**Verdict, plainly: the level accounts for essentially none of the win.**
+Lowering the dopant uniformly from 1.0 to 0.9334 buys 0.08 percent on the solve
+mesh and 0.12 percent on the hold-out mesh. Between 98 and 99 percent of the
+margin on both meshes comes from the spatial structure of the map. The
+confound named in the first version of this report is closed, and it closed in
+the favourable direction.
+
+This matters for how the dissertation words the win. The claim
+"a direct three-dimensional design solve beats a uniform dopant" is safe, and
+the stronger reading is now also supported: the benefit is attributable to
+grading the dopant, not to using less of it. The wording should not hedge with
+a mean-level caveat, because the control rules it out on both meshes.
+
+Artifacts: `scripts/analysis/score_mean_shift_control.py`,
+`scripts/analysis/mean_shift_control.json` (checkpointed per stage, including
+the transfer-of-a-constant check and the full `score_arm` records for both
+control arms).
+
 ## Named limits
 
 1. **Not a solve in the symmetric subspace.** The delivered map is a projection
@@ -130,12 +173,10 @@ centre. That is the sign a heat-loss boundary should produce.
    orbit at budget 40 would very likely do better than 6.94 percent in-grid,
    and its in-grid number would be trustworthy rather than inflated. Stage A
    met the acceptance rule, so per the staged mandate Stage B was not run.
-2. **The mean-shift confound is not yet separated.** The delivered map has
-   volume-weighted mean 0.9334, so part of the 6.94 percent could come from
-   simply lowering the dopant level rather than from its shape. Scoring a
-   spatially uniform s = 0.9334 arm is one forward evaluation and would settle
-   it. This is the single most valuable next measurement and it has **not**
-   been made.
+2. ~~The mean-shift confound is not yet separated.~~ **CLOSED**, see the
+   mean-shift control section above. The level accounts for 1.2 percent of the
+   margin on the solve mesh and 1.6 percent on the hold-out mesh; the rest is
+   shaping.
 3. **Nearest-centroid matching is not exact.** The tetrahedral mesh is not
    itself mirror-symmetric, so the group action is approximate; the worst match
    distance is 7.7e-04 m, comparable to the 1.0 mm filter radius. The residual
@@ -155,6 +196,7 @@ centre. That is the sign a heat-loss boundary should produce.
 | `solve3d/results/phase_c_gate.json` -> same arm | mesh hold-out and smoothing robustness |
 | `scripts/analysis/cylinder_map_symmetry.py` / `.json` | the group derivation, the projection, and the decomposition numbers in this report |
 | `scripts/analysis/score_symmetrized_cylinder_map.py` | the scoring driver, checkpointed per stage |
+| `scripts/analysis/score_mean_shift_control.py` / `mean_shift_control.json` | the level-versus-shape control, both meshes |
 | `fgm_solve_campaign/figs_3d/export_phase_c_fields_sym.py` | the one forward that produced the figure's read-state fields |
 | `fgm_solve_campaign/figs_3d/phase_c_cylinder_fields_sym_gate.txt` | reproduction gate, eight scalars, relative error 0.000e+00 |
 | `fgm_solve_campaign/figs_3d/fig_cylinder_3d_solve.png` | the regenerated dissertation figure |

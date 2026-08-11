@@ -193,11 +193,15 @@ step and the two-mesh statement are all stated plainly in the caption.
    forward; it does not certify the physics against experiment, and no Studio
    badge follows from it.
 4. **One shape.** The cylinder only. Generalization is Phase E work.
-5. **The mean-shift confound is not separated.** The delivered map has
-   volume-weighted mean 0.9334, so an unknown share of the 6.94 percent may
-   come from lowering the dopant level rather than from shaping it. Scoring a
-   spatially uniform $s = 0.9334$ arm is one forward evaluation and would
-   settle it. It has not been run, and the figure does not claim otherwise.
+5. **The mean-shift confound is CLOSED, in the favourable direction.** The
+   delivered map has volume-weighted mean 0.9334, so the margin could have come
+   from using less dopant rather than from placing it well. A control arm at a
+   spatially uniform $s = 0.9334$ was scored through the same read rule on both
+   meshes: it beats $s = 1$ by only 0.080 percent on the solve mesh and 0.120
+   percent on the hold-out mesh, so **98.8 and 98.4 percent of the margin is
+   spatial structure, not level**. The caption's claim is therefore about
+   grading the dopant, and needs no mean-level hedge. Numbers and method in
+   `CYLINDER_MAP_FIX_REPORT.md`, mean-shift control section.
 6. **This is a projection, not a symmetric-subspace solve.** A re-solve
    parameterized on the quadrant orbit at the full budget would probably beat
    6.94 percent in grid, and its in-grid number would not be inflated by
