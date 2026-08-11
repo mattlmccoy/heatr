@@ -1,0 +1,18 @@
+Phase E cube light-figure reproduction gate
+recomputed from stored artifacts at render time; no solve, no forward re-run
+exact rtol 1e-12, grid-vs-FEM rtol 0.03
+
+map_mean_volume_weighted                       recomputed  6.759589389752e-01  stored  6.759589389752e-01  rel  0.000e+00  PASS
+map_min                                        recomputed  5.002925748316e-03  stored  5.002925748316e-03  rel  0.000e+00  PASS
+map_max                                        recomputed  1.000000000000e+00  stored  1.000000000000e+00  rel  0.000e+00  PASS
+n_design_cells                                 recomputed  2.404200000000e+04  stored  2.404200000000e+04  rel  0.000e+00  PASS
+dJ_solve_percent                               recomputed -4.608614580431e+01  stored -4.608614580430e+01  rel  1.861e-13  PASS
+dJ_heuristic_percent                           recomputed  4.999757372905e+01  stored  4.999757372910e+01  rel  9.328e-13  PASS
+grid_mean_phi[uniform_baseline]                recomputed  6.375661630508e-01  stored  6.365281368874e-01  rel  1.631e-03  PASS
+sampler_missed_in_part[uniform_baseline]       recomputed  0.000000000000e+00  stored  0.000000000000e+00  rel  0.000e+00  PASS
+grid_mean_phi[heuristic_grading_law]           recomputed  5.778819538651e-01  stored  5.803494427361e-01  rel  4.252e-03  PASS
+sampler_missed_in_part[heuristic_grading_law]  recomputed  0.000000000000e+00  stored  0.000000000000e+00  rel  0.000e+00  PASS
+grid_mean_phi[solve_filter_only]               recomputed  7.653863627895e-01  stored  7.530367217184e-01  rel  1.640e-02  PASS
+sampler_missed_in_part[solve_filter_only]      recomputed  0.000000000000e+00  stored  0.000000000000e+00  rel  0.000e+00  PASS
+symmetry_frac_xz                               recomputed  9.121000000000e-01  stored  9.121000000000e-01  rel  0.000e+00  PASS
+symmetry_frac_xyz                              recomputed  9.063000000000e-01  stored  9.063000000000e-01  rel  0.000e+00  PASS
