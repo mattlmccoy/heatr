@@ -869,6 +869,8 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
                    ceiling_drive: bool = False,
                    drive_candidates: tuple = CEILING_DRIVE_CANDIDATES,
                    drive_max_time_s: float = 3000.0,
+                   adaptive_drive: bool = False,
+                   drive_max_evals: int = 4,
                    _peak_probe=None) -> dict:
     """Solve one imported EXTRUDED part; write the Studio's artifact pair.
 
@@ -1037,7 +1039,8 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
     if ceiling_drive:
         rec = recommended_drive_for_part(
             tc.msh, rings, z_lo, z_hi, candidates=drive_candidates,
-            max_time_s=drive_max_time_s, peak_probe=_peak_probe)
+            max_time_s=drive_max_time_s, peak_probe=_peak_probe,
+            adaptive=adaptive_drive, max_evals=drive_max_evals)
         rec["drive_probe_mesh"] = {"which": "solve_mesh",
                                    "n_nodes_in_part": info.get("n_nodes_in_part")}
         _merge_recommended_drive(doc, rec)
@@ -1071,6 +1074,13 @@ def main() -> int:
                          "default on); --no-ceiling-drive for the legacy output")
     ap.add_argument("--drive-max-time-s", type=float, default=3000.0,
                     help="densify horizon for the uniform drive-probe forwards")
+    ap.add_argument("--adaptive-drive", action=argparse.BooleanOptionalAction,
+                    default=False,
+                    help="secant-probe the drive (~3 forwards) instead of the "
+                         "fixed 6-point ladder; select_recommended_drive still "
+                         "arbitrates so it can only under-drive, never over-drive")
+    ap.add_argument("--drive-max-evals", type=int, default=4,
+                    help="max uniform forwards for the adaptive drive probe")
     ap.add_argument("--make-tube", default=None, metavar="OUT_NPZ",
                     help="write the validation tube part and exit")
     ap.add_argument("--n", type=int, default=32)
@@ -1086,7 +1096,9 @@ def main() -> int:
     solve_extruded(args.part_npz, args.out_dir, budget_fwd_equiv=args.budget,
                    warm_start_sat=args.warm_start, max_time_s=args.max_time_s,
                    ceiling_drive=args.ceiling_drive,
-                   drive_max_time_s=args.drive_max_time_s)
+                   drive_max_time_s=args.drive_max_time_s,
+                   adaptive_drive=args.adaptive_drive,
+                   drive_max_evals=args.drive_max_evals)
     return 0
 
 
