@@ -143,3 +143,87 @@ worst rel-err <= 1e-6 at a few top-|g| probes.
 (The two probe scripts live in the session scratchpad; their logic is the coarse
 `density_adjoint.fd_gate()` and a straight mirror of `dks_peak_ds`'s reverse loop
 with per-step max|gT| instrumentation. Nothing in production code was changed.)
+
+---
+
+## 5. Phase 1 result (implicit FORWARD step landed; adjoint still Phase 2)
+
+The explicit enthalpy Euler in `density_adjoint._substep_forward` is replaced,
+behind `Case.implicit` (default True), by an unconditionally-stable IMPLICIT
+backward-Euler step `_implicit_T_step`. Density update stays explicit.
+
+**Scheme (linearly-implicit / apparent-cp backward-Euler).** Per step, transport
+is LAGGED at `T_in` (conductivity `k(T_in)` already on `tc.k_fn`), and the latent
+heat is carried by an APPARENT heat capacity `Capp = dH/dT|_{T_in} =
+rho_cp + rho_L*m_frac/dt_pc` (the exact slope of `enthalpy_from_T`, so the scheme
+reduces to the explicit enthalpy Euler as `dt -> 0`). One SPD solve per step:
+
+    (M/dt + K(T_in) + A_conv) @ T_new = (M/dt) @ T_in + F + A_conv @ (preheat 1)
+
+`M` is the SAME lumped nodal mass (`vol_safe`) the explicit step divides by.
+Solved MATRIX-FREE by CG, reusing the ALREADY-COMPILED linear forms
+(`diffG_form` -> `K@x`, `convG_form` -> `A_conv@x`) with a Jacobi(mass)
+preconditioner, `rtol=1e-11`. Matrix-free is FORCED by the environment: the
+Dropbox path has a space that breaks the FFCX JIT, so no NEW UFL form (no bilinear
+`a(u,v)`) can be compiled; only cached forms may be reused. `A` is symmetric, so
+Phase 2's transpose solve is the SAME operator/factorization.
+
+CHOSEN apparent-cp (over an enthalpy-consistent source): it reproduces the coarse
+baseline within 0.05 C, its `dH/dT` slope is byte-identical to the existing
+enthalpy VJP chain (so Phase 2 reuses that machinery), and it stays a single
+linear solve. No tradeoff surfaced at the Phase-1 gates.
+
+**PHASE-1 SCOPE / pins.** Only the FORWARD changed. The per-step VJP is still the
+EXPLICIT adjoint, so the adjoint-gate entry points (`ks_peak_forward`,
+`dks_peak_ds`, `diagnose_case`, `march_fidelity_check`) pin `implicit=False` and
+`_substep_forward` REFUSES `implicit + keep_cache` (the reverse sweep needs the
+explicit `num`/`H2` caches). Result: every existing FD gate + `test_two_sided`
+stay byte-identical/green. The implicit forward is exercised only forward-only.
+
+### Gate 1 -- coarse-equivalence (square, dt=1.0, 900 steps; both CFL-stable)
+
+- explicit ks_peak = 204.8804 C, implicit ks_peak = 204.9272 C,
+  |diff| = 0.0468 C  (frozen band 1.0 C -> PASS). Non-zero diff confirms the
+  implicit path is genuinely exercised (not a passthrough false-green).
+
+### Gate 2 -- Tamper stability (lc_part=2.5e-3, 54495 cells, 10221 nodes, 30 steps)
+
+CFL `n_sub` from `_stability_dt` = 458 (dt_stable ~1.21e-3 s) -> deeply unstable.
+- reference (explicit substepped n_sub=458) peak = 61.229 C
+- implicit (n_sub=1) peak = 61.034 C  -> **0.194 C** from reference (PASS, tol 1.0)
+- explicit (n_sub=1) peak = 60.855 C  -> 0.374 C from reference
+- **dt-cap clamp cells over the march: implicit = 0 (0.0%) vs explicit n_sub=1 =
+  5379 (52.6%).** The 52.6% matches Phase 0's "54% explicit-unstable" and is the
+  RED evidence: the un-substepped explicit step is CFL-broken here; the implicit
+  step is clamp-free. (The PEAK alone does not discriminate -- the explicit clamp
+  masks the instability, exactly the Phase-0 warning -- so the CLAMP FRACTION is
+  the load-bearing test.)
+
+### Step 5 -- convergence probe (coarse square, halve dt, fixed horizon)
+
+implicit -> explicit end-state ks_peak as dt -> 0 (first-order, ~linear shrink):
+
+    dt=1.000  n_steps=900   explicit=204.8804  implicit=204.9272  |diff|=0.04677 C
+    dt=0.500  n_steps=1800  explicit=204.8655  implicit=204.8773  |diff|=0.01177 C
+    dt=0.250  n_steps=3600  explicit=204.8581  implicit=204.8533  |diff|=0.00484 C
+
+Confirms the implicit scheme is a CONSISTENT discretization of the SAME PDE
+(not a different model).
+
+### Regression
+
+`test_two_sided` 6/6 (AL-grad FD gate worst_rel_err 1.572e-8, unchanged);
+`test_density_adjoint`/`test_densify_forward` 11/11; `test_gate_fd`/`test_stage_b3`
+14/14 -- the explicit adjoint is byte-preserved by the pins.
+
+Tests: `solve3d/tests/test_implicit_step.py`
+(`test_implicit_matches_explicit_on_coarse_within_tol`,
+`test_implicit_forward_matches_substepped_reference_on_tamper` [slow]).
+
+### Next layer (Phase 2)
+
+Re-derive the per-step IMPLICIT VJP: back-prop through `A@T_new=b` as one
+TRANSPOSE solve (A symmetric -> reuse the CG operator), plus the cotangents
+through the lagged-coefficient assembly and the apparent-cp/enthalpy chain. Then
+FD-gate on the coarse case (worst rel-err <= 1e-6, match the Phase-0 gradient) and
+remove the `implicit=False` pins so the adjoint honors `Case.implicit`.
