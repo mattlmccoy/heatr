@@ -22,12 +22,16 @@ Run (spike env):
     OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
     heatr3d_d1_spike/env/bin/python -m pytest solve3d/tests/test_implicit_step.py -x -q -s
 """
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from solve3d import ceiling
 from solve3d import density_adjoint as da
 from solve3d import forward as fwd
+
+RESULTS_ROOT = Path(__file__).resolve().parents[1]   # .../solve3d
 
 
 def _march_peak_and_clamps(case, implicit):
@@ -205,3 +209,62 @@ def test_implicit_substep_vjp_matches_fd():
             ("rho_in", i, fd, gR_in[i])
     print(f"\n[implicit substep VJP FD gate] worst_rel_err={worst:.3e} "
           f"(frozen 1e-6; {len(melt)} melt-window nodes probed)")
+
+
+# --------------------------------------------------------------------------- #
+# Phase 3: whole-march implicit adjoint FD-gate on the coarse square
+# --------------------------------------------------------------------------- #
+def test_implicit_full_march_adjoint_fd_gate_coarse():
+    """The no-regression proof for the WHOLE implicit march. Runs the standard
+    density_adjoint.fd_gate on the coarse square with implicit ON: the implicit
+    adjoint dks_peak_ds must be SELF-CONSISTENT with the implicit forward's central
+    FD to worst_rel_err <= 1e-6 (frozen, NO widening -- the correctness oracle),
+    and dropping the density co-state must still break it (mutation-bites).
+
+    SCHEME-DIFFERENCE CHARACTERIZATION (not a bug -- reported, see
+    PHASE_E_IMPLICIT_BASELINE.md sec 7): the implicit apparent-cp GRADIENT is NOT
+    identical to the explicit (exact-enthalpy) Phase-0 baseline gradient. Below the
+    melt onset the two agree to < 2% (the transport / EQS / design-chain paths are
+    unchanged), but once nodes cross the melt window the apparent-cp latent-heat
+    treatment makes the design-sensitivity diverge (~14% here). This is a real
+    discretization difference (both schemes pass their OWN self-consistent FD gate;
+    an h-sweep shows the implicit FD converges to the implicit adjoint), which is
+    why the coarse B-stage stays EXPLICIT (decision 4b) and the implicit adjoint is
+    reserved for the fine-mesh Tamper (Phase 4)."""
+    case = da.build_coarse_case(implicit=True)
+    assert case.implicit is True
+    # write to an implicit-specific artifact so the tracked EXPLICIT gate json is
+    # not clobbered (the coarse shipped gate stays explicit).
+    d = da.fd_gate(case, out_name="stage_b_density_adjoint_fd_gate_implicit.json")
+    print(f"\n[implicit full-march FD gate] worst_rel_err={d['worst_rel_err']:.3e} "
+          f"(frozen 1e-6)  mutation_worst={d['mutation_worst_rel_err_drop_lambda_rho']:.3e}")
+    assert d["fd_gate_passed"] and d["worst_rel_err"] <= 1e-6, d["worst_rel_err"]
+    assert d["mutation_bites"], d["mutation_worst_rel_err_drop_lambda_rho"]
+
+    # no-regression on the NON-LATENT paths: below the melt onset the implicit and
+    # explicit gradients agree tightly (proves transport/EQS/chain are byte-shared).
+    ce = da.build_coarse_case(n_steps=150, implicit=False)   # part stays < melt onset
+    ci = da.build_coarse_case(n_steps=150, implicit=True)
+    v = ce.design_point()
+    Te, _r, _c, _F = da._march(ce, v, keep_cache=False, implicit=False)
+    part = ce.tc.m_nodal > 0.5
+    assert not bool((Te[part] >= ce.tc.p.t_pc_c - ce.tc.p.dt_pc_c / 2).any()), \
+        "sub-onset check requires the part to stay below the melt window"
+    ge = da.dks_peak_ds(ce, v)
+    gi = da.dks_peak_ds(ci, v)
+    rel_nomelt = float(np.linalg.norm(gi - ge) / np.linalg.norm(ge))
+    print(f"[no-melt] implicit-vs-explicit gradient rel diff = {rel_nomelt:.3e} "
+          "(non-latent paths agree)")
+    assert rel_nomelt < 2e-2, rel_nomelt
+
+    # characterize (report, do NOT assert tight) the melt-regime apparent-cp latent
+    # difference vs the Phase-0 explicit baseline gradient.
+    base_path = (RESULTS_ROOT / "phase_e" / "results"
+                 / "phase_e_explicit_baseline_coarse_grad.npz")
+    if base_path.exists():
+        base = np.load(base_path)
+        g_base = base["grad"]
+        g_impl = da.dks_peak_ds(case, case.design_point())
+        rel_melt = float(np.linalg.norm(g_impl - g_base) / np.linalg.norm(g_base))
+        print(f"[melt-regime] implicit-vs-explicit-baseline gradient rel diff = "
+              f"{rel_melt:.3e} (apparent-cp latent tradeoff; coarse stays explicit)")

@@ -227,3 +227,106 @@ TRANSPOSE solve (A symmetric -> reuse the CG operator), plus the cotangents
 through the lagged-coefficient assembly and the apparent-cp/enthalpy chain. Then
 FD-gate on the coarse case (worst rel-err <= 1e-6, match the Phase-0 gradient) and
 remove the `implicit=False` pins so the adjoint honors `Case.implicit`.
+
+---
+
+## 6. Phase 2 result (implicit per-step VJP -- the transpose solve)
+
+`_substep_vjp` now branches on `cache.implicit`. For the implicit step
+`T_new = A^{-1} b` (A = diag(mdt) + K(k_cells) + A_conv, SPD), the adjoint of the
+linear solve is ONE transpose solve; A symmetric -> `lam = A^{-1} g_Tnew` via the
+SAME matrix-free operator the forward built (`_implicit_operator`, assemble-once
+consistency). The cotangents:
+
+    g_F     = lam                       (b = mdt*T_in + F + A_conv(preheat 1))
+    gT_in  += lam * mdt                 (T_in inside b)
+    g_mdt   = lam * (T_in - T_solve)    (mdt in b, and in the A diagonal)
+    g_k_c   = -int_c grad(lam).grad(T_new)   (K coefficient; reuses gk_form)
+    g_Capp  = g_mdt * vol_safe / dt ;  g_rho_cp = g_Capp ;
+    g_rho_L = g_Capp * m_frac / dt_pc
+
+There is NO stiffness/convection transpose ON gT_in (unlike the explicit branch):
+in the implicit operator K multiplies T_new, not T_in, so T_in enters K only via
+the lagged coefficient k_cells (-> g_k_cells -> shared bottom). `T_solve`
+(= pre-clamp T_new) is cached; the shared downstream (clip subgradients, densify,
+k_cells / rho_cp / phi_in chains) is unchanged.
+
+**CG preconditioner upgraded** to the FULL Jacobi diagonal
+`diag(A) = mdt + diag(K) + lumped(A_conv)` (the mass-only diagonal was a poor
+preconditioner where a cell's conductivity dominates its mass -- the two-sided
+BOOSTED node -- degrading both the forward ks and the adjoint lam). `diag(K)` is
+assembled from the SAME UFL as `forward._stability_dt` (cache hit; the space-in-
+path build forbids compiling a new form). This affects convergence only, not the
+solved (consistent-convection) operator.
+
+### Phase-2 gate -- single-step VJP FD (coarse, melting state)
+
+`test_implicit_substep_vjp_matches_fd`: one implicit step at a melting/densifying
+coarse state (7 part nodes IN the melt window so the latent apparent-cp term is
+live; rho densified; clips inactive). Central-difference `sum(w_T*T_out)+
+sum(w_R*rho_out)` vs the VJP cotangents on T_in and rho_in probes (incl. all
+melt-window nodes): **worst_rel_err = 4.9e-9** (frozen 1e-6). g_F separately
+FD-verified to 6.7e-10.
+
+Pins removed: `dks_peak_ds`, `ks_peak_forward`, `diagnose_case` now honor
+`Case.implicit`. `march_fidelity_check` stays explicit (decision 4b coarse
+contract). `build_coarse_case` gains `implicit=False` DEFAULT (see sec 7).
+
+---
+
+## 7. Phase 3 result (whole-march implicit adjoint FD-gate on the coarse square)
+
+`test_implicit_full_march_adjoint_fd_gate_coarse`: `density_adjoint.fd_gate` on a
+coarse square built with `implicit=True`.
+
+- **worst_rel_err = 1.72e-8** (implicit adjoint self-consistent with the implicit
+  forward's central FD; frozen 1e-6, PASS -- the correctness oracle).
+- mutation (drop lambda_rho) worst_rel_err = 2.6e-2 (bites; density co-state
+  load-bearing).
+
+### The apparent-cp latent tradeoff (measured, NOT a VJP bug)
+
+The implicit apparent-cp GRADIENT does NOT match the Phase-0 explicit
+(exact-enthalpy) baseline gradient bit-for-bit:
+
+- below the melt onset (n_steps=150, part < t_pc): implicit-vs-explicit gradient
+  rel diff = **6.7e-3** (the transport / EQS / design-chain paths agree).
+- full melting march (n_steps=900): rel diff = **1.445e-01 (14%)**, uniform across
+  the high-|g| melt-window-adjacent probes, and it does NOT shrink as dt halves
+  (0.1445 -> 0.1437 -> 0.1424 at dt 1.0/0.5/0.25) even though the PEAK converges
+  (0.047 -> 0.012 -> 0.005 C).
+
+Diagnosis: this is the **apparent-cp vs exact-enthalpy latent-heat treatment**
+(the spec's flagged Sec-3 tradeoff), NOT a VJP error. Three independent proofs the
+implicit adjoint is correct: (a) the single-step VJP FD-gate (4.9e-9), (b) the
+whole-march self-consistent fd_gate (1.72e-8), (c) an FD-step sweep at a boosted
+node shows the implicit central FD CONVERGES to the implicit adjoint as h->0
+(3.8e-6 @ h=1e-3 -> 1.5e-7 @ h=3e-6). The apparent-cp forward tracks the substepped
+truth on the Tamper to 0.19 C (sec 5), so its gradient is a correct descent
+direction for an accurate forward; it simply propagates latent-heat SENSITIVITY
+differently from the exact-enthalpy explicit scheme through the melt window.
+
+### Consequence: the coarse B-stage stays EXPLICIT
+
+Because the coarse gradient genuinely moves 14% under implicit AND the frozen
+two-sided AL gate (h=1e-4, penalty factor ~3e4) amplifies the implicit scheme's
+larger melt-window FD-truncation past 1e-6, `build_coarse_case` DEFAULTS
+`implicit=False`. This honors decision 4b (coarse is CFL-stable + certified by the
+explicit production forward -> must not move) and keeps every B1/B2/B3/B4 +
+two-sided gate byte-stable and green. `Case.implicit` stays True as the fine-mesh
+(Tamper) default; the implicit adjoint is gated on coarse via `implicit=True` and
+is reserved for the fine-mesh solve (Phase 4).
+
+### Regression
+
+`test_two_sided` 6/6 (1.572e-8), `test_stage_b3` (1.016e-8), `test_density_adjoint`
+/`test_densify_forward`/`test_gate_fd`/`test_stage_b`/`test_stage_b4` all green;
+the Phase-1 Tamper forward test still PASS. Explicit coarse path byte-preserved.
+
+### Next layer (Phase 4 -- coordinator-checkpointed compute)
+
+FD-gate the implicit adjoint on the TAMPER (a resolution where the explicit adjoint
+NaN'd): `dks_peak_ds` FINITE everywhere + worst rel-err <= 1e-6 at a few top-|g|
+probes. If the 14% apparent-cp latent difference is judged to matter for the
+fine-mesh solve, an enthalpy-consistent-source variant is the fallback (a separate
+FD-gated layer).
