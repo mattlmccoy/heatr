@@ -70,11 +70,20 @@ The executor derives the implicit step. REQUIRED interface + gates:
   solve `A @ T_new = b` with A, b assembled from T_in-lagged coefficients
   (k(T_in), rho_cp(T_in), phase state), latent heat preserved (apparent-cp or
   enthalpy-consistent source). Density update stays explicit.
-- [ ] **Step 1 (RED): stability test on the Tamper.** Write
-  `test_implicit_forward_finite_on_tamper`: build the Tamper case, run `_march`
-  forward-only at dt=0.5, assert `np.all(np.isfinite(T_end))` AND peak in a sane
-  band (100-300 C). Run it against the CURRENT explicit code; expected FAIL
-  (non-finite) - this is the bug reproduced as a test.
+- [ ] **Step 1 (RED): forward ACCURACY on the Tamper (NOT mere finiteness).**
+  Phase 0 found the explicit n_sub=1 forward is ALREADY clamped-finite (T_end
+  244.8 C) - it survives via the temp/nan_to_num clamps, so `isfinite` does NOT
+  discriminate; the instability is in the REVERSE. So use an ACCURACY test:
+  compute a TRUSTED reference forward once - the explicit forward CFL-SUBSTEPPED at
+  n_sub from `forward._stability_dt` (stable, slow) on a REDUCED Tamper case (small
+  n_steps to keep the reference affordable; lc_part <= 2.5e-3 REQUIRED - Phase 0
+  found lc_part=5e-3 is CFL-stable and hides the bug). Write
+  `test_implicit_forward_matches_substepped_reference_on_tamper`: the IMPLICIT
+  forward end-state peak matches the substepped reference to a stated tol AND
+  activates the temp/dt clamps on far fewer cells than the explicit n_sub=1 forward
+  (report both counts). Run against current explicit n_sub=1 code; expected FAIL
+  (n_sub=1 diverges from the reference and clamps ~54% of cells). This is the
+  valid RED.
 - [ ] **Step 2 (RED): coarse-equivalence test.** Write
   `test_implicit_matches_explicit_on_coarse_within_tol`: on the coarse square
   (CFL-stable, so explicit is valid), the implicit end-state peak must match the
