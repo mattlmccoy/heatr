@@ -134,3 +134,74 @@ def test_implicit_forward_matches_substepped_reference_on_tamper():
                                       f"Tamper: only {exp_caps}/{ncells} clamped")
     assert imp_caps <= 0.01 * ncells, ("implicit must be CFL-stable: "
                                        f"{imp_caps}/{ncells} clamped")
+
+
+# --------------------------------------------------------------------------- #
+# Phase 2: per-step implicit VJP (the transpose solve) -- FD-gated on coarse
+# --------------------------------------------------------------------------- #
+def test_implicit_substep_vjp_matches_fd():
+    """FD-gate the FULL implicit `_substep_vjp` on ONE implicit step at a realistic
+    melting/densifying coarse state (some part nodes IN the melt window, so the
+    latent apparent-cp term rho_L*m_frac in Capp is live; rho densified, so the
+    density paths are live; the dt/temp/drho clips INACTIVE, so no kink). Perturb
+    T_in and rho_in entries (including the melt-window nodes), central-difference
+    the scalar sum(w_T*T_out)+sum(w_R*rho_out), and compare to the VJP cotangents
+    gT_in/gR_in. Frozen 1e-6, NO widening -- the correctness oracle for the
+    implicit adjoint."""
+    case = da.build_coarse_case(implicit=True)          # exercise the implicit VJP
+    assert case.implicit is True
+    tc, p = case.tc, case.tc.p
+    n = tc.vol_nodal.size
+    F = da._drive_F(case, case.design_point())
+
+    # warm up to a melting state (part spans t_pc +- dt_pc; rho has densified)
+    T = np.full(n, p.preheat_c, dtype=np.float64)
+    rho = np.full(n, p.rho_rel)
+    for _ in range(850):
+        T, rho, _ = da._substep_forward(case, T, rho, F, keep_cache=False,
+                                        implicit=True)
+    T_in, rho_in = T.copy(), rho.copy()
+    part = tc.m_nodal > 0.5
+
+    _T_out, _rho_out, c = da._substep_forward(case, T_in, rho_in, F,
+                                              keep_cache=True, implicit=True)
+    assert c.implicit and c.T_solve is not None
+    # the clips whose subgradients would inject a kink must be inactive here
+    assert c.m_cap.all() and c.m_tmp.all()
+    assert not bool((~c.drho_cap_mask & c.pm).any())
+    melt = [int(i) for i in np.where(c.m_frac & part)[0]]
+    assert len(melt) >= 3, f"need melt-window nodes to gate the latent term ({melt})"
+
+    rng = np.random.default_rng(1)
+    w_T = rng.standard_normal(n)
+    w_R = rng.standard_normal(n)
+    gT_in, gR_in, g_F = da._substep_vjp(case, c, w_T, w_R)
+    assert np.all(np.isfinite(gT_in)) and np.all(np.isfinite(gR_in))
+
+    def scalar(Ti, Ri):
+        To, Ro, _ = da._substep_forward(case, Ti, Ri, F, keep_cache=False,
+                                        implicit=True)
+        return float(w_T @ To + w_R @ Ro)
+
+    h = 1e-4
+    idxT = list(dict.fromkeys(
+        [int(i) for i in np.argsort(-np.abs(gT_in * part))[:6]] + melt))
+    idxR = list(dict.fromkeys(
+        [int(i) for i in np.argsort(-np.abs(gR_in * part))[:6]] + melt))
+    worst = 0.0
+    for i in idxT:
+        vp = T_in.copy(); vp[i] += h
+        vm = T_in.copy(); vm[i] -= h
+        fd = (scalar(vp, rho_in) - scalar(vm, rho_in)) / (2 * h)
+        worst = max(worst, abs(fd - gT_in[i]) / max(1.0, abs(fd)))
+        assert abs(fd - gT_in[i]) <= 1e-6 * max(1.0, abs(fd)) + 1e-9, \
+            ("T_in", i, fd, gT_in[i])
+    for i in idxR:
+        vp = rho_in.copy(); vp[i] += h
+        vm = rho_in.copy(); vm[i] -= h
+        fd = (scalar(T_in, vp) - scalar(T_in, vm)) / (2 * h)
+        worst = max(worst, abs(fd - gR_in[i]) / max(1.0, abs(fd)))
+        assert abs(fd - gR_in[i]) <= 1e-6 * max(1.0, abs(fd)) + 1e-9, \
+            ("rho_in", i, fd, gR_in[i])
+    print(f"\n[implicit substep VJP FD gate] worst_rel_err={worst:.3e} "
+          f"(frozen 1e-6; {len(melt)} melt-window nodes probed)")

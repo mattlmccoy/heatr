@@ -57,7 +57,7 @@ RESULTS = Path(__file__).resolve().parent / "results"
 # that breaks the FFCX JIT, so NO new UFL form may be introduced -- every operator
 # is a reuse of a cached form. rtol 1e-11 makes the solve effectively exact so the
 # coarse-equivalence and (Phase 2) VJP FD-gate see a smooth forward.
-CG_RTOL = 1.0e-11
+CG_RTOL = 1.0e-13
 CG_MAXITER = 5000
 
 # Coarse gate case. Small square at the FIXED 0.40x drive; a fixed number of
@@ -137,8 +137,8 @@ class _StepCache:
     m_frac: np.ndarray
     phi_c: np.ndarray
     k_cells: np.ndarray
-    num: np.ndarray
-    H2: np.ndarray
+    num: np.ndarray                   # explicit-only (None on the implicit path)
+    H2: np.ndarray                   # explicit-only (None on the implicit path)
     m_cap: np.ndarray
     m_tmp: np.ndarray
     T_out: np.ndarray
@@ -147,6 +147,8 @@ class _StepCache:
     drho_cap_mask: np.ndarray
     rho_clip_mask: np.ndarray
     pm: np.ndarray
+    implicit: bool = False           # which diffusion step produced this cache
+    T_solve: np.ndarray | None = None  # implicit: A^{-1} b (pre-clamp T_new)
 
 
 @dataclass
@@ -200,7 +202,7 @@ def build_coarse_case(target_nodes: int = COARSE_TARGET_NODES,
                       lc0: float = COARSE_LC0_M, dt: float = COARSE_DT_S,
                       n_steps: int = COARSE_N_STEPS,
                       power_density: float | None = None,
-                      shape: str = "square") -> Case:
+                      shape: str = "square", implicit: bool = False) -> Case:
     """The coarse case at the FIXED 0.40x drive for the B1 FD gate.
 
     `power_density` overrides the chosen 0.40x drive for the Stage B4 drive-
@@ -209,7 +211,21 @@ def build_coarse_case(target_nodes: int = COARSE_TARGET_NODES,
     "cube"/"pyramid" -> the Phase E conforming mesh via
     _build_transient_case_for_shape). The design chain, the density co-state and
     everything downstream are geometry-agnostic -- only the mesh + part mask
-    change."""
+    change.
+
+    `implicit` DEFAULTS FALSE on the COARSE builder even though Case.implicit
+    (the fine-mesh/Tamper default) is True. Rationale (decision 4b + a measured
+    Phase-3 finding): the coarse B-stage is CFL-STABLE and is CERTIFIED BY THE
+    EXPLICIT production forward (march_enthalpy), so it must stay explicit and
+    byte-stable -- every B1/B2/B3/B4 + two-sided gate keeps its frozen numbers.
+    Empirically the apparent-cp implicit forward reproduces the coarse PEAK to
+    ~0.05 C but its design-GRADIENT diverges ~14% from the exact-enthalpy explicit
+    baseline ONCE nodes cross the melt window (0.6% below onset) -- the apparent-cp
+    latent-heat treatment, a real scheme difference, NOT a VJP error (the implicit
+    adjoint is FD-gated self-consistent to 1.7e-8). Switching the coarse default to
+    implicit would move certified coarse results and break the frozen two-sided
+    gate, so it stays explicit; pass implicit=True to exercise/gate the implicit
+    adjoint on coarse (Phase 3)."""
     tc = _build_transient_case_for_shape(
         shape, int(target_nodes), float(lc0),
         p2.drive_params(dt_s=float(dt), power_density=power_density),
@@ -219,7 +235,8 @@ def build_coarse_case(target_nodes: int = COARSE_TARGET_NODES,
         tc.msh, tc.msh.topology.dim,
         np.arange(tc.ncells, dtype=np.int32)))[tc.eqs.part]
     chain = dc.DesignChain(part_cent, tc.eqs.vol[tc.eqs.part], FILTER_RADIUS_M, [0.0])
-    case = Case(tc=tc, chain=chain, dt=float(dt), n_steps=int(n_steps))
+    case = Case(tc=tc, chain=chain, dt=float(dt), n_steps=int(n_steps),
+                implicit=bool(implicit))
     case._v0 = case.design_point()
     return case
 
@@ -265,15 +282,58 @@ def _implicit_T_step(case: Case, T_in, rho_cp, rho_L, F, m_frac):
     free CG reusing the cached forms diffG_form (K@x) and convG_form (A_conv@x);
     Jacobi(mass) preconditioner. A is symmetric, so Phase 2's transpose solve is the
     SAME operator."""
-    tc, p = case.tc, case.tc.p
+    p = case.tc.p
     dt = case.dt
-    vol_safe = np.where(tc.vol_nodal > 0, tc.vol_nodal, 1.0)
-    st = fwd.dolfinx.default_scalar_type
-    has_conv = p.conv_h != 0.0
-
+    vol_safe = np.where(case.tc.vol_nodal > 0, case.tc.vol_nodal, 1.0)
     Capp = rho_cp + rho_L * m_frac / p.dt_pc_c          # dH/dT at T_in
     mdt = vol_safe * Capp / dt                           # lumped mass / dt (> 0)
-    n = T_in.size
+    A_op, Minv = _implicit_operator(case, mdt)           # SHARED fwd/adjoint operator
+    rhs = mdt * T_in + F + _conv_source(case)            # + A_conv @ (preheat 1)
+    T_new = _implicit_solve(A_op, rhs, Minv, x0=T_in)
+    return T_new
+
+
+def _precond_diag(case: Case, mdt: np.ndarray) -> np.ndarray:
+    """The true FULL Jacobi diagonal diag(A) = mdt + diag(K(k_fn)) + lumped(A_conv),
+    for preconditioning ONLY (it does not touch the solved operator, so the solve
+    stays the consistent-convection matrix-free A). A mass-only diagonal is a POOR
+    preconditioner where a cell's conductivity dominates its mass (the two-sided
+    BOOSTED node, k > sigma_doped): CG then meets rtol in the mass-preconditioned
+    norm while the true error at the stiff row is orders larger, degrading both the
+    forward ks and the adjoint lam. diag(K) is assembled from the SAME UFL as
+    forward._stability_dt (cache hit -- no new form is JIT-compiled, which the
+    space-in-path build forbids); the Robin part is lumped (row sums, convG(ones))."""
+    tc, p = case.tc, case.tc.p
+    if getattr(case, "_a_stiff", None) is None:
+        import ufl
+        u = ufl.TrialFunction(tc.eqs.W)
+        w = ufl.TestFunction(tc.eqs.W)
+        case._a_stiff = fwd.fem.form(
+            ufl.inner(tc.k_fn * ufl.grad(u), ufl.grad(w)) * ufl.dx)
+        if p.conv_h != 0.0:
+            st = fwd.dolfinx.default_scalar_type
+            tc.G_fn.x.array[:] = np.ones(tc.vol_nodal.size).astype(st)
+            case._conv_lump = fwd._assemble_real(tc.convG_form).copy()
+        else:
+            case._conv_lump = np.zeros(tc.vol_nodal.size)
+    A = adjoint.fp.assemble_matrix(case._a_stiff)        # uses current tc.k_fn
+    A.assemble()
+    diagK = np.real(A.getDiagonal().array).copy()
+    A.destroy()
+    return mdt + diagK + case._conv_lump
+
+
+def _implicit_operator(case: Case, mdt: np.ndarray):
+    """The SPD backward-Euler operator A = diag(mdt) + K(k_fn) + A_conv as a matrix-
+    free scipy LinearOperator, plus a full-diagonal Jacobi preconditioner. tc.k_fn
+    MUST be set to the step's k_cells by the caller (forward sets it; the VJP
+    re-sets it from the cache). ASSEMBLE-ONCE CONSISTENCY: the forward step and its
+    adjoint build A through this ONE helper, so the transpose solve differentiates
+    exactly the operator the forward solved (A is symmetric -> A^T = A -> same op)."""
+    tc, p = case.tc, case.tc.p
+    st = fwd.dolfinx.default_scalar_type
+    has_conv = p.conv_h != 0.0
+    n = mdt.size
 
     def matvec(x):
         tc.G_fn.x.array[:] = np.asarray(x, float).astype(st)
@@ -282,17 +342,32 @@ def _implicit_T_step(case: Case, T_in, rho_cp, rho_L, F, m_frac):
             y = y + fwd._assemble_real(tc.convG_form)     # + A_conv x (Robin)
         return y
 
+    pd = _precond_diag(case, mdt)
     A_op = spla.LinearOperator((n, n), matvec=matvec, dtype=float)
-    rhs = mdt * T_in + F
-    if has_conv:
-        tc.G_fn.x.array[:] = np.full(n, p.preheat_c).astype(st)
-        rhs = rhs + fwd._assemble_real(tc.convG_form)     # A_conv @ (preheat 1)
-    Minv = spla.LinearOperator((n, n), matvec=lambda x: x / mdt, dtype=float)
-    T_new, info = spla.cg(A_op, rhs, rtol=CG_RTOL, atol=0.0, maxiter=CG_MAXITER,
-                          M=Minv, x0=T_in)
+    Minv = spla.LinearOperator((n, n), matvec=lambda x: x / pd, dtype=float)
+    return A_op, Minv
+
+
+def _conv_source(case: Case) -> np.ndarray:
+    """The constant Robin RHS source A_conv @ (preheat 1) = h*M_top@(preheat 1);
+    zero when convection is off. tc.G_fn is scratch here."""
+    tc, p = case.tc, case.tc.p
+    if p.conv_h == 0.0:
+        return 0.0
+    st = fwd.dolfinx.default_scalar_type
+    tc.G_fn.x.array[:] = np.full(tc.vol_nodal.size, p.preheat_c).astype(st)
+    return fwd._assemble_real(tc.convG_form)
+
+
+def _implicit_solve(A_op, rhs, Minv, x0) -> np.ndarray:
+    """CG solve of the SPD backward-Euler system (or its transpose, identical since
+    A is symmetric). rtol is tight so the solve is effectively exact -- the FD gate
+    sees a smooth forward and the adjoint's residual noise stays far below 1e-6."""
+    x, info = spla.cg(A_op, rhs, rtol=CG_RTOL, atol=0.0, maxiter=CG_MAXITER,
+                      M=Minv, x0=x0)
     if info != 0:
         raise RuntimeError(f"implicit diffusion CG failed (info={info})")
-    return T_new
+    return x
 
 
 def _substep_forward(case: Case, T_in, rho_in, F, keep_cache: bool,
@@ -304,9 +379,8 @@ def _substep_forward(case: Case, T_in, rho_in, F, keep_cache: bool,
     unconditionally-stable backward-Euler solve (_implicit_T_step); False = the
     explicit enthalpy Euler (the pre-Phase-E path). Only the T_new BLOCK changes;
     the dT/temp clamps and the density update are identical, so the VJP's clip
-    machinery is untouched. PHASE 1: the implicit path is forward-only -- its VJP
-    is Phase 2, so keep_cache with implicit is refused rather than silently caching
-    fields (num, H2) the implicit step never computes."""
+    machinery is shared. The cache records which step ran (implicit + T_solve) so
+    _substep_vjp differentiates the right branch; num/H2 are explicit-only."""
     use_implicit = case.implicit if implicit is None else bool(implicit)
     tc, p = case.tc, case.tc.p
     dt = case.dt
@@ -314,13 +388,6 @@ def _substep_forward(case: Case, T_in, rho_in, F, keep_cache: bool,
     vol = tc.vol_nodal
     vol_safe = np.where(vol > 0, vol, 1.0)
     lo = p.t_pc_c - p.dt_pc_c / 2.0
-
-    if use_implicit and keep_cache:
-        raise NotImplementedError(
-            "implicit diffusion (case.implicit=True) has no per-step VJP yet "
-            "(Phase 2); the reverse sweep requires the explicit forward "
-            "(implicit=False). Phase-1 exercises the implicit forward only "
-            "forward-only (keep_cache=False).")
 
     # phi from T_in (properties)
     arg_in = (T_in - p.t_pc_c) / p.dt_pc_c + 0.5
@@ -348,9 +415,10 @@ def _substep_forward(case: Case, T_in, rho_in, F, keep_cache: bool,
     frac = np.clip((T_in - lo) / p.dt_pc_c, 0.0, 1.0)
     m_frac = ((T_in - lo) / p.dt_pc_c > 0.0) & ((T_in - lo) / p.dt_pc_c < 1.0)
     if use_implicit:
-        # unconditionally-stable backward-Euler; the explicit-only diagnostics
-        # (num, H2) are never read on this path (keep_cache is refused above).
+        # unconditionally-stable backward-Euler; T_solve (= pre-clamp T_new, the
+        # A^{-1} b solve) is cached for the transpose-solve VJP. num/H2 stay None.
         T_new = _implicit_T_step(case, T_in, rho_cp, rho_L, F, m_frac)
+        T_solve = T_new
         num = H2 = None
     else:
         tc.T_fn.x.array[:] = T_in.astype(fwd.dolfinx.default_scalar_type)
@@ -361,6 +429,7 @@ def _substep_forward(case: Case, T_in, rho_in, F, keep_cache: bool,
         H = fwd.enthalpy_from_T(T_in, rho_cp, rho_L, p)
         H2 = H + dt * np.nan_to_num(num) / vol_safe
         T_new = fwd.T_from_enthalpy(H2, rho_cp, rho_L, p)
+        T_solve = None
     dT_raw = T_new - T_in
     dT = np.clip(dT_raw, -p.max_dt_step_c, p.max_dt_step_c)
     m_cap = np.abs(dT_raw) <= p.max_dt_step_c
@@ -391,7 +460,8 @@ def _substep_forward(case: Case, T_in, rho_in, F, keep_cache: bool,
             rho_cp=rho_cp, rho_L=rho_L, frac=frac, m_frac=m_frac, phi_c=phi_c,
             k_cells=k_cells, num=num, H2=H2, m_cap=m_cap, m_tmp=m_tmp,
             T_out=T_out, phi_out=phi_out, m_phi_out=m_phi_out,
-            drho_cap_mask=drho_cap_mask, rho_clip_mask=rho_clip_mask, pm=pm)
+            drho_cap_mask=drho_cap_mask, rho_clip_mask=rho_clip_mask, pm=pm,
+            implicit=bool(use_implicit), T_solve=T_solve)
     return T_out, rho_out, c
 
 
@@ -400,9 +470,8 @@ def _march(case: Case, v: np.ndarray, keep_cache: bool,
     """Fixed-horizon densify march. Returns (T_end, caches, diag).
 
     `implicit` (None -> case.implicit) selects the diffusion step for every
-    substep. PHASE 1: keep_cache (the reverse sweep's forward) requires the
-    explicit step -- _substep_forward refuses implicit+keep_cache -- so the
-    adjoint stays consistent with its untouched explicit VJP."""
+    substep. keep_cache stores which step ran (cache.implicit + T_solve) so the
+    reverse sweep differentiates the matching branch (Phase 2)."""
     tc = case.tc
     F = _drive_F(case, v)
     T = np.full(tc.vol_nodal.size, tc.p.preheat_c, dtype=np.float64)
@@ -416,16 +485,15 @@ def _march(case: Case, v: np.ndarray, keep_cache: bool,
 
 
 def ks_peak_forward(case: Case, v: np.ndarray,
-                    implicit: bool | None = False) -> float:
+                    implicit: bool | None = None) -> float:
     """Scalar end-state KS peak: march densify (fixed horizon, 0.40x, coupling
     off) and read ceiling.peak_temp on the end-state in-part temperature.
 
-    `implicit` DEFAULTS FALSE (PHASE 1): this function is the FD reference for the
-    explicit adjoint dks_peak_ds, so it must march the SAME explicit forward the
-    VJP differentiates (else every AL/two-sided FD gate that pairs the two would
-    mismatch). The new Phase-1 forward tests pass implicit=True/False explicitly to
-    compare the two schemes; Phase 2 (implicit VJP) flips this default to
-    None -> case.implicit."""
+    `implicit` (None -> case.implicit) MUST match whatever dks_peak_ds marches, so
+    every FD gate that pairs the FD reference (this function) with the adjoint
+    stays self-consistent. Phase 2 landed the implicit VJP, so both now default to
+    case.implicit (True). The Phase-1 forward tests still pass implicit=True/False
+    explicitly to compare the two schemes."""
     tc = case.tc
     T_end, _rho, _c, _F = _march(case, np.asarray(v, float),
                                  keep_cache=False, implicit=implicit)
@@ -487,27 +555,63 @@ def _substep_vjp(case: Case, c: _StepCache, gT_out, gR_out):
     g_Tnew = g_dT
     gT_in -= g_dT                                            # dT_raw = T_new - T_in
 
-    dT_dH, dT_drc, dT_drL = _dT_from_enthalpy(c.H2, c.rho_cp, c.rho_L, p)
-    g_H2 = g_Tnew * dT_dH
-    g_rho_cp = g_Tnew * dT_drc
-    g_rho_L = g_Tnew * dT_drL                                # T_new direct rho_L path
+    # ===================================================================== #
+    # BRANCH: back-prop g_Tnew (cotangent on the pre-clamp T_new) through the
+    # diffusion step. Both branches emit the SAME downstream cotangents
+    # (g_rho_cp, g_rho_L, g_k_cells, g_F) + any direct gT_in term; the shared
+    # bottom (k_cells / rho_cp / phi_in chains) then closes them out.
+    # ===================================================================== #
+    if c.implicit:
+        # IMPLICIT backward-Euler: T_new = A^{-1} b,
+        #   A = diag(mdt) + K(k_cells) + A_conv  (SPD, symmetric),
+        #   b = mdt*T_in + F + A_conv @ (preheat 1),  mdt = vol_safe*Capp/dt.
+        # Adjoint of the linear solve: lam solves A^T lam = g_Tnew; A symmetric so
+        # lam = A^{-1} g_Tnew via the SAME operator the forward built. Then
+        #   dJ/db      = lam                       -> g_F = lam ; gT_in += lam*mdt
+        #   dJ/dmdt    = lam*T_in (b) - lam*T_new (A diag) = lam*(T_in - T_solve)
+        #   dJ/dk_c    = -lam^T (dK/dk_c) T_new = -int_c grad(lam).grad(T_new)
+        # In the implicit operator K multiplies T_new (not T_in), so T_in enters K
+        # ONLY through the lagged coefficient k_cells -> there is NO stiffness/conv
+        # transpose ON gT_in here (that field path lives inside the A^{-1} solve).
+        Capp = c.rho_cp + c.rho_L * c.m_frac / p.dt_pc_c
+        mdt = vol_safe * Capp / dt
+        tc.k_fn.x.array[:] = c.k_cells.astype(fwd.dolfinx.default_scalar_type)
+        A_op, Minv = _implicit_operator(case, mdt)
+        lam = _implicit_solve(A_op, g_Tnew, Minv, x0=g_Tnew)
+        g_F = lam.copy()
+        gT_in += lam * mdt                                   # T_in in b = mdt*T_in
+        g_mdt = lam * (c.T_in - c.T_solve)
+        tc.T_fn.x.array[:] = c.T_solve.astype(fwd.dolfinx.default_scalar_type)
+        tc.G_fn.x.array[:] = lam.astype(fwd.dolfinx.default_scalar_type)
+        g_k_cells = -np.real(fwd.fem.assemble_vector(tc.gk_form).array)
+        # mdt = vol_safe*Capp/dt ; Capp = rho_cp + rho_L*m_frac/dt_pc
+        g_Capp = g_mdt * vol_safe / dt
+        g_rho_cp = g_Capp
+        g_rho_L = g_Capp * c.m_frac / p.dt_pc_c
+    else:
+        # EXPLICIT enthalpy Euler (unchanged): T_new = T_from_enthalpy(H2, ...),
+        # H2 = enthalpy_from_T(T_in, ...) + dt*num/vol, num = -KT + F - C.
+        dT_dH, dT_drc, dT_drL = _dT_from_enthalpy(c.H2, c.rho_cp, c.rho_L, p)
+        g_H2 = g_Tnew * dT_dH
+        g_rho_cp = g_Tnew * dT_drc
+        g_rho_L = g_Tnew * dT_drL                            # T_new direct rho_L path
 
-    g_num = g_H2 * dt / vol_safe
-    g_H = g_H2
-    # H = enthalpy_from_T(T_in, rho_cp, rho_L): dH/dT_in, dH/drho_cp, dH/drho_L
-    gT_in += g_H * (c.rho_cp + c.rho_L * c.m_frac / p.dt_pc_c)
-    g_rho_cp = g_rho_cp + g_H * c.T_in
-    g_rho_L = g_rho_L + g_H * c.frac
+        g_num = g_H2 * dt / vol_safe
+        g_H = g_H2
+        # H = enthalpy_from_T(T_in, rho_cp, rho_L): dH/dT_in, dH/drho_cp, dH/drho_L
+        gT_in += g_H * (c.rho_cp + c.rho_L * c.m_frac / p.dt_pc_c)
+        g_rho_cp = g_rho_cp + g_H * c.T_in
+        g_rho_L = g_rho_L + g_H * c.frac
 
-    # --- num = -KT + F - C -------------------------------------------------
-    g_F = g_num.copy()
-    tc.G_fn.x.array[:] = g_num.astype(fwd.dolfinx.default_scalar_type)
-    tc.k_fn.x.array[:] = c.k_cells.astype(fwd.dolfinx.default_scalar_type)
-    tc.T_fn.x.array[:] = c.T_in.astype(fwd.dolfinx.default_scalar_type)
-    gT_in -= fwd._assemble_real(tc.diffG_form)               # -KT, K symmetric
-    if p.conv_h != 0.0:
-        gT_in -= fwd._assemble_real(tc.convG_form)           # -C, M_top symmetric
-    g_k_cells = -np.real(fwd.fem.assemble_vector(tc.gk_form).array)
+        # --- num = -KT + F - C ---------------------------------------------
+        g_F = g_num.copy()
+        tc.G_fn.x.array[:] = g_num.astype(fwd.dolfinx.default_scalar_type)
+        tc.k_fn.x.array[:] = c.k_cells.astype(fwd.dolfinx.default_scalar_type)
+        tc.T_fn.x.array[:] = c.T_in.astype(fwd.dolfinx.default_scalar_type)
+        gT_in -= fwd._assemble_real(tc.diffG_form)           # -KT, K symmetric
+        if p.conv_h != 0.0:
+            gT_in -= fwd._assemble_real(tc.convG_form)       # -C, M_top symmetric
+        g_k_cells = -np.real(fwd.fem.assemble_vector(tc.gk_form).array)
 
     # --- k_cells = where(doped, (1-phi_c) k_s_eff + phi_c k_liq, k_powder) --
     doped = tc.doped_cells > 0.5
@@ -548,10 +652,9 @@ def dks_peak_ds(case: Case, v: np.ndarray,
     mutation proof that the density co-state is load-bearing."""
     tc = case.tc
     v = np.asarray(v, float)
-    # PHASE 1 PIN: the reverse sweep below is the EXPLICIT per-step VJP, so its
-    # forward must be the explicit step (implicit=False). Phase 2 re-derives the
-    # implicit VJP and lets this honor case.implicit.
-    T_end, _rho, caches, F = _march(case, v, keep_cache=True, implicit=False)
+    # The reverse sweep (_substep_vjp) differentiates whichever step the forward
+    # ran (cache.implicit): honors case.implicit for both forward and adjoint.
+    T_end, _rho, caches, F = _march(case, v, keep_cache=True)
 
     mask = _peak_mask(tc)
     gT = ceiling.peak_temp_vjp(T_end, weights=tc.vol_nodal, mask=mask)   # seed
@@ -589,10 +692,11 @@ def march_fidelity_check(case: Case | None = None,
     case = case or build_coarse_case()
     tc = case.tc
     v = case.design_point()
-    # gate forward (also sets tc.q_fn = st.q via _drive_F inside _march). PHASE 1:
-    # compare the EXPLICIT gate forward to the explicit production march_enthalpy
-    # (both CFL-stable on this coarse case); the implicit-vs-production fidelity
-    # contract is Phase 5 (decision 4b).
+    # gate forward (also sets tc.q_fn = st.q via _drive_F inside _march). The
+    # coarse fidelity contract compares the EXPLICIT gate forward to the explicit
+    # production march_enthalpy (both CFL-stable here); this deliberately stays
+    # implicit=False even after Phase 2. The implicit-vs-production fine-mesh
+    # contract is Phase 5 (decision 4b: heatr3d is the fine-mesh arbiter).
     T_mine, rho_mine, _c, _F = _march(case, v, keep_cache=False, implicit=False)
 
     # production forward, matched: same q (tc.q_fn), same dt, n_sub forced to 1
@@ -739,9 +843,9 @@ def diagnose_case(case: Case) -> dict:
     the design point?"""
     tc = case.tc
     v = case._v0 if case._v0 is not None else case.design_point()
-    # PHASE 1: the clip diagnostics below read explicit-forward caches (num, H2,
-    # m_cap, ...); keep_cache requires the explicit step.
-    T, rho, caches, F = _march(case, v, keep_cache=True, implicit=False)
+    # The clip diagnostics below read only shared cache fields (m_cap, m_tmp,
+    # drho_cap_mask, pm), present on both the explicit and implicit paths.
+    T, rho, caches, F = _march(case, v, keep_cache=True)
     mask = _peak_mask(tc)
     any_cap = any(bool((~c.m_cap).any() or (~c.m_tmp).any()
                        or (c.drho_cap_mask == False).all() and False)
