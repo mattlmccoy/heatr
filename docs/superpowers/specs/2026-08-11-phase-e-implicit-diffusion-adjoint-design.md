@@ -84,10 +84,13 @@ fine meshes by construction. Two options:
   `march_enthalpy`. Smaller code blast radius, but shifts the fine-mesh trust
   anchor from `march_enthalpy` to heatr3d and needs that re-argued.
 
-RECOMMENDATION: start with (4b) scoped to Phase-E + heatr3d-as-fine-arbiter (keeps
-the validated explicit production path untouched for the coarse parts it already
-certifies), and treat (4a) as a separate, later decision only if the coarse
-path also needs implicit. **This is the decision to settle before the plan.**
+DECISION (Matt, 2026-08-11): **(4b) chosen.** Gate-only implicit; the validated
+explicit production `march_enthalpy` is UNTOUCHED (keeps every coarse-part result
++ the trust ladder + dissertation physics as-is); heatr3d (voxel FD, stable)
+becomes the FINE-mesh arbiter. `march_fidelity_check` keeps asserting bit-identity
+on COARSE meshes (where both forwards are CFL-stable and must still agree), and is
+explicitly scoped to NOT apply on fine meshes (where the explicit arbiter is itself
+CFL-unstable). (4a) is deferred unless a coarse part ever needs implicit.
 
 ## 5. Testing / verification (non-negotiable gates)
 
