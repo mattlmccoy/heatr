@@ -374,3 +374,44 @@ The apparent-cp latent tradeoff (sec 7, 14% coarse gradient vs exact-enthalpy) i
 accepted for the fine-mesh solve (heatr3d is the arbiter, 4b); the
 enthalpy-consistent-source variant remains the fallback if that tradeoff is later
 judged to matter.
+
+---
+
+## 9. Phase 5 result -- decision 4b encoded in march_fidelity_check
+
+`march_fidelity_check` now branches on the EXPLICIT-forward CFL substep count
+`n_sub` (new helper `_explicit_n_sub`: `forward._stability_dt` at the worst-case
+conductivity + the `ceil(dt/(CFL_SAFETY*dt_stable))` formula, mirroring
+`march_enthalpy`). This is the inradius-driven lumped-mass limit (the assembled
+stiffness diagonal), NOT a cell-diameter proxy -- Phase 0 sec 3.2 proved the
+diameter proxy LIES here.
+
+- **COARSE (n_sub == 1):** runs BOTH forwards byte-matched (SAME mesh, drive Q, dt,
+  n_sub=1, horizon) and asserts bit-identity, unchanged. The gate `_march` is
+  EXPLICIT on coarse, so this is the explicit-gate-vs-explicit-production match.
+  MEASURED on the coarse square: `fine_mesh=False`, `n_sub_explicit=1`,
+  **rel_T = 0.0, rel_mean_rho = 0.0, agree = True (exact bit-match)** -- the coarse
+  certified path did NOT move under the implicit work (this is the no-op bit-match
+  the coordinator asked to confirm). The doc gains `fine_mesh`, `n_sub_explicit`,
+  `dt_stable_s`.
+- **FINE (n_sub > 1):** the explicit production forward is itself CFL-unstable at
+  dt, so it is not a valid fine-mesh reference. Instead of asserting bit-identity
+  against an unstable run, `march_fidelity_check` RETURNS
+  `{"fine_mesh": True, "arbiter": "heatr3d", "reason": "explicit forward is
+  CFL-unstable at this dt (n_sub>1); heatr3d (voxel FD) is the fine-mesh arbiter
+  per decision 4b", "n_sub_explicit": ..., "dt_stable_s": ..., "agree": None}`.
+  MEASURED on the fine Tamper (lc_part=2.5e-3): `fine_mesh=True`, `arbiter=heatr3d`,
+  **`n_sub_explicit = 323`**, `dt_stable = 1.72e-3 s`. Detection only -- NO heavy
+  march / EQS solve is run (one `_stability_dt` assemble on top of the mesh build).
+
+Decision 4b is now encoded in CODE, not just the doc: the explicit arbiter is the
+truth only where it is CFL-stable (coarse); on fine meshes heatr3d is the arbiter.
+
+Tests (`solve3d/tests/test_implicit_step.py`):
+`test_march_fidelity_coarse_bit_matches` (bit-match, `fine_mesh=False`, n_sub=1)
+and `test_march_fidelity_fine_mesh_returns_4b_record` (@slow; the Tamper returns
+the 4b record, n_sub_explicit>1, no false assertion, no heavy march).
+
+Regression: `test_two_sided` 6/6, `test_density_adjoint` 6/6 (incl.
+`test_march_matches_production_densify` still agree=True). The next layer is
+Phase 6 (relaunch the Tamper two-sided rescue) -- Matt-checkpointed heavy compute.

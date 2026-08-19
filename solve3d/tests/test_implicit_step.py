@@ -312,3 +312,46 @@ def test_tamper_implicit_adjoint_finite_and_fd_gated():
     print(f"\n[Tamper implicit adjoint] FINITE + FD gate worst_rel_err={worst:.3e} "
           f"(n_cells={tc.ncells}, n_nodes={tc.vol_nodal.size}, n_steps=300, "
           f"{len(idx)} probes)")
+
+
+# --------------------------------------------------------------------------- #
+# Phase 5: decision 4b encoded in march_fidelity_check
+# --------------------------------------------------------------------------- #
+def test_march_fidelity_coarse_bit_matches():
+    """Decision 4b COARSE contract: on the coarse square (CFL-stable, n_sub=1) the
+    gate _march (EXPLICIT on coarse) still bit-matches the explicit production
+    march_enthalpy. This is the no-op bit-match confirmed after the implicit work --
+    the coarse certified path did not move."""
+    d = da.march_fidelity_check(out_name="phase5_fidelity_coarse.json")
+    assert d["fine_mesh"] is False, d
+    assert d["n_sub_explicit"] == 1, d["n_sub_explicit"]
+    assert d["agree"] is True, (d["rel_T_in_part"], d["rel_mean_rho"])
+    print(f"\n[fidelity coarse] fine_mesh=False n_sub=1 agree=True "
+          f"rel_T={d['rel_T_in_part']:.2e} rel_rho={d['rel_mean_rho']:.2e}")
+
+
+@pytest.mark.slow
+def test_march_fidelity_fine_mesh_returns_4b_record():
+    """Decision 4b FINE-mesh scoping: on the fine Tamper mesh (lc_part=2.5e-3, where
+    the explicit forward is CFL-unstable at dt, n_sub>1 via _explicit_n_sub -- NOT a
+    cell-diameter proxy, which Phase 0 proved lies here) march_fidelity_check RETURNS
+    the 4b record naming heatr3d as the arbiter and does NOT assert bit-identity
+    against an unstable explicit run. LIGHT: only DETECTS instability (one
+    _stability_dt assemble); no heavy march / EQS solve is run."""
+    from solve3d import design_chain as dc
+    from solve3d.phase_e import run_tamper as rt
+
+    tc, _info = rt.build_case(lc_part=2.5e-3, max_time_s=1800.0)
+    chain = dc.DesignChain(rt._part_centroids(tc), tc.eqs.vol[tc.eqs.part],
+                           da.FILTER_RADIUS_M, [0.0])
+    case = da.Case(tc=tc, chain=chain, dt=0.5, n_steps=300)
+    d = da.march_fidelity_check(case, out_name="phase5_fidelity_tamper.json")
+    assert d["fine_mesh"] is True, d
+    assert d["arbiter"] == "heatr3d", d
+    assert d["n_sub_explicit"] > 1, d["n_sub_explicit"]
+    assert "agree" in d and d["agree"] is None, d
+    assert "CFL-unstable" in d["reason"], d["reason"]
+    # it must NOT have run the comparison (no bit-match fields present)
+    assert "rel_T_in_part" not in d, "fine-mesh path must not run the heavy march"
+    print(f"\n[fidelity fine] fine_mesh=True arbiter=heatr3d "
+          f"n_sub_explicit={d['n_sub_explicit']} dt_stable={d['dt_stable_s']:.2e}s")

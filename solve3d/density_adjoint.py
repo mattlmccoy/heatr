@@ -674,6 +674,32 @@ def dks_peak_ds(case: Case, v: np.ndarray,
     return g_v
 
 
+def _explicit_n_sub(case: Case) -> tuple[int, float]:
+    """The explicit-diffusion CFL substep count n_sub for this mesh at dt=case.dt,
+    computed the SAME way forward.march_enthalpy does: forward._stability_dt at the
+    worst-case (largest) per-cell conductivity, then n_sub = 1 if
+    dt <= CFL_SAFETY*dt_stable else ceil(dt / (CFL_SAFETY*dt_stable)).
+
+    n_sub > 1 means the EXPLICIT lumped-mass forward is CFL-UNSTABLE at dt on this
+    mesh -> a FINE mesh (decision 4b). This is the inradius-driven lumped-mass limit
+    (via the ASSEMBLED stiffness diagonal in _stability_dt), NOT a cell-DIAMETER
+    proxy -- Phase 0 sec 3.2 proved the diameter proxy LIES here (it reports the
+    sliver-tet Tamper as CFL-stable when the true limit is ~150x smaller)."""
+    tc, p = case.tc, case.tc.p
+    vol = tc.vol_nodal
+    m = tc.m_nodal
+    # worst-case conductivity, mirroring march_enthalpy's CFL block
+    k_max = np.where(tc.doped_cells > 0.5, max(tc.k_s_eff, p.k_liquid), p.k_powder)
+    # rho*cp at the initial (preheat -> solid, phi=0) state; the conservative rho*cp
+    # bound the forward uses (not the latent-augmented slope)
+    rho0 = (1.0 - m) * p.rho_powder + m * tc.rho_s_eff
+    cp0 = (1.0 - m) * p.cp_powder + m * p.cp_solid
+    dt_stable = fwd._stability_dt(tc.msh, tc.eqs.W, k_max, rho0 * cp0, vol, tc.eqs.Q0)
+    n_sub = (1 if case.dt <= fwd.CFL_SAFETY * dt_stable
+             else int(np.ceil(case.dt / (fwd.CFL_SAFETY * dt_stable))))
+    return int(n_sub), float(dt_stable)
+
+
 def march_fidelity_check(case: Case | None = None,
                          out_name: str | None = None) -> dict:
     """Fidelity of the gate forward `_march` vs PRODUCTION forward.march_enthalpy
@@ -682,15 +708,51 @@ def march_fidelity_check(case: Case | None = None,
     The B2 solve minimizes a peak read from `_march`, but is judged on a peak read
     from march_densify (-> march_enthalpy). If the two forwards diverge, the solve
     would drive down a peak the arbiter does not see -- a silent forward mismatch.
-    This runs BOTH with byte-matched inputs: SAME mesh (tc.msh), SAME drive Q (the
-    single EQS solve), SAME dt with CFL substepping DISABLED so n_sub=1 (the exact
-    dt_sub path `_march` uses), and the SAME fixed horizon (phi_target=2.0,
-    stop_mean_rho above what the march reaches), then compares the end-state
-    in-part T field and mean rho. Bit-identity is the target."""
+
+    DECISION 4b SCOPING (Phase 5). This contract is COARSE-mesh only. On a COARSE
+    (CFL-stable, n_sub=1) mesh it runs BOTH forwards byte-matched -- SAME mesh, SAME
+    drive Q, SAME dt with CFL substepping DISABLED so n_sub=1, SAME fixed horizon --
+    and asserts bit-identity of the end-state in-part T field and mean rho (the gate
+    `_march` runs EXPLICIT here, so this is the explicit-gate-vs-explicit-production
+    match; both are valid and must agree). On a FINE mesh (explicit CFL-unstable at
+    dt, n_sub>1 per _explicit_n_sub) it does NOT assert against an unstable explicit
+    run -- it RETURNS a 4b record naming heatr3d (voxel FD, stable) as the fine-mesh
+    arbiter."""
     import dataclasses
     import json
     case = case or build_coarse_case()
     tc = case.tc
+
+    # DECISION 4b: fine-mesh scoping. If the EXPLICIT production forward is itself
+    # CFL-unstable at dt on this mesh (n_sub>1), it cannot be the fine-mesh truth --
+    # do NOT assert bit-identity against an unstable run; record the heatr3d arbiter.
+    n_sub_explicit, dt_stable = _explicit_n_sub(case)
+    if n_sub_explicit > 1:
+        doc = {
+            "what": "Stage B fidelity cross-check -- decision 4b fine-mesh scoping. "
+                    "The explicit production forward (march_enthalpy / march_densify) "
+                    "is CFL-unstable at this dt on this mesh (n_sub>1), so it is NOT "
+                    "a valid fine-mesh reference; bit-identity is not asserted. "
+                    "heatr3d (voxel FD, stable) is the fine-mesh arbiter.",
+            "fine_mesh": True,
+            "arbiter": "heatr3d",
+            "reason": "explicit forward is CFL-unstable at this dt (n_sub>1); heatr3d "
+                      "(voxel FD) is the fine-mesh arbiter per decision 4b",
+            "n_sub_explicit": int(n_sub_explicit),
+            "dt_stable_s": float(dt_stable),
+            "dt_s": float(case.dt),
+            "config": {"n_cells": int(tc.ncells),
+                       "n_nodes": int(tc.vol_nodal.size),
+                       "n_steps": int(case.n_steps)},
+            "agree": None,
+        }
+        RESULTS.mkdir(parents=True, exist_ok=True)
+        path = RESULTS / (out_name or "stage_b_march_fidelity.json")
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(doc, indent=1, default=float))
+        tmp.replace(path)
+        return doc
+
     v = case.design_point()
     # gate forward (also sets tc.q_fn = st.q via _drive_F inside _march). The
     # coarse fidelity contract compares the EXPLICIT gate forward to the explicit
@@ -722,11 +784,15 @@ def march_fidelity_check(case: Case | None = None,
     n_sub = int(out.get("n_substeps_used", 1))
     agree = bool(rel_T < 1e-6 and rel_mean_rho < 1e-6 and n_sub == 1)
     doc = {
-        "what": "Stage B fidelity cross-check: density_adjoint._march (the FD-gate "
-                "forward the co-state differentiates) vs production "
+        "what": "Stage B fidelity cross-check (COARSE, decision 4b): "
+                "density_adjoint._march (the FD-gate forward the co-state "
+                "differentiates, EXPLICIT on coarse) vs production "
                 "forward.march_enthalpy (densify=True) -- the forward the B2 "
                 "arbiter ceiling_end_state_gate reads. Matched mesh, drive Q, dt, "
                 "n_sub=1, fixed horizon. Bit-identity is the target.",
+        "fine_mesh": False,
+        "n_sub_explicit": int(n_sub_explicit),
+        "dt_stable_s": float(dt_stable),
         "config": {"target_nodes": COARSE_TARGET_NODES, "lc0_m": COARSE_LC0_M,
                    "dt_s": case.dt, "n_steps": case.n_steps,
                    "n_part_nodes": int(mask.sum()),
