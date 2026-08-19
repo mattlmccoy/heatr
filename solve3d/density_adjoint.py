@@ -55,8 +55,12 @@ RESULTS = Path(__file__).resolve().parent / "results"
 # operator (M/dt + K + A_conv), matrix-free from the ALREADY-COMPILED linear
 # forms (diffG_form -> K@x, convG_form -> A_conv@x); the Dropbox path has a space
 # that breaks the FFCX JIT, so NO new UFL form may be introduced -- every operator
-# is a reuse of a cached form. rtol 1e-11 makes the solve effectively exact so the
-# coarse-equivalence and (Phase 2) VJP FD-gate see a smooth forward.
+# is a reuse of a cached form. rtol 1e-13 (below) makes the solve effectively exact
+# so the coarse-equivalence and VJP FD-gates see a smooth forward. NOTE: 1e-13 is a
+# hard ceiling (~2 decades above float64 eps); it converges on the coarse + Tamper
+# mesh families here, but a stiffer/larger fine mesh could stagnate above it and hit
+# CG_MAXITER -> RuntimeError (fail-loud, by design). Requires scipy >= 1.12 (the
+# `rtol`/`atol` cg kwargs; spike env is 1.17.1).
 CG_RTOL = 1.0e-13
 CG_MAXITER = 5000
 
@@ -160,15 +164,19 @@ class Case:
     F: np.ndarray | None = None      # fixed drive node-forcing of the last forward
     st: object | None = None         # last EQS SteadyState (for vjp_q)
     _v0: np.ndarray | None = field(default=None)
+    # cached implicit-operator pieces (assemble-once, matrix-free; see _precond_diag)
+    _a_stiff: object | None = field(default=None, repr=False)
+    _conv_lump: np.ndarray | None = field(default=None, repr=False)
     # Phase-E (plan 2026-08-11 decision 4b): the diffusion step. True = implicit
     # backward-Euler (unconditionally stable, the fine-mesh/Tamper default). The
     # EXPLICIT enthalpy Euler stays reachable (implicit=False) so the coarse
     # fidelity check can still compare against production forward.march_enthalpy.
-    # PHASE 1 SCOPE: the per-step VJP (_substep_vjp) is still the EXPLICIT adjoint,
-    # so the adjoint-gate entry points (ks_peak_forward, dks_peak_ds, diagnose_case,
-    # march_fidelity_check) pin implicit=False for self-consistency until Phase 2
-    # re-derives the implicit VJP. The implicit forward is exercised (Phase 1) only
-    # forward-only (keep_cache=False), via an explicit implicit=True argument.
+    # The implicit per-step VJP landed (commit 94295f0), so the adjoint entry points
+    # (ks_peak_forward, dks_peak_ds, diagnose_case) HONOR case.implicit (default
+    # True). Only the coarse contract pins explicit: march_fidelity_check runs
+    # explicit for the bit-match, and build_coarse_case defaults implicit=False
+    # (the apparent-cp gradient moves the coarse physics ~14%, so coarse keeps the
+    # certified explicit adjoint; fine meshes use implicit + heatr3d arbiter).
     implicit: bool = True
 
     # ---- design point / probes ------------------------------------------ #
