@@ -330,3 +330,47 @@ NaN'd): `dks_peak_ds` FINITE everywhere + worst rel-err <= 1e-6 at a few top-|g|
 probes. If the 14% apparent-cp latent difference is judged to matter for the
 fine-mesh solve, an enthalpy-consistent-source variant is the fallback (a separate
 FD-gated layer).
+
+---
+
+## 8. Phase 4 result -- THE PAYOFF: the Tamper implicit adjoint is FINITE (was NaN)
+
+On the FINE Tamper mesh -- the EXACT resolution where the explicit adjoint NaN'd
+(sec 2): STL feb850ec, **lc_part = 2.5e-3** (REQUIRED; 5e-3 is CFL-stable and hides
+the bug), n_cells = 54495, n_nodes = 10221, n_design = 20106, dt = 0.5, design
+v = ones (uniform), nominal drive. The FD probes use a REDUCED horizon
+(n_steps = 300; the MESH, not the step count, is the explicit-instability source),
+which heats the part to ~176.6 C (near the melt onset).
+
+FINITE vs NaN (reported as finite/NaN, NOT vs a step count -- the overflow step is
+drive/design-dependent, sec 3.4):
+
+- **IMPLICIT `dks_peak_ds` (Case.implicit=True): FINITE EVERYWHERE.** max|g| = 0.79,
+  no Inf/NaN. Backward-Euler at n_sub=1 is unconditionally stable, so the reverse
+  co-state cannot geometrically overflow -- this is the gradient the explicit
+  adjoint could never reach. (dks wall ~146 s at n_steps=300.)
+- **EXPLICIT `dks_peak_ds` at the Phase-0 config (n_steps = 2800): NaN**
+  (has_nan = True), reproduced LIVE here on the same mesh (the reverse co-state
+  overflows to Inf then Inf*0 -> NaN, sec 2).
+
+FD-gate (self-consistency of the implicit adjoint with the implicit forward on the
+FINE mesh -- the same gate that passed 1.72e-8 on coarse):
+
+- top-|g| design probes: index 11872 rel_err = 1.60e-8, index 11859 = 3.26e-9.
+- **worst_rel_err = 1.60e-8 (frozen 1e-6, PASS).**
+
+Total wall ~577 s (~9.6 min): build 5 s, implicit dks 146 s, 2 FD probes ~309 s,
+explicit-NaN reference 39 s. No checkpointing (n_sub=1, ~sub-10 GB).
+
+Durable gate: `test_tamper_implicit_adjoint_finite_and_fd_gated`
+(`solve3d/tests/test_implicit_step.py`, @slow) -- asserts FINITE + worst
+rel-err <= 1e-6 on the Tamper.
+
+**This is the artifact that unblocks the Tamper two-sided rescue** (Phase 6): the
+fine-mesh ceiling-coupled gradient is now finite and FD-verified. Remaining before
+the heavy rescue: Phase 5 (fidelity contract per decision 4b -- coarse bit-match,
+heatr3d the fine-mesh arbiter) and Phase 6 (relaunch `run_tamper_rescue --solve`).
+The apparent-cp latent tradeoff (sec 7, 14% coarse gradient vs exact-enthalpy) is
+accepted for the fine-mesh solve (heatr3d is the arbiter, 4b); the
+enthalpy-consistent-source variant remains the fallback if that tradeoff is later
+judged to matter.

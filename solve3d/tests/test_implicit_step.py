@@ -268,3 +268,47 @@ def test_implicit_full_march_adjoint_fd_gate_coarse():
         rel_melt = float(np.linalg.norm(g_impl - g_base) / np.linalg.norm(g_base))
         print(f"[melt-regime] implicit-vs-explicit-baseline gradient rel diff = "
               f"{rel_melt:.3e} (apparent-cp latent tradeoff; coarse stays explicit)")
+
+
+# --------------------------------------------------------------------------- #
+# Phase 4: the payoff -- FD-gate the implicit adjoint on the fine TAMPER mesh
+# --------------------------------------------------------------------------- #
+@pytest.mark.slow
+def test_tamper_implicit_adjoint_finite_and_fd_gated():
+    """THE PAYOFF. On the FINE Tamper mesh (lc_part=2.5e-3 -- the resolution where
+    the EXPLICIT adjoint overflowed to NaN at reverse-step ~2424, Phase 0 /
+    PHASE_E_IMPLICIT_BASELINE.md sec 2), the IMPLICIT adjoint dks_peak_ds is
+    (a) FINITE everywhere -- backward-Euler at n_sub=1 is unconditionally stable, so
+    the reverse co-state cannot geometrically overflow -- and (b) self-consistent
+    with the implicit forward to worst rel-err <= 1e-6. n_steps is REDUCED (the
+    MESH, not the horizon, is what makes explicit unstable; keeping lc_part=2.5e-3
+    is REQUIRED -- 5e-3 is CFL-stable and hides the bug) so the FD probes are
+    affordable. Explicit-vs-implicit at this exact mesh was reproduced live in
+    Phase 4: the explicit adjoint NaN'd (has_nan=True) at n_steps=2800; the implicit
+    adjoint is finite here (n_steps=300, part peak ~176 C). Wall ~5 min."""
+    from solve3d import design_chain as dc
+    from solve3d.phase_e import run_tamper as rt
+
+    tc, _info = rt.build_case(lc_part=2.5e-3, max_time_s=1800.0)
+    chain = dc.DesignChain(rt._part_centroids(tc), tc.eqs.vol[tc.eqs.part],
+                           da.FILTER_RADIUS_M, [0.0])
+    case = da.Case(tc=tc, chain=chain, dt=0.5, n_steps=300)   # implicit default True
+    assert case.implicit is True
+    v = np.ones(chain.n_design)
+
+    g = da.dks_peak_ds(case, v)
+    assert np.all(np.isfinite(g)), \
+        "implicit Tamper adjoint must be FINITE (the explicit adjoint NaN'd here)"
+
+    h = 1e-4
+    idx = [int(i) for i in np.argsort(-np.abs(g))[:2]]   # top-|g| design probes
+    worst = 0.0
+    for i in idx:
+        vp = v.copy(); vp[i] += h
+        vm = v.copy(); vm[i] -= h
+        fd = (da.ks_peak_forward(case, vp) - da.ks_peak_forward(case, vm)) / (2 * h)
+        worst = max(worst, abs(fd - g[i]) / max(1.0, abs(fd)))
+        assert abs(fd - g[i]) <= 1e-6 * max(1.0, abs(fd)) + 1e-9, (i, fd, g[i])
+    print(f"\n[Tamper implicit adjoint] FINITE + FD gate worst_rel_err={worst:.3e} "
+          f"(n_cells={tc.ncells}, n_nodes={tc.vol_nodal.size}, n_steps=300, "
+          f"{len(idx)} probes)")
