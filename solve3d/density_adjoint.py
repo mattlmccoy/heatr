@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
 from solve3d import adjoint, ceiling, design_chain as dc, forward as fwd
@@ -164,9 +165,12 @@ class Case:
     F: np.ndarray | None = None      # fixed drive node-forcing of the last forward
     st: object | None = None         # last EQS SteadyState (for vjp_q)
     _v0: np.ndarray | None = field(default=None)
-    # cached implicit-operator pieces (assemble-once, matrix-free; see _precond_diag)
+    # cached assemble-once operator pieces (Phase 7; see _ensure_operator_forms):
+    # the per-step bilinear stiffness form, the CONSTANT Robin convection matrix,
+    # and its RHS source A_conv @ (preheat 1).
     _a_stiff: object | None = field(default=None, repr=False)
-    _conv_lump: np.ndarray | None = field(default=None, repr=False)
+    _a_conv_csr: object | None = field(default=None, repr=False)
+    _conv_source_vec: object | None = field(default=None, repr=False)
     # Phase-E (plan 2026-08-11 decision 4b): the diffusion step. True = implicit
     # backward-Euler (unconditionally stable, the fine-mesh/Tamper default). The
     # EXPLICIT enthalpy Euler stays reachable (implicit=False) so the coarse
@@ -286,10 +290,12 @@ def _implicit_T_step(case: Case, T_in, rho_cp, rho_L, F, m_frac):
     dt->0). M is the SAME lumped nodal mass (vol_safe) the explicit step divides by,
     so the two schemes share one mass and one energy balance.
 
-    Unconditionally stable -> n_sub = 1 at any mesh (the Tamper included). Matrix-
-    free CG reusing the cached forms diffG_form (K@x) and convG_form (A_conv@x);
-    Jacobi(mass) preconditioner. A is symmetric, so Phase 2's transpose solve is the
-    SAME operator."""
+    Unconditionally stable -> n_sub = 1 at any mesh (the Tamper included). The SPD
+    operator is ASSEMBLED ONCE per step (sparse) and CG-solved with a fast sparse
+    matvec (Phase 7: the old matrix-free path re-assembled the FEM forms on EVERY CG
+    iteration -- ~2 dolfinx assemblies x ~80 iters x hundreds of steps -- the
+    dominant density-adjoint cost; assemble-once is ~4x faster and bit-identical).
+    A is symmetric, so the transpose (adjoint) solve reuses this exact operator."""
     p = case.tc.p
     dt = case.dt
     vol_safe = np.where(case.tc.vol_nodal > 0, case.tc.vol_nodal, 1.0)
@@ -301,70 +307,75 @@ def _implicit_T_step(case: Case, T_in, rho_cp, rho_L, F, m_frac):
     return T_new
 
 
-def _precond_diag(case: Case, mdt: np.ndarray) -> np.ndarray:
-    """The true FULL Jacobi diagonal diag(A) = mdt + diag(K(k_fn)) + lumped(A_conv),
-    for preconditioning ONLY (it does not touch the solved operator, so the solve
-    stays the consistent-convection matrix-free A). A mass-only diagonal is a POOR
-    preconditioner where a cell's conductivity dominates its mass (the two-sided
-    BOOSTED node, k > sigma_doped): CG then meets rtol in the mass-preconditioned
-    norm while the true error at the stiff row is orders larger, degrading both the
-    forward ks and the adjoint lam. diag(K) is assembled from the SAME UFL as
-    forward._stability_dt (cache hit -- no new form is JIT-compiled, which the
-    space-in-path build forbids); the Robin part is lumped (row sums, convG(ones))."""
+def _petsc_to_csr(A) -> "sp.csr_matrix":
+    """A dolfinx/PETSc assembled Mat -> real scipy CSR (T is real; only the EQS
+    field is complex). getValuesCSR is used because this PETSc build has no
+    Mat.to_scipy."""
+    ai, aj, av = A.getValuesCSR()
+    return sp.csr_matrix((np.real(av), aj, ai), shape=A.getSize())
+
+
+def _ensure_operator_forms(case: Case) -> None:
+    """Lazily build the assemble-ONCE operator machinery on the case: the bilinear
+    stiffness form `_a_stiff` (re-assembled per step because k(T_in) changes) and
+    the CONSTANT Robin convection matrix `_a_conv_csr` + its RHS source
+    `_conv_source_vec` (assembled ONCE -- conv_h, geometry and the top facet do NOT
+    change over the march). The stiffness UFL matches forward._stability_dt (cache
+    hit); the convection bilinear form compiles in the space-containing path too
+    (verified). Reused across CG iterations so no FEM form is re-assembled per
+    iteration."""
+    if getattr(case, "_a_stiff", None) is not None:
+        return
+    import ufl
     tc, p = case.tc, case.tc.p
-    if getattr(case, "_a_stiff", None) is None:
-        import ufl
-        u = ufl.TrialFunction(tc.eqs.W)
-        w = ufl.TestFunction(tc.eqs.W)
-        case._a_stiff = fwd.fem.form(
-            ufl.inner(tc.k_fn * ufl.grad(u), ufl.grad(w)) * ufl.dx)
-        if p.conv_h != 0.0:
-            st = fwd.dolfinx.default_scalar_type
-            tc.G_fn.x.array[:] = np.ones(tc.vol_nodal.size).astype(st)
-            case._conv_lump = fwd._assemble_real(tc.convG_form).copy()
-        else:
-            case._conv_lump = np.zeros(tc.vol_nodal.size)
-    A = adjoint.fp.assemble_matrix(case._a_stiff)        # uses current tc.k_fn
-    A.assemble()
-    diagK = np.real(A.getDiagonal().array).copy()
-    A.destroy()
-    return mdt + diagK + case._conv_lump
+    st = fwd.dolfinx.default_scalar_type
+    u = ufl.TrialFunction(tc.eqs.W)
+    w = ufl.TestFunction(tc.eqs.W)
+    case._a_stiff = fwd.fem.form(
+        ufl.inner(tc.k_fn * ufl.grad(u), ufl.grad(w)) * ufl.dx)
+    if p.conv_h != 0.0:
+        a_conv = fwd.fem.form(ufl.inner(
+            fwd.fem.Constant(tc.msh, st(p.conv_h)) * u, w) * tc.ds_top)
+        M = adjoint.fp.assemble_matrix(a_conv)
+        M.assemble()
+        case._a_conv_csr = _petsc_to_csr(M)
+        M.destroy()
+        case._conv_source_vec = case._a_conv_csr @ np.full(
+            tc.vol_nodal.size, p.preheat_c)
+    else:
+        case._a_conv_csr = None
+        case._conv_source_vec = 0.0
 
 
 def _implicit_operator(case: Case, mdt: np.ndarray):
-    """The SPD backward-Euler operator A = diag(mdt) + K(k_fn) + A_conv as a matrix-
-    free scipy LinearOperator, plus a full-diagonal Jacobi preconditioner. tc.k_fn
-    MUST be set to the step's k_cells by the caller (forward sets it; the VJP
-    re-sets it from the cache). ASSEMBLE-ONCE CONSISTENCY: the forward step and its
-    adjoint build A through this ONE helper, so the transpose solve differentiates
-    exactly the operator the forward solved (A is symmetric -> A^T = A -> same op)."""
-    tc, p = case.tc, case.tc.p
-    st = fwd.dolfinx.default_scalar_type
-    has_conv = p.conv_h != 0.0
+    """ASSEMBLE-ONCE SPD operator A = diag(mdt) + K(k_fn) + A_conv as a scipy sparse
+    matrix (K from the bilinear stiffness form; A_conv the cached constant Robin
+    matrix), returned as a LinearOperator whose matvec is a FAST sparse product plus
+    the TRUE-diagonal Jacobi preconditioner. tc.k_fn MUST hold the step's k_cells
+    (forward sets it; the VJP re-sets it from the cache). A is symmetric, so the
+    adjoint transpose solve reuses this EXACT operator (assemble-once consistency)."""
+    tc = case.tc
+    _ensure_operator_forms(case)
+    Kmat = adjoint.fp.assemble_matrix(case._a_stiff)     # uses current tc.k_fn
+    Kmat.assemble()
+    K_csr = _petsc_to_csr(Kmat)
+    Kmat.destroy()
+    A = sp.diags(mdt) + K_csr
+    if case._a_conv_csr is not None:
+        A = A + case._a_conv_csr
+    A = A.tocsr()
+    dA = A.diagonal()
     n = mdt.size
-
-    def matvec(x):
-        tc.G_fn.x.array[:] = np.asarray(x, float).astype(st)
-        y = mdt * x + fwd._assemble_real(tc.diffG_form)  # (M/dt + K) x
-        if has_conv:
-            y = y + fwd._assemble_real(tc.convG_form)     # + A_conv x (Robin)
-        return y
-
-    pd = _precond_diag(case, mdt)
-    A_op = spla.LinearOperator((n, n), matvec=matvec, dtype=float)
-    Minv = spla.LinearOperator((n, n), matvec=lambda x: x / pd, dtype=float)
+    A_op = spla.LinearOperator((n, n), matvec=lambda x: A @ x, dtype=float)
+    Minv = spla.LinearOperator((n, n), matvec=lambda x: x / dA, dtype=float)
     return A_op, Minv
 
 
-def _conv_source(case: Case) -> np.ndarray:
-    """The constant Robin RHS source A_conv @ (preheat 1) = h*M_top@(preheat 1);
-    zero when convection is off. tc.G_fn is scratch here."""
-    tc, p = case.tc, case.tc.p
-    if p.conv_h == 0.0:
-        return 0.0
-    st = fwd.dolfinx.default_scalar_type
-    tc.G_fn.x.array[:] = np.full(tc.vol_nodal.size, p.preheat_c).astype(st)
-    return fwd._assemble_real(tc.convG_form)
+def _conv_source(case: Case):
+    """The constant Robin RHS source A_conv @ (preheat 1), precomputed once
+    (_ensure_operator_forms); 0.0 when convection is off."""
+    _ensure_operator_forms(case)
+    return case._conv_source_vec
 
 
 def _implicit_solve(A_op, rhs, Minv, x0) -> np.ndarray:

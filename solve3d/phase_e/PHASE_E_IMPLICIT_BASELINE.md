@@ -415,3 +415,80 @@ the 4b record, n_sub_explicit>1, no false assertion, no heavy march).
 Regression: `test_two_sided` 6/6, `test_density_adjoint` 6/6 (incl.
 `test_march_matches_production_densify` still agree=True). The next layer is
 Phase 6 (relaunch the Tamper two-sided rescue) -- Matt-checkpointed heavy compute.
+
+---
+
+## 10. Phase 7 -- density-adjoint performance (assemble-once) + the REAL bottleneck
+
+Motivation: one `al_objective_and_grad` (Tamper, n_steps=300, drive 1.2x, full
+melt) measured ~4527 s (~75 min) -- days for a full config. Profiled (not guessed).
+
+### STEP 1 -- diagnosis (the CG hypothesis is REFUTED)
+
+- **CG iterations are STEADY ~80-90 per step, NEVER near CG_MAXITER=5000**, whether
+  the part is cold (83), near onset (101), or fully melted with a sharp melt front
+  at 244 C (87). The backward-Euler operator `M/dt + K` is mass-DOMINATED (well-
+  conditioned) so melt/heterogeneity does not blow up the iteration count. (This is
+  why loosening CG_RTOL 1e-13->1e-9 did not help -- iteration count, not tolerance,
+  and iteration count was never the problem.)
+- The pre-fix waste was that the MATRIX-FREE CG matvec RE-ASSEMBLED two dolfinx FEM
+  forms (diffG + convG) on EVERY CG iteration: ~2 x 2.4 ms x ~85 iters ~ 0.4 s/step
+  of pure re-assembly. Real but NOT the 75 min.
+- **The DOMINANT `al_objective` cost is the ENVELOPE term**
+  (`stage_a_phase2.envelope_grad_of_design` -> `adjoint.TransientCase.forward` +
+  checkpointed reverse), NOT the density co-state. The envelope runs the COUPLED
+  (EQS-thermal) transient forward+adjoint with EXPLICIT CFL SUBSTEPPING: on the
+  Tamper that is ~594000 substeps (see `adjoint.py:556`), and one call did NOT
+  finish in >18 min at NOMINAL drive (killed; drive 1.2x is hotter/longer). The
+  density co-state (`dks_peak_ds`) at n=300 was only ~146 s -- a small fraction.
+
+Split (Tamper, n=300): ks_peak_forward ~20-72 s, dks_peak_ds ~146 s (pre-fix),
+envelope >18 min (dominant, not completed).
+
+### STEP 2 -- fix (assemble-once, NOT splu direct)
+
+The splu DIRECT solve was tried and REJECTED: on the 10221-node 3-D matrix the
+sparse LU FACTORIZE is ~170 ms/step, so direct (~215 ms/step) is NOT faster than
+the 85-iter CG (~192 ms) -- 0.9x. The winning fix keeps CG but ASSEMBLES THE SPARSE
+OPERATOR ONCE per step and does the CG matvec as a FAST scipy sparse product:
+
+- `_implicit_operator` now assembles `A = diag(mdt) + K(k_fn) + A_conv` as a scipy
+  CSR once per step -- K from the bilinear stiffness form (cache hit;
+  `adjoint.fp.assemble_matrix` -> `getValuesCSR`), `A_conv` the CONSTANT Robin
+  matrix assembled ONCE (the convection bilinear form DOES compile in the
+  space-containing path -- the earlier JIT failure was a cold cache) -- and returns
+  a `LinearOperator(A @ x)` with a TRUE-diagonal Jacobi preconditioner. No FEM form
+  is re-assembled per CG iteration.
+- The operator is BIT-IDENTICAL to the old matrix-free one (benchmark
+  `||x_assemble_once - x_matfree|| / ||x|| = 8.3e-16`), CONSISTENT convection kept,
+  so the gradient does not move. A is symmetric -> the adjoint transpose solve
+  reuses the same assembled operator.
+- Micro-benchmark (hot Tamper step): matrix-free CG+precond ~231 ms -> assemble-once
+  52 ms = **4.4x**. `_precond_diag` (the old per-step full-matrix assemble just for
+  the diagonal) is removed.
+
+### STEP 3 -- correctness gate (gradient UNCHANGED)
+
+- coarse single-step VJP FD-gate: **8.6e-9** (was 4.9e-9; both << 1e-6).
+- coarse whole-march FD-gate: **1.47e-8** (was 1.72e-8), mutation-bites 2.6e-2.
+- coarse-equivalence 0.0468 C, no-melt gradient diff 6.7e-3, melt-regime 14.5% --
+  ALL identical to Phase 3 (the apparent-cp physics did not move).
+- Tamper adjoint gate: FINITE + **1e-6** (unchanged), now 118 s (was ~455 s).
+- `test_two_sided` 6/6, AL-grad FD gate **1.572e-8** (bit-identical to pre-fix).
+
+### STEP 4 -- re-time
+
+- `dks_peak_ds` (Tamper, n=300): **146 s -> 38.1 s (3.8x)**; ks_peak_forward ~20 s.
+- Extrapolation, DENSITY-ADJOINT portion per AL eval (ks + dks): ~218 s -> ~58 s.
+- BUT the AL eval is ENVELOPE-DOMINATED: total ~75 min -> ~75 min still, because the
+  envelope (>18 min/eval) is untouched. A reduced PoC (outer 3 x inner 4 = 12 evals)
+  and the full config (72 evals) remain impractical until the ENVELOPE is fixed.
+
+### The real next layer (recommendation)
+
+The density-adjoint assemble-once fix is correct and helps the producer's
+arbitrary-fine-part path (density-only). But to make the TAMPER RESCUE practical
+the ENVELOPE's coupled CFL-substepped transient forward+adjoint must get the SAME
+implicit (n_sub=1) treatment -- a separate, FD-gated coupled-adjoint layer
+(bigger than this density-only work). Recommend that as Phase 8 before the heavy
+rescue relaunch; the assemble-once operator built here is directly reusable for it.
