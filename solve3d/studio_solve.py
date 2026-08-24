@@ -997,15 +997,24 @@ def _probe_explicit_n_sub(tc, chain, dt: float):
 
 def _ceiling_restore_al_loop(rings, z_lo, z_hi, sample_dt_s, *, power_density,
                              t_target, envelope_max_time_s, march_time_s,
-                             outer_max, inner_budget, ckpt_dir) -> dict:
+                             outer_max, inner_budget, ckpt_dir,
+                             grade_node_density: float = SOLVE_NODE_DENSITY,
+                             grade_lc0: float = SOLVE_LC0) -> dict:
     """The B3/B4 outer augmented-Lagrangian restoration on the extruded producer
     mesh at the recommended drive, targeting T_eff (mirrors
     run_tamper_rescue.run_solve: build the ALCase once, mutate lam/mu each outer,
     checkpointed L-BFGS-B on b3.al_objective_and_grad). One-sided box [0,1] (the
     frozen producer convention; the Tamper's two-sided box is its starved-core
     case, out of scope here). EXPLICIT diffusion (implicit=False): the coarse
-    producer mesh is CFL-stable and certified by the explicit forward. HEAVY --
-    only the coordinator runs it (the unit tests inject a stub for run_al)."""
+    producer mesh is CFL-stable and certified by the explicit forward.
+
+    `grade_node_density`/`grade_lc0` size the GRADING mesh. Default = the Phase C
+    SOLVE_* constants (~206k in-part nodes -> ~942 s/eval, a full solve is
+    infeasible). The dopant map is smooth/low-frequency, so a COARSE grading mesh
+    is physically fine (the B4 cube proved it at ~9k nodes); pass e.g.
+    SOLVE_NODE_DENSITY/28 + SOLVE_LC0*3 (~7k nodes, still CFL-stable n_sub=1) to
+    make the full march tractable (~45 s/eval). HEAVY -- only the coordinator runs
+    it (the unit tests inject a stub for run_al)."""
     import dataclasses
     from solve3d import density_adjoint as da
     from solve3d import stage_b3 as b3
@@ -1013,8 +1022,9 @@ def _ceiling_restore_al_loop(rings, z_lo, z_hi, sample_dt_s, *, power_density,
 
     p_drive = dataclasses.replace(fwd.ForwardParams(),
                                   power_density_w_per_m3=float(power_density))
-    tc_d, info_d = build_case(rings, z_lo, z_hi, SOLVE_NODE_DENSITY, SOLVE_LC0,
-                              p_drive, float(envelope_max_time_s), sample_dt_s)
+    tc_d, info_d = build_case(rings, z_lo, z_hi, float(grade_node_density),
+                              float(grade_lc0), p_drive,
+                              float(envelope_max_time_s), sample_dt_s)
     chain_d = dc.DesignChain.build(tc_d)
     dt = float(tc_d.p.dt_s)
     n_steps = max(1, int(round(float(march_time_s) / dt)))
@@ -1055,6 +1065,8 @@ def _solve_extruded_ceiling_restore(part_npz, out, t_start, *,
                                     max_time_s, sample_dt_s, drive_candidates,
                                     drive_max_time_s, adaptive_drive,
                                     drive_max_evals,
+                                    grade_node_density: float = SOLVE_NODE_DENSITY,
+                                    grade_lc0: float = SOLVE_LC0,
                                     restore_outer_max=None,
                                     restore_inner_budget=None,
                                     restore_envelope_max_time_s=1800.0,
@@ -1081,8 +1093,13 @@ def _solve_extruded_ceiling_restore(part_npz, out, t_start, *,
     z_lo, z_hi = sg.z_extent(part, h)
     rings = sg.outline_rings(sg.mid_slice(part), h)
     p = fwd.ForwardParams()
-    tc, info = build_case(rings, z_lo, z_hi, SOLVE_NODE_DENSITY, SOLVE_LC0,
-                          p, max_time_s, sample_dt_s)
+    # The GRADING mesh (default = Phase C SOLVE_* constants). The drive probe, the
+    # fine-mesh guard, the AL restoration and the emitted map's OWN standing-gate
+    # ALL read this same mesh, so the sendable number is self-consistent FOR THE
+    # MAP THAT SHIPS. Coarsen (grade_node_density/grade_lc0) to make the full
+    # march tractable; the dopant map is smooth so a coarse grading mesh is fine.
+    tc, info = build_case(rings, z_lo, z_hi, float(grade_node_density),
+                          float(grade_lc0), p, max_time_s, sample_dt_s)
     chain = dc.DesignChain.build(tc)
     grid_cache = {"grid": eval_grid(rings, z_lo, z_hi)}
     _holder: dict = {}
@@ -1107,7 +1124,8 @@ def _solve_extruded_ceiling_restore(part_npz, out, t_start, *,
             t_target=t_target, envelope_max_time_s=restore_envelope_max_time_s,
             march_time_s=(restore_march_time_s if restore_march_time_s is not None
                           else drive_max_time_s),
-            outer_max=outer_max, inner_budget=inner_budget, ckpt_dir=out)
+            outer_max=outer_max, inner_budget=inner_budget, ckpt_dir=out,
+            grade_node_density=grade_node_density, grade_lc0=grade_lc0)
         _holder["restore"] = res
         return res
 
@@ -1147,7 +1165,19 @@ def _solve_extruded_ceiling_restore(part_npz, out, t_start, *,
                            "march_time_s": float(restore_march_time_s
                                                  if restore_march_time_s is not None
                                                  else drive_max_time_s),
-                           "box": "[0,1] one-sided", "diffusion": "explicit"},
+                           "box": "[0,1] one-sided", "diffusion": "explicit",
+                           "grade_node_density": float(grade_node_density),
+                           "grade_lc0": float(grade_lc0),
+                           "grade_node_density_default": SOLVE_NODE_DENSITY,
+                           "grade_mesh_note": (
+                               "the drive probe, fine-mesh guard, AL restoration "
+                               "and the emitted map's standing-gate ALL read this "
+                               "one grading mesh, so sendable is self-consistent "
+                               "for the shipped map. Default = Phase C SOLVE_* "
+                               "(~206k nodes, ~942 s/eval, full solve infeasible); "
+                               "coarsen (~7k nodes) to make the march tractable -- "
+                               "the smooth dopant map tolerates a coarse mesh "
+                               "(B4 cube proved it at ~9k).")},
     }
 
     def assemble(stage, **kw):
@@ -1188,6 +1218,8 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
                    drive_max_evals: int = 4,
                    _peak_probe=None,
                    ceiling_restore: bool = False,
+                   grade_node_density: float = SOLVE_NODE_DENSITY,
+                   grade_lc0: float = SOLVE_LC0,
                    _n_sub_probe=None,
                    _al_restore_solve=None) -> dict:
     """Solve one imported EXTRUDED part; write the Studio's artifact pair.
@@ -1207,6 +1239,14 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
     is the EXACT legacy shape-only path, byte-identical (this guard is the only
     added statement). `_n_sub_probe`/`_al_restore_solve` inject the fine-mesh
     probe / heavy AL solve for wiring tests.
+
+    grade_node_density / grade_lc0 (ceiling_restore ONLY): size the GRADING mesh
+    the drive probe + guard + AL + the emitted map's standing-gate all read.
+    Default = the Phase C SOLVE_* constants (byte-identical to the legacy solve
+    mesh). The full-density grading mesh (~206k nodes) makes one AL eval ~942 s
+    and the full solve infeasible; the dopant map is smooth, so coarsen (e.g.
+    SOLVE_NODE_DENSITY/28, SOLVE_LC0*3 -> ~7k nodes, still CFL-stable) to make the
+    march tractable (~45 s/eval, full solve ~1 h). Ignored on the legacy path.
     """
     t_start = time.perf_counter()
     out = Path(out_dir)
@@ -1216,8 +1256,10 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
             part_npz, out, t_start, max_time_s=max_time_s,
             sample_dt_s=sample_dt_s, drive_candidates=drive_candidates,
             drive_max_time_s=drive_max_time_s, adaptive_drive=adaptive_drive,
-            drive_max_evals=drive_max_evals, _peak_probe=_peak_probe,
-            _n_sub_probe=_n_sub_probe, _al_restore_solve=_al_restore_solve)
+            drive_max_evals=drive_max_evals,
+            grade_node_density=grade_node_density, grade_lc0=grade_lc0,
+            _peak_probe=_peak_probe, _n_sub_probe=_n_sub_probe,
+            _al_restore_solve=_al_restore_solve)
     with np.load(part_npz) as d:
         part = np.asarray(d["part"], bool)
         h = float(d["h"]) if "h" in d.files else L_DOMAIN / part.shape[0]
@@ -1438,6 +1480,17 @@ def main() -> int:
                          "(drive-select -> fine-mesh guard -> B3/B4 AL restoration "
                          "at the recommended drive -> graded sendable map) instead "
                          "of the shape-only solve. Default OFF = legacy output.")
+    ap.add_argument("--grade-node-density", type=float, default=SOLVE_NODE_DENSITY,
+                    help="ceiling_restore GRADING-mesh in-part node density "
+                         "(nodes/m^3). Default = Phase C SOLVE density (~206k "
+                         "nodes, full solve infeasible); coarsen (e.g. "
+                         f"{SOLVE_NODE_DENSITY / 28:.4g} ~ /28 -> ~7k nodes) to "
+                         "make the full march tractable (~1 h).")
+    ap.add_argument("--grade-lc0", type=float, default=SOLVE_LC0,
+                    help="ceiling_restore GRADING-mesh seed element size (m). "
+                         f"Default {SOLVE_LC0}; pair with --grade-node-density "
+                         f"(e.g. {SOLVE_LC0 * 3:.6g} = SOLVE_LC0*3 for the coarse "
+                         "grading mesh).")
     ap.add_argument("--make-tube", default=None, metavar="OUT_NPZ",
                     help="write the validation tube part and exit")
     ap.add_argument("--n", type=int, default=32)
@@ -1456,7 +1509,9 @@ def main() -> int:
                    drive_max_time_s=args.drive_max_time_s,
                    adaptive_drive=args.adaptive_drive,
                    drive_max_evals=args.drive_max_evals,
-                   ceiling_restore=args.ceiling_restore)
+                   ceiling_restore=args.ceiling_restore,
+                   grade_node_density=args.grade_node_density,
+                   grade_lc0=args.grade_lc0)
     return 0
 
 

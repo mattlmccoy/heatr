@@ -274,3 +274,115 @@ def test_ceiling_restore_false_takes_legacy_path(monkeypatch, tmp_path):
     with pytest.raises(_LegacySentinel):
         ss.solve_extruded(str(tmp_path / "any.npz"), str(tmp_path),
                           ceiling_restore=False)
+
+
+# --------------------------------------------------------------------------- #
+# 5. grade-mesh knob: coarsen the AL/grading mesh so the full march is tractable
+# --------------------------------------------------------------------------- #
+class _BuildSentinel(Exception):
+    pass
+
+
+def _record_build_case(recorded):
+    def _stub(rings, z_lo, z_hi, node_density, lc0, p, max_time_s, sample_dt_s):
+        recorded.append({"node_density": node_density, "lc0": lc0})
+        raise _BuildSentinel()
+    return _stub
+
+
+def test_al_loop_threads_coarse_grade_mesh(monkeypatch, tmp_path):
+    """The AL/grading build_case uses the COARSE grade density/lc0 when set (the
+    old code hardcoded SOLVE_NODE_DENSITY -> 942 s/eval, infeasible)."""
+    rec = []
+    monkeypatch.setattr(ss, "build_case", _record_build_case(rec))
+    coarse = ss.SOLVE_NODE_DENSITY / 28.0
+    lc = ss.SOLVE_LC0 * 3.0
+    with pytest.raises(_BuildSentinel):
+        ss._ceiling_restore_al_loop(
+            [np.zeros((4, 2))], 0.0, 0.004, 50.0, power_density=1.0,
+            t_target=235.0, envelope_max_time_s=1800.0, march_time_s=3000.0,
+            outer_max=1, inner_budget=1, ckpt_dir=tmp_path,
+            grade_node_density=coarse, grade_lc0=lc)
+    assert rec[0]["node_density"] == pytest.approx(coarse)
+    assert rec[0]["lc0"] == pytest.approx(lc)
+
+
+def test_al_loop_default_grade_mesh_preserves_solve_density(monkeypatch, tmp_path):
+    """Default (no knob) preserves the Phase C SOLVE mesh density -- byte-identical
+    behavior for a caller that does not coarsen."""
+    rec = []
+    monkeypatch.setattr(ss, "build_case", _record_build_case(rec))
+    with pytest.raises(_BuildSentinel):
+        ss._ceiling_restore_al_loop(
+            [np.zeros((4, 2))], 0.0, 0.004, 50.0, power_density=1.0,
+            t_target=235.0, envelope_max_time_s=1800.0, march_time_s=3000.0,
+            outer_max=1, inner_budget=1, ckpt_dir=tmp_path)
+    assert rec[0]["node_density"] == pytest.approx(ss.SOLVE_NODE_DENSITY)
+    assert rec[0]["lc0"] == pytest.approx(ss.SOLVE_LC0)
+
+
+def test_restore_front_end_threads_grade_mesh(monkeypatch, tmp_path):
+    """The front-end tc (drive probe + fine-mesh guard read it) is built on the
+    SAME grading mesh -- so the guard/score numbers are self-consistent with the
+    mesh the AL and the shipped map live on."""
+    rec = []
+
+    class _FakeNpz:
+        files = ["part", "h", "n"]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def __getitem__(self, k):
+            return {"part": np.ones((4, 4, 4), bool), "h": 0.001, "n": 4}[k]
+
+    monkeypatch.setattr(ss.np, "load", lambda p: _FakeNpz())
+    monkeypatch.setattr(ss.sg, "detect_extrusion",
+                        lambda part: {"is_extruded": True, "refusal": None})
+    monkeypatch.setattr(ss.sg, "z_extent", lambda part, h: (0.0, 0.004))
+    monkeypatch.setattr(ss.sg, "mid_slice", lambda part: part)
+    monkeypatch.setattr(ss.sg, "outline_rings", lambda sl, h: [np.zeros((4, 2))])
+    monkeypatch.setattr(ss, "build_case", _record_build_case(rec))
+    coarse = ss.SOLVE_NODE_DENSITY / 28.0
+    with pytest.raises(_BuildSentinel):
+        ss._solve_extruded_ceiling_restore(
+            "x.npz", tmp_path, 0.0, max_time_s=500.0, sample_dt_s=50.0,
+            drive_candidates=(0.3,), drive_max_time_s=1.0, adaptive_drive=False,
+            drive_max_evals=4, grade_node_density=coarse,
+            grade_lc0=ss.SOLVE_LC0 * 3.0)
+    assert rec[0]["node_density"] == pytest.approx(coarse)
+    assert rec[0]["lc0"] == pytest.approx(ss.SOLVE_LC0 * 3.0)
+
+
+def test_solve_extruded_passes_grade_params_to_restore(monkeypatch, tmp_path):
+    """solve_extruded plumbs the grade knobs through the ceiling_restore
+    dispatch."""
+    seen = {}
+
+    def rec(part_npz, out, t_start, **kw):
+        seen.update(kw)
+        return {"ok": True}
+
+    monkeypatch.setattr(ss, "_solve_extruded_ceiling_restore", rec)
+    coarse = ss.SOLVE_NODE_DENSITY / 28.0
+    ss.solve_extruded("x.npz", str(tmp_path), ceiling_restore=True,
+                      grade_node_density=coarse, grade_lc0=ss.SOLVE_LC0 * 3.0)
+    assert seen["grade_node_density"] == pytest.approx(coarse)
+    assert seen["grade_lc0"] == pytest.approx(ss.SOLVE_LC0 * 3.0)
+
+
+def test_solve_extruded_default_grade_params_are_solve_constants(monkeypatch,
+                                                                 tmp_path):
+    seen = {}
+
+    def rec(part_npz, out, t_start, **kw):
+        seen.update(kw)
+        return {}
+
+    monkeypatch.setattr(ss, "_solve_extruded_ceiling_restore", rec)
+    ss.solve_extruded("x.npz", str(tmp_path), ceiling_restore=True)
+    assert seen["grade_node_density"] == pytest.approx(ss.SOLVE_NODE_DENSITY)
+    assert seen["grade_lc0"] == pytest.approx(ss.SOLVE_LC0)
