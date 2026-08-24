@@ -241,6 +241,34 @@ DELTA_EMA = 0.5                  # restoration-shift EMA damping
 CONVERGE_TOL_C = 0.25            # |true arbiter peak - ceiling| convergence band
 
 
+def build_al_case_from_tc(tc, chain, *, power_density, t_target: float,
+                          dt: float, n_steps: int,
+                          lam: float = LAM0, mu: float = MU0,
+                          implicit: bool = True) -> ALCase:
+    """Wrap an ALREADY-BUILT TransientCase + design chain into an ALCase.
+
+    The ONE da.Case/_v0/ALCase construction shared by the Tamper rescue driver
+    (run_tamper_rescue.build_tamper_al_case) and the studio_solve producer
+    ceiling-restoration path (DRY -- one code path, no drift). Both callers build
+    their own geometry-specific tc + chain (Tamper STL vs Studio extruded prism)
+    and hand them here; the density-co-state / envelope adjoint downstream are
+    geometry-agnostic.
+
+    `power_density` is carried for PROVENANCE only: the drive is baked into `tc`
+    at build time (via da.build_coarse_case / rt.build_case), so nothing here
+    re-touches the forward -- byte-identical to the prior build_tamper_al_case,
+    which likewise did not re-apply power_density in this construction.
+    `implicit` defaults True (the fine-mesh/Tamper Case default, so the Tamper
+    wrapper stays byte-identical); the coarse producer passes implicit=False to
+    keep the certified explicit adjoint. `lam`/`mu` default to the AL initial
+    (LAM0/MU0); callers that vary them (the FD gate, validate) pass explicitly."""
+    case = da.Case(tc=tc, chain=chain, dt=float(dt), n_steps=int(n_steps),
+                   implicit=bool(implicit))
+    case._v0 = np.ones(chain.n_design)
+    return ALCase(da_case=case, lam=float(lam), mu=float(mu),
+                  t_target=float(t_target))
+
+
 def build_al_solve_case(lam: float, mu: float, t_target: float,
                         power_density: float | None = None,
                         shape: str = "square") -> ALCase:

@@ -408,6 +408,99 @@ def _merge_recommended_drive(doc: dict, rec: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# PRODUCER CEILING-RESTORATION (spec 3a, opt-in). The current shape-only solve
+# (run_solve = L-BFGS-B on J_asymmetric, box [0,1]) busts the ceiling: its graded
+# map relocates the peak UP (cube 243.6 uniform -> 260.97 shaped, over 250) so
+# is_sendable rejects it and the Studio ships UNIFORM. This mode instead runs the
+# B3/B4 ceiling-coupled augmented-Lagrangian restoration AT the recommended drive,
+# targeting T_eff = ceiling - reserve (235), so the graded map lands under 250 by
+# construction. IN SCOPE: coarse-meshable extruded parts (CFL-stable, n_sub=1).
+# OUT: fine parts (the envelope adjoint is explicit-CFL-bound there) -- guarded
+# out with an honest-null, NOT silently run for days.
+# --------------------------------------------------------------------------- #
+FINE_MESH_REASON = (
+    "fine mesh: the explicit melt-onset envelope adjoint is CFL-unstable at this "
+    "dt on this mesh (n_sub>1); use the Phase-8 implicit fine-mesh path, not the "
+    "coarse ceiling restoration")
+
+
+def _assemble_ceiling_restore_doc(stage: str, *, drive_rec: dict,
+                                  restore: dict | None = None,
+                                  scored: dict | None = None,
+                                  n_sub: int | None = None,
+                                  dt_stable: float | None = None,
+                                  base: dict | None = None) -> dict:
+    """Assemble the ceiling_restore result doc (pure). `stage` is one of
+    drive_limited | fine_mesh | graded. Every stage folds the PINNED recommended-
+    drive contract fields (what the Studio consumer reads); only the graded stage
+    carries a map + a standing peak + sendable=True. The two honest-null stages
+    carry map=None + sendable=False + a reason -- never a cooking map."""
+    doc = dict(base or {})
+    doc["mode"] = "ceiling_restore"
+    doc["ceiling_restore_stage"] = str(stage)
+    _merge_recommended_drive(doc, drive_rec)
+    if stage == "drive_limited":
+        doc["ceiling_restored_map"] = None
+        doc["sendable"] = False
+        doc["ceiling_restore_reason"] = drive_rec.get("recommended_drive_reason")
+        return doc
+    if stage == "fine_mesh":
+        doc["ceiling_restored_map"] = None
+        doc["sendable"] = False
+        doc["fine_mesh_guard"] = {"n_sub": int(n_sub),
+                                  "dt_stable_s": float(dt_stable),
+                                  "reason": FINE_MESH_REASON}
+        doc["ceiling_restore_reason"] = FINE_MESH_REASON
+        return doc
+    if stage != "graded":
+        raise ValueError(f"unknown ceiling_restore stage {stage!r}")
+    scored = scored or {}
+    doc["ceiling_restored_map"] = restore.get("s_best")
+    doc["ceiling_restored"] = scored.get("scored_rec")
+    doc["ceiling_restore_outer"] = restore.get("outer")
+    doc["standing_peak_c"] = scored.get("peak_T_c")
+    doc["peak_over_ceiling"] = scored.get("peak_over_ceiling")
+    doc["symmetry_gate"] = scored.get("symmetry_gate")
+    doc["sendable"] = scored.get("sendable")
+    doc["t_eff_target_c"] = float(drive_rec.get("t_eff_c")) \
+        if drive_rec.get("t_eff_c") is not None else None
+    return doc
+
+
+def ceiling_restore_solve(*, select_drive, probe_n_sub, run_al, score,
+                          assemble_doc=None) -> dict:
+    """Pure orchestration of the producer ceiling-restoration flow (spec 3a).
+
+    The DRIVE is selected FIRST (the AL targets T_eff at the drive), THEN the
+    fine-mesh guard, THEN -- only for a coarse, drive-feasible part -- the heavy AL
+    restoration. A drive-limited part or a fine mesh honest-nulls WITHOUT ever
+    calling run_al (never cook a map that busts the ceiling / a days-long solve).
+
+    Injected callables (solve_extruded wires the real physics; tests stub):
+      select_drive() -> recommended_drive_for_part record (has
+          recommended_power_density_w_per_m3 None on honest-null, t_eff_c target).
+      probe_n_sub()  -> (n_sub, dt_stable) explicit-CFL substep count on the mesh.
+      run_al(power_density, t_target) -> {"s_best":.., "v_best":.., "outer":..}.
+      score(restore) -> {"scored_rec":.., "peak_T_c":.., "sendable":.., ..}.
+    """
+    if assemble_doc is None:
+        assemble_doc = _assemble_ceiling_restore_doc
+    drive_rec = select_drive()
+    if drive_rec.get("recommended_power_density_w_per_m3") is None:
+        return assemble_doc("drive_limited", drive_rec=drive_rec)
+    n_sub, dt_stable = probe_n_sub()
+    if int(n_sub) > 1:
+        return assemble_doc("fine_mesh", drive_rec=drive_rec,
+                            n_sub=int(n_sub), dt_stable=float(dt_stable))
+    restore = run_al(
+        power_density=float(drive_rec["recommended_power_density_w_per_m3"]),
+        t_target=float(drive_rec["t_eff_c"]))
+    scored = score(restore)
+    return assemble_doc("graded", drive_rec=drive_rec, restore=restore,
+                        scored=scored)
+
+
+# --------------------------------------------------------------------------- #
 # The extruded-polygon conforming mesh (generalizes heatr3d_d1_spike/mesh_gmsh)
 # --------------------------------------------------------------------------- #
 def build_extruded_mesh(rings: list, z_lo: float, z_hi: float, lc_part: float,
@@ -888,6 +981,201 @@ def run_gates(tc, chain, s_best: np.ndarray, solved_rec: dict,
 
 
 # --------------------------------------------------------------------------- #
+# The producer ceiling-restoration wiring (spec 3a). Builds the real front-end +
+# the four physics callables, hands them to the pure ceiling_restore_solve, then
+# writes the artifact pair. The heavy AL loop lives in _ceiling_restore_al_loop;
+# the fine-mesh guard probes the explicit CFL substep count on this very mesh.
+# --------------------------------------------------------------------------- #
+def _probe_explicit_n_sub(tc, chain, dt: float):
+    """The explicit-CFL substep count on THIS mesh at `dt` (da._explicit_n_sub).
+    n_sub > 1 means the explicit envelope adjoint is CFL-unstable here -> a FINE
+    mesh, guarded out of the coarse restoration."""
+    from solve3d import density_adjoint as da
+    case = da.Case(tc=tc, chain=chain, dt=float(dt), n_steps=1)
+    return da._explicit_n_sub(case)
+
+
+def _ceiling_restore_al_loop(rings, z_lo, z_hi, sample_dt_s, *, power_density,
+                             t_target, envelope_max_time_s, march_time_s,
+                             outer_max, inner_budget, ckpt_dir) -> dict:
+    """The B3/B4 outer augmented-Lagrangian restoration on the extruded producer
+    mesh at the recommended drive, targeting T_eff (mirrors
+    run_tamper_rescue.run_solve: build the ALCase once, mutate lam/mu each outer,
+    checkpointed L-BFGS-B on b3.al_objective_and_grad). One-sided box [0,1] (the
+    frozen producer convention; the Tamper's two-sided box is its starved-core
+    case, out of scope here). EXPLICIT diffusion (implicit=False): the coarse
+    producer mesh is CFL-stable and certified by the explicit forward. HEAVY --
+    only the coordinator runs it (the unit tests inject a stub for run_al)."""
+    import dataclasses
+    from solve3d import density_adjoint as da
+    from solve3d import stage_b3 as b3
+    from solve3d.phase_e import checkpoint as ck
+
+    p_drive = dataclasses.replace(fwd.ForwardParams(),
+                                  power_density_w_per_m3=float(power_density))
+    tc_d, info_d = build_case(rings, z_lo, z_hi, SOLVE_NODE_DENSITY, SOLVE_LC0,
+                              p_drive, float(envelope_max_time_s), sample_dt_s)
+    chain_d = dc.DesignChain.build(tc_d)
+    dt = float(tc_d.p.dt_s)
+    n_steps = max(1, int(round(float(march_time_s) / dt)))
+    lam, mu = b3.LAM0, b3.MU0
+    case = b3.build_al_case_from_tc(
+        tc_d, chain_d, power_density=power_density, t_target=float(t_target),
+        dt=dt, n_steps=n_steps, lam=lam, mu=mu, implicit=False)
+    v = np.ones(chain_d.n_design)
+    print(f"[studio_solve ceiling_restore] AL START pw={power_density:.3e} "
+          f"t_target={t_target} n_design={chain_d.n_design} n_steps={n_steps}",
+          flush=True)
+    outers = []
+    for k in range(int(outer_max)):
+        case.lam, case.mu = float(lam), float(mu)
+
+        def fg(vv):
+            return b3.al_objective_and_grad(case, vv)
+        ckpt = Path(ckpt_dir) / f"ckpt_ceiling_restore_outer{k}.npz"
+        res = ck.run_with_checkpoint(fg, v, int(inner_budget), ckpt,
+                                     bounds=(0.0, 1.0), scale_first_step=True)
+        v = np.asarray(res["best_v"], float)
+        ks = float(da.ks_peak_forward(case.da_case, v))
+        lam = b3.multiplier_update(lam=lam, mu=mu, g=ks - case.t_target)
+        outers.append({"outer": int(k), "ks_peak_c": ks,
+                       "best_J": float(res["best_J"]),
+                       "evals_used": int(res.get("evals_used", 0)),
+                       "lam_after": float(lam)})
+        print(f"[studio_solve ceiling_restore] outer={k} KS={ks:.2f}C "
+              f"lam->{lam:.3e}", flush=True)
+    s_best = chain_d.design_to_map(v, 0.0)
+    return {"v_best": v, "s_best": s_best, "outer": outers,
+            "tc": tc_d, "chain": chain_d, "info": info_d,
+            "power_density_w_per_m3": float(power_density),
+            "t_target_c": float(t_target)}
+
+
+def _solve_extruded_ceiling_restore(part_npz, out, t_start, *,
+                                    max_time_s, sample_dt_s, drive_candidates,
+                                    drive_max_time_s, adaptive_drive,
+                                    drive_max_evals,
+                                    restore_outer_max=None,
+                                    restore_inner_budget=None,
+                                    restore_envelope_max_time_s=1800.0,
+                                    restore_march_time_s=None,
+                                    _peak_probe=None, _n_sub_probe=None,
+                                    _al_restore_solve=None) -> dict:
+    """The real ceiling_restore wiring: front-end + physics callables + emission.
+    (solve_extruded dispatches here when ceiling_restore=True.)"""
+    from solve3d import stage_b3 as b3
+    outer_max = b3.OUTER_MAX if restore_outer_max is None else int(restore_outer_max)
+    inner_budget = (b3.INNER_BUDGET if restore_inner_budget is None
+                    else int(restore_inner_budget))
+
+    with np.load(part_npz) as d:
+        part = np.asarray(d["part"], bool)
+        h = float(d["h"]) if "h" in d.files else L_DOMAIN / part.shape[0]
+        n = int(d["n"]) if "n" in d.files else part.shape[0]
+
+    det = sg.detect_extrusion(part)
+    print(f"[studio_solve ceiling_restore] extrusion: {det['is_extruded']}",
+          flush=True)
+    if not det["is_extruded"]:
+        raise sg.NotExtrudedError(det["refusal"])
+    z_lo, z_hi = sg.z_extent(part, h)
+    rings = sg.outline_rings(sg.mid_slice(part), h)
+    p = fwd.ForwardParams()
+    tc, info = build_case(rings, z_lo, z_hi, SOLVE_NODE_DENSITY, SOLVE_LC0,
+                          p, max_time_s, sample_dt_s)
+    chain = dc.DesignChain.build(tc)
+    grid_cache = {"grid": eval_grid(rings, z_lo, z_hi)}
+    _holder: dict = {}
+
+    def select_drive():
+        rec = recommended_drive_for_part(
+            tc.msh, rings, z_lo, z_hi, candidates=drive_candidates,
+            max_time_s=drive_max_time_s, peak_probe=_peak_probe,
+            adaptive=adaptive_drive, max_evals=drive_max_evals)
+        rec["drive_probe_mesh"] = {"which": "solve_mesh",
+                                   "n_nodes_in_part": info.get("n_nodes_in_part")}
+        return rec
+
+    def probe_n_sub():
+        if _n_sub_probe is not None:
+            return _n_sub_probe(tc, chain, p.dt_s)
+        return _probe_explicit_n_sub(tc, chain, p.dt_s)
+
+    def run_al(power_density, t_target):
+        res = _ceiling_restore_al_loop(
+            rings, z_lo, z_hi, sample_dt_s, power_density=power_density,
+            t_target=t_target, envelope_max_time_s=restore_envelope_max_time_s,
+            march_time_s=(restore_march_time_s if restore_march_time_s is not None
+                          else drive_max_time_s),
+            outer_max=outer_max, inner_budget=inner_budget, ckpt_dir=out)
+        _holder["restore"] = res
+        return res
+
+    def score(restore):
+        tc_d, chain_d, s_best = restore["tc"], restore["chain"], restore["s_best"]
+        rec = score_arm(tc_d, s_best, "ceiling_restored", grid_cache)
+        uni = score_arm(tc_d, np.ones(chain_d.n_design), "uniform_at_restore_mesh",
+                        grid_cache)
+
+        def _price(projected_map):
+            return score_arm(tc_d, projected_map, "symmetry_projection_price",
+                             grid_cache)["J_asymmetric"]
+        symrec = symmetry_gate_record_for_map(
+            chain_d.centroids, chain_d.volumes, s_best, scorer=_price,
+            j_uniform=uni["J_asymmetric"], j_solved=rec["J_asymmetric"])
+        return {"scored_rec": rec, "peak_T_c": rec["peak_T_c"],
+                "peak_over_ceiling": rec["peak_over_ceiling"],
+                "symmetry_gate": symrec, "sendable": symrec["sendable"]}
+
+    base = {
+        "what": "solve3d producer CEILING-RESTORATION (spec 3a): drive-select -> "
+                "fine-mesh guard -> B3/B4 augmented-Lagrangian restoration at the "
+                "recommended drive targeting T_eff -> graded, ceiling-respecting, "
+                "sendable dopant map (or honest-null).",
+        "part": {"npz": str(part_npz), "grid_n": n, "h_m": h,
+                 "n_voxels": int(part.sum()),
+                 "voxel_volume_m3": float(part.sum() * h ** 3)},
+        "extrusion_detection": det,
+        "outline": {"n_rings": len(rings),
+                    "n_vertices": [int(len(r)) for r in rings],
+                    "net_area_m2": sg.rings_area(rings),
+                    "z_lo_m": z_lo, "z_hi_m": z_hi},
+        "mesh": info,
+        "restore_config": {"outer_max": int(outer_max),
+                           "inner_budget": int(inner_budget),
+                           "envelope_max_time_s": float(restore_envelope_max_time_s),
+                           "march_time_s": float(restore_march_time_s
+                                                 if restore_march_time_s is not None
+                                                 else drive_max_time_s),
+                           "box": "[0,1] one-sided", "diffusion": "explicit"},
+    }
+
+    def assemble(stage, **kw):
+        return _assemble_ceiling_restore_doc(stage, base=base, **kw)
+
+    doc = ceiling_restore_solve(
+        select_drive=select_drive, probe_n_sub=probe_n_sub,
+        run_al=(_al_restore_solve if _al_restore_solve is not None else run_al),
+        score=score, assemble_doc=assemble)
+    doc["wall_seconds"] = time.perf_counter() - t_start
+
+    # artifact pair: the graded map npz (when a map was produced) + the results json
+    restore = _holder.get("restore")
+    if doc.get("ceiling_restored_map") is not None and restore is not None:
+        ch = restore["chain"]
+        sg.write_map_npz(out / "studio_ceiling_restore_map.npz", ch.centroids,
+                         restore["s_best"], ch.volumes, restore["v_best"])
+        doc["ceiling_restored_map_npz"] = str(out / "studio_ceiling_restore_map.npz")
+    (out / "studio_solve_results.json").write_text(
+        json.dumps(doc, indent=1, default=G._jsonable))
+    print(f"[studio_solve ceiling_restore] DONE stage={doc['ceiling_restore_stage']} "
+          f"sendable={doc.get('sendable')} "
+          f"standing_peak={doc.get('standing_peak_c')} "
+          f"wall={doc['wall_seconds']:.0f}s", flush=True)
+    return doc
+
+
+# --------------------------------------------------------------------------- #
 # The service
 # --------------------------------------------------------------------------- #
 def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
@@ -898,7 +1186,10 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
                    drive_max_time_s: float = 3000.0,
                    adaptive_drive: bool = False,
                    drive_max_evals: int = 4,
-                   _peak_probe=None) -> dict:
+                   _peak_probe=None,
+                   ceiling_restore: bool = False,
+                   _n_sub_probe=None,
+                   _al_restore_solve=None) -> dict:
     """Solve one imported EXTRUDED part; write the Studio's artifact pair.
 
     ceiling_drive (Matt path A: the ceiling-coupled solve is the standard path):
@@ -907,10 +1198,26 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
     into studio_solve_results.json. Default False preserves the exact legacy
     output (no new fields, no extra forwards); the CLI turns it on by default.
     `_peak_probe` injects a stubbed drive-selection probe for wiring tests.
+
+    ceiling_restore (spec 3a, OPT-IN, default OFF): when True, take the NEW
+    ceiling-restoration path instead of the shape-only solve -- drive-select
+    first, honest-null a drive-limited or FINE mesh, else run the B3/B4 AL
+    restoration at the recommended drive (targeting T_eff = ceiling - reserve) and
+    emit the graded, ceiling-respecting, sendable map. When False the flow below
+    is the EXACT legacy shape-only path, byte-identical (this guard is the only
+    added statement). `_n_sub_probe`/`_al_restore_solve` inject the fine-mesh
+    probe / heavy AL solve for wiring tests.
     """
     t_start = time.perf_counter()
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    if ceiling_restore:
+        return _solve_extruded_ceiling_restore(
+            part_npz, out, t_start, max_time_s=max_time_s,
+            sample_dt_s=sample_dt_s, drive_candidates=drive_candidates,
+            drive_max_time_s=drive_max_time_s, adaptive_drive=adaptive_drive,
+            drive_max_evals=drive_max_evals, _peak_probe=_peak_probe,
+            _n_sub_probe=_n_sub_probe, _al_restore_solve=_al_restore_solve)
     with np.load(part_npz) as d:
         part = np.asarray(d["part"], bool)
         h = float(d["h"]) if "h" in d.files else L_DOMAIN / part.shape[0]
@@ -1126,6 +1433,11 @@ def main() -> int:
                          "arbitrates so it can only under-drive, never over-drive")
     ap.add_argument("--drive-max-evals", type=int, default=4,
                     help="max uniform forwards for the adaptive drive probe")
+    ap.add_argument("--ceiling-restore", action="store_true", default=False,
+                    help="OPT-IN (spec 3a): take the ceiling-restoration path "
+                         "(drive-select -> fine-mesh guard -> B3/B4 AL restoration "
+                         "at the recommended drive -> graded sendable map) instead "
+                         "of the shape-only solve. Default OFF = legacy output.")
     ap.add_argument("--make-tube", default=None, metavar="OUT_NPZ",
                     help="write the validation tube part and exit")
     ap.add_argument("--n", type=int, default=32)
@@ -1143,7 +1455,8 @@ def main() -> int:
                    ceiling_drive=args.ceiling_drive,
                    drive_max_time_s=args.drive_max_time_s,
                    adaptive_drive=args.adaptive_drive,
-                   drive_max_evals=args.drive_max_evals)
+                   drive_max_evals=args.drive_max_evals,
+                   ceiling_restore=args.ceiling_restore)
     return 0
 
 

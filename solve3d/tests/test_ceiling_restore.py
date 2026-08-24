@@ -1,0 +1,276 @@
+"""Unit / wiring tests for the producer ceiling-restoration mode (spec 3a,
+docs/superpowers/specs/2026-08-19-producer-ceiling-restoration-design.md).
+
+NO heavy solve. The AL restoration solve and the mesh front end are STUBBED so
+these are pure logic, mirroring how test_studio_solve_drive stubs the drive
+probe. Two surfaces are pinned:
+
+  1. The DRY helper stage_b3.build_al_case_from_tc and that
+     run_tamper_rescue.build_tamper_al_case is now a THIN WRAPPER over it that
+     builds a byte-identical ALCase (implicit default True, LAM0/MU0 threaded).
+  2. The studio_solve ceiling_restore ORCHESTRATION: drive selected BEFORE the
+     AL solve; a drive-limited part or a fine mesh honest-nulls WITHOUT running
+     the AL (never a cooking map); a coarse feasible part emits the graded map +
+     recommended drive + the map's standing peak + sendable. And that the flag
+     is opt-in: ceiling_restore=False takes the exact legacy path.
+"""
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from solve3d import stage_b3 as b3
+from solve3d import studio_solve as ss
+from solve3d.phase_e import run_tamper_rescue as rrescue
+
+
+# --------------------------------------------------------------------------- #
+# 1. DRY helper + tamper thin-wrapper byte-identity
+# --------------------------------------------------------------------------- #
+class _FakeEqs:
+    vol = np.arange(10, dtype=float) + 1.0
+    part = np.array([0, 1, 2, 3, 4], dtype=np.int64)
+
+
+class _FakeTC:
+    eqs = _FakeEqs()
+
+
+class _FakeChain:
+    def __init__(self, n_design: int = 5):
+        self.n_design = int(n_design)
+
+
+def _alcase_fields(case):
+    dc = case.da_case
+    return (case.lam, case.mu, case.t_target, dc.dt, dc.n_steps, dc.implicit,
+            tuple(np.asarray(dc._v0).tolist()))
+
+
+def test_build_al_case_from_tc_fields():
+    tc = _FakeTC()
+    chain = _FakeChain(5)
+    case = b3.build_al_case_from_tc(
+        tc, chain, power_density=None, t_target=200.0, dt=0.5, n_steps=2800,
+        lam=500.0, mu=1.0e4)
+    assert case.lam == 500.0
+    assert case.mu == 1.0e4
+    assert case.t_target == 200.0
+    assert case.da_case.dt == 0.5
+    assert case.da_case.n_steps == 2800
+    assert case.da_case.tc is tc
+    assert case.da_case.chain is chain
+    assert case.da_case.implicit is True           # tamper/fine default
+    assert np.array_equal(case.da_case._v0, np.ones(5))
+
+
+def test_build_al_case_from_tc_implicit_override():
+    """The coarse producer passes implicit=False to keep the certified explicit
+    adjoint; the field must thread through."""
+    case = b3.build_al_case_from_tc(
+        _FakeTC(), _FakeChain(3), power_density=1.0, t_target=235.0, dt=0.5,
+        n_steps=100, implicit=False)
+    assert case.da_case.implicit is False
+
+
+def test_tamper_wrapper_is_byte_identical_to_helper(monkeypatch):
+    """run_tamper_rescue.build_tamper_al_case must build the SAME ALCase as a
+    direct helper call on the same tc/chain -- one code path, no drift."""
+    tc = _FakeTC()
+    chain = _FakeChain(5)
+    monkeypatch.setattr(rrescue.rt, "build_case", lambda **kw: (tc, {}))
+    monkeypatch.setattr(rrescue.rt, "_part_centroids",
+                        lambda _tc: np.zeros((5, 3)))
+    monkeypatch.setattr(rrescue.dc, "DesignChain", lambda *a, **k: chain)
+
+    wrapped = rrescue.build_tamper_al_case(
+        lam=500.0, mu=1.0e4, t_target=200.0, power_density=None, dt=0.5,
+        n_steps=2800, envelope_max_time_s=1800.0)
+    direct = b3.build_al_case_from_tc(
+        tc, chain, power_density=None, t_target=200.0, dt=0.5, n_steps=2800,
+        lam=500.0, mu=1.0e4)
+    assert _alcase_fields(wrapped) == _alcase_fields(direct)
+    assert wrapped.da_case.tc is tc
+    assert wrapped.da_case.chain is chain
+    assert wrapped.da_case.implicit is True
+
+
+# --------------------------------------------------------------------------- #
+# 2. Orchestration: order, honest-null, fine-mesh guard, graded emission
+# --------------------------------------------------------------------------- #
+def _feasible_drive_rec():
+    return {
+        "recommended_power_density_w_per_m3": 0.58 * 1.5915e6,
+        "recommended_drive_frac": 0.58,
+        "t_eff_c": 235.0,
+        "ceiling_c": 250.0,
+        "chamber_tag": "ch060",
+        "thermal_config_path": "solve3d/thermal_config.json",
+        "recommended_drive_reason": "densification_bracket_under_ceiling ...",
+    }
+
+
+def _drive_limited_rec():
+    return {
+        "recommended_power_density_w_per_m3": None,
+        "recommended_drive_frac": None,
+        "t_eff_c": 235.0,
+        "ceiling_c": 250.0,
+        "chamber_tag": "ch060",
+        "thermal_config_path": "solve3d/thermal_config.json",
+        "recommended_drive_reason": "drive_limited: no feasible drive ...",
+    }
+
+
+def _run(select_rec, n_sub, *, al_return=None, score_return=None):
+    calls = []
+
+    def select_drive():
+        calls.append("drive")
+        return select_rec
+
+    def probe_n_sub():
+        calls.append("guard")
+        return (n_sub, 1.0e-3)
+
+    def run_al(power_density, t_target):
+        calls.append("al")
+        run_al.seen = {"power_density": power_density, "t_target": t_target}
+        return al_return or {"s_best": np.array([0.1, 0.2, 0.3]),
+                             "v_best": np.array([0.1, 0.2, 0.3]), "outer": []}
+
+    run_al.seen = None
+
+    def score(restore):
+        calls.append("score")
+        return score_return or {
+            "scored_rec": {"map_stats": {"mean": 0.2}},
+            "peak_T_c": 234.5, "peak_over_ceiling": False,
+            "symmetry_gate": {"group": "d4", "sendable": True},
+            "sendable": True}
+
+    doc = ss.ceiling_restore_solve(
+        select_drive=select_drive, probe_n_sub=probe_n_sub, run_al=run_al,
+        score=score)
+    return doc, calls, run_al
+
+
+def test_orchestrator_selects_drive_before_solving():
+    doc, calls, run_al = _run(_feasible_drive_rec(), n_sub=1)
+    assert calls == ["drive", "guard", "al", "score"]
+    assert calls.index("drive") < calls.index("al")
+    # the AL targets the drive: it is handed the recommended power + T_eff
+    assert run_al.seen["power_density"] == pytest.approx(0.58 * 1.5915e6)
+    assert run_al.seen["t_target"] == pytest.approx(235.0)
+
+
+def test_orchestrator_drive_limited_honest_nulls_without_al():
+    doc, calls, run_al = _run(_drive_limited_rec(), n_sub=1)
+    assert "al" not in calls                        # never cook a map
+    assert run_al.seen is None
+    assert doc["ceiling_restored_map"] is None
+    assert doc["sendable"] is False
+    assert doc["recommended_power_density_w_per_m3"] is None
+    assert "drive_limited" in doc["recommended_drive_reason"]
+
+
+def test_orchestrator_fine_mesh_guard_honest_nulls_without_al():
+    doc, calls, run_al = _run(_feasible_drive_rec(), n_sub=3)
+    assert "al" not in calls                        # guard fired before the solve
+    assert run_al.seen is None
+    assert doc["ceiling_restored_map"] is None
+    assert doc["sendable"] is False
+    assert doc["fine_mesh_guard"]["n_sub"] == 3
+    reason = (doc["fine_mesh_guard"]["reason"] + doc.get(
+        "ceiling_restore_reason", "")).lower()
+    assert "fine mesh" in reason
+    assert "n_sub" in reason
+
+
+def test_orchestrator_graded_emits_map_drive_peak_sendable():
+    s_best = np.array([0.11, 0.22, 0.33, 0.44])
+    al_return = {"s_best": s_best, "v_best": s_best, "outer": [{"k": 0}]}
+    score_return = {
+        "scored_rec": {"map_stats": {"mean": 0.275}, "peak_T_c": 236.1},
+        "peak_T_c": 236.1, "peak_over_ceiling": False,
+        "symmetry_gate": {"group": "d4", "sendable": True}, "sendable": True}
+    doc, calls, run_al = _run(_feasible_drive_rec(), n_sub=1,
+                              al_return=al_return, score_return=score_return)
+    assert calls == ["drive", "guard", "al", "score"]
+    # the graded map rides in the doc
+    assert np.array_equal(np.asarray(doc["ceiling_restored_map"]), s_best)
+    # the recommended drive rides in the doc (the Studio consumer's pinned field)
+    assert doc["recommended_drive_frac"] == 0.58
+    assert doc["recommended_power_density_w_per_m3"] == pytest.approx(0.58 * 1.5915e6)
+    # the map's OWN standing peak + sendable
+    assert doc["standing_peak_c"] == pytest.approx(236.1)
+    assert doc["sendable"] is True
+    assert doc["symmetry_gate"]["sendable"] is True
+    assert doc["t_eff_target_c"] == pytest.approx(235.0)
+
+
+# --------------------------------------------------------------------------- #
+# 3. Doc assembler content per stage (pure)
+# --------------------------------------------------------------------------- #
+def test_assemble_doc_marks_mode_and_stage():
+    doc = ss._assemble_ceiling_restore_doc(
+        "drive_limited", drive_rec=_drive_limited_rec())
+    assert doc["mode"] == "ceiling_restore"
+    assert doc["ceiling_restore_stage"] == "drive_limited"
+
+
+def test_assemble_doc_graded_carries_provenance():
+    s_best = np.array([0.5, 0.6])
+    doc = ss._assemble_ceiling_restore_doc(
+        "graded", drive_rec=_feasible_drive_rec(),
+        restore={"s_best": s_best, "outer": [{"k": 0}]},
+        scored={"scored_rec": {"map_stats": {"mean": 0.55}},
+                "peak_T_c": 233.0, "peak_over_ceiling": False,
+                "symmetry_gate": {"sendable": True}, "sendable": True})
+    assert doc["ceiling_restore_stage"] == "graded"
+    assert np.array_equal(np.asarray(doc["ceiling_restored_map"]), s_best)
+    assert doc["standing_peak_c"] == pytest.approx(233.0)
+    assert doc["peak_over_ceiling"] is False
+    assert doc["sendable"] is True
+
+
+# --------------------------------------------------------------------------- #
+# 4. solve_extruded dispatch: opt-in, legacy path untouched
+# --------------------------------------------------------------------------- #
+class _LegacySentinel(Exception):
+    pass
+
+
+def test_ceiling_restore_true_dispatches_before_legacy(monkeypatch, tmp_path):
+    """ceiling_restore=True routes to the new path BEFORE the legacy np.load /
+    mesh build even begins."""
+    seen = {}
+
+    def fake_restore(part_npz, out, t_start, **kw):
+        seen["hit"] = True
+        return {"mode": "ceiling_restore", "ok": True}
+
+    monkeypatch.setattr(ss, "_solve_extruded_ceiling_restore", fake_restore)
+    # if the legacy body were entered it would np.load this missing file
+    doc = ss.solve_extruded(str(tmp_path / "missing.npz"), str(tmp_path),
+                            ceiling_restore=True)
+    assert seen.get("hit") is True
+    assert doc["ok"] is True
+
+
+def test_ceiling_restore_false_takes_legacy_path(monkeypatch, tmp_path):
+    """Opt-in: with the flag OFF the legacy body runs (reaches np.load) and the
+    ceiling-restore path is never touched -- no drive-first reorder."""
+    def boom(*a, **k):
+        raise _LegacySentinel()
+
+    monkeypatch.setattr(ss, "ceiling_restore_solve",
+                        lambda *a, **k: (_ for _ in ()).throw(
+                            AssertionError("ceiling path entered with flag off")))
+    monkeypatch.setattr(ss, "_solve_extruded_ceiling_restore",
+                        lambda *a, **k: (_ for _ in ()).throw(
+                            AssertionError("ceiling path entered with flag off")))
+    monkeypatch.setattr(ss.np, "load", boom)
+    with pytest.raises(_LegacySentinel):
+        ss.solve_extruded(str(tmp_path / "any.npz"), str(tmp_path),
+                          ceiling_restore=False)

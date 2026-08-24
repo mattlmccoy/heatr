@@ -53,10 +53,11 @@ def build_tamper_al_case(lam: float, mu: float, t_target: float, *,
     tc, _info = rt.build_case(lc_part=lc_part, max_time_s=envelope_max_time_s)
     part_cent = rt._part_centroids(tc)
     chain = dc.DesignChain(part_cent, tc.eqs.vol[tc.eqs.part], FILTER_RADIUS_M, [0.0])
-    case = da.Case(tc=tc, chain=chain, dt=float(dt), n_steps=int(n_steps))
-    case._v0 = np.ones(chain.n_design)
-    return b3.ALCase(da_case=case, lam=float(lam), mu=float(mu),
-                     t_target=float(t_target))
+    # DRY: the da.Case/_v0/ALCase construction is the shared helper (byte-
+    # identical to the inlined version; implicit defaults True for the Tamper).
+    return b3.build_al_case_from_tc(
+        tc, chain, power_density=power_density, t_target=t_target,
+        dt=dt, n_steps=n_steps, lam=lam, mu=mu)
 
 
 def validate(boost_sat: float = 1.5) -> dict:
