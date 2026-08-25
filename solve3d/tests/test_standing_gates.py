@@ -118,13 +118,26 @@ def test_the_end_state_peak_is_labelled_as_such():
 # Cross-component contract: the ceiling is ONE number
 # --------------------------------------------------------------------------- #
 def test_the_ceiling_matches_the_studio_lane_value():
-    """The Studio owns the process ceiling. Duplicating the literal here would
-    let the two lanes drift silently, so the value is checked against theirs
-    the same way the STL refusal names are checked against the library."""
+    """The process ceiling has ONE source of truth: solve3d/thermal_config.json.
+    Both lanes must derive the SAME number from it so they cannot silently drift
+    (the cross-engine is_sendable gate is meaningful only if the solve and the
+    Studio verify judge against the identical ceiling).
+
+    The Studio runner was refactored to READ T_ceiling_C from that config
+    (load_thermal_config) and no longer embeds the old 250.0 literal, so this
+    checks the single-source MECHANISM, not a duplicated literal:
+      1. the config states the ceiling,
+      2. solve3d's gates constant matches the config, and
+      3. the Studio runner BINDS to the config (reads it) rather than hardcoding.
+    """
+    cfg = json.loads((ROOT / "solve3d" / "thermal_config.json").read_text())
+    ceiling = float(cfg["T_ceiling_C"])
+    assert ceiling == 250.0                          # the source value
+    assert sg.T_CEILING_C == ceiling                 # solve3d lane == source
     src = (ROOT / "studio3d" / "runner.py").read_text()
-    assert f"T_ceiling_C\": {sg.T_CEILING_C}" in src or \
-        f"{sg.T_CEILING_C}" in src, "solve3d and studio3d disagree on the ceiling"
-    assert sg.T_CEILING_C == 250.0
+    # the Studio verify binds to the SAME config (single source), not a literal
+    assert "load_thermal_config" in src
+    assert "T_ceiling_C" in src
 
 
 def test_the_energy_residual_tolerance_is_stated_not_invented():
