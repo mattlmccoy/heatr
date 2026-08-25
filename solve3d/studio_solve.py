@@ -453,6 +453,7 @@ def _assemble_ceiling_restore_doc(stage: str, *, drive_rec: dict,
                                   n_sub: int | None = None,
                                   dt_stable: float | None = None,
                                   drive_source: str = "recommended",
+                                  solved_power_density: float | None = None,
                                   base: dict | None = None) -> dict:
     """Assemble the ceiling_restore result doc (pure). `stage` is one of
     drive_limited | fine_mesh | graded. Every stage folds the PINNED recommended-
@@ -489,6 +490,21 @@ def _assemble_ceiling_restore_doc(stage: str, *, drive_rec: dict,
     doc["sendable"] = scored.get("sendable")
     doc["t_eff_target_c"] = float(drive_rec.get("t_eff_c")) \
         if drive_rec.get("t_eff_c") is not None else None
+    # CONTRACT: always state the power the shipped map was actually solved at.
+    doc["solved_power_density_w_per_m3"] = (float(solved_power_density)
+                                           if solved_power_density is not None
+                                           else None)
+    # On the over-driven fallback path the drive-limited rec left the pinned
+    # recommended power None; the map DID solve (at the fallback power) and passed
+    # the sendable gate, so report the real power the consumer must drive with,
+    # while keeping the provenance honest (drive_source + the fallback reason).
+    if drive_source == "over_driven_fallback" and solved_power_density is not None:
+        fb = drive_rec.get("over_driven_fallback") or {}
+        doc["recommended_power_density_w_per_m3"] = float(solved_power_density)
+        doc["recommended_drive_frac"] = fb.get("drive_frac")
+        doc["recommended_drive_reason"] = (
+            "over_driven_fallback: " + str(fb.get("reason", "")) +
+            " -- graded map solved at this drive and passed the sendable gate")
     return doc
 
 
@@ -533,7 +549,8 @@ def ceiling_restore_solve(*, select_drive, probe_n_sub, run_al, score,
                      t_target=float(drive_rec["t_eff_c"]))
     scored = score(restore)
     return assemble_doc("graded", drive_rec=drive_rec, restore=restore,
-                        scored=scored, drive_source=drive_source)
+                        scored=scored, drive_source=drive_source,
+                        solved_power_density=float(pw))
 
 
 # --------------------------------------------------------------------------- #

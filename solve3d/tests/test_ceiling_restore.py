@@ -264,6 +264,30 @@ def test_orchestrator_drive_source_is_recommended_on_feasible():
     assert doc["drive_source"] == "recommended"
 
 
+def test_fallback_graded_doc_exposes_actual_solve_power():
+    """CONTRACT: a graded map from the over-driven fallback must ship WITH the
+    power it was solved at -- else the Studio consumer sees sendable=True but a
+    null recommended power (drive-limited leftover) and cannot drive the print.
+    The pinned recommended power is populated with the fallback power, and a
+    solved_power_density_w_per_m3 field always states the actual AL power."""
+    doc, calls, run_al = _run(_over_driven_fallback_rec(), n_sub=1)
+    fb_pw = 0.34 * 1.5915e6
+    assert doc["solved_power_density_w_per_m3"] == pytest.approx(fb_pw)
+    assert doc["recommended_power_density_w_per_m3"] == pytest.approx(fb_pw)
+    assert doc["recommended_drive_frac"] == pytest.approx(0.34)
+    # provenance stays honest about how the drive was chosen
+    assert doc["drive_source"] == "over_driven_fallback"
+
+
+def test_feasible_graded_doc_also_states_solve_power():
+    """The solved-power field is present on the normal feasible path too (always
+    states what the shipped map was solved at)."""
+    doc, calls, run_al = _run(_feasible_drive_rec(), n_sub=1)
+    fpw = 0.58 * 1.5915e6
+    assert doc["solved_power_density_w_per_m3"] == pytest.approx(fpw)
+    assert doc["recommended_power_density_w_per_m3"] == pytest.approx(fpw)
+
+
 def test_orchestrator_nulls_when_drive_limited_and_no_fallback():
     """drive_limited with fallback None (cold part) stays honest-null -- the AL
     cannot help a part no drive densifies."""
