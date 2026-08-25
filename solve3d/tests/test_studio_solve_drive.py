@@ -450,3 +450,32 @@ def test_recommended_drive_for_part_adaptive_probes_few_and_selects():
     assert len(calls) <= 4                             # fewer than the 6-ladder
     assert rec["recommended_drive_frac"] is not None
     assert 0.44 <= rec["recommended_drive_frac"] <= 0.50
+
+
+# ---- (e) over-driven fallback: the grading opportunity ------------------- #
+# When no UNIFORM drive both densifies AND stays under the ceiling, but some drive
+# DOES densify (by busting the ceiling), that is exactly the case grading exists
+# for. select_recommended_drive keeps honest-nulling the RECOMMENDED (path-A)
+# fields but additively emits an `over_driven_fallback` = the LOWEST densifying
+# drive (least bust -> easiest for the shaped AL to pull under the ceiling). The
+# ceiling_restore path consumes it; path A ignores it. A cold part -> None.
+def test_over_driven_case_emits_lowest_densifying_fallback():
+    rec = _rec(_all_over_ceiling())          # 0.34/255 and 0.38/268 both densify
+    assert rec["recommended_power_density_w_per_m3"] is None   # path A unchanged
+    fb = rec["over_driven_fallback"]
+    assert fb is not None
+    assert fb["drive_frac"] == pytest.approx(0.34)            # lowest densifying
+    assert fb["power_density_w_per_m3"] == pytest.approx(0.34 * BASELINE)
+    assert fb["true_peak_c"] == pytest.approx(255.0)
+
+
+def test_cold_part_has_no_over_driven_fallback():
+    rec = _rec(_never_densifies())
+    assert rec["recommended_power_density_w_per_m3"] is None
+    assert rec["over_driven_fallback"] is None
+
+
+def test_feasible_case_carries_no_fallback():
+    rec = _rec(_feasible())                    # a feasible drive exists
+    assert rec["recommended_power_density_w_per_m3"] is not None
+    assert rec.get("over_driven_fallback") is None

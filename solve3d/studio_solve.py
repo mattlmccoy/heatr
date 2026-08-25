@@ -228,6 +228,7 @@ def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
             "is_sendable fails, back off down the candidate ladder."
             % (a, rho_target, peak, ceiling_c, chamber_tag, t_eff_label, t_eff,
                ceiling_c, delta_headroom, ceiling_c))
+        out["over_driven_fallback"] = None       # a feasible pick stands; N/A
         return out
 
     # honest-null: distinguish "over-driven before grading" from "never densifies"
@@ -249,6 +250,28 @@ def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
         "drive_limited: no feasible drive densifies under %.0fC "
         "(shaped-solve target %s %.1f C = %.0f - %.0f cross-engine reserve) (%s)"
         % (ceiling_c, t_eff_label, t_eff, ceiling_c, delta_headroom, why))
+    # OVER-DRIVEN FALLBACK (the grading opportunity): if some drive DENSIFIES but
+    # only by busting the ceiling (n_over case), the shaped AL restoration is
+    # exactly what redistributes dopant to pull that peak back under. Expose the
+    # LOWEST densifying drive (least bust -> easiest to recover) so the
+    # ceiling_restore path can run the AL there instead of honest-nulling. Path A
+    # ignores this field. A cold part (no drive densifies) has no opportunity ->
+    # None. The final cross-engine is_sendable gate remains the safety net, so a
+    # map the AL cannot bring under 250 is still refused.
+    densifying = [c for c in candidates if c["reached_rho"]]
+    if densifying:
+        fb = min(densifying, key=lambda c: c["drive_a"])
+        out["over_driven_fallback"] = {
+            "drive_frac": float(fb["drive_a"]),
+            "power_density_w_per_m3": float(fb["power_density_w_per_m3"]),
+            "true_peak_c": float(fb["true_peak_c"]),
+            "reason": ("lowest densifying drive; uniform peak %.1f C busts the "
+                       "%.0f C ceiling, so the shaped AL (target %s %.1f C) must "
+                       "pull it under -- is_sendable is the final arbiter"
+                       % (fb["true_peak_c"], ceiling_c, t_eff_label, t_eff)),
+        }
+    else:
+        out["over_driven_fallback"] = None       # cold part: no grading can help
     return out
 
 
@@ -429,6 +452,7 @@ def _assemble_ceiling_restore_doc(stage: str, *, drive_rec: dict,
                                   scored: dict | None = None,
                                   n_sub: int | None = None,
                                   dt_stable: float | None = None,
+                                  drive_source: str = "recommended",
                                   base: dict | None = None) -> dict:
     """Assemble the ceiling_restore result doc (pure). `stage` is one of
     drive_limited | fine_mesh | graded. Every stage folds the PINNED recommended-
@@ -438,6 +462,7 @@ def _assemble_ceiling_restore_doc(stage: str, *, drive_rec: dict,
     doc = dict(base or {})
     doc["mode"] = "ceiling_restore"
     doc["ceiling_restore_stage"] = str(stage)
+    doc["drive_source"] = str(drive_source)
     _merge_recommended_drive(doc, drive_rec)
     if stage == "drive_limited":
         doc["ceiling_restored_map"] = None
@@ -486,18 +511,29 @@ def ceiling_restore_solve(*, select_drive, probe_n_sub, run_al, score,
     if assemble_doc is None:
         assemble_doc = _assemble_ceiling_restore_doc
     drive_rec = select_drive()
-    if drive_rec.get("recommended_power_density_w_per_m3") is None:
-        return assemble_doc("drive_limited", drive_rec=drive_rec)
+    # DRIVE SOURCE: prefer the feasible recommended drive; else, if a densifying-
+    # but-ceiling-busting drive exists (over_driven_fallback), run the AL THERE --
+    # that "no uniform drive works" case is exactly the grading opportunity, and
+    # the final is_sendable gate below refuses any map the AL cannot bring under
+    # 250. Only a truly drive-limited part (no densifying drive at all) nulls.
+    pw = drive_rec.get("recommended_power_density_w_per_m3")
+    drive_source = "recommended"
+    if pw is None:
+        fb = drive_rec.get("over_driven_fallback")
+        if fb is None:
+            return assemble_doc("drive_limited", drive_rec=drive_rec)
+        pw = fb["power_density_w_per_m3"]
+        drive_source = "over_driven_fallback"
     n_sub, dt_stable = probe_n_sub()
     if int(n_sub) > 1:
         return assemble_doc("fine_mesh", drive_rec=drive_rec,
-                            n_sub=int(n_sub), dt_stable=float(dt_stable))
-    restore = run_al(
-        power_density=float(drive_rec["recommended_power_density_w_per_m3"]),
-        t_target=float(drive_rec["t_eff_c"]))
+                            n_sub=int(n_sub), dt_stable=float(dt_stable),
+                            drive_source=drive_source)
+    restore = run_al(power_density=float(pw),
+                     t_target=float(drive_rec["t_eff_c"]))
     scored = score(restore)
     return assemble_doc("graded", drive_rec=drive_rec, restore=restore,
-                        scored=scored)
+                        scored=scored, drive_source=drive_source)
 
 
 # --------------------------------------------------------------------------- #

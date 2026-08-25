@@ -210,6 +210,73 @@ def test_orchestrator_graded_emits_map_drive_peak_sendable():
 
 
 # --------------------------------------------------------------------------- #
+# 2b. Over-driven fallback: run the AL where grading is exactly the point
+# --------------------------------------------------------------------------- #
+def _over_driven_fallback_rec():
+    """drive_limited (no feasible uniform drive) BUT a densifying-yet-busting
+    drive exists -> the ceiling_restore path should run the AL there, not null."""
+    r = _drive_limited_rec()
+    r["over_driven_fallback"] = {
+        "drive_frac": 0.34,
+        "power_density_w_per_m3": 0.34 * 1.5915e6,
+        "true_peak_c": 255.0,
+        "reason": "lowest densifying drive; uniform busts, AL must pull under",
+    }
+    return r
+
+
+def test_orchestrator_runs_al_on_over_driven_fallback():
+    doc, calls, run_al = _run(_over_driven_fallback_rec(), n_sub=1)
+    assert "al" in calls                             # grading IS the point here
+    assert run_al.seen["power_density"] == pytest.approx(0.34 * 1.5915e6)
+    assert run_al.seen["t_target"] == pytest.approx(235.0)
+    assert doc["ceiling_restore_stage"] == "graded"
+    assert doc["drive_source"] == "over_driven_fallback"
+
+
+def test_orchestrator_over_driven_fallback_still_guarded_by_fine_mesh():
+    """The fine-mesh guard still fires before the AL on the fallback path (never
+    a days-long fine solve)."""
+    doc, calls, run_al = _run(_over_driven_fallback_rec(), n_sub=4)
+    assert "al" not in calls
+    assert run_al.seen is None
+    assert doc["ceiling_restored_map"] is None
+    assert doc["sendable"] is False
+
+
+def test_orchestrator_fallback_al_that_busts_is_not_sendable():
+    """Safety net: if the AL runs on the fallback but cannot bring the peak under
+    250, score() -> sendable False and the map is NOT shipped as sendable."""
+    score_return = {
+        "scored_rec": {}, "peak_T_c": 258.0, "peak_over_ceiling": True,
+        "symmetry_gate": {"sendable": False}, "sendable": False}
+    doc, calls, run_al = _run(_over_driven_fallback_rec(), n_sub=1,
+                              score_return=score_return)
+    assert "al" in calls                             # it TRIED (grading's job)
+    assert doc["sendable"] is False                  # but the gate refused it
+    assert doc["peak_over_ceiling"] is True
+
+
+def test_orchestrator_drive_source_is_recommended_on_feasible():
+    """The provenance field distinguishes a normal feasible pick from a
+    fallback."""
+    doc, calls, run_al = _run(_feasible_drive_rec(), n_sub=1)
+    assert doc["drive_source"] == "recommended"
+
+
+def test_orchestrator_nulls_when_drive_limited_and_no_fallback():
+    """drive_limited with fallback None (cold part) stays honest-null -- the AL
+    cannot help a part no drive densifies."""
+    rec = _drive_limited_rec()
+    rec["over_driven_fallback"] = None
+    doc, calls, run_al = _run(rec, n_sub=1)
+    assert "al" not in calls
+    assert run_al.seen is None
+    assert doc["ceiling_restored_map"] is None
+    assert doc["sendable"] is False
+
+
+# --------------------------------------------------------------------------- #
 # 3. Doc assembler content per stage (pure)
 # --------------------------------------------------------------------------- #
 def test_assemble_doc_marks_mode_and_stage():
