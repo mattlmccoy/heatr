@@ -37,6 +37,18 @@ def test_mu_escalation_when_violation_stalls():
                             factor=5.0, shrink=0.5) == 1e3
 
 
+def test_al_objective_and_grad_checkpointed_bit_identical():
+    """The AL objective/grad threads checkpoint_interval to dks_peak_ds and stays
+    bit-identical to the store-all path (the hinge is active in the coarse gate
+    case, so the dks_peak_ds term actually runs)."""
+    case = b3.build_al_coarse_case()
+    v = case.design_point()
+    L0, g0 = b3.al_objective_and_grad(case, v)
+    L1, g1 = b3.al_objective_and_grad(case, v, checkpoint_interval=100)
+    assert L0 == L1
+    assert np.array_equal(g0, g1)
+
+
 def test_al_gradient_factor():
     # active branch factor = max(0, lambda + mu*g); zero when lambda+mu*g <= 0
     assert b3.al_gradient_factor(lam=0.0, mu=1e3, g=0.01) == 10.0

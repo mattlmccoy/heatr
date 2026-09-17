@@ -503,6 +503,33 @@ def _march(case: Case, v: np.ndarray, keep_cache: bool,
     return T, rho, caches, F
 
 
+def _march_checkpoints(case: Case, v: np.ndarray, checkpoint_interval: int,
+                       implicit: bool | None = None):
+    """Forward march that stores ONLY a (T, rho) anchor every `checkpoint_interval`
+    steps (plus the fixed drive F), not the full per-step cache list. Returns
+    (T_end, rho_end, anchors, F) with anchors = {step_index: (T.copy(), rho.copy())}
+    keyed by the index at the START of that step. This is the memory-frugal forward
+    for gradient (activation) checkpointing: dks_peak_ds recomputes each segment's
+    caches from its anchor on the reverse pass (see that function). The explicit
+    densify step is deterministic, so anchors + segment replay reproduce the
+    store-all caches bit-for-bit. This is INNER activation checkpointing, distinct
+    from the OUTER L-BFGS-B disk warm-restart in solve3d/phase_e/checkpoint.py."""
+    k = int(checkpoint_interval)
+    if k < 1:
+        raise ValueError("checkpoint_interval must be >= 1")
+    tc = case.tc
+    F = _drive_F(case, v)
+    T = np.full(tc.vol_nodal.size, tc.p.preheat_c, dtype=np.float64)
+    rho = np.full(tc.vol_nodal.size, tc.p.rho_rel)
+    anchors: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+    for i in range(case.n_steps):
+        if i % k == 0:
+            anchors[i] = (T.copy(), rho.copy())
+        T, rho, _c = _substep_forward(case, T, rho, F, keep_cache=False,
+                                      implicit=implicit)
+    return T, rho, anchors, F
+
+
 def ks_peak_forward(case: Case, v: np.ndarray,
                     implicit: bool | None = None) -> float:
     """Scalar end-state KS peak: march densify (fixed horizon, 0.40x, coupling
@@ -663,28 +690,61 @@ def _substep_vjp(case: Case, c: _StepCache, gT_out, gR_out):
 # dks_peak_ds: the rho+T co-state, backward over the fixed-horizon march
 # --------------------------------------------------------------------------- #
 def dks_peak_ds(case: Case, v: np.ndarray,
-                _drop_density_costate: bool = False) -> np.ndarray:
+                _drop_density_costate: bool = False,
+                checkpoint_interval: int | None = None) -> np.ndarray:
     """The adjoint gradient of the end-state KS peak w.r.t. the design v.
 
     `_drop_density_costate` ABLATES lambda_rho (zeros the density co-state after
     every substep, so it never propagates), which must break the FD gate -- the
-    mutation proof that the density co-state is load-bearing."""
+    mutation proof that the density co-state is load-bearing.
+
+    `checkpoint_interval` (None -> store-all, the default, byte-identical to the
+    original path so every frozen gate is unchanged): when set, use gradient
+    (activation) checkpointing -- store only a (T,rho) anchor every k steps on the
+    forward pass and RECOMPUTE each segment's caches from its anchor on the reverse
+    pass. Peak memory drops from O(n_steps) full caches to O(n_steps/k + k), at the
+    cost of one extra forward march. The explicit densify step is deterministic, so
+    the checkpointed gradient is BIT-IDENTICAL to the store-all gradient (the
+    reverse _substep_vjp sequence and the g_F accumulation order are unchanged)."""
     tc = case.tc
     v = np.asarray(v, float)
-    # The reverse sweep (_substep_vjp) differentiates whichever step the forward
-    # ran (cache.implicit): honors case.implicit for both forward and adjoint.
-    T_end, _rho, caches, F = _march(case, v, keep_cache=True)
-
     mask = _peak_mask(tc)
-    gT = ceiling.peak_temp_vjp(T_end, weights=tc.vol_nodal, mask=mask)   # seed
-    gR = np.zeros_like(gT)
-    g_F = np.zeros_like(gT)
 
-    for c in reversed(caches):
-        gT, gR, gF = _substep_vjp(case, c, gT, gR)
-        g_F += gF
-        if _drop_density_costate:
-            gR = np.zeros_like(gR)
+    if checkpoint_interval is None:
+        # store-all: the reverse sweep differentiates whichever step the forward
+        # ran (cache.implicit); honors case.implicit for forward and adjoint.
+        T_end, _rho, caches, F = _march(case, v, keep_cache=True)
+        gT = ceiling.peak_temp_vjp(T_end, weights=tc.vol_nodal, mask=mask)  # seed
+        gR = np.zeros_like(gT)
+        g_F = np.zeros_like(gT)
+        for c in reversed(caches):
+            gT, gR, gF = _substep_vjp(case, c, gT, gR)
+            g_F += gF
+            if _drop_density_costate:
+                gR = np.zeros_like(gR)
+    else:
+        # checkpointed: recompute each segment's caches from its anchor, in strict
+        # reverse-segment order, so the _substep_vjp sequence + g_F sum match exactly.
+        T_end, _rho, anchors, F = _march_checkpoints(case, v,
+                                                     int(checkpoint_interval))
+        gT = ceiling.peak_temp_vjp(T_end, weights=tc.vol_nodal, mask=mask)  # seed
+        gR = np.zeros_like(gT)
+        g_F = np.zeros_like(gT)
+        starts = sorted(anchors)
+        for idx in range(len(starts) - 1, -1, -1):
+            a = starts[idx]
+            b = starts[idx + 1] if idx + 1 < len(starts) else case.n_steps
+            T_seg, rho_seg = anchors[a][0].copy(), anchors[a][1].copy()
+            seg: list[_StepCache] = []
+            for _ in range(a, b):
+                T_seg, rho_seg, c = _substep_forward(case, T_seg, rho_seg, F,
+                                                     keep_cache=True)
+                seg.append(c)
+            for c in reversed(seg):
+                gT, gR, gF = _substep_vjp(case, c, gT, gR)
+                g_F += gF
+                if _drop_density_costate:
+                    gR = np.zeros_like(gR)
 
     gQ = tc.gF_to_gq(g_F)                          # dJ/dF -> dJ/dQ_cell
     g_sigma_part = tc.eqs.vjp_q(case.st, gQ)       # EQS adjoint, reuses the LU

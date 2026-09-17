@@ -194,7 +194,8 @@ def build_al_coarse_case(lam: float = GATE_LAMBDA, mu: float = GATE_MU,
 
 
 def al_objective_and_grad(case: ALCase, v: np.ndarray,
-                          _drop_al_term: bool = False):
+                          _drop_al_term: bool = False,
+                          checkpoint_interval: int | None = None):
     """(L, dL/dv) for the augmented Lagrangian
 
         L = J_shape + (1/(2 mu)) [ max(0, lambda + mu*g)^2 - lambda^2 ],
@@ -220,7 +221,8 @@ def al_objective_and_grad(case: ALCase, v: np.ndarray,
     al_term = (1.0 / (2.0 * case.mu)) * (factor * factor - case.lam * case.lam)
     J = float(J_shape) + float(al_term)
     if factor > 0.0:
-        g = g + factor * da.dks_peak_ds(dcase, v)
+        g = g + factor * da.dks_peak_ds(dcase, v,
+                                        checkpoint_interval=checkpoint_interval)
     return float(J), g
 
 

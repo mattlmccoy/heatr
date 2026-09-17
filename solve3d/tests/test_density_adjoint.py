@@ -57,6 +57,68 @@ def test_dks_peak_ds_matches_fd_coarse():
         assert abs(fd - g[i]) <= 1e-6 * max(1.0, abs(fd)) + 1e-9, (i, fd, g[i])
 
 
+def test_march_checkpoints_lays_anchors_and_matches_forward():
+    """The anchor march lays a (T,rho) checkpoint every k steps and reproduces the
+    store-all march's end state bit-for-bit (deterministic explicit path)."""
+    import math
+    from solve3d import density_adjoint as da
+    case = da.build_coarse_case(); v = case.design_point()
+    k = 100
+    T_end, rho_end, anchors, F = da._march_checkpoints(case, v, k)
+    assert len(anchors) == math.ceil(case.n_steps / k)
+    assert 0 in anchors                                   # first anchor is the initial state
+    T0, r0 = anchors[0]
+    assert T0.shape == T_end.shape and r0.shape == rho_end.shape
+    T_ref, rho_ref, _caches, _F = da._march(case, v, keep_cache=True)
+    assert np.array_equal(T_end, T_ref)                   # bit-identical end state
+    assert np.array_equal(rho_end, rho_ref)
+
+
+def test_dks_peak_ds_checkpointed_is_bit_identical():
+    """THE acceptance gate: the checkpointed gradient equals the store-all gradient
+    bit-for-bit on the explicit path, for several k including a non-divisor of
+    n_steps (ragged final segment)."""
+    from solve3d import density_adjoint as da
+    case = da.build_coarse_case(); v = case.design_point()
+    g_full = da.dks_peak_ds(case, v)
+    for k in (50, 100, 250, 300):        # 250 does not divide 900 -> ragged tail
+        g_ck = da.dks_peak_ds(case, v, checkpoint_interval=k)
+        assert np.array_equal(g_ck, g_full), (k, float(np.abs(g_ck - g_full).max()))
+
+
+def test_dks_peak_ds_checkpointed_matches_fd():
+    """Non-vacuity: the checkpointed gradient still passes the frozen FD gate
+    (<=1e-6), with NO tolerance widening -- mirrors test_dks_peak_ds_matches_fd_coarse."""
+    from solve3d import density_adjoint as da
+    case = da.build_coarse_case(); v = case.design_point()
+    g = da.dks_peak_ds(case, v, checkpoint_interval=100)
+
+    def ks_of(vv):
+        return da.ks_peak_forward(case, vv)
+    h = 1e-4
+    for i in da.probe_indices(case):
+        vp = v.copy(); vp[i] += h; vm = v.copy(); vm[i] -= h
+        fd = (ks_of(vp) - ks_of(vm)) / (2 * h)
+        assert abs(fd - g[i]) <= 1e-6 * max(1.0, abs(fd)) + 1e-9, (i, fd, g[i])
+
+
+def test_drop_lambda_rho_fails_fd_checkpointed():
+    """Safety property survives checkpointing: ablating the density co-state must
+    still break the FD gate even on the checkpointed path (the checkpointing does
+    not mask a wrong gradient)."""
+    from solve3d import density_adjoint as da
+    case = da.build_coarse_case(); v = case.design_point()
+    g_bad = da.dks_peak_ds(case, v, _drop_density_costate=True,
+                           checkpoint_interval=100)
+    h = 1e-4
+    worst = 0.0
+    for i in da.probe_indices(case):
+        vp = v.copy(); vp[i] += h; vm = v.copy(); vm[i] -= h
+        fd = (da.ks_peak_forward(case, vp) - da.ks_peak_forward(case, vm)) / (2 * h)
+        worst = max(worst, abs(fd - g_bad[i]) / max(1.0, abs(fd)))
+    assert worst > 1e-3, "checkpointed path must still detect the dropped co-state"
+
+
 def test_march_matches_production_densify():
     """The gate forward _march must reproduce production march_enthalpy (densify)
     -- the forward the B2 arbiter reads -- or the solve would chase a peak the

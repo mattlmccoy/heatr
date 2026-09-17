@@ -539,3 +539,20 @@ def test_solve_extruded_default_restore_budget_knobs_preserve_behavior(
     assert seen["restore_envelope_max_time_s"] == pytest.approx(1800.0)
     assert seen["restore_outer_max"] is None
     assert seen["restore_inner_budget"] is None
+    assert seen["restore_checkpoint_interval"] is None       # default = store-all
+
+
+def test_solve_extruded_passes_checkpoint_interval_to_restore(monkeypatch,
+                                                             tmp_path):
+    """The AL gradient-checkpointing knob threads through the dispatch so the heavy
+    producer path can fit a fine/full-density grading mesh in RAM."""
+    seen = {}
+
+    def rec(part_npz, out, t_start, **kw):
+        seen.update(kw)
+        return {"ok": True}
+
+    monkeypatch.setattr(ss, "_solve_extruded_ceiling_restore", rec)
+    ss.solve_extruded("x.npz", str(tmp_path), ceiling_restore=True,
+                      restore_checkpoint_interval=200)
+    assert seen["restore_checkpoint_interval"] == 200

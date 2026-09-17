@@ -1052,7 +1052,8 @@ def _ceiling_restore_al_loop(rings, z_lo, z_hi, sample_dt_s, *, power_density,
                              t_target, envelope_max_time_s, march_time_s,
                              outer_max, inner_budget, ckpt_dir,
                              grade_node_density: float = SOLVE_NODE_DENSITY,
-                             grade_lc0: float = SOLVE_LC0) -> dict:
+                             grade_lc0: float = SOLVE_LC0,
+                             restore_checkpoint_interval: int | None = None) -> dict:
     """The B3/B4 outer augmented-Lagrangian restoration on the extruded producer
     mesh at the recommended drive, targeting T_eff (mirrors
     run_tamper_rescue.run_solve: build the ALCase once, mutate lam/mu each outer,
@@ -1094,7 +1095,8 @@ def _ceiling_restore_al_loop(rings, z_lo, z_hi, sample_dt_s, *, power_density,
         case.lam, case.mu = float(lam), float(mu)
 
         def fg(vv):
-            return b3.al_objective_and_grad(case, vv)
+            return b3.al_objective_and_grad(
+                case, vv, checkpoint_interval=restore_checkpoint_interval)
         ckpt = Path(ckpt_dir) / f"ckpt_ceiling_restore_outer{k}.npz"
         res = ck.run_with_checkpoint(fg, v, int(inner_budget), ckpt,
                                      bounds=(0.0, 1.0), scale_first_step=True)
@@ -1124,6 +1126,7 @@ def _solve_extruded_ceiling_restore(part_npz, out, t_start, *,
                                     restore_inner_budget=None,
                                     restore_envelope_max_time_s=1800.0,
                                     restore_march_time_s=None,
+                                    restore_checkpoint_interval=None,
                                     _peak_probe=None, _n_sub_probe=None,
                                     _al_restore_solve=None) -> dict:
     """The real ceiling_restore wiring: front-end + physics callables + emission.
@@ -1178,7 +1181,8 @@ def _solve_extruded_ceiling_restore(part_npz, out, t_start, *,
             march_time_s=(restore_march_time_s if restore_march_time_s is not None
                           else drive_max_time_s),
             outer_max=outer_max, inner_budget=inner_budget, ckpt_dir=out,
-            grade_node_density=grade_node_density, grade_lc0=grade_lc0)
+            grade_node_density=grade_node_density, grade_lc0=grade_lc0,
+            restore_checkpoint_interval=restore_checkpoint_interval)
         _holder["restore"] = res
         return res
 
@@ -1219,6 +1223,7 @@ def _solve_extruded_ceiling_restore(part_npz, out, t_start, *,
                                                  if restore_march_time_s is not None
                                                  else drive_max_time_s),
                            "box": "[0,1] one-sided", "diffusion": "explicit",
+                           "checkpoint_interval": restore_checkpoint_interval,
                            "grade_node_density": float(grade_node_density),
                            "grade_lc0": float(grade_lc0),
                            "grade_node_density_default": SOLVE_NODE_DENSITY,
@@ -1277,6 +1282,7 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
                    restore_inner_budget=None,
                    restore_envelope_max_time_s: float = 1800.0,
                    restore_march_time_s=None,
+                   restore_checkpoint_interval=None,
                    _n_sub_probe=None,
                    _al_restore_solve=None) -> dict:
     """Solve one imported EXTRUDED part; write the Studio's artifact pair.
@@ -1319,6 +1325,7 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
             restore_inner_budget=restore_inner_budget,
             restore_envelope_max_time_s=restore_envelope_max_time_s,
             restore_march_time_s=restore_march_time_s,
+            restore_checkpoint_interval=restore_checkpoint_interval,
             _peak_probe=_peak_probe, _n_sub_probe=_n_sub_probe,
             _al_restore_solve=_al_restore_solve)
     with np.load(part_npz) as d:
@@ -1567,6 +1574,13 @@ def main() -> int:
     ap.add_argument("--restore-inner-budget", type=int, default=None,
                     help="ceiling_restore inner evals per outer. Default None -> "
                          "stage_b3.INNER_BUDGET.")
+    ap.add_argument("--restore-checkpoint-interval", type=int, default=None,
+                    help="ceiling_restore AL gradient (activation) checkpointing: "
+                         "store a (T,rho) anchor every N march steps and recompute "
+                         "segments on the reverse pass. Default None = store-all. "
+                         "Set (e.g. 200) to fit a fine/full-density grading mesh in "
+                         "RAM at the cost of ~1 extra forward march per gradient; "
+                         "the gradient is bit-identical to store-all.")
     ap.add_argument("--make-tube", default=None, metavar="OUT_NPZ",
                     help="write the validation tube part and exit")
     ap.add_argument("--n", type=int, default=32)
@@ -1591,7 +1605,8 @@ def main() -> int:
                    restore_outer_max=args.restore_outer_max,
                    restore_inner_budget=args.restore_inner_budget,
                    restore_envelope_max_time_s=args.restore_envelope_max_time_s,
-                   restore_march_time_s=args.restore_march_time_s)
+                   restore_march_time_s=args.restore_march_time_s,
+                   restore_checkpoint_interval=args.restore_checkpoint_interval)
     return 0
 
 
