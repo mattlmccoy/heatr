@@ -258,6 +258,86 @@ def test_real_mesh_pyramid_detects_x_only_group_and_passes():
     assert rec["sendable"] is True
 
 
+# ---- mesh-robust (interpolated) matching: kills the coarse-mesh false-fail --- #
+# Nearest-node matching snaps a mirrored point to the nearest node, so on a coarse
+# / unstructured mesh a symmetric field reads as asymmetric (fraction is a LOWER
+# bound; the gate warns it can false-fail). Interpolating the field AT the mirror
+# point removes that slop without enabling a false-pass (a genuinely asymmetric
+# field still evaluates differently at the mirror). Opt-in (interp=True); the
+# default nearest-node path is unchanged so the calibrated retro cross-checks hold.
+def _jittered_sym_mesh(seed=1, n=11):
+    """Symmetric x-z point cloud about the origin with ASYMMETRIC positional
+    jitter -> the mesh nodes are NOT mirror-partnered, so nearest-node matching
+    has real slop, exactly like a coarse tet mesh."""
+    rng = np.random.default_rng(seed)
+    ax = np.linspace(-3.0, 3.0, n)
+    base = np.array([[x, 0.0, z] for x in ax for z in ax])
+    jit = rng.uniform(-0.12, 0.12, base.shape)
+    jit[:, 1] = 0.0
+    return base + jit
+
+
+def test_interp_is_a_bounded_projection_where_nearest_overshoots():
+    """interp evaluates the field AT the mirror image, so it is a true orthogonal
+    projection: fraction in [0,1] and ~1 for a symmetric field. Nearest-node
+    matching is NOT a projection -- on a non-partnered cloud it can report a
+    fraction ABOVE 1 (matching slop adds spurious variance). This is interp's
+    correctness guarantee, independent of mesh resolution."""
+    rng = np.random.default_rng(2)
+    p = rng.uniform(-3.0, 3.0, (80, 2))            # non-mirror-partnered cloud
+    coords = np.column_stack([p[:, 0], np.zeros(80), p[:, 1]])
+    s = coords[:, 0] ** 2 + coords[:, 2] ** 2       # symmetric under x and z
+    grp = [IDENT,
+           sg._mirror_op(np.zeros(3), [0]),
+           sg._mirror_op(np.zeros(3), [2]),
+           sg._mirror_op(np.zeros(3), [0, 2])]
+    near = sg.symmetric_variance_fraction(s, coords, np.ones(len(s)), grp)["fraction"]
+    interp = sg.symmetric_variance_fraction(
+        s, coords, np.ones(len(s)), grp, interp=True)["fraction"]
+    assert near > 1.0                       # nearest overshoots -> not a projection
+    assert interp <= 1.0 + 1e-9             # interp is a bounded projection
+    assert interp == pytest.approx(1.0, abs=0.1)   # and recovers the symmetry
+
+
+def test_interp_does_not_false_pass_a_genuinely_asymmetric_map():
+    coords = _jittered_sym_mesh()
+    # odd in x -> the x-symmetric component is ~0; interpolation must NOT inflate it
+    s = coords[:, 0].copy()
+    grp = [IDENT, sg._mirror_op(np.zeros(3), [0])]
+    interp = sg.symmetric_variance_fraction(
+        s, coords, np.ones(len(s)), grp, interp=True)["fraction"]
+    assert interp < 0.2                     # still fails -> never a false-pass
+
+
+def test_interp_identity_group_is_still_trivially_symmetric():
+    coords = _jittered_sym_mesh()
+    s = np.linspace(0.2, 0.8, len(coords))
+    out = sg.symmetric_variance_fraction(
+        s, coords, np.ones(len(s)), [IDENT], interp=True)
+    assert out["fraction"] == pytest.approx(1.0)
+
+
+def test_record_accepts_interp_and_flags_it():
+    """symmetry_gate_record threads interp=True and records which matcher was used
+    so a re-scored verdict is self-documenting."""
+    coords = _grid_part()
+    s = np.array([abs(x) + abs(z) for x, _, z in coords])
+    rec = sg.symmetry_gate_record(s, coords, np.ones(len(s)),
+                                  in_part=np.ones(len(s), bool), build_axis="y",
+                                  interp=True)
+    assert rec["matcher"] == "interp"
+    assert rec["fraction"] == pytest.approx(1.0, abs=1e-6)
+    assert rec["verdict"] == "PASS"
+
+
+def test_record_default_matcher_is_nearest_node():
+    coords = _grid_part()
+    s = np.array([abs(x) + abs(z) for x, _, z in coords])
+    rec = sg.symmetry_gate_record(s, coords, np.ones(len(s)),
+                                  in_part=np.ones(len(s), bool), build_axis="y")
+    assert rec["matcher"] == "nearest"
+
+
 # ---- studio_solve producer wiring ------------------------------------------ #
 def test_studio_solve_symmetry_gate_helper_emits_conformant_record():
     # studio_solve pulls in the dolfinx forward; runs only in the spike env.

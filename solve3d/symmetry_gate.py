@@ -57,16 +57,62 @@ _LETTER = {0: "x", 1: "y", 2: "z"}
 
 
 def _group_average(s: np.ndarray, coords: np.ndarray,
-                   group_ops: Sequence[CoordOp]):
-    """Orbit-average s over the group; each op's acting permutation recovered by
-    nearest-node match. Returns (s_sym, max_match_dist)."""
+                   group_ops: Sequence[CoordOp], interp: bool = False):
+    """Orbit-average s over the group. Returns (s_sym, max_match_dist).
+
+    matcher (`interp`):
+      * False (default): recover each op's acting permutation by NEAREST-NODE
+        match -- on a coarse/unstructured mesh the mirror image lands off-node, so
+        s[idx] grabs a neighbour's value and injects apparent asymmetry (the
+        fraction is then a LOWER bound). The calibrated retro cross-checks use this.
+      * True: evaluate s AT the mirror image by LINEAR interpolation on the node
+        cloud (hull-exterior images fall back to nearest). This removes the
+        mesh-frame slop -- unbiased, so it cannot turn a genuinely asymmetric map
+        symmetric (no false-pass) -- and makes the fraction mesh-resolution robust.
+    `max_match_dist` (the nearest-node mirror distance) is still reported either
+    way as the exactness/slop indicator.
+    """
     tree = cKDTree(coords)
     orbit = np.zeros_like(s)
     max_match = 0.0
+
+    sample = None
+    if interp:
+        # Interpolate in the cloud's INTRINSIC dimensions: a mesh confined to a
+        # plane (or line) is degenerate for a full-3D triangulation, so drop the
+        # axes with no range. Hull-exterior images fall back to nearest-node.
+        rng = coords.max(0) - coords.min(0)
+        scale = float(np.max(rng)) or 1.0
+        vary = [k for k in range(coords.shape[1]) if rng[k] > 1e-9 * scale]
+        if len(vary) >= 2:
+            from scipy.interpolate import (LinearNDInterpolator,
+                                           NearestNDInterpolator)
+            lin = LinearNDInterpolator(coords[:, vary], s)
+            nrst = NearestNDInterpolator(coords[:, vary], s)
+
+            def sample(moved):
+                q = moved[:, vary]
+                vals = np.asarray(lin(q), float)
+                miss = ~np.isfinite(vals)
+                if miss.any():
+                    vals[miss] = np.asarray(nrst(q[miss]), float)
+                return vals
+        elif len(vary) == 1:
+            k = vary[0]
+            order = np.argsort(coords[:, k])
+            xp, fp = coords[order, k], s[order]
+
+            def sample(moved):
+                return np.interp(moved[:, k], xp, fp)     # clamps outside range
+        else:                                             # constant cloud
+            def sample(moved):
+                return s.copy()
+
     for op in group_ops:
-        dist, idx = tree.query(np.asarray(op(coords), float), k=1)
-        orbit += s[idx]
+        moved = np.asarray(op(coords), float)
+        dist, idx = tree.query(moved, k=1)
         max_match = max(max_match, float(np.max(dist)))
+        orbit += sample(moved) if interp else s[idx]
     return orbit / float(len(group_ops)), max_match
 
 
@@ -107,6 +153,7 @@ def symmetry_gate_record(s: np.ndarray, coords: np.ndarray, weights: np.ndarray,
                          price_threshold: float = 0.01,
                          contain_k: float = CONTAIN_K,
                          accept_threshold: float = ACCEPT_THRESHOLD,
+                         interp: bool = False,
                          scorer: Callable[[np.ndarray], float] | None = None,
                          j_uniform: float | None = None,
                          j_solved: float | None = None) -> dict:
@@ -179,13 +226,14 @@ def symmetry_gate_record(s: np.ndarray, coords: np.ndarray, weights: np.ndarray,
             group_names.append("mirror_" + "".join(_LETTER[a] for a in combo))
 
     vacuous = len(accepted_axes) == 0
-    frac_out = symmetric_variance_fraction(s_ip, c_ip, w_ip, group_ops)
+    frac_out = symmetric_variance_fraction(s_ip, c_ip, w_ip, group_ops,
+                                           interp=interp)
     fraction = frac_out["fraction"]
 
     price = None
     if not vacuous and fraction < threshold and scorer is not None \
             and j_uniform is not None and j_solved is not None:
-        s_sym, _ = _group_average(s_ip, c_ip, group_ops)
+        s_sym, _ = _group_average(s_ip, c_ip, group_ops, interp=interp)
         proj = s.copy(); proj[ip] = s_sym          # projected map, in-part only
         margin = abs(float(j_uniform) - float(j_solved))
         price = (abs(float(scorer(proj)) - float(j_solved)) / margin
@@ -208,10 +256,13 @@ def symmetry_gate_record(s: np.ndarray, coords: np.ndarray, weights: np.ndarray,
         "build_axis": build_axis,
         "convective_faces": list(convective_faces),
         "vacuous": bool(vacuous),
+        "matcher": "interp" if interp else "nearest",
         "max_match_dist": float(max_match),
         "match_dist_note": ("nearest-node matching injects apparent asymmetry; "
                             "the fraction is a LOWER bound (can false-fail, never "
-                            "false-pass)"),
+                            "false-pass). matcher='interp' evaluates the field at "
+                            "the mirror image by linear interpolation and removes "
+                            "that mesh-frame slop."),
         "verdict": verdict,
         "sendable": verdict != "FAIL",
     }
@@ -219,7 +270,8 @@ def symmetry_gate_record(s: np.ndarray, coords: np.ndarray, weights: np.ndarray,
 
 def symmetric_variance_fraction(s: np.ndarray, coords: np.ndarray,
                                 weights: np.ndarray,
-                                group_ops: Sequence[CoordOp]) -> dict:
+                                group_ops: Sequence[CoordOp],
+                                interp: bool = False) -> dict:
     """Volume-weighted fraction of `s`'s variance in the subspace symmetric under
     `group_ops`.
 
@@ -240,7 +292,7 @@ def symmetric_variance_fraction(s: np.ndarray, coords: np.ndarray,
     if not (len(s) == len(coords) == len(w)):
         raise ValueError("s, coords, weights must have the same length")
 
-    s_sym, max_match = _group_average(s, coords, group_ops)
+    s_sym, max_match = _group_average(s, coords, group_ops, interp=interp)
 
     wsum = float(w.sum())
     sbar = float(np.dot(w, s) / wsum)
