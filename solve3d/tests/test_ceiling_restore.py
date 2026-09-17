@@ -477,3 +477,65 @@ def test_solve_extruded_default_grade_params_are_solve_constants(monkeypatch,
     ss.solve_extruded("x.npz", str(tmp_path), ceiling_restore=True)
     assert seen["grade_node_density"] == pytest.approx(ss.SOLVE_NODE_DENSITY)
     assert seen["grade_lc0"] == pytest.approx(ss.SOLVE_LC0)
+
+
+# --------------------------------------------------------------------------- #
+# 6. restore-budget knobs: bound the AL march/envelope + outer/inner evals so
+#    the ceiling solve runs in ~minutes-hours instead of never (the second speed
+#    lever; grade-mesh in section 5 is the first). _solve_extruded_ceiling_restore
+#    already accepts these -- solve_extruded and the CLI must thread them.
+# --------------------------------------------------------------------------- #
+def test_solve_extruded_passes_restore_march_time_to_restore(monkeypatch,
+                                                             tmp_path):
+    """The bounded restore-march knob threads through the dispatch. Without it the
+    AL march defaults to drive_max_time_s (3000 s -> 60000 steps), the dominant
+    per-eval cost."""
+    seen = {}
+
+    def rec(part_npz, out, t_start, **kw):
+        seen.update(kw)
+        return {"ok": True}
+
+    monkeypatch.setattr(ss, "_solve_extruded_ceiling_restore", rec)
+    ss.solve_extruded("x.npz", str(tmp_path), ceiling_restore=True,
+                      restore_march_time_s=500.0)
+    assert seen["restore_march_time_s"] == pytest.approx(500.0)
+
+
+def test_solve_extruded_passes_restore_budget_knobs_to_restore(monkeypatch,
+                                                              tmp_path):
+    """The envelope horizon and the outer/inner eval budget thread through too --
+    outer x inner AL evaluations are the multiplier on the per-eval march cost."""
+    seen = {}
+
+    def rec(part_npz, out, t_start, **kw):
+        seen.update(kw)
+        return {"ok": True}
+
+    monkeypatch.setattr(ss, "_solve_extruded_ceiling_restore", rec)
+    ss.solve_extruded("x.npz", str(tmp_path), ceiling_restore=True,
+                      restore_envelope_max_time_s=600.0,
+                      restore_outer_max=2, restore_inner_budget=4)
+    assert seen["restore_envelope_max_time_s"] == pytest.approx(600.0)
+    assert seen["restore_outer_max"] == 2
+    assert seen["restore_inner_budget"] == 4
+
+
+def test_solve_extruded_default_restore_budget_knobs_preserve_behavior(
+        monkeypatch, tmp_path):
+    """Defaults must equal _solve_extruded_ceiling_restore's own current defaults
+    (march None -> drive_max_time_s fallback, envelope 1800 s, outer/inner None ->
+    stage_b3 defaults), so a caller that does not set them is byte-identical to
+    the pre-knob behavior."""
+    seen = {}
+
+    def rec(part_npz, out, t_start, **kw):
+        seen.update(kw)
+        return {}
+
+    monkeypatch.setattr(ss, "_solve_extruded_ceiling_restore", rec)
+    ss.solve_extruded("x.npz", str(tmp_path), ceiling_restore=True)
+    assert seen["restore_march_time_s"] is None
+    assert seen["restore_envelope_max_time_s"] == pytest.approx(1800.0)
+    assert seen["restore_outer_max"] is None
+    assert seen["restore_inner_budget"] is None

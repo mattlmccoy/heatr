@@ -1273,6 +1273,10 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
                    ceiling_restore: bool = False,
                    grade_node_density: float = SOLVE_NODE_DENSITY,
                    grade_lc0: float = SOLVE_LC0,
+                   restore_outer_max=None,
+                   restore_inner_budget=None,
+                   restore_envelope_max_time_s: float = 1800.0,
+                   restore_march_time_s=None,
                    _n_sub_probe=None,
                    _al_restore_solve=None) -> dict:
     """Solve one imported EXTRUDED part; write the Studio's artifact pair.
@@ -1311,6 +1315,10 @@ def solve_extruded(part_npz, out_dir, budget_fwd_equiv: float = 40.0,
             drive_max_time_s=drive_max_time_s, adaptive_drive=adaptive_drive,
             drive_max_evals=drive_max_evals,
             grade_node_density=grade_node_density, grade_lc0=grade_lc0,
+            restore_outer_max=restore_outer_max,
+            restore_inner_budget=restore_inner_budget,
+            restore_envelope_max_time_s=restore_envelope_max_time_s,
+            restore_march_time_s=restore_march_time_s,
             _peak_probe=_peak_probe, _n_sub_probe=_n_sub_probe,
             _al_restore_solve=_al_restore_solve)
     with np.load(part_npz) as d:
@@ -1544,6 +1552,21 @@ def main() -> int:
                          f"Default {SOLVE_LC0}; pair with --grade-node-density "
                          f"(e.g. {SOLVE_LC0 * 3:.6g} = SOLVE_LC0*3 for the coarse "
                          "grading mesh).")
+    ap.add_argument("--restore-march-time-s", type=float, default=None,
+                    help="ceiling_restore AL march horizon (s). Default None -> "
+                         "drive_max_time_s (3000 s -> 60000 steps at dt=0.05), the "
+                         "DOMINANT per-eval cost; bound it (e.g. 500-1000 s, long "
+                         "enough to densify) to make the ceiling solve tractable.")
+    ap.add_argument("--restore-envelope-max-time-s", type=float, default=1800.0,
+                    help="ceiling_restore melt-onset envelope horizon (s). "
+                         "Default 1800; shorten to trim the envelope adjoint cost.")
+    ap.add_argument("--restore-outer-max", type=int, default=None,
+                    help="ceiling_restore outer augmented-Lagrangian iterations. "
+                         "Default None -> stage_b3.OUTER_MAX. outer x inner is the "
+                         "eval multiplier on the per-eval march.")
+    ap.add_argument("--restore-inner-budget", type=int, default=None,
+                    help="ceiling_restore inner evals per outer. Default None -> "
+                         "stage_b3.INNER_BUDGET.")
     ap.add_argument("--make-tube", default=None, metavar="OUT_NPZ",
                     help="write the validation tube part and exit")
     ap.add_argument("--n", type=int, default=32)
@@ -1564,7 +1587,11 @@ def main() -> int:
                    drive_max_evals=args.drive_max_evals,
                    ceiling_restore=args.ceiling_restore,
                    grade_node_density=args.grade_node_density,
-                   grade_lc0=args.grade_lc0)
+                   grade_lc0=args.grade_lc0,
+                   restore_outer_max=args.restore_outer_max,
+                   restore_inner_budget=args.restore_inner_budget,
+                   restore_envelope_max_time_s=args.restore_envelope_max_time_s,
+                   restore_march_time_s=args.restore_march_time_s)
     return 0
 
 
