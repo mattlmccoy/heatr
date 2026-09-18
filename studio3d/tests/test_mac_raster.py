@@ -53,6 +53,20 @@ def test_layer_to_levels_dithers_partial_saturation():
     assert len(np.unique(lv)) >= 2
 
 
+def test_centered_axis_mm_matches_2d_convention():
+    """Placement georeferencing: n cell-centered chamber columns -> centered mm
+    coords (symmetric about 0), spacing h, mirroring the 2D x_mm/y_mm contract
+    (scripts/solve_fgm.py:409, x_mm = centered domain coords * 1000)."""
+    n, h = 6, 1.0e-3
+    ax = mr.centered_axis_mm(n, h)
+    assert ax.shape == (n,)
+    assert np.isclose(ax.mean(), 0.0)                      # centered about the origin
+    assert np.allclose(np.diff(ax), h * 1e3)               # spacing = h in mm
+    assert np.isclose(ax[-1], -ax[0])                      # symmetric
+    # cell-centered chamber: half-cell inset from the edges
+    assert np.isclose(ax[0], -(n / 2 - 0.5) * h * 1e3)
+
+
 def test_levels_to_whiteiszero_black_is_max_ink():
     """Meteor WhiteIsZero: level 0 -> 255 (white/no ink), level mv -> 0 (black/max
     ink), mid -> gray, monotonic decreasing in level."""

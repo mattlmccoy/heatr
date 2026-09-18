@@ -57,6 +57,16 @@ def voxel_to_layer_stack(sat_vox: np.ndarray, part: np.ndarray, h: float):
     return sat_stack, mask_stack, z_mm
 
 
+def centered_axis_mm(n: int, h: float) -> np.ndarray:
+    """The n cell-centered chamber-column coordinates in mm, centered about the
+    origin (symmetric, half-cell inset from the edges), mirroring the 2D x_mm/y_mm
+    placement contract (scripts/solve_fgm.py:409). This is the georeferencing a
+    bed-placement consumer (the Windows slicer / stage_job) reads to position the
+    part on the printer bed; the Mac raster canvas IS the chamber (package_verify
+    derives chamber_m = raster_px / dpi), so these coords fully place it."""
+    return ((np.arange(int(n)) + 0.5) * float(h) - 0.5 * int(n) * float(h)) * 1e3
+
+
 def layer_to_levels(sat_layer: np.ndarray, mask_layer: np.ndarray, h: float, *,
                     dpi: int = DPI_DEFAULT, bpp: int = BPP_DEFAULT,
                     grey_levels: int = GREY_LEVELS_DEFAULT) -> np.ndarray:
@@ -109,8 +119,12 @@ def emit_printable_package(map_npz: str, part_npz: str, out_dir: str, *,
 
     sat_stack, mask_stack, z_mm = voxel_to_layer_stack(sat_vox, part, h)
     nz, ny, nx = sat_stack.shape
+    x_mm = centered_axis_mm(nx, h)               # placement georeferencing (2D-parity)
+    y_mm = centered_axis_mm(ny, h)
     np.savez_compressed(out / "correction_stack.npz",
-                        sat=sat_stack, part_mask=mask_stack, z_mm=z_mm,
+                        sat=sat_stack, part_mask=mask_stack,
+                        x_mm=x_mm, y_mm=y_mm, z_mm=z_mm,
+                        width_mm=float(nx * h * 1e3), height_mm=float(ny * h * 1e3),
                         chamber_m=chamber_m, proxy_field="solve")
 
     mv = float(pq.max_level(bpp, grey_levels))
@@ -135,6 +149,14 @@ def emit_printable_package(map_npz: str, part_npz: str, out_dir: str, *,
         "layer_height_mm": float(h * 1e3), "layer_count": int(nz),
         "raster_px": [int(levels.shape[1]), int(levels.shape[2])],
         "chamber_m": float(chamber_m),
+        "placement": {"width_mm": float(nx * h * 1e3),
+                      "height_mm": float(ny * h * 1e3),
+                      "x_mm_range": [float(x_mm[0]), float(x_mm[-1])],
+                      "y_mm_range": [float(y_mm[0]), float(y_mm[-1])],
+                      "z_mm_range": [float(z_mm[0]), float(z_mm[-1])],
+                      "frame": "chamber-centered in x,y (canvas = chamber); z is "
+                               "build height from the part bottom. The bed-position "
+                               "offset is applied by the slicer/stage_job consumer."},
         "dopant_mass_move_rel": float(rec.get("dopant_mass_move_rel", float("nan"))),
         "dg0_state": str(rec.get("state", "")),
         "tiff_convention": "Meteor WhiteIsZero (black=max ink), levels 0..%d" % int(mv),
