@@ -459,14 +459,54 @@ def test_recommended_drive_for_part_adaptive_probes_few_and_selects():
 # fields but additively emits an `over_driven_fallback` = the LOWEST densifying
 # drive (least bust -> easiest for the shaped AL to pull under the ceiling). The
 # ceiling_restore path consumes it; path A ignores it. A cold part -> None.
-def test_over_driven_case_emits_lowest_densifying_fallback():
+def _cube_like_all_busting():
+    """The REAL vol_cube run: 0.26x cold, 0.34-0.66x all densify but bust 250
+    (uniform peaks 261..293). The old fallback picked 0.34x (least bust, +11C),
+    which starves grading -> near-uniform map -> fails the symmetry gate. The fix
+    picks the drive whose overshoot is closest to the grading-target (+35C default
+    = the proven stage_b4 0.58x regime)."""
+    return {
+        0.26: {"true_peak_c": 220.0, "reached_rho": False, "achieved_rho": 0.84},
+        0.34: {"true_peak_c": 261.0, "reached_rho": True, "achieved_rho": 0.98},
+        0.42: {"true_peak_c": 273.0, "reached_rho": True, "achieved_rho": 0.98},
+        0.50: {"true_peak_c": 281.0, "reached_rho": True, "achieved_rho": 0.98},
+        0.58: {"true_peak_c": 288.0, "reached_rho": True, "achieved_rho": 0.98},
+        0.66: {"true_peak_c": 293.0, "reached_rho": True, "achieved_rho": 0.98},
+    }
+
+
+def test_over_driven_fallback_picks_meaningful_grading_drive_not_lowest():
+    """The fallback must NOT pick the lowest densifying drive (starves grading);
+    it picks the drive whose uniform overshoot is closest to the +35C grading
+    target = 0.58x (288C, +38) for the cube, the proven strong-grading regime."""
+    rec = _rec(_cube_like_all_busting())
+    assert rec["recommended_power_density_w_per_m3"] is None   # path A unchanged
+    fb = rec["over_driven_fallback"]
+    assert fb is not None
+    assert fb["drive_frac"] != pytest.approx(0.34)             # NOT the starved-grading min
+    assert fb["drive_frac"] == pytest.approx(0.58)             # closest to +35C overshoot
+    assert fb["true_peak_c"] == pytest.approx(288.0)
+
+
+def test_over_driven_fallback_target_overshoot_is_tunable():
+    """A smaller grading target picks a cooler drive (closest to that overshoot)."""
+    rec = ss.select_recommended_drive(
+        _cube_like_all_busting(), baseline=BASELINE, ceiling_c=250.0,
+        chamber_tag="ch060", thermal_config_path=TCFG_PATH, rho_target=0.98,
+        grading_target_overshoot_c=10.0)
+    fb = rec["over_driven_fallback"]
+    assert fb["drive_frac"] == pytest.approx(0.34)             # 261C = +11, closest to +10
+
+
+def test_over_driven_case_emits_most_grading_available_fallback():
     rec = _rec(_all_over_ceiling())          # 0.34/255 and 0.38/268 both densify
     assert rec["recommended_power_density_w_per_m3"] is None   # path A unchanged
     fb = rec["over_driven_fallback"]
     assert fb is not None
-    assert fb["drive_frac"] == pytest.approx(0.34)            # lowest densifying
-    assert fb["power_density_w_per_m3"] == pytest.approx(0.34 * BASELINE)
-    assert fb["true_peak_c"] == pytest.approx(255.0)
+    # neither reaches +35C overshoot; the closest (most grading available) is 0.38 (+18)
+    assert fb["drive_frac"] == pytest.approx(0.38)
+    assert fb["power_density_w_per_m3"] == pytest.approx(0.38 * BASELINE)
+    assert fb["true_peak_c"] == pytest.approx(268.0)
 
 
 def test_cold_part_has_no_over_driven_fallback():

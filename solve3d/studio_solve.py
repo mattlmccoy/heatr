@@ -120,11 +120,23 @@ def prereg() -> dict:
 # --------------------------------------------------------------------------- #
 # Ceiling-feasible drive selection: pure pick, physics probe, wiring, emission
 # --------------------------------------------------------------------------- #
+GRADING_TARGET_OVERSHOOT_C = 35.0        # over-driven fallback: the uniform-peak
+# overshoot above the ceiling the fallback aims the AL at. Grading only does REAL
+# work when the uniform drive busts the ceiling by a meaningful margin; the OLD
+# fallback picked the LOWEST densifying drive (least bust), which starved the
+# grading signal -> a near-uniform map that fails the symmetry gate. 35C ~ 2-3x
+# the 15C cross-engine reserve, and it lands on the proven stage_b4 cube regime
+# (0.58x, uniform 288C = +38 over 250, which grades strongly to 0.89 symmetry).
+# is_sendable remains the final arbiter, so a too-hot pick is still refused.
+
+
 def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
                              ceiling_c: float, chamber_tag: str,
                              thermal_config_path: str, rho_target: float,
                              t_eff_c: float | None = None,
-                             delta_headroom: float = DELTA_HEADROOM_C) -> dict:
+                             delta_headroom: float = DELTA_HEADROOM_C,
+                             grading_target_overshoot_c: float =
+                             GRADING_TARGET_OVERSHOOT_C) -> dict:
     """Pick the ceiling-feasible drive from MEASURED uniform end-state peaks.
 
     `peaks_by_drive` maps a drive multiplier `a` to a dict with at least
@@ -252,23 +264,34 @@ def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
         % (ceiling_c, t_eff_label, t_eff, ceiling_c, delta_headroom, why))
     # OVER-DRIVEN FALLBACK (the grading opportunity): if some drive DENSIFIES but
     # only by busting the ceiling (n_over case), the shaped AL restoration is
-    # exactly what redistributes dopant to pull that peak back under. Expose the
-    # LOWEST densifying drive (least bust -> easiest to recover) so the
-    # ceiling_restore path can run the AL there instead of honest-nulling. Path A
-    # ignores this field. A cold part (no drive densifies) has no opportunity ->
-    # None. The final cross-engine is_sendable gate remains the safety net, so a
-    # map the AL cannot bring under 250 is still refused.
+    # exactly what redistributes dopant to pull that peak back under. Pick the
+    # densifying drive whose uniform overshoot (peak - ceiling) is CLOSEST to
+    # `grading_target_overshoot_c` (default 35 C). The old rule took the LOWEST
+    # densifying drive (least bust), but a barely-busting drive needs almost no
+    # grading -> the AL emits a NEAR-UNIFORM map (cube: std/mean 3.4%) whose
+    # symmetric-variance fraction is residue-dominated -> the symmetry gate FAILs
+    # it. A meaningful overshoot forces STRONG grading (the proven stage_b4 cube at
+    # 0.58x / +38 C -> 0.89 symmetry). When no drive reaches the target the closest
+    # (the MOST grading available) is taken. Path A ignores this field; a cold part
+    # -> None. The cross-engine is_sendable gate stays the safety net, so a map the
+    # AL cannot bring under 250 (a too-hot pick) is still refused.
     densifying = [c for c in candidates if c["reached_rho"]]
     if densifying:
-        fb = min(densifying, key=lambda c: c["drive_a"])
+        target = float(grading_target_overshoot_c)
+        fb = min(densifying,
+                 key=lambda c: abs((c["true_peak_c"] - ceiling_c) - target))
         out["over_driven_fallback"] = {
             "drive_frac": float(fb["drive_a"]),
             "power_density_w_per_m3": float(fb["power_density_w_per_m3"]),
             "true_peak_c": float(fb["true_peak_c"]),
-            "reason": ("lowest densifying drive; uniform peak %.1f C busts the "
-                       "%.0f C ceiling, so the shaped AL (target %s %.1f C) must "
-                       "pull it under -- is_sendable is the final arbiter"
-                       % (fb["true_peak_c"], ceiling_c, t_eff_label, t_eff)),
+            "reason": ("densifying drive whose uniform overshoot %.1f C (peak "
+                       "%.1f C over the %.0f C ceiling) is closest to the +%.0f C "
+                       "grading target -> forces meaningful grading (the lowest "
+                       "densifying drive would starve it -> near-uniform map that "
+                       "fails the symmetry gate). The shaped AL (target %s %.1f C) "
+                       "pulls the peak under; is_sendable is the final arbiter"
+                       % (fb["true_peak_c"] - ceiling_c, fb["true_peak_c"],
+                          ceiling_c, target, t_eff_label, t_eff)),
         }
     else:
         out["over_driven_fallback"] = None       # cold part: no grading can help
