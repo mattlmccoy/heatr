@@ -67,13 +67,37 @@ def test_centered_axis_mm_matches_2d_convention():
     assert np.isclose(ax[0], -(n / 2 - 0.5) * h * 1e3)
 
 
-def test_levels_to_whiteiszero_black_is_max_ink():
-    """Meteor WhiteIsZero: level 0 -> 255 (white/no ink), level mv -> 0 (black/max
-    ink), mid -> gray, monotonic decreasing in level."""
-    mv = 7
-    lv = np.array([[0, mv], [3, mv]], np.uint8)
-    g8 = mr.levels_to_whiteiszero(lv, bpp=4, grey_levels=8)
-    assert g8.dtype == np.uint8
-    assert g8[0, 0] == 255
-    assert g8[0, 1] == 0
-    assert 0 < g8[1, 0] < 255
+def test_emit_level_map_npz_is_fgm_to_rip_compatible(tmp_path):
+    """The fold: emit_printable_package writes a level_map npz in the exact format
+    software/meteor/tools/fgm_to_rip.fgm_to_tiff_stack consumes -- level_map
+    (nz,ny,nx) uint8 in [0, head_ceiling=7] at printer resolution, plus bpp/dpi/
+    width_mm/height_mm -- instead of writing its own (wrong 8-bit) TIFFs. The real
+    MetPrint TIFFs are written by meteor_rip (4bpp/LZW/WhiteIsZero), not here."""
+    import numpy as np
+    map_npz, part_npz = _tiny_map_and_part(tmp_path)
+    man = mr.emit_printable_package(str(map_npz), str(part_npz), str(tmp_path / "pkg"),
+                                    dpi=720, bpp=4, grey_levels=8)
+    d = np.load(tmp_path / "pkg" / "fgm_level_map.npz")
+    lm = d["level_map"]
+    assert lm.ndim == 3                              # (nz,ny,nx) -> one TIFF page per z
+    assert lm.dtype == np.uint8
+    assert int(lm.max()) <= 7                        # head ceiling, NOT container 15
+    assert int(d["bpp"]) == 4 and int(d["dpi"]) == 720
+    assert "width_mm" in d.files and "height_mm" in d.files
+    assert man["level_map_npz"].endswith("fgm_level_map.npz")
+
+
+def _tiny_map_and_part(tmp_path):
+    """A tiny solved-map npz + matching voxel part for the emit integration test."""
+    import numpy as np
+    n = 8
+    part = np.zeros((n, n, n), bool); part[2:6, 2:6, 1:7] = True
+    h = 2.121e-4
+    pnp = tmp_path / "part.npz"; np.savez(pnp, part=part, h=h, n=n)
+    # a FEM-ish map: cell centroids at the in-part voxels, graded s_map
+    idx = np.argwhere(part)
+    cen = (idx + 0.5) * h - 0.5 * n * h
+    s = np.linspace(0.1, 0.95, len(idx)).astype(float)
+    vol = np.full(len(idx), h ** 3)
+    mnp = tmp_path / "map.npz"; np.savez(mnp, centroids=cen, s_map=s, volumes=vol)
+    return mnp, pnp

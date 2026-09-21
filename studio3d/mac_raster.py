@@ -79,14 +79,6 @@ def layer_to_levels(sat_layer: np.ndarray, mask_layer: np.ndarray, h: float, *,
                                 dither="ordered")
 
 
-def levels_to_whiteiszero(levels: np.ndarray, bpp: int = BPP_DEFAULT,
-                          grey_levels: int = GREY_LEVELS_DEFAULT) -> np.ndarray:
-    """Level map (0..mv) -> Meteor WhiteIsZero 8-bit gray: black (0) = max ink,
-    white (255) = no ink, monotonic decreasing in level."""
-    mv = pq.max_level(bpp, grey_levels)
-    return (255.0 * (1.0 - np.asarray(levels, float) / mv)).round().astype(np.uint8)
-
-
 # --------------------------------------------------------------------------- #
 # IO orchestrator (end-to-end verified by a real run)
 # --------------------------------------------------------------------------- #
@@ -95,13 +87,27 @@ def emit_printable_package(map_npz: str, part_npz: str, out_dir: str, *,
                            grey_levels: int = GREY_LEVELS_DEFAULT,
                            engine_version: str = "mac_raster-1.0.0") -> dict:
     """Solved-map npz (FEM centroids+s_map+volumes) + part voxel npz (part,h,n) ->
-    a printable package dir: correction_stack.npz + print_job/ (per-layer 720-dpi
-    WhiteIsZero TIFFs + _ungraded/) + job_info.json + level_stack.npz. Returns a
-    manifest dict. Pure-numpy; no Meteor slicer, no dolfinx."""
-    from studio3d.transfer import dg0_to_voxel
-    from PIL import Image
+    the printable inputs the SANCTIONED Meteor writer consumes:
 
-    out = Path(out_dir); (out / "print_job" / "_ungraded").mkdir(parents=True, exist_ok=True)
+      correction_stack.npz  -- (nz,ny,nx) voxel sat + mask + placement coords
+      fgm_level_map.npz      -- level_map (nz,ny_px,nx_px) uint8 in [0, head ceiling
+                                7] at printer resolution + bpp/dpi/width_mm/height_mm;
+                                THE format software/meteor/tools/fgm_to_rip.
+                                fgm_to_tiff_stack reads to emit 4bpp/LZW/WhiteIsZero
+                                MetPrint TIFFs.
+      print_job/*.tif        -- the real MetPrint TIFFs, IF meteor_rip is importable
+                                (delegated to fgm_to_rip); else write them later with
+                                `fgm_to_rip.fgm_to_tiff_stack(fgm_level_map.npz, ...)`.
+
+    This module does NOT encode TIFFs itself -- the 4bpp 3-bit-in-nibble WhiteIsZero
+    LZW format (MetPrint masks the 4th bit; quantize to the head's 7, not the
+    container 15) lives in meteor_rip.py and must not be re-implemented here.
+    Pure-numpy up to the level_map; no dolfinx, no Meteor slicer for the geometry
+    (the slicer-free footprint is the voxel cross-section -- edges limited by the
+    sim grid; crisp true-3D edges are stage_3d's slicer job)."""
+    from studio3d.transfer import dg0_to_voxel
+
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     m = np.load(map_npz, allow_pickle=True)
     centroids = m["centroids"].astype(float)
     s_map = m["s_map"].astype(float)
@@ -109,6 +115,7 @@ def emit_printable_package(map_npz: str, part_npz: str, out_dir: str, *,
     pj = np.load(part_npz)
     part = pj["part"].astype(bool)
     n = int(pj["n"]); h = float(pj["h"]); chamber_m = n * h
+    job_name = Path(map_npz).stem
 
     # frame: re-center the map centroids onto the part voxel frame (the map sits in
     # the gmsh outline frame; the voxel part is chamber-centered). voxelize_stl does
@@ -119,7 +126,7 @@ def emit_printable_package(map_npz: str, part_npz: str, out_dir: str, *,
 
     sat_stack, mask_stack, z_mm = voxel_to_layer_stack(sat_vox, part, h)
     nz, ny, nx = sat_stack.shape
-    x_mm = centered_axis_mm(nx, h)               # placement georeferencing (2D-parity)
+    x_mm = centered_axis_mm(nx, h)
     y_mm = centered_axis_mm(ny, h)
     np.savez_compressed(out / "correction_stack.npz",
                         sat=sat_stack, part_mask=mask_stack,
@@ -127,42 +134,51 @@ def emit_printable_package(map_npz: str, part_npz: str, out_dir: str, *,
                         width_mm=float(nx * h * 1e3), height_mm=float(ny * h * 1e3),
                         chamber_m=chamber_m, proxy_field="solve")
 
-    mv = float(pq.max_level(bpp, grey_levels))
-    levels = []
-    for k in range(nz):
-        lv = layer_to_levels(sat_stack[k], mask_stack[k], h, dpi=dpi, bpp=bpp,
-                             grey_levels=grey_levels)
-        base = layer_to_levels(mask_stack[k].astype(float), mask_stack[k], h,
-                               dpi=dpi, bpp=bpp, grey_levels=grey_levels)
-        levels.append(lv)
-        Image.fromarray(levels_to_whiteiszero(lv, bpp, grey_levels), "L").save(
-            out / "print_job" / f"layer_{k:03d}.tif")
-        Image.fromarray(levels_to_whiteiszero(base, bpp, grey_levels), "L").save(
-            out / "print_job" / "_ungraded" / f"layer_{k:03d}.tif")
-    levels = np.stack(levels).astype(np.uint8)
-    np.savez_compressed(out / "level_stack.npz", levels=levels, z_mm=z_mm,
-                        dpi=dpi, bpp=bpp, grey_levels=grey_levels)
+    # printer-resolution level_map (0..head ceiling 7), one page per z -> fgm_to_rip
+    levels = np.stack([
+        layer_to_levels(sat_stack[k], mask_stack[k], h, dpi=dpi, bpp=bpp,
+                        grey_levels=grey_levels)
+        for k in range(nz)]).astype(np.uint8)
+    px_h, px_w = levels.shape[1], levels.shape[2]
+    lm_path = out / "fgm_level_map.npz"
+    np.savez_compressed(lm_path, level_map=levels, bpp=int(bpp), dpi=int(dpi),
+                        grey_levels=int(grey_levels),
+                        width_mm=float(px_w / dpi * 25.4),
+                        height_mm=float(px_h / dpi * 25.4),
+                        x_mm=x_mm, y_mm=y_mm, z_mm=z_mm, proxy_field="solve")
+
+    # delegate the real MetPrint TIFF write to meteor_rip via fgm_to_rip (sanctioned
+    # 4bpp/LZW/WhiteIsZero writer, 3-bit head cap). Optional: absent tools -> the
+    # level_map npz above is the handoff.
+    tiff_writer, tiff_paths = "deferred (run fgm_to_rip on fgm_level_map.npz)", []
+    try:
+        _tools = Path(__file__).resolve().parents[3] / "software" / "meteor" / "tools"
+        if str(_tools) not in sys.path:
+            sys.path.insert(0, str(_tools))
+        from fgm_to_rip import fgm_to_tiff_stack           # noqa: E402
+        tiff_paths = fgm_to_tiff_stack(str(lm_path), str(out / "print_job"),
+                                       n_layers=nz, job_name=job_name, bpp=bpp,
+                                       dpi=dpi, compression="lzw")
+        tiff_writer = "meteor_rip.fgm_to_tiff_stack (4bpp/LZW/WhiteIsZero)"
+    except Exception as e:                                # tools not present here
+        tiff_writer = f"deferred ({type(e).__name__}: run fgm_to_rip on fgm_level_map.npz)"
 
     manifest = {
         "engine_version": engine_version, "proxy_field": "solve",
         "dpi": int(dpi), "bpp": int(bpp), "grey_levels": int(grey_levels),
+        "head_ceiling": int(pq.max_level(bpp, grey_levels)),
         "layer_height_mm": float(h * 1e3), "layer_count": int(nz),
-        "raster_px": [int(levels.shape[1]), int(levels.shape[2])],
+        "raster_px": [int(px_h), int(px_w)],
+        "printed_size_mm": [float(px_w / dpi * 25.4), float(px_h / dpi * 25.4)],
         "chamber_m": float(chamber_m),
-        "placement": {"width_mm": float(nx * h * 1e3),
-                      "height_mm": float(ny * h * 1e3),
-                      "x_mm_range": [float(x_mm[0]), float(x_mm[-1])],
-                      "y_mm_range": [float(y_mm[0]), float(y_mm[-1])],
-                      "z_mm_range": [float(z_mm[0]), float(z_mm[-1])],
-                      "frame": "chamber-centered in x,y (canvas = chamber); z is "
-                               "build height from the part bottom. The bed-position "
-                               "offset is applied by the slicer/stage_job consumer."},
+        "level_map_npz": str(lm_path),
+        "tiff_writer": tiff_writer,
+        "tiff_count": len(tiff_paths),
         "dopant_mass_move_rel": float(rec.get("dopant_mass_move_rel", float("nan"))),
         "dg0_state": str(rec.get("state", "")),
-        "tiff_convention": "Meteor WhiteIsZero (black=max ink), levels 0..%d" % int(mv),
-        "slicer": "mac_raster pure-numpy (no Meteor slicer); MetPrint submission is Windows-side",
+        "note": "fgm_level_map.npz is the sanctioned meteor_rip/fgm_to_rip input; the "
+                "4bpp 3-bit-in-nibble WhiteIsZero LZW encoding is meteor_rip's, not here.",
     }
-    (out / "print_job" / "job_info.json").write_text(json.dumps(manifest, indent=2))
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
     return manifest
 
