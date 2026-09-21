@@ -192,13 +192,22 @@ def select_recommended_drive(peaks_by_drive: dict, *, baseline: float,
         rec = peaks_by_drive[a]
         peak = float(rec["true_peak_c"])
         reached = bool(rec["reached_rho"])
-        under_ceiling = bool(peak <= ceiling_c)     # THE GATE: vs the REAL ceiling
-        under_t_eff = bool(peak <= t_eff)           # info: already under the target
+        # Fix A: gate drive SELECTION on the mesh-stable KS-aggregate peak when the
+        # probe supplies it (the raw true-MAX is corner-EQS-singularity sensitive
+        # and false-nulls drives whose solve-relevant peak is actually under the
+        # ceiling). true_peak_c is still recorded for the downstream is_sendable
+        # safety gate, which is UNCHANGED. Absent ks_peak_c -> gate on true_peak.
+        ks = float(rec["ks_peak_c"]) if rec.get("ks_peak_c") is not None else None
+        gate_peak = ks if ks is not None else peak
+        under_ceiling = bool(gate_peak <= ceiling_c)   # THE GATE: mesh-stable vs 250
+        under_t_eff = bool(gate_peak <= t_eff)          # info: already under target
         is_feasible = bool(reached and under_ceiling)
         candidates.append({
             "drive_a": float(a),
             "power_density_w_per_m3": float(a) * baseline,
-            "true_peak_c": peak,
+            "true_peak_c": peak,                        # physical MAX (is_sendable)
+            "ks_peak_c": ks,                            # mesh-stable gate metric
+            "gate_peak_c": float(gate_peak),
             "reached_rho": reached,
             "achieved_rho": float(rec.get("achieved_rho", float("nan"))),
             "under_t_eff": under_t_eff,
@@ -367,10 +376,19 @@ def _uniform_end_state_peak(msh, rings: list, z_lo: float, z_hi: float,
     march = df.march_densify(msh, p, stop_mean_rho=float(rho_target), mats=mats,
                              q_dg0=drive["q"], max_time_s=float(max_time_s),
                              sample_dt_s=float(sample_dt_s))
+    # the mesh-stable KS-aggregate of the trajectory-peak field (fix A): the drive
+    # gate reads this instead of the corner-singularity-sensitive true MAX. Kept in
+    # a SEPARATE slot; true_peak_c stays the physical MAX for is_sendable.
+    from solve3d import ceiling
+    _Tpk = march.get("T_peak_nodal")
+    _pmk = march.get("part_peak_mask")
+    ks_peak = (float(ceiling.peak_temp(_Tpk, mask=_pmk)["ks_aggregate_c"])
+               if _Tpk is not None else float(march["true_peak_T_c"]))
     return {
         "drive_a": float(drive_a),
         "power_density_w_per_m3": pw,
         "true_peak_c": float(march["true_peak_T_c"]),
+        "ks_peak_c": ks_peak,
         "reached_rho": bool(march["reached_rho"]),
         "achieved_rho": float(march["part_mean_rho"]),
     }

@@ -519,3 +519,34 @@ def test_feasible_case_carries_no_fallback():
     rec = _rec(_feasible())                    # a feasible drive exists
     assert rec["recommended_power_density_w_per_m3"] is not None
     assert rec.get("over_driven_fallback") is None
+
+
+# ---- (f) drive gate on the mesh-stable KS peak (fix A) --------------------- #
+# The raw true-MAX peak is mesh-sensitive (corner EQS singularity), which can
+# false-null a drive whose real, solve-relevant peak is under the ceiling. Gate
+# drive SELECTION on the mesh-stable KS-aggregate peak when the probe supplies
+# it; still record true_peak_c for the downstream is_sendable safety gate (which
+# is unchanged). Absent ks_peak_c -> fall back to true_peak (byte-compatible).
+def test_drive_gate_uses_ks_peak_when_present():
+    peaks = {0.50: {"true_peak_c": 274.0, "ks_peak_c": 248.0,
+                    "reached_rho": True, "achieved_rho": 0.98}}
+    rec = _rec(peaks)
+    assert rec["recommended_drive_frac"] == 0.50            # KS 248 < 250 -> feasible
+    c = rec["candidates"][0]
+    assert c["true_peak_c"] == 274.0 and c["ks_peak_c"] == 248.0   # true peak kept
+
+
+def test_drive_gate_falls_back_to_true_peak_without_ks():
+    assert _rec({0.50: {"true_peak_c": 248.0, "reached_rho": True,
+                        "achieved_rho": 0.98}})["recommended_drive_frac"] == 0.50
+    assert _rec({0.50: {"true_peak_c": 274.0, "reached_rho": True,
+                        "achieved_rho": 0.98}})["recommended_drive_frac"] is None
+
+
+def test_drive_gate_ks_under_true_over_still_records_true_for_sendable():
+    # a KS-feasible but true-busting drive: recommended (KS gate) BUT the true
+    # peak rides in the candidate so is_sendable can still refuse the shaped map.
+    rec = _rec({0.50: {"true_peak_c": 260.0, "ks_peak_c": 249.0,
+                       "reached_rho": True, "achieved_rho": 0.98}})
+    assert rec["recommended_drive_frac"] == 0.50
+    assert rec["candidates"][0]["true_peak_c"] == 260.0
