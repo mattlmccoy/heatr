@@ -28,3 +28,11 @@ def test_march_dense_heights_reads_shrinkage(monkeypatch):
     part = np.ones((8, 8, 8), bool); sat = np.full((8, 8, 8), 0.5)
     Hm, warp, res = gpf.march_dense_heights(part, sat, H.Params(), grid)
     assert Hm.shape == (8, 8) and np.isclose(warp, 3.0)
+
+
+def test_crop_to_footprint_matches_nominal_shape():
+    # a 3x3 footprint centred in an 8x8 grid; crop returns the 3x3 block
+    full = np.zeros((8, 8)); full[2:5, 2:5] = np.arange(9).reshape(3, 3)
+    crop = gpf.crop_to_footprint(full, nx=3, ny=3)
+    assert crop.shape == (3, 3)
+    assert np.allclose(crop, np.arange(9).reshape(3, 3))
