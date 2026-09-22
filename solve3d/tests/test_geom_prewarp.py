@@ -41,3 +41,25 @@ def test_max_rel_error_over_part_columns():
     Ht = np.array([[10.0, 0.0], [10.0, 10.0]])
     Hm = np.array([[9.5, 0.0], [10.0, 8.0]])   # errors 5%, -, 0%, 20%
     assert abs(gp.max_rel_error(Ht, Hm) - 0.20) < 1e-9
+
+
+def test_build_green_volume_stretches_columns_and_conserves_mask():
+    # nominal: column A 3 voxels tall, column B 2 voxels; dopant ramps in z
+    nx, ny, nz0 = 2, 1, 4
+    mask0 = np.zeros((nx, ny, nz0), bool)
+    dop0 = np.zeros((nx, ny, nz0))
+    mask0[0, 0, :3] = True; dop0[0, 0, :3] = [0.2, 0.5, 0.8]
+    mask0[1, 0, :2] = True; dop0[1, 0, :2] = [0.4, 0.6]
+    h = 0.2
+    # ask column A to be 6 voxels tall (double), B to be 2 (unchanged)
+    H_green = np.array([[6 * h], [2 * h]])
+    gm, gd = gp.build_green_volume(mask0, dop0, H_green, h)
+    assert gm.shape == (nx, ny, 6) and gd.shape == (nx, ny, 6)
+    # column A: 6 occupied, dopant nonzero within, zero above
+    assert gm[0, 0].sum() == 6 and gm[0, 0, :6].all()
+    assert np.all(gd[0, 0, :6] > 0)
+    # column B: 2 occupied, rest empty
+    assert gm[1, 0].sum() == 2 and not gm[1, 0, 2:].any()
+    assert np.all(gd[1, 0, 2:] == 0.0)
+    # dopant range preserved (resample stays within source min/max)
+    assert 0.2 - 1e-9 <= gd[0, 0, :6].min() and gd[0, 0, :6].max() <= 0.8 + 1e-9

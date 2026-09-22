@@ -57,3 +57,32 @@ def max_rel_error(H_target: np.ndarray, H_measured: np.ndarray,
         return 0.0
     return float(np.max(np.abs(H_target[cols] - H_measured[cols])
                         / np.maximum(H_target[cols], 1e-9)))
+
+
+def build_green_volume(mask0: np.ndarray, dop0: np.ndarray,
+                       H_green: np.ndarray, h: float):
+    """Per-column pre-warped green volume. Each (x,y) column is occupied from
+    z=0 to round(H_green/h) voxels; the nominal column's dopant (occupied voxels
+    only) is resampled to that many green voxels. Returns (green_mask, green_dop),
+    both (nx, ny, nz_out) with z = axis 2, base at k=0."""
+    mask0 = np.asarray(mask0, bool)
+    dop0 = np.asarray(dop0, float)
+    nx, ny, _ = mask0.shape
+    H_green = np.asarray(H_green, float)
+    n_g = np.rint(H_green / float(h)).astype(int)
+    n_g = np.where(H_green > 0, np.maximum(n_g, 1), 0)
+    nz_out = int(n_g.max()) if n_g.max() > 0 else 1
+    green_mask = np.zeros((nx, ny, nz_out), bool)
+    green_dop = np.zeros((nx, ny, nz_out), float)
+    for i in range(nx):
+        for j in range(ny):
+            ng = int(n_g[i, j])
+            if ng <= 0:
+                continue
+            occ = mask0[i, j]
+            src = dop0[i, j][occ]
+            if src.size == 0:
+                src = np.zeros(1)
+            green_dop[i, j, :ng] = resample_column(src, ng)
+            green_mask[i, j, :ng] = True
+    return green_mask, green_dop
