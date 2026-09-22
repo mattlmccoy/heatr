@@ -26,3 +26,34 @@ def resample_column(src: np.ndarray, n_out: int) -> np.ndarray:
     hi = np.minimum(lo + 1, n_in - 1)
     w = zi - lo
     return src[lo] * (1.0 - w) + src[hi] * w
+
+
+def target_column_heights(mask0: np.ndarray, h: float) -> np.ndarray:
+    """Per-(x,y) nominal (target dense) column height in metres = occupied
+    voxel count along z (axis 2) times h."""
+    return np.asarray(mask0, bool).sum(axis=2).astype(float) * float(h)
+
+
+def column_height_update(H_green: np.ndarray, H_target: np.ndarray,
+                         H_measured: np.ndarray, eps: float = 1e-9) -> np.ndarray:
+    """Multiplicative green-height update: H_green *= H_target / H_measured.
+    Non-part columns (H_target == 0) stay 0. Robust form (matches the shrinkage
+    compensation convention f = target/built)."""
+    H_green = np.asarray(H_green, float)
+    H_target = np.asarray(H_target, float)
+    H_measured = np.asarray(H_measured, float)
+    gain = H_target / np.maximum(H_measured, eps)
+    return np.where(H_target > 0, H_green * gain, 0.0)
+
+
+def max_rel_error(H_target: np.ndarray, H_measured: np.ndarray,
+                  cols: np.ndarray | None = None) -> float:
+    """Max over part columns of |H_target - H_measured| / H_target."""
+    H_target = np.asarray(H_target, float)
+    H_measured = np.asarray(H_measured, float)
+    if cols is None:
+        cols = H_target > 0
+    if not np.any(cols):
+        return 0.0
+    return float(np.max(np.abs(H_target[cols] - H_measured[cols])
+                        / np.maximum(H_target[cols], 1e-9)))
