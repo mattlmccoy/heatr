@@ -7,6 +7,8 @@ with z = axis 2 (heatr3d build axis); column heights are (nx, ny) in metres.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
 
@@ -138,3 +140,21 @@ def prewarp_solve(mask0: np.ndarray, dop0: np.ndarray, h: float, forward_fn,
             "green_dop": best["green_dop"], "warp_std": best["warp_std"],
             "err_history": err_history, "warp_history": warp_history,
             "H_target": H_target}
+
+
+def emit_prewarped_spec(green_mask: np.ndarray, green_dop: np.ndarray,
+                        out_path, provenance: dict) -> None:
+    """Write the pre-warped green volume as a staging spec npz. Fields match the
+    spec that stage_3d consumes: SOLVE_cont (dopant), part_mask, proxy_field, plus
+    a `prewarp` provenance dict. Dopant is zeroed outside the mask for staging."""
+    green_mask = np.asarray(green_mask, bool)
+    green_dop = np.where(green_mask, np.asarray(green_dop, float), 0.0)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        out_path,
+        SOLVE_cont=green_dop.astype(np.float32),
+        part_mask=green_mask,
+        proxy_field="solve",
+        prewarp=np.array(dict(provenance), dtype=object),
+    )

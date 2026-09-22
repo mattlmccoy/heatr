@@ -102,3 +102,21 @@ def test_prewarp_solve_stall_breaks_on_voxel_quantization():
     assert res["iters"] < 8
     assert min(res["err_history"]) < 0.06
     assert res["warp_std"] is not None
+
+
+def test_emit_prewarped_spec_roundtrips(tmp_path):
+    gm = np.zeros((2, 2, 3), bool); gm[:, :, :2] = True
+    gd = np.where(gm, 0.5, 0.0)
+    prov = {"enabled": True, "iters": 3, "converged": True, "tol": 0.01,
+            "warp_std_before": 9.5, "warp_std_after": 2.0,
+            "bulk_factor": 1.58, "source_densify": "densify_pyramid"}
+    out = tmp_path / "pyr_prewarped_green_spec.npz"
+    gp.emit_prewarped_spec(gm, gd, out, prov)
+    d = np.load(out, allow_pickle=True)
+    assert str(d["proxy_field"]) == "solve"
+    assert d["SOLVE_cont"].shape == gd.shape
+    assert d["part_mask"].shape == gm.shape and d["part_mask"].dtype == bool
+    rec = d["prewarp"].item()          # dict round-trips via object array
+    assert rec["enabled"] is True and rec["converged"] is True
+    # dopant zero outside the mask (staging validity)
+    assert np.all(d["SOLVE_cont"][~d["part_mask"]] == 0.0)
