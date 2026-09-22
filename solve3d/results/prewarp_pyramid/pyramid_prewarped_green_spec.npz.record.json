@@ -1,0 +1,25 @@
+{
+  "enabled": true,
+  "iters": 5,
+  "converged": false,
+  "tol": 0.01,
+  "bulk_factor": 1.583,
+  "grid_n": 48,
+  "z0": null,
+  "max_time_s": 1200.0,
+  "warp_std_history": [
+    4.103,
+    3.005,
+    3.299,
+    3.004,
+    3.218
+  ],
+  "err_history": [
+    0.1844611556951882,
+    0.4230559811836532,
+    0.17857934247793184,
+    0.1755646550178031,
+    0.17714680232326918
+  ],
+  "source_densify": "densify_pyramid"
+}
