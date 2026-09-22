@@ -104,6 +104,43 @@ def test_prewarp_solve_stall_breaks_on_voxel_quantization():
     assert res["warp_std"] is not None
 
 
+def test_column_height_update_clamps_runaway_gain():
+    Hg = np.array([[1.0]]); Ht = np.array([[2.0]]); Hm = np.array([[1e-12]])  # ~0 measured
+    out = gp.column_height_update(Hg, Ht, Hm, gain_cap=8.0)
+    assert out[0, 0] <= 8.0 + 1e-9        # bounded by gain_cap, not 2e12
+
+
+def test_build_green_volume_raises_on_divergence():
+    mask0 = np.zeros((2, 2, 4), bool); mask0[:, :, :4] = True
+    dop0 = np.where(mask0, 0.5, 0.0)
+    Hgiant = np.full((2, 2), 1000.0)      # 1000/0.2 = 5000 voxels >> 5x*4
+    with pytest.raises(ValueError):
+        gp.build_green_volume(mask0, dop0, Hgiant, h=0.2)
+
+
+def test_build_green_volume_rejects_nonpositive_h():
+    mask0 = np.zeros((1, 1, 2), bool); mask0[0, 0, :2] = True
+    with pytest.raises(AssertionError):
+        gp.build_green_volume(mask0, np.zeros((1, 1, 2)), np.array([[0.4]]), h=0.0)
+
+
+def test_build_green_volume_mixed_part_and_empty_columns():
+    mask0 = np.zeros((2, 2, 4), bool)
+    mask0[0, 0, :3] = True                 # only one column is part
+    dop0 = np.where(mask0, 0.5, 0.0)
+    Ht = gp.target_column_heights(mask0, 0.2)
+    gm, gd = gp.build_green_volume(mask0, dop0, Ht, h=0.2)
+    assert gm[0, 0].sum() == 3
+    assert gm[0, 1].sum() == 0 and gm[1, 0].sum() == 0 and gm[1, 1].sum() == 0
+    assert np.all(gd[~gm] == 0.0)
+
+
+def test_prewarp_solve_rejects_bad_kmax():
+    mask0 = np.zeros((2, 2, 4), bool); mask0[:, :, :4] = True
+    with pytest.raises(ValueError):
+        gp.prewarp_solve(mask0, np.zeros((2, 2, 4)), 0.2, lambda gm, gd: (None, 0, {}), k_max=0)
+
+
 def test_emit_prewarped_spec_roundtrips(tmp_path):
     gm = np.zeros((2, 2, 3), bool); gm[:, :, :2] = True
     gd = np.where(gm, 0.5, 0.0)

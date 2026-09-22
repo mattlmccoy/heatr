@@ -8,6 +8,7 @@ with z = axis 2 (heatr3d build axis); column heights are (nx, ny) in metres.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
 
@@ -37,14 +38,17 @@ def target_column_heights(mask0: np.ndarray, h: float) -> np.ndarray:
 
 
 def column_height_update(H_green: np.ndarray, H_target: np.ndarray,
-                         H_measured: np.ndarray, eps: float = 1e-9) -> np.ndarray:
+                         H_measured: np.ndarray, eps: float = 1e-9,
+                         gain_cap: float = 8.0) -> np.ndarray:
     """Multiplicative green-height update: H_green *= H_target / H_measured.
     Non-part columns (H_target == 0) stay 0. Robust form (matches the shrinkage
-    compensation convention f = target/built)."""
+    compensation convention f = target/built). gain is clamped to
+    [1/gain_cap, gain_cap] so a degenerate near-zero measured height cannot
+    explode the green height."""
     H_green = np.asarray(H_green, float)
     H_target = np.asarray(H_target, float)
     H_measured = np.asarray(H_measured, float)
-    gain = H_target / np.maximum(H_measured, eps)
+    gain = np.clip(H_target / np.maximum(H_measured, eps), 1.0 / gain_cap, gain_cap)
     return np.where(H_target > 0, H_green * gain, 0.0)
 
 
@@ -62,18 +66,28 @@ def max_rel_error(H_target: np.ndarray, H_measured: np.ndarray,
 
 
 def build_green_volume(mask0: np.ndarray, dop0: np.ndarray,
-                       H_green: np.ndarray, h: float):
+                       H_green: np.ndarray, h: float, max_growth: float = 5.0):
     """Per-column pre-warped green volume. Each (x,y) column is occupied from
     z=0 to round(H_green/h) voxels; the nominal column's dopant (occupied voxels
     only) is resampled to that many green voxels. Returns (green_mask, green_dop),
-    both (nx, ny, nz_out) with z = axis 2, base at k=0."""
+    both (nx, ny, nz_out) with z = axis 2, base at k=0. Raises ValueError if any
+    column's green height exceeds max_growth x the nominal max column (a
+    diverging forward)."""
+    assert h > 0, f"h must be > 0 (metres), got {h}"
     mask0 = np.asarray(mask0, bool)
     dop0 = np.asarray(dop0, float)
     nx, ny, _ = mask0.shape
     H_green = np.asarray(H_green, float)
     n_g = np.rint(H_green / float(h)).astype(int)
     n_g = np.where(H_green > 0, np.maximum(n_g, 1), 0)
-    nz_out = int(n_g.max()) if n_g.max() > 0 else 1
+    nominal_max = int(mask0.sum(axis=2).max())
+    cap = max(1, int(max_growth * nominal_max))
+    if int(n_g.max()) > cap:
+        raise ValueError(
+            f"green column height {int(n_g.max())} voxels exceeds {max_growth}x the "
+            f"nominal max ({nominal_max} voxels); forward measurements likely diverged")
+    m = int(n_g.max())
+    nz_out = m if m > 0 else 1
     green_mask = np.zeros((nx, ny, nz_out), bool)
     green_dop = np.zeros((nx, ny, nz_out), float)
     for i in range(nx):
@@ -90,9 +104,10 @@ def build_green_volume(mask0: np.ndarray, dop0: np.ndarray,
     return green_mask, green_dop
 
 
-def prewarp_solve(mask0: np.ndarray, dop0: np.ndarray, h: float, forward_fn,
-                  *, bulk_factor: float = 1.0, tol: float = 0.01,
-                  k_max: int = 5, stall_patience: int = 2) -> dict:
+def prewarp_solve(mask0: np.ndarray, dop0: np.ndarray, h: float,
+                  forward_fn: Callable, *, bulk_factor: float = 1.0,
+                  tol: float = 0.01, k_max: int = 5,
+                  stall_patience: int = 2) -> dict:
     """Sequential outer-loop green-geometry backsolve.
 
     forward_fn(green_mask, green_dop) -> (H_measured(nx,ny), warp_std, aux).
@@ -105,6 +120,9 @@ def prewarp_solve(mask0: np.ndarray, dop0: np.ndarray, h: float, forward_fn,
     best error does not improve for `stall_patience` consecutive iters, stop and
     return the best iterate. Always returns the best-error iterate seen.
     """
+    if int(k_max) < 1:
+        raise ValueError(f"k_max must be >= 1, got {k_max}")
+    assert h > 0, f"h must be > 0 (metres), got {h}"
     H_target = target_column_heights(mask0, h)
     cols = H_target > 0
     H_green = H_target * float(bulk_factor)
@@ -143,7 +161,7 @@ def prewarp_solve(mask0: np.ndarray, dop0: np.ndarray, h: float, forward_fn,
 
 
 def emit_prewarped_spec(green_mask: np.ndarray, green_dop: np.ndarray,
-                        out_path, provenance: dict) -> None:
+                        out_path: "str | Path", provenance: dict[str, Any]) -> None:
     """Write the pre-warped green volume as a staging spec npz. Fields match the
     spec that stage_3d consumes: SOLVE_cont (dopant), part_mask, proxy_field, plus
     a `prewarp` provenance dict. Dopant is zeroed outside the mask for staging."""
