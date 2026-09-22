@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -13,13 +14,19 @@ import numpy as np
 import heatr3d as H
 from solve3d import geom_prewarp as gp
 
+logger = logging.getLogger(__name__)
+
 
 def embed_in_grid(green_mask: np.ndarray, green_dop: np.ndarray, n: int,
-                  z0: int = 0):
+                  z0: int | None = None) -> tuple[np.ndarray, np.ndarray]:
     """Place a (nx,ny,nz) green volume into a cubic (n,n,n) grid: footprint
-    centred in x,y, base at z=z0. Returns (part, sat), sat zeroed outside part."""
+    centred in x,y; z centred by default (z0=None -> (n-gz)//2, matching the
+    baseline densify placement), or anchored at an explicit z0. Returns
+    (part, sat), sat zeroed outside part."""
     gx, gy, gz = green_mask.shape
-    if gx > n or gy > n or z0 + gz > n:
+    if z0 is None:
+        z0 = (n - gz) // 2
+    if gx > n or gy > n or z0 < 0 or z0 + gz > n:
         raise ValueError(f"green volume {green_mask.shape} + z0={z0} does not fit "
                          f"in a {n}^3 grid; raise n or scale the part down")
     part = np.zeros((n, n, n), bool)
@@ -31,7 +38,8 @@ def embed_in_grid(green_mask: np.ndarray, green_dop: np.ndarray, n: int,
 
 
 def march_dense_heights(part: np.ndarray, sat: np.ndarray, p: "H.Params",
-                        grid: "H.Grid", max_time_s: float = 1200.0):
+                        grid: "H.Grid",
+                        max_time_s: float = 1200.0) -> tuple[np.ndarray, float, "H.Result"]:
     """One densify march + shrinkage read. Returns (H_measured(nx,ny) in metres
     over the FULL grid footprint, warp_std_pct, Result)."""
     res = H.run(grid, part, p, sat=sat, max_time_s=max_time_s, densify=True)
@@ -48,22 +56,32 @@ def crop_to_footprint(full_xy: np.ndarray, nx: int, ny: int) -> np.ndarray:
 
 def run_prewarp(fields_npz: str, out_spec: str, *, bulk_factor: float | None = None,
                 tol: float = 0.01, k_max: int = 5, grid_n: int = 48,
-                z0: int = 1, max_time_s: float = 1200.0) -> dict:
+                z0: int | None = None, max_time_s: float = 1200.0) -> dict:
     """Load a densify baseline, run the green-geometry backsolve on the real
-    march, emit the pre-warped spec + a JSON record next to it."""
+    march, emit the pre-warped spec + a JSON record next to it.
+
+    z0: z-placement of the green volume in the cubic grid. None (default)
+    centres it (matching the real baseline densify placement); pass an
+    explicit int to anchor the base at that z instead.
+    """
     d = np.load(fields_npz, allow_pickle=True)
     mask0 = np.asarray(d["part"], bool)          # (nx,ny,nz) nominal/target
     dop0 = np.where(mask0, np.asarray(d["sat"], float), 0.0)
     h = float(d["h"])
+    assert h > 0, f"h must be > 0 (metres), got {h}"
+    if mask0.shape != dop0.shape:
+        raise ValueError(f"part {mask0.shape} and sat {dop0.shape} shapes differ")
     p = H.Params()
     grid = H.Grid(n=grid_n, L=grid_n * h)
-    nx, ny, _ = mask0.shape
     if bulk_factor is None:            # warm start: bulk factor from the baseline march
+        logger.info("computing warm-start bulk_factor via a baseline densify march "
+                    "(up to %.0fs)...", max_time_s)
         part0, sat0 = embed_in_grid(mask0, dop0, grid_n, z0)
         sh0 = H.shrinkage_analysis(
             H.run(grid, part0, p, sat=sat0, max_time_s=max_time_s, densify=True),
             p, h)
         bulk_factor = float(sh0["layer_multiplier"])
+        logger.info("warm-start bulk_factor = %.3f", bulk_factor)
 
     def forward_fn(green_mask, green_dop):
         part, sat = embed_in_grid(green_mask, green_dop, grid_n, z0)
@@ -74,7 +92,8 @@ def run_prewarp(fields_npz: str, out_spec: str, *, bulk_factor: float | None = N
     res = gp.prewarp_solve(mask0, dop0, h, forward_fn,
                            bulk_factor=bulk_factor, tol=tol, k_max=k_max)
     prov = {"enabled": True, "iters": res["iters"], "converged": res["converged"],
-            "tol": tol, "bulk_factor": bulk_factor,
+            "tol": tol, "bulk_factor": bulk_factor, "grid_n": grid_n, "z0": z0,
+            "max_time_s": max_time_s,
             "warp_std_history": res["warp_history"],
             "err_history": res["err_history"],
             "source_densify": Path(fields_npz).parent.name}
@@ -91,9 +110,11 @@ def main(argv=None) -> int:
     ap.add_argument("--tol", type=float, default=0.01)
     ap.add_argument("--k-max", type=int, default=5)
     ap.add_argument("--grid-n", type=int, default=48)
+    ap.add_argument("--z0", type=int, default=None)
     args = ap.parse_args(argv)
     prov = run_prewarp(args.fields_npz, args.out_spec, bulk_factor=args.bulk_factor,
-                       tol=args.tol, k_max=args.k_max, grid_n=args.grid_n)
+                       tol=args.tol, k_max=args.k_max, grid_n=args.grid_n,
+                       z0=args.z0)
     print(json.dumps(prov, indent=2))
     return 0
 
