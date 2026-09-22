@@ -63,3 +63,42 @@ def test_build_green_volume_stretches_columns_and_conserves_mask():
     assert np.all(gd[1, 0, 2:] == 0.0)
     # dopant range preserved (resample stays within source min/max)
     assert 0.2 - 1e-9 <= gd[0, 0, :6].min() and gd[0, 0, :6].max() <= 0.8 + 1e-9
+
+
+def test_prewarp_solve_converges_against_uniform_forward():
+    nx, ny, nz0 = 3, 3, 8
+    mask0 = np.zeros((nx, ny, nz0), bool); mask0[:, :, :4] = True
+    dop0 = np.where(mask0, 0.5, 0.0)
+    h = 0.2
+    LAM_Z = 0.5   # 4 voxels / 0.5 = 8 voxels exactly -> reachable to tol
+
+    def forward(green_mask, green_dop):
+        occ = green_mask.sum(axis=2).astype(float)
+        return occ * h * LAM_Z, 0.0, {}
+
+    res = gp.prewarp_solve(mask0, dop0, h, forward,
+                           bulk_factor=1.0, tol=0.01, k_max=8)
+    assert res["converged"] is True
+    Ht = gp.target_column_heights(mask0, h)
+    expect = Ht / LAM_Z
+    assert np.allclose(res["H_green"][Ht > 0], expect[Ht > 0], rtol=0.02)
+    assert res["err_history"][-1] < 0.01
+    assert res["iters"] >= 1
+
+
+def test_prewarp_solve_stall_breaks_on_voxel_quantization():
+    nx, ny, nz0 = 3, 3, 8
+    mask0 = np.zeros((nx, ny, nz0), bool); mask0[:, :, :4] = True
+    dop0 = np.where(mask0, 0.5, 0.0)
+    h = 0.2
+
+    def forward(green_mask, green_dop):
+        occ = green_mask.sum(axis=2).astype(float)
+        return occ * h * 0.6, 0.0, {}   # 6.67 voxels -> unreachable to 1%
+
+    res = gp.prewarp_solve(mask0, dop0, h, forward,
+                           bulk_factor=1.0, tol=0.01, k_max=20)
+    assert res["converged"] is False
+    assert res["iters"] < 8
+    assert min(res["err_history"]) < 0.06
+    assert res["warp_std"] is not None

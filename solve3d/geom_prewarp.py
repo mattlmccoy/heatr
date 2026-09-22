@@ -86,3 +86,55 @@ def build_green_volume(mask0: np.ndarray, dop0: np.ndarray,
             green_dop[i, j, :ng] = resample_column(src, ng)
             green_mask[i, j, :ng] = True
     return green_mask, green_dop
+
+
+def prewarp_solve(mask0: np.ndarray, dop0: np.ndarray, h: float, forward_fn,
+                  *, bulk_factor: float = 1.0, tol: float = 0.01,
+                  k_max: int = 5, stall_patience: int = 2) -> dict:
+    """Sequential outer-loop green-geometry backsolve.
+
+    forward_fn(green_mask, green_dop) -> (H_measured(nx,ny), warp_std, aux).
+    Warm start: green height = target * bulk_factor. Each iter builds the green
+    volume, marches it (forward_fn), measures per-column dense height, applies
+    the multiplicative update until max column error < tol or k_max reached.
+
+    Stall-break: voxel rounding quantizes achievable heights, so a target finer than
+    one voxel is unreachable and the update can enter a small limit cycle. If the
+    best error does not improve for `stall_patience` consecutive iters, stop and
+    return the best iterate. Always returns the best-error iterate seen.
+    """
+    H_target = target_column_heights(mask0, h)
+    cols = H_target > 0
+    H_green = H_target * float(bulk_factor)
+
+    best = None
+    err_history, warp_history = [], []
+    converged = False
+    iters = 0
+    no_improve = 0
+    for k in range(1, int(k_max) + 1):
+        iters = k
+        green_mask, green_dop = build_green_volume(mask0, dop0, H_green, h)
+        H_measured, warp_std, aux = forward_fn(green_mask, green_dop)
+        err = max_rel_error(H_target, H_measured, cols)
+        err_history.append(err)
+        warp_history.append(float(warp_std))
+        if best is None or err < best["err"] - 1e-9:
+            best = {"err": err, "H_green": H_green.copy(),
+                    "green_mask": green_mask, "green_dop": green_dop,
+                    "warp_std": float(warp_std)}
+            no_improve = 0
+        else:
+            no_improve += 1
+        if err < tol:
+            converged = True
+            break
+        if no_improve >= stall_patience:
+            break
+        H_green = column_height_update(H_green, H_target, H_measured)
+
+    return {"converged": converged, "iters": iters,
+            "H_green": best["H_green"], "green_mask": best["green_mask"],
+            "green_dop": best["green_dop"], "warp_std": best["warp_std"],
+            "err_history": err_history, "warp_history": warp_history,
+            "H_target": H_target}
