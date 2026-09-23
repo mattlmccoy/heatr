@@ -33,6 +33,7 @@ import itertools
 import json
 import math
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -354,6 +355,19 @@ def _parse_preflight(returncode: int, stdout: str, stderr: str) -> dict:
     return res
 
 
+def _deliver(staged: Path, hot_folder: Path, work: Path, ready: bool) -> tuple:
+    """Move a staged job to where it belongs. READY -> the live hot folder (a
+    same-volume shutil.move is an atomic rename: MetPrint never sees a partial
+    job). Not ready -> <work>/_rejected. Never overwrites. Returns (path, error)."""
+    dest = hot_folder / staged.name if ready else work / "_rejected" / staged.name
+    if dest.exists():
+        return staged, (f"{dest} already exists: refusing to overwrite it; the job "
+                        f"stays in {staged}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(staged), str(dest))
+    return dest, None
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -414,10 +428,12 @@ def main(argv=None) -> int:
         print(f"WARNING: {reg_rep['pose_note']}", file=sys.stderr)
     spec_npz = write_spec(spec, work / f"{args.job_name}_spec.npz")
     report_json = work / "stage_report.json"
+    # stage + preflight OFF the live hot folder; only a READY job is moved in
+    staging = work.resolve() / "staging"
     cmd = [sys.executable, str(tools / "stage_job.py"), str(spec_npz), "--3d",
            "--stl", str(args.stl), "--chamber-mm", repr(spec["domain_mm"]),
            "--layer-height", repr(args.layer_height),
-           "--hot-folder", str(args.hot_folder), "--job-name", args.job_name,
+           "--hot-folder", str(staging), "--job-name", args.job_name,
            "--report-json", str(report_json)]
     if args.densify:
         from solve3d import densify_summary as ds
@@ -433,7 +449,12 @@ def main(argv=None) -> int:
             print(f"STAGE FAILED (stage_job exit {r.returncode})", file=sys.stderr)
             return 1
         rep = json.loads(report_json.read_text())
-        pf = subprocess.run([sys.executable, str(tools / "preflight.py"), rep["out_dir"],
+        staged = Path(rep["out_dir"]).resolve()
+        if staged.parent != staging or not staged.is_dir():
+            print(f"STAGE FAILED: stage_job reported {staged}, outside {staging}; "
+                  "not moving it", file=sys.stderr)
+            return 1
+        pf = subprocess.run([sys.executable, str(tools / "preflight.py"), str(staged),
                              "--json"], cwd=str(tools), capture_output=True, text=True,
                             timeout=_SUBPROCESS_TIMEOUT_S)
     except subprocess.TimeoutExpired as e:
@@ -441,7 +462,13 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 1
     pre = _parse_preflight(pf.returncode, pf.stdout, pf.stderr)
-    out = {"job": args.job_name, "out_dir": rep["out_dir"],
+    ready = bool(rep.get("all_pass") and pre.get("ready"))
+    final, move_err = _deliver(staged, Path(args.hot_folder), work.resolve(), ready)
+    if move_err:
+        print(f"REFUSED: {move_err}", file=sys.stderr)
+    elif not ready:
+        print(f"NOT READY (job moved to {final}): {pre.get('errors')}", file=sys.stderr)
+    out = {"job": args.job_name, "out_dir": str(final),
            "staged_all_pass": rep.get("all_pass"),
            "print_layers": rep.get("print_layers"),
            "printed_z_mm": rep.get("printed_z_mm"),
@@ -454,7 +481,7 @@ def main(argv=None) -> int:
            "preflight_errors": pre.get("errors"),
            "preflight_warnings": pre.get("warnings")}
     print(json.dumps(out, indent=2))
-    return 0 if (rep.get("all_pass") and pre.get("ready")) else 1
+    return 0 if (ready and not move_err) else 1
 
 
 if __name__ == "__main__":

@@ -47,6 +47,9 @@ def test_stage_part_end_to_end(tmp_path, capsys, part, factor, pages, symmetry):
     assert dm["moment_ok"] and dm["extent_ok"], dm
     assert dm["source"] == str(fields)
 
+    # staged + pre-flighted off the hot folder, then moved in whole
+    assert Path(out["out_dir"]).parent == (tmp_path / "hf").resolve()
+    assert not any((tmp_path / "work" / "staging").iterdir())
     # the staged job on disk carries provenance tying it to this densify run
     info = json.loads((Path(out["out_dir"]) / "job_info.json").read_text())
     z = info["provenance"]["z"]

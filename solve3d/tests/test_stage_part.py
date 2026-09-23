@@ -325,22 +325,11 @@ def test_cli_timeout_fails_cleanly(tmp_path, monkeypatch, capsys):
 
 def test_cli_warns_when_pose_not_unique(tmp_path, monkeypatch, capsys):
     import json
-    import subprocess
-    timeouts = []
-
-    def fake_run(cmd, **kw):
-        timeouts.append(kw.get("timeout"))
-        if "--report-json" in cmd:
-            rj = cmd[cmd.index("--report-json") + 1]
-            with open(rj, "w") as fh:
-                json.dump({"out_dir": str(tmp_path / "out"), "all_pass": True}, fh)
-            return subprocess.CompletedProcess(cmd, 0, "", "")
-        return subprocess.CompletedProcess(
-            cmd, 0, '[{"ready": true, "errors": [], "warnings": []}]', "")
-    monkeypatch.setattr(sp.subprocess, "run", fake_run)
+    seen = []
+    _fake_stager(tmp_path, monkeypatch, seen=seen)
     assert sp.main(_cli_setup(tmp_path)) == 0
     cap = capsys.readouterr()
-    assert timeouts == [1800, 1800]
+    assert [kw.get("timeout") for _, kw in seen] == [1800, 1800]
     assert "WARNING: part is symmetric under 4 axis rotations" in cap.err
     out = json.loads(cap.out)
     assert "4 axis rotations" in out["pose_note"] and out["preflight_ready"] is True
@@ -350,25 +339,13 @@ def test_cli_hands_the_stager_absolute_paths(tmp_path, monkeypatch):
     """stage_job runs with cwd = the tools dir, so every path the driver passes it
     must be absolute. Regression: a relative --stl (as typed at a shell prompt)
     was forwarded verbatim and stage_job could not find it."""
-    import json
-    import subprocess
     argv = _cli_setup(tmp_path)
     rel = [a.replace(str(tmp_path) + "/", "") for a in argv]   # user types relative paths
     monkeypatch.chdir(tmp_path)
     seen = []
-
-    def fake_run(cmd, **kw):
-        seen.append(cmd)
-        if "--report-json" in cmd:
-            rj = cmd[cmd.index("--report-json") + 1]
-            with open(rj, "w") as fh:
-                json.dump({"out_dir": str(tmp_path / "out"), "all_pass": True}, fh)
-            return subprocess.CompletedProcess(cmd, 0, "", "")
-        return subprocess.CompletedProcess(
-            cmd, 0, '[{"ready": true, "errors": [], "warnings": []}]', "")
-    monkeypatch.setattr(sp.subprocess, "run", fake_run)
+    _fake_stager(tmp_path, monkeypatch, seen=seen)
     assert sp.main(rel) == 0
-    stage_cmd = next(c for c in seen if "--report-json" in c)
+    stage_cmd = next(c for c, _ in seen if "--report-json" in c)
     assert Path(stage_cmd[2]).is_absolute()                          # the spec npz
     for flag in ("--stl", "--hot-folder", "--report-json"):
         assert Path(stage_cmd[stage_cmd.index(flag) + 1]).is_absolute(), flag
@@ -464,6 +441,78 @@ def test_cli_reports_the_densify_match(tmp_path, monkeypatch, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["densify_match"]["extent_ok"] is True
     assert out["densify_match"]["moment_err_2nd"] < sp.MARCH_SEC_TOL
+
+
+_JOB = "20260101_000000_FGM_j"                         # what _fake_stager writes
+
+
+def test_cli_stages_off_the_hot_folder_then_moves_a_ready_job_in(tmp_path, monkeypatch,
+                                                                 capsys):
+    """MetPrint must never see a half-written job: stage + preflight in
+    <work>/staging, and only a READY job is moved (atomic rename) into the hot folder."""
+    import json
+    seen = []
+    _fake_stager(tmp_path, monkeypatch, seen=seen)
+    assert sp.main(_cli_setup(tmp_path)) == 0
+    stage_cmd = next(c for c, _ in seen if "--report-json" in c)
+    pre_cmd = next(c for c, _ in seen if "--report-json" not in c)
+    staging = tmp_path / "w" / "staging"
+    assert Path(stage_cmd[stage_cmd.index("--hot-folder") + 1]) == staging
+    assert Path(pre_cmd[2]) == staging / _JOB             # preflight ran off the hot folder
+    hot = tmp_path / "hot"
+    assert (hot / _JOB / "job_info.json").is_file()
+    assert not (staging / _JOB).exists()
+    assert json.loads(capsys.readouterr().out)["out_dir"] == str(hot / _JOB)
+
+
+def test_cli_never_leaves_a_rejected_job_in_the_hot_folder(tmp_path, monkeypatch, capsys):
+    import json
+    _fake_stager(tmp_path, monkeypatch, ready=False)
+    assert sp.main(_cli_setup(tmp_path)) == 1
+    hot = tmp_path / "hot"
+    assert not hot.exists() or not any(hot.iterdir())
+    rejected = tmp_path / "w" / "_rejected" / _JOB
+    assert (rejected / "job_info.json").is_file()
+    assert not (tmp_path / "w" / "staging" / _JOB).exists()
+    cap = capsys.readouterr()
+    out = json.loads(cap.out)
+    assert out["out_dir"] == str(rejected)
+    assert out["preflight_ready"] is False and out["preflight_errors"]
+    assert "bad page count" in cap.err
+
+
+def test_cli_refuses_to_overwrite_a_job_already_in_the_hot_folder(tmp_path, monkeypatch,
+                                                                  capsys):
+    existing = tmp_path / "hot" / _JOB
+    existing.mkdir(parents=True)
+    (existing / "marker").write_text("theirs")
+    _fake_stager(tmp_path, monkeypatch)
+    assert sp.main(_cli_setup(tmp_path)) == 1
+    assert (existing / "marker").read_text() == "theirs"
+    assert sorted(p.name for p in existing.iterdir()) == ["marker"]
+    assert "already exists" in capsys.readouterr().err
+
+
+def test_cli_refuses_to_move_a_job_staged_outside_staging(tmp_path, monkeypatch, capsys):
+    """Only ever move what WE staged: a report pointing elsewhere is not moved."""
+    import json
+    import subprocess
+    elsewhere = tmp_path / "elsewhere" / _JOB
+    elsewhere.mkdir(parents=True)
+
+    def fake_run(cmd, **kw):
+        if "--report-json" in cmd:
+            with open(cmd[cmd.index("--report-json") + 1], "w") as fh:
+                json.dump({"out_dir": str(elsewhere), "all_pass": True}, fh)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return subprocess.CompletedProcess(
+            cmd, 0, '[{"ready": true, "errors": [], "warnings": []}]', "")
+    monkeypatch.setattr(sp.subprocess, "run", fake_run)
+    assert sp.main(_cli_setup(tmp_path)) == 1
+    assert elsewhere.is_dir()
+    hot = tmp_path / "hot"
+    assert not hot.exists() or not any(hot.iterdir())
+    assert "outside" in capsys.readouterr().err
 
 
 def test_cli_requires_exactly_one_densification_choice():
