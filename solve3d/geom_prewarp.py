@@ -161,18 +161,35 @@ def prewarp_solve(mask0: np.ndarray, dop0: np.ndarray, h: float,
 
 
 def emit_prewarped_spec(green_mask: np.ndarray, green_dop: np.ndarray,
-                        out_path: "str | Path", provenance: dict[str, Any]) -> None:
-    """Write the pre-warped green volume as a staging spec npz. Fields match the
-    spec that stage_3d consumes: SOLVE_cont (dopant), part_mask, proxy_field, plus
-    a `prewarp` provenance dict. Dopant is zeroed outside the mask for staging."""
+                        out_path: "str | Path", provenance: dict[str, Any], *,
+                        h_mm: float) -> None:
+    """Write the pre-warped green volume as a STAGING spec npz.
+
+    This module works in (nx, ny, nz) with z = axis 2; the MetPrint stager
+    (stage_lib.stage_3d) consumes (nz, ny, nx) with the build axis FIRST and the
+    base at k = 0. Transpose here, at the handoff, so a staged pre-warp can never
+    be sliced along x. Also record the physical scale the stager needs: z_mm (the
+    green height) and domain_mm (the square xy side the dopant field spans).
+    """
+    if not h_mm > 0:
+        raise ValueError(f"h_mm must be > 0, got {h_mm}")
     green_mask = np.asarray(green_mask, bool)
+    if green_mask.ndim != 3:
+        raise ValueError(f"green_mask must be 3-D (nx, ny, nz), got {green_mask.shape}")
+    nx, ny, nz = green_mask.shape
+    if nx != ny:
+        raise ValueError(f"green footprint must be square for staging, got {nx}x{ny}")
     green_dop = np.where(green_mask, np.asarray(green_dop, float), 0.0)
+    sol = np.transpose(green_dop, (2, 1, 0))          # (nz, ny, nx), base at k = 0
+    msk = np.transpose(green_mask, (2, 1, 0))
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         out_path,
-        SOLVE_cont=green_dop.astype(np.float32),
-        part_mask=green_mask,
+        SOLVE_cont=sol.astype(np.float32),
+        part_mask=msk,
         proxy_field="solve",
+        z_mm=float(nz * h_mm),
+        domain_mm=float(nx * h_mm),
         prewarp=np.array(dict(provenance), dtype=object),
     )

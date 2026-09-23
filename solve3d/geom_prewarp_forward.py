@@ -97,7 +97,7 @@ def run_prewarp(fields_npz: str, out_spec: str, *, bulk_factor: float | None = N
             "warp_std_history": res["warp_history"],
             "err_history": res["err_history"],
             "source_densify": Path(fields_npz).parent.name}
-    gp.emit_prewarped_spec(res["green_mask"], res["green_dop"], out_spec, prov)
+    gp.emit_prewarped_spec(res["green_mask"], res["green_dop"], out_spec, prov, h_mm=h * 1e3)
     Path(str(out_spec) + ".record.json").write_text(json.dumps(prov, indent=2))
     return prov
 

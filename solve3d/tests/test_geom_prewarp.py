@@ -141,19 +141,31 @@ def test_prewarp_solve_rejects_bad_kmax():
         gp.prewarp_solve(mask0, np.zeros((2, 2, 4)), 0.2, lambda gm, gd: (None, 0, {}), k_max=0)
 
 
-def test_emit_prewarped_spec_roundtrips(tmp_path):
-    gm = np.zeros((2, 2, 3), bool); gm[:, :, :2] = True
+def test_emit_prewarped_spec_is_staging_order_with_scale(tmp_path):
+    # (nx, ny, nz) green volume whose base (z = 0) is the widest layer
+    gm = np.zeros((6, 6, 4), bool)
+    gm[:, :, 0] = True
+    gm[1:5, 1:5, 1] = True
+    gm[2:4, 2:4, 2:4] = True
     gd = np.where(gm, 0.5, 0.0)
-    prov = {"enabled": True, "iters": 3, "converged": True, "tol": 0.01,
-            "warp_std_before": 9.5, "warp_std_after": 2.0,
-            "bulk_factor": 1.58, "source_densify": "densify_pyramid"}
+    prov = {"enabled": True, "iters": 3, "converged": True}
     out = tmp_path / "pyr_prewarped_green_spec.npz"
-    gp.emit_prewarped_spec(gm, gd, out, prov)
+    gp.emit_prewarped_spec(gm, gd, out, prov, h_mm=1.25)
     d = np.load(out, allow_pickle=True)
+    assert d["SOLVE_cont"].shape == (4, 6, 6)          # (nz, ny, nx): build axis first
+    m = d["part_mask"]
+    assert m[0].sum() > m[-1].sum()                    # base at k = 0
+    assert float(d["z_mm"]) == pytest.approx(4 * 1.25)
+    assert float(d["domain_mm"]) == pytest.approx(6 * 1.25)
     assert str(d["proxy_field"]) == "solve"
-    assert d["SOLVE_cont"].shape == gd.shape
-    assert d["part_mask"].shape == gm.shape and d["part_mask"].dtype == bool
-    rec = d["prewarp"].item()          # dict round-trips via object array
-    assert rec["enabled"] is True and rec["converged"] is True
-    # dopant zero outside the mask (staging validity)
-    assert np.all(d["SOLVE_cont"][~d["part_mask"]] == 0.0)
+    assert d["prewarp"].item()["converged"] is True
+    assert np.all(d["SOLVE_cont"][~m] == 0.0)
+
+
+def test_emit_prewarped_spec_requires_square_footprint_and_scale(tmp_path):
+    with pytest.raises(ValueError):
+        gp.emit_prewarped_spec(np.ones((4, 6, 3), bool), np.full((4, 6, 3), 0.5),
+                               tmp_path / "a.npz", {}, h_mm=1.0)
+    with pytest.raises(ValueError):
+        gp.emit_prewarped_spec(np.ones((4, 4, 3), bool), np.full((4, 4, 3), 0.5),
+                               tmp_path / "b.npz", {}, h_mm=0.0)
