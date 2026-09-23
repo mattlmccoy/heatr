@@ -1,2 +1,3 @@
 # Regenerable heatr3d anchor fields (solve3d/cases.py --anchor). JSON gates are tracked.
 *.npz
+stage_inputs/

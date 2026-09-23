@@ -26,7 +26,12 @@ orientation relative to the RF field IS the print orientation.
 """
 from __future__ import annotations
 
+import argparse
+import json
 import math
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -139,3 +144,148 @@ def register(map_d: dict, mesh: trimesh.Trimesh, build_axis: str = "z",
         raise RegistrationError("; ".join(problems)
                                 + f" [declared build_axis={build_axis}, base={base}]")
     return {"points_mm": p, "s_map": map_d["s_map"], "report": report}
+
+
+def build_spec(map_npz, stl_path, *, voxel_mm: float = 0.25,
+               chamber_mm: float | None = None, pad: float = 1.25,
+               build_axis: str = "z", base: str = "min") -> dict:
+    """Staging spec (SOLVE_cont (nz, ny, nx), base at k = 0) spanning EXACTLY the
+    chamber canvas, centred where stage_lib._stl_layer_masks centres the part (the
+    STL triangle-vertex mean), and the STL's full z-span."""
+    if not voxel_mm > 0:
+        raise ValueError(f"voxel_mm must be > 0, got {voxel_mm}")
+    mesh = trimesh.load(str(stl_path), force="mesh")
+    reg = register(load_map(map_npz), mesh, build_axis, base)
+    tri = np.asarray(mesh.triangles).reshape(-1, 3)
+    cx, cy = float(tri[:, 0].mean()), float(tri[:, 1].mean())
+    lo, hi = mesh.bounds
+    need = 2.0 * max(abs(lo[0] - cx), abs(hi[0] - cx), abs(lo[1] - cy), abs(hi[1] - cy))
+    if chamber_mm is None:
+        chamber_mm = math.ceil(pad * need * 10.0) / 10.0
+    chamber_mm = float(chamber_mm)
+    if chamber_mm < need:
+        raise ValueError(f"chamber_mm={chamber_mm} cannot hold the part "
+                         f"(needs >= {need:.2f} mm around its centre)")
+    n_xy = max(8, int(round(chamber_mm / voxel_mm)))
+    height = float(hi[2] - lo[2])
+    nz = max(2, int(math.ceil(height / voxel_mm)))
+    dxy, dz = chamber_mm / n_xy, height / nz
+    xs = cx - chamber_mm / 2 + (np.arange(n_xy) + 0.5) * dxy
+    ys = cy - chamber_mm / 2 + (np.arange(n_xy) + 0.5) * dxy
+    zs = lo[2] + (np.arange(nz) + 0.5) * dz
+    Z, Y, X = np.meshgrid(zs, ys, xs, indexing="ij")               # (nz, ny, nx)
+    pts = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()])
+    in_box = np.flatnonzero(np.all((pts >= lo) & (pts <= hi), axis=1))
+    inside = np.zeros(len(pts), bool)
+    for s in range(0, len(in_box), 200_000):
+        chunk = in_box[s:s + 200_000]
+        inside[chunk] = mesh.contains(pts[chunk])
+    from scipy.spatial import cKDTree
+    _, near = cKDTree(reg["points_mm"]).query(pts[inside])
+    sol = np.zeros(len(pts), np.float32)
+    sol[inside] = np.clip(reg["s_map"][near], 0.0, 1.0)
+    shape = (nz, n_xy, n_xy)
+    return {"SOLVE_cont": sol.reshape(shape), "part_mask": inside.reshape(shape),
+            "proxy_field": "solve", "domain_mm": chamber_mm, "z_mm": height,
+            "voxel_mm": [dz, dxy, dxy], "registration": reg["report"],
+            "source_map": str(map_npz), "stl": str(stl_path)}
+
+
+def write_spec(spec: dict, out_npz) -> Path:
+    """Save a build_spec() result as a stage_job-ready npz (no pickled objects)."""
+    out = Path(out_npz)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out, SOLVE_cont=spec["SOLVE_cont"], part_mask=spec["part_mask"],
+                        proxy_field=spec["proxy_field"], domain_mm=spec["domain_mm"],
+                        z_mm=spec["z_mm"], voxel_mm=np.asarray(spec["voxel_mm"], float),
+                        registration=json.dumps(spec["registration"]),
+                        source_map=spec["source_map"], stl=spec["stl"])
+    return out
+
+
+def _default_meteor_tools() -> Path:
+    env = os.environ.get("RFAM_METEOR_TOOLS")
+    if env:
+        return Path(env)
+    return Path(__file__).resolve().parents[3] / "software" / "meteor" / "tools"
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--map", required=True, help="solve3d DG0 map npz")
+    ap.add_argument("--stl", required=True, help="the part STL (mm), as solved")
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--densify", metavar="FIELDS_NPZ",
+                   help="densify march fields.npz: field-based factor (preferred)")
+    g.add_argument("--densify-factor", type=float,
+                   help="manual green->dense Z factor (recorded as 'manual')")
+    g.add_argument("--no-densification", action="store_true",
+                   help="the STL IS the green shape (recorded as 'none')")
+    ap.add_argument("--hot-folder", required=True)
+    ap.add_argument("--job-name", required=True)
+    ap.add_argument("--layer-height", type=float, default=0.2)
+    ap.add_argument("--voxel-mm", type=float, default=0.25)
+    ap.add_argument("--chamber-mm", type=float, default=None)
+    ap.add_argument("--build-axis", choices=["x", "y", "z"], default="z")
+    ap.add_argument("--base", choices=["min", "max"], default="min")
+    ap.add_argument("--work-dir", default=None,
+                    help="spec/summary/report dir (default solve3d/results/stage_inputs/<job>)")
+    ap.add_argument("--meteor-tools", default=None)
+    args = ap.parse_args(argv)
+
+    tools = Path(args.meteor_tools) if args.meteor_tools else _default_meteor_tools()
+    for f in ("stage_job.py", "preflight.py"):
+        if not (tools / f).is_file():
+            print(f"error: {tools / f} not found (set --meteor-tools or "
+                  "RFAM_METEOR_TOOLS)", file=sys.stderr)
+            return 2
+    work = (Path(args.work_dir) if args.work_dir else
+            Path(__file__).resolve().parent / "results" / "stage_inputs" / args.job_name)
+    work.mkdir(parents=True, exist_ok=True)
+    try:
+        spec = build_spec(args.map, args.stl, voxel_mm=args.voxel_mm,
+                          chamber_mm=args.chamber_mm, build_axis=args.build_axis,
+                          base=args.base)
+    except ValueError as e:                     # includes RegistrationError
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return 1
+    spec_npz = write_spec(spec, work / f"{args.job_name}_spec.npz")
+    report_json = work / "stage_report.json"
+    cmd = [sys.executable, str(tools / "stage_job.py"), str(spec_npz), "--3d",
+           "--stl", str(args.stl), "--chamber-mm", repr(spec["domain_mm"]),
+           "--layer-height", repr(args.layer_height),
+           "--hot-folder", str(args.hot_folder), "--job-name", args.job_name,
+           "--report-json", str(report_json)]
+    if args.densify:
+        from solve3d import densify_summary as ds
+        cmd += ["--densify-summary",
+                str(ds.write_summary(args.densify, work / "densify_summary.json"))]
+    elif args.densify_factor is not None:
+        cmd += ["--z-densification", repr(args.densify_factor)]
+    r = subprocess.run(cmd, cwd=str(tools), capture_output=True, text=True)
+    if r.returncode != 0 or not report_json.is_file():
+        sys.stderr.write(r.stdout + r.stderr)
+        print(f"STAGE FAILED (stage_job exit {r.returncode})", file=sys.stderr)
+        return 1
+    rep = json.loads(report_json.read_text())
+    pf = subprocess.run([sys.executable, str(tools / "preflight.py"), rep["out_dir"],
+                         "--json"], cwd=str(tools), capture_output=True, text=True)
+    pre = (json.loads(pf.stdout)[0] if pf.stdout.strip()
+           else {"ready": False, "errors": [pf.stderr.strip()], "warnings": []})
+    out = {"job": args.job_name, "out_dir": rep["out_dir"],
+           "staged_all_pass": rep.get("all_pass"),
+           "print_layers": rep.get("print_layers"),
+           "printed_z_mm": rep.get("printed_z_mm"),
+           "z_mode": rep.get("provenance", {}).get("z", {}).get("mode"),
+           "factor": rep.get("z_densification"),
+           "registration": spec["registration"],
+           "preflight_ready": pre.get("ready"),
+           "preflight_errors": pre.get("errors"),
+           "preflight_warnings": pre.get("warnings")}
+    print(json.dumps(out, indent=2))
+    return 0 if (rep.get("all_pass") and pre.get("ready")) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

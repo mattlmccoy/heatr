@@ -80,3 +80,49 @@ def test_load_map_refuses_non_dg0(tmp_path):
     np.savez(p, sat_map=np.zeros((4, 4)))
     with pytest.raises(ValueError, match="DG0"):
         sp.load_map(p)
+
+
+def test_build_spec_is_staging_ready(tmp_path):
+    mesh = _pyramid_mesh()
+    stl = tmp_path / "pyr.stl"
+    mesh.export(stl)
+    spec = sp.build_spec(_save_map(tmp_path, _map_from_mesh(mesh)), stl, voxel_mm=1.0)
+    sol, m = spec["SOLVE_cont"], spec["part_mask"]
+    assert sol.ndim == 3 and sol.shape[1] == sol.shape[2]        # (nz, n, n)
+    assert m[0].sum() > m[-1].sum()                                # base at k = 0
+    assert spec["z_mm"] == pytest.approx(20.0)
+    assert spec["domain_mm"] >= 20.0
+    assert sol.shape[1] == round(spec["domain_mm"] / 1.0)
+    assert np.all(sol[~m] == 0) and sol.min() >= 0 and sol.max() <= 1
+    means = [sol[k][m[k]].mean() for k in range(sol.shape[0]) if m[k].any()]
+    assert means[-1] > means[0]                    # dopant still rises with height
+
+
+def test_build_spec_refuses_too_small_chamber(tmp_path):
+    mesh = _pyramid_mesh()
+    stl = tmp_path / "pyr.stl"
+    mesh.export(stl)
+    with pytest.raises(ValueError, match="chamber"):
+        sp.build_spec(_save_map(tmp_path, _map_from_mesh(mesh)), stl,
+                      voxel_mm=1.0, chamber_mm=10.0)
+
+
+def test_write_spec_round_trips_for_the_stager(tmp_path):
+    import json
+    mesh = _pyramid_mesh()
+    stl = tmp_path / "pyr.stl"
+    mesh.export(stl)
+    spec = sp.build_spec(_save_map(tmp_path, _map_from_mesh(mesh)), stl, voxel_mm=1.0)
+    p = sp.write_spec(spec, tmp_path / "s.npz")
+    d = np.load(p, allow_pickle=False)                 # no pickle needed to stage it
+    assert str(d["proxy_field"]) == "solve"
+    assert float(d["domain_mm"]) == pytest.approx(spec["domain_mm"])
+    assert json.loads(str(d["registration"]))["orientation_ok"] is True
+
+
+def test_cli_requires_exactly_one_densification_choice():
+    base = ["--map", "m", "--stl", "s", "--hot-folder", "h", "--job-name", "j"]
+    with pytest.raises(SystemExit):
+        sp.main(base)
+    with pytest.raises(SystemExit):
+        sp.main(base + ["--no-densification", "--densify-factor", "1.5"])
