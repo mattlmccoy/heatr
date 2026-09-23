@@ -5,7 +5,8 @@ pre-flighted MetPrint job, in one command.
         --map solve3d/phase_e/results/map_pyramid_solve_filter_only.npz \\
         --stl shape_library_3d/stl/pyramid.stl \\
         --densify solve3d/results/densify_pyramid/fields.npz \\
-        --hot-folder "<...>/rfam-web/Hot Folder" --job-name pyramid_graded_3d
+        --hot-folder "<...>/rfam-web/Hot Folder" --job-name pyramid_graded_3d \\
+        --layer-height 0.2
 
 Geometry comes from the STL (authoritative, crisp). The dopant comes from the
 map's cell centroids, REGISTERED into the STL frame and PROVEN to be the same
@@ -42,6 +43,23 @@ import trimesh
 VOLUME_TOL = 0.03          # map vs STL volume
 SEC_TOL = 0.05             # max abs diff of normalised 2nd central moments, map vs STL
 THR_TOL = 0.25             # max abs diff of normalised 3rd central moments
+# Densify march vs STL. The march is a COARSE voxelisation (h = 1.25 mm, 13-19
+# voxels across), so it gets its own moment tolerances. Measured 2026-09-22:
+#   real marches (solve3d/results/densify_*/fields.npz vs shape_library_3d/stl):
+#     same part : cube 0.000/0.000, pyramid 0.042/0.035        (2nd/3rd order)
+#     cross part: cube-march vs pyramid.stl 0.182/0.639,
+#                 pyramid-march vs cube.stl 0.224/0.604
+#   every library STL voxelised at 1.25 mm, 4 grid offsets (same-part worst):
+#     pipe 0.064/0.059, cylinder 0.061/0.005, lattice 0.005/0.161
+# Tolerances sit near the geometric middle of the worst same-part and the
+# closest real cross-part errors. Normalised 2nd moments cannot separate
+# isotropic solids (cube, spheres, truncated octahedron); for those the physical
+# extent check carries the proof, and it separates cube from the spheres
+# (16.1 vs ~20 mm) but NOT the near-spheres from each other (extents within 1.5 %).
+MARCH_SEC_TOL = 0.10
+MARCH_THR_TOL = 0.30
+MARCH_EXTENT_VOX = 2.0     # extent tolerance = max(2 voxels, 3 % of the STL extent)
+MARCH_EXTENT_REL = 0.03
 _ORIENT_GRID = 40          # deterministic STL interior sample grid per axis
 _SUBPROCESS_TIMEOUT_S = 1800   # stage_job / preflight wall-clock limit
 
@@ -198,6 +216,56 @@ def register(map_d: dict, mesh: trimesh.Trimesh, build_axis: str = "z",
     return {"points_mm": p, "s_map": map_d["s_map"], "report": report}
 
 
+def check_march_matches_stl(fields_npz, mesh: trimesh.Trimesh) -> dict:
+    """Prove the densify march simulated THIS part, or raise RegistrationError.
+
+    The march's `part` (nx, ny, nz; z = build axis) and `h` (metres) give voxel
+    centres (idx + 0.5) * h in mm. Its normalised moments (translation- and
+    scale-invariant) must match the STL interior's, and its physical per-axis
+    extent (occupied index span * h) must match the STL bounds. Volume alone
+    cannot tell parts apart: the shape library is equal-volume."""
+    d = np.load(Path(fields_npz), allow_pickle=False)
+    for k in ("part", "h"):
+        if k not in d.files:
+            raise ValueError(f"{fields_npz}: missing '{k}' (not a densify march output?)")
+    part = np.asarray(d["part"], bool)
+    if part.ndim != 3 or not part.any():
+        raise ValueError(f"{fields_npz}: part mask must be a non-empty 3-D array")
+    h_mm = float(d["h"]) * 1e3
+    idx = np.argwhere(part)
+    P = (idx + 0.5) * h_mm
+    q = _stl_interior_points(mesh)
+    err2, err3 = _signature_err(_moment_signature(P, np.ones(len(P))),
+                                _moment_signature(q, np.ones(len(q))))
+    ext_march = (idx.max(axis=0) - idx.min(axis=0) + 1) * h_mm
+    lo, hi = mesh.bounds
+    ext_stl = np.asarray(hi - lo, float)
+    ext_tol = np.maximum(MARCH_EXTENT_VOX * h_mm, MARCH_EXTENT_REL * ext_stl)
+    extent_ok = bool(np.all(np.abs(ext_march - ext_stl) <= ext_tol))
+    moment_ok = bool(err2 < MARCH_SEC_TOL and err3 < MARCH_THR_TOL)
+    report = {"source": str(fields_npz), "h_mm": round(h_mm, 4),
+              "n_voxels": int(part.sum()),
+              "moment_err_2nd": round(err2, 4), "moment_err_3rd": round(err3, 4),
+              "moment_ok": moment_ok,
+              "march_extent_mm": [round(float(x), 3) for x in ext_march],
+              "stl_extent_mm": [round(float(x), 3) for x in ext_stl],
+              "extent_tol_mm": [round(float(x), 3) for x in ext_tol],
+              "extent_ok": extent_ok}
+    problems = []
+    if not moment_ok:
+        problems.append(f"shape moments march vs STL differ (2nd-order {err2:.3f} vs tol "
+                        f"{MARCH_SEC_TOL}, 3rd-order {err3:.3f} vs tol {MARCH_THR_TOL}): "
+                        "a different shape, or the march is on its side/upside down")
+    if not extent_ok:
+        problems.append("physical extent march "
+                        f"{np.round(ext_march, 2).tolist()} vs STL "
+                        f"{np.round(ext_stl, 2).tolist()} mm exceeds "
+                        f"{np.round(ext_tol, 2).tolist()} mm: a different part or size")
+    if problems:
+        raise RegistrationError("; ".join(problems) + f" [{fields_npz}]")
+    return report
+
+
 def build_spec(map_npz, stl_path, *, voxel_mm: float = 0.25,
                chamber_mm: float | None = None, pad: float = 1.25,
                build_axis: str = "z", base: str = "min") -> dict:
@@ -300,7 +368,9 @@ def main(argv=None) -> int:
                    help="the STL IS the green shape (recorded as 'none')")
     ap.add_argument("--hot-folder", required=True)
     ap.add_argument("--job-name", required=True)
-    ap.add_argument("--layer-height", type=float, default=0.2)
+    ap.add_argument("--layer-height", type=float, required=True,
+                    help="the MACHINE's layer height in mm (0.1-0.3): MetPrint prints one "
+                         "page per machine layer, so this must match the printer setting")
     ap.add_argument("--voxel-mm", type=float, default=0.25)
     ap.add_argument("--chamber-mm", type=float, default=None)
     ap.add_argument("--build-axis", choices=["x", "y", "z"], default="z")
@@ -331,6 +401,14 @@ def main(argv=None) -> int:
     except ValueError as e:                     # includes RegistrationError
         print(f"REFUSED: {e}", file=sys.stderr)
         return 1
+    march_rep = None
+    if args.densify:
+        try:
+            march_rep = check_march_matches_stl(
+                args.densify, trimesh.load(args.stl, force="mesh"))
+        except ValueError as e:                 # includes RegistrationError
+            print(f"REFUSED: densify march is not this part: {e}", file=sys.stderr)
+            return 1
     reg_rep = spec["registration"]
     if not reg_rep.get("pose_unique", True):
         print(f"WARNING: {reg_rep['pose_note']}", file=sys.stderr)
@@ -371,6 +449,7 @@ def main(argv=None) -> int:
            "factor": rep.get("z_densification"),
            "registration": reg_rep,
            "pose_note": reg_rep.get("pose_note"),
+           "densify_match": march_rep,
            "preflight_ready": pre.get("ready"),
            "preflight_errors": pre.get("errors"),
            "preflight_warnings": pre.get("warnings")}

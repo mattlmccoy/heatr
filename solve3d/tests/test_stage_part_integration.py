@@ -28,7 +28,7 @@ def test_stage_part_end_to_end(tmp_path, capsys, part, factor, pages, symmetry):
         pytest.skip("MetPrint tools or real artifacts not present")
     rc = sp.main(["--map", str(m), "--stl", str(stl), "--densify", str(fields),
                   "--hot-folder", str(tmp_path / "hf"), "--job-name", f"{part}_it",
-                  "--work-dir", str(tmp_path / "work")])
+                  "--layer-height", "0.2", "--work-dir", str(tmp_path / "work")])
     out = json.loads(capsys.readouterr().out)
     assert rc == 0, out
     assert out["staged_all_pass"] and out["preflight_ready"], out
@@ -42,6 +42,10 @@ def test_stage_part_end_to_end(tmp_path, capsys, part, factor, pages, symmetry):
     # both parts are rotationally symmetric, so the report must SAY the pose is
     # verified only up to that symmetry -- never claim a unique pose
     assert reg["pose_symmetry_count"] == symmetry and reg["pose_unique"] is False
+    # the densify march is proven to be this part (moments + physical extents)
+    dm = out["densify_match"]
+    assert dm["moment_ok"] and dm["extent_ok"], dm
+    assert dm["source"] == str(fields)
 
     # the staged job on disk carries provenance tying it to this densify run
     info = json.loads((Path(out["out_dir"]) / "job_info.json").read_text())
@@ -52,6 +56,23 @@ def test_stage_part_end_to_end(tmp_path, capsys, part, factor, pages, symmetry):
     assert info["layer_height_mm"] == 0.2
 
 
+def test_driver_refuses_another_parts_densify_march(tmp_path, capsys):
+    """Pyramid map + pyramid STL + the CUBE's march: every volume check passes (the
+    library is equal-volume) and it would print ~7.8 % too tall. Must be refused."""
+    m = REPO / "solve3d/phase_e/results/map_pyramid_solve_filter_only.npz"
+    stl = REPO / "shape_library_3d/stl/pyramid.stl"
+    fields = REPO / "solve3d/results/densify_cube/fields.npz"
+    if not (TOOLS / "stage_job.py").is_file() or not all(
+            p.exists() for p in (m, stl, fields)):
+        pytest.skip("MetPrint tools or real artifacts not present")
+    rc = sp.main(["--map", str(m), "--stl", str(stl), "--densify", str(fields),
+                  "--hot-folder", str(tmp_path / "hf"), "--job-name", "pyr_cubemarch",
+                  "--layer-height", "0.2", "--work-dir", str(tmp_path / "work")])
+    assert rc == 1
+    assert "REFUSED: densify march is not this part" in capsys.readouterr().err
+    assert not (tmp_path / "hf").exists() or not any((tmp_path / "hf").iterdir())
+
+
 def test_driver_refuses_a_wrongly_declared_pose(tmp_path, capsys):
     """The real pyramid map declared upside down must be refused before staging."""
     m = REPO / "solve3d/phase_e/results/map_pyramid_solve_filter_only.npz"
@@ -60,7 +81,8 @@ def test_driver_refuses_a_wrongly_declared_pose(tmp_path, capsys):
         pytest.skip("MetPrint tools or real artifacts not present")
     rc = sp.main(["--map", str(m), "--stl", str(stl), "--no-densification",
                   "--base", "max", "--hot-folder", str(tmp_path / "hf"),
-                  "--job-name", "pyr_bad", "--work-dir", str(tmp_path / "work")])
+                  "--job-name", "pyr_bad", "--layer-height", "0.2",
+                  "--work-dir", str(tmp_path / "work")])
     assert rc == 1
     assert "REFUSED" in capsys.readouterr().err
     assert not (tmp_path / "hf").exists() or not any((tmp_path / "hf").iterdir())

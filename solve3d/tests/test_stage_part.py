@@ -260,7 +260,7 @@ def test_parse_preflight_failure_carries_stderr():
     assert any("boom" in e for e in r["errors"])
 
 
-def _cli_setup(tmp_path):
+def _cli_setup(tmp_path, layer_height="0.2"):
     tools = tmp_path / "tools"
     tools.mkdir()
     for f in ("stage_job.py", "preflight.py"):
@@ -272,7 +272,45 @@ def _cli_setup(tmp_path):
             "--no-densification", "--hot-folder", str(tmp_path / "hot"),
             "--job-name", "j", "--voxel-mm", "1.0", "--work-dir", str(tmp_path / "w"),
             "--meteor-tools", str(tools)]
+    if layer_height is not None:
+        argv += ["--layer-height", layer_height]
     return argv
+
+
+def _fake_stager(tmp_path, monkeypatch, ready=True, seen=None):
+    """Fake subprocess.run for stage_job + preflight. Like the real stage_job, the
+    fake writes its job dir <stamp>_FGM_<job> under the --hot-folder it was GIVEN
+    and reports that path; the fake preflight answers `ready`."""
+    import json
+    import subprocess
+
+    def fake_run(cmd, **kw):
+        if seen is not None:
+            seen.append((cmd, kw))
+        if "--report-json" in cmd:
+            job = Path(cmd[cmd.index("--hot-folder") + 1]) / (
+                "20260101_000000_FGM_" + cmd[cmd.index("--job-name") + 1])
+            job.mkdir(parents=True)
+            (job / "job_info.json").write_text("{}")
+            rj = cmd[cmd.index("--report-json") + 1]
+            with open(rj, "w") as fh:
+                json.dump({"out_dir": str(job), "all_pass": True}, fh)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        res = {"ready": ready, "errors": [] if ready else ["bad page count"],
+               "warnings": []}
+        return subprocess.CompletedProcess(cmd, 0, json.dumps([res]), "")
+    monkeypatch.setattr(sp.subprocess, "run", fake_run)
+
+
+def test_cli_requires_layer_height(tmp_path, monkeypatch, capsys):
+    """MetPrint prints one page per MACHINE layer and ignores our metadata, so the
+    layer height must be the machine's setting (0.1-0.3 mm): never defaulted."""
+    def fake_run(cmd, **kw):
+        raise AssertionError("must not stage without an explicit --layer-height")
+    monkeypatch.setattr(sp.subprocess, "run", fake_run)
+    with pytest.raises(SystemExit):
+        sp.main(_cli_setup(tmp_path, layer_height=None))
+    assert "--layer-height" in capsys.readouterr().err
 
 
 def test_cli_timeout_fails_cleanly(tmp_path, monkeypatch, capsys):
@@ -337,8 +375,100 @@ def test_cli_hands_the_stager_absolute_paths(tmp_path, monkeypatch):
     assert Path(stage_cmd[stage_cmd.index("--stl") + 1]).is_file()
 
 
+def _fields_from_mesh(tmp_path, mesh, h_mm=1.25, name="fields.npz"):
+    """Synthetic densify-march fields.npz: the mesh voxelised on a coarse grid the
+    way the march stores it -- part (nx, ny, nz) bool with z = build axis, voxel
+    centres at (idx + 0.5) * h, h in metres. Placed at an arbitrary grid offset."""
+    lo, hi = mesh.bounds
+    n = [int(np.ceil((hi[i] - lo[i]) / h_mm)) + 4 for i in range(3)]
+    idx = np.stack(np.meshgrid(*[np.arange(k) for k in n], indexing="ij"), -1)
+    P = (idx.reshape(-1, 3) + 0.5) * h_mm + (lo - 2.0 * h_mm)
+    part = mesh.contains(P).reshape(n)
+    p = tmp_path / name
+    np.savez(p, part=part, h=np.float64(h_mm / 1e3), rho_final=np.full(n, 0.9))
+    return p
+
+
+def test_march_check_accepts_the_same_part(tmp_path):
+    mesh = _pyramid_mesh()
+    rep = sp.check_march_matches_stl(_fields_from_mesh(tmp_path, mesh), mesh)
+    assert rep["moment_err_2nd"] < sp.MARCH_SEC_TOL
+    assert rep["moment_err_3rd"] < sp.MARCH_THR_TOL
+    assert rep["extent_ok"] is True
+    assert rep["h_mm"] == pytest.approx(1.25)
+    assert rep["march_extent_mm"][2] == pytest.approx(20.0, abs=2 * 1.25)
+
+
+def test_march_check_refuses_an_equal_volume_box(tmp_path):
+    """The real failure: the shape library is equal-VOLUME, so a cube march staged
+    with a pyramid map + STL passes every volume check and prints too tall."""
+    pyr = _pyramid_mesh()
+    side = abs(pyr.volume) ** (1.0 / 3.0)
+    box = trimesh.creation.box((side, side, side))
+    assert abs(box.volume) == pytest.approx(abs(pyr.volume))
+    with pytest.raises(sp.RegistrationError):
+        sp.check_march_matches_stl(_fields_from_mesh(tmp_path, box), pyr)
+
+
+def test_march_check_refuses_a_box_with_the_same_bounding_box(tmp_path):
+    """Same extents, different shape: only the moments can tell."""
+    pyr = _pyramid_mesh()
+    box = trimesh.creation.box((20.0, 20.0, 20.0))
+    with pytest.raises(sp.RegistrationError, match="moment"):
+        sp.check_march_matches_stl(_fields_from_mesh(tmp_path, box), pyr)
+
+
+def test_march_check_refuses_wrong_physical_size(tmp_path):
+    """Normalised moments are scale-invariant; the physical extents are not."""
+    pyr = _pyramid_mesh()
+    big = _pyramid_mesh(b=26.0, h=26.0)                # same shape, 1.3x the size
+    with pytest.raises(sp.RegistrationError, match="extent"):
+        sp.check_march_matches_stl(_fields_from_mesh(tmp_path, big), pyr)
+
+
+def test_march_check_refuses_an_upside_down_march(tmp_path):
+    pyr = _pyramid_mesh()
+    flipped = pyr.copy()
+    flipped.apply_transform(trimesh.transformations.rotation_matrix(np.pi, [1, 0, 0]))
+    with pytest.raises(sp.RegistrationError, match="moment"):
+        sp.check_march_matches_stl(_fields_from_mesh(tmp_path, flipped), pyr)
+
+
+def test_cli_refuses_a_densify_march_of_another_part(tmp_path, monkeypatch, capsys):
+    def fake_run(cmd, **kw):
+        raise AssertionError("must not stage with another part's densify march")
+    monkeypatch.setattr(sp.subprocess, "run", fake_run)
+    side = abs(_pyramid_mesh().volume) ** (1.0 / 3.0)
+    fields = _fields_from_mesh(tmp_path, trimesh.creation.box((side, side, side)))
+    argv = _cli_setup(tmp_path)
+    argv[argv.index("--no-densification")] = "--densify"
+    argv.insert(argv.index("--densify") + 1, str(fields))
+    assert sp.main(argv) == 1
+    assert "REFUSED: densify march is not this part" in capsys.readouterr().err
+
+
+def test_cli_reports_the_densify_match(tmp_path, monkeypatch, capsys):
+    import json
+    from solve3d import densify_summary as ds
+
+    def fake_summary(fields_npz, out_json=None, xy_frac=0.04):
+        Path(out_json).write_text("{}")
+        return Path(out_json)
+    monkeypatch.setattr(ds, "write_summary", fake_summary)
+    _fake_stager(tmp_path, monkeypatch)
+    argv = _cli_setup(tmp_path)
+    argv[argv.index("--no-densification")] = "--densify"
+    argv.insert(argv.index("--densify") + 1,
+                str(_fields_from_mesh(tmp_path, _pyramid_mesh())))
+    assert sp.main(argv) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["densify_match"]["extent_ok"] is True
+    assert out["densify_match"]["moment_err_2nd"] < sp.MARCH_SEC_TOL
+
+
 def test_cli_requires_exactly_one_densification_choice():
-    base = ["--map", "m", "--stl", "s", "--hot-folder", "h", "--job-name", "j"]
+    base = ["--map", "m", "--stl", "s", "--hot-folder", "h", "--job-name", "j",
+            "--layer-height", "0.2"]
     with pytest.raises(SystemExit):
         sp.main(base)
     with pytest.raises(SystemExit):
