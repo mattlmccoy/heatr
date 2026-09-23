@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 import trimesh
@@ -304,6 +306,35 @@ def test_cli_warns_when_pose_not_unique(tmp_path, monkeypatch, capsys):
     assert "WARNING: part is symmetric under 4 axis rotations" in cap.err
     out = json.loads(cap.out)
     assert "4 axis rotations" in out["pose_note"] and out["preflight_ready"] is True
+
+
+def test_cli_hands_the_stager_absolute_paths(tmp_path, monkeypatch):
+    """stage_job runs with cwd = the tools dir, so every path the driver passes it
+    must be absolute. Regression: a relative --stl (as typed at a shell prompt)
+    was forwarded verbatim and stage_job could not find it."""
+    import json
+    import subprocess
+    argv = _cli_setup(tmp_path)
+    rel = [a.replace(str(tmp_path) + "/", "") for a in argv]   # user types relative paths
+    monkeypatch.chdir(tmp_path)
+    seen = []
+
+    def fake_run(cmd, **kw):
+        seen.append(cmd)
+        if "--report-json" in cmd:
+            rj = cmd[cmd.index("--report-json") + 1]
+            with open(rj, "w") as fh:
+                json.dump({"out_dir": str(tmp_path / "out"), "all_pass": True}, fh)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return subprocess.CompletedProcess(
+            cmd, 0, '[{"ready": true, "errors": [], "warnings": []}]', "")
+    monkeypatch.setattr(sp.subprocess, "run", fake_run)
+    assert sp.main(rel) == 0
+    stage_cmd = next(c for c in seen if "--report-json" in c)
+    assert Path(stage_cmd[2]).is_absolute()                          # the spec npz
+    for flag in ("--stl", "--hot-folder", "--report-json"):
+        assert Path(stage_cmd[stage_cmd.index(flag) + 1]).is_absolute(), flag
+    assert Path(stage_cmd[stage_cmd.index("--stl") + 1]).is_file()
 
 
 def test_cli_requires_exactly_one_densification_choice():

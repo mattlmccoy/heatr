@@ -309,6 +309,11 @@ def main(argv=None) -> int:
                     help="spec/summary/report dir (default solve3d/results/stage_inputs/<job>)")
     ap.add_argument("--meteor-tools", default=None)
     args = ap.parse_args(argv)
+    # stage_job/preflight run with cwd = the tools dir, so every path handed to
+    # them must be absolute -- resolve user-typed relative paths against OUR cwd.
+    for name in ("map", "stl", "densify", "hot_folder", "work_dir", "meteor_tools"):
+        if getattr(args, name):
+            setattr(args, name, str(Path(getattr(args, name)).expanduser().resolve()))
 
     tools = Path(args.meteor_tools) if args.meteor_tools else _default_meteor_tools()
     for f in ("stage_job.py", "preflight.py"):
