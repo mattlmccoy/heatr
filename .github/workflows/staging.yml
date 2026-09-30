@@ -1,0 +1,32 @@
+name: staging
+
+# The MetPrint staging driver (solve3d.stage_part / stage_batch) has to run on the
+# Mac, the lab Windows PC and Linux. These tests use stand-in stage_job/preflight
+# scripts, so they need no MetPrint tools; the real-tools integration tests skip.
+on:
+  push:
+    paths: ["solve3d/stage_part.py", "solve3d/stage_batch.py",
+            "solve3d/tests/test_stage_*.py", ".github/workflows/staging.yml"]
+  pull_request:
+    paths: ["solve3d/stage_part.py", "solve3d/stage_batch.py",
+            "solve3d/tests/test_stage_*.py", ".github/workflows/staging.yml"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install numpy scipy trimesh rtree pytest
+      - run: >-
+          python -m pytest -q
+          solve3d/tests/test_stage_part.py
+          solve3d/tests/test_stage_batch.py
+          solve3d/tests/test_stage_part_integration.py

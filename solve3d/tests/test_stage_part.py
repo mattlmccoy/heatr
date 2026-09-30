@@ -1,3 +1,5 @@
+import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -271,7 +273,7 @@ def _cli_setup(tmp_path, layer_height="0.2"):
     argv = ["--map", str(_save_map(tmp_path, _map_from_mesh(mesh))), "--stl", str(stl),
             "--no-densification", "--hot-folder", str(tmp_path / "hot"),
             "--job-name", "j", "--voxel-mm", "1.0", "--work-dir", str(tmp_path / "w"),
-            "--meteor-tools", str(tools)]
+            "--meteor-tools", str(tools), "--meteor-python", sys.executable]
     if layer_height is not None:
         argv += ["--layer-height", layer_height]
     return argv
@@ -340,7 +342,7 @@ def test_cli_hands_the_stager_absolute_paths(tmp_path, monkeypatch):
     must be absolute. Regression: a relative --stl (as typed at a shell prompt)
     was forwarded verbatim and stage_job could not find it."""
     argv = _cli_setup(tmp_path)
-    rel = [a.replace(str(tmp_path) + "/", "") for a in argv]   # user types relative paths
+    rel = [a.replace(str(tmp_path) + os.sep, "") for a in argv]   # user types relative paths
     monkeypatch.chdir(tmp_path)
     seen = []
     _fake_stager(tmp_path, monkeypatch, seen=seen)
@@ -522,3 +524,258 @@ def test_cli_requires_exactly_one_densification_choice():
         sp.main(base)
     with pytest.raises(SystemExit):
         sp.main(base + ["--no-densification", "--densify-factor", "1.5"])
+
+
+# --------------------------------------------------------------------------- #
+# large parts: the voxel fill is one ray per column, not per voxel
+# --------------------------------------------------------------------------- #
+def _grid_for(mesh, vox, pad=1.25):
+    lo, hi = mesh.bounds
+    c = (lo + hi) / 2
+    ch = float(np.max(hi[:2] - lo[:2])) * pad
+    n = int(round(ch / vox))
+    xs = c[0] - ch / 2 + (np.arange(n) + 0.5) * ch / n
+    ys = c[1] - ch / 2 + (np.arange(n) + 0.5) * ch / n
+    nz = int(np.ceil((hi[2] - lo[2]) / vox))
+    zs = lo[2] + (np.arange(nz) + 0.5) * (hi[2] - lo[2]) / nz
+    return xs, ys, zs
+
+
+def _contains_grid(mesh, xs, ys, zs):
+    Z, Y, X = np.meshgrid(zs, ys, xs, indexing="ij")
+    P = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()])
+    return mesh.contains(P).reshape(len(zs), len(ys), len(xs))
+
+
+def _annulus():
+    return trimesh.creation.annulus(r_min=4.0, r_max=9.0, height=12.0)
+
+
+@pytest.mark.parametrize("make", [
+    lambda: _pyramid_mesh(),
+    lambda: trimesh.creation.box((16.0, 16.0, 16.0)),          # faces on the grid
+    lambda: trimesh.creation.box(
+        (20.0, 6.0, 6.0), transform=trimesh.transformations.rotation_matrix(
+            np.pi / 4, [0, 0, 1])),
+    _annulus,                                                   # a hole: 4 hits a ray
+    lambda: trimesh.creation.icosphere(subdivisions=2, radius=9.0),
+])
+def test_inside_grid_matches_per_voxel_contains(make):
+    mesh = make()
+    xs, ys, zs = _grid_for(mesh, 1.0)
+    got = sp._inside_grid(mesh, xs, ys, zs)
+    ref = _contains_grid(mesh, xs, ys, zs)
+    assert got.shape == ref.shape == (len(zs), len(ys), len(xs))
+    assert ref.sum() > 100
+    # a voxel centre lying exactly on the surface is ambiguous either way
+    assert (got != ref).sum() <= max(1, ref.sum() // 1000)
+
+
+def test_inside_grid_settles_unpaired_columns_exactly(monkeypatch):
+    """A column whose ray hits do not pair up must not be guessed: it is decided
+    point by point with mesh.contains."""
+    mesh = _pyramid_mesh()
+    xs, ys, zs = _grid_for(mesh, 1.0)
+    real = mesh.ray.intersects_location
+
+    def drop_one_hit(origins, dirs, multiple_hits=True):
+        loc, ray, tri = real(origins, dirs, multiple_hits=multiple_hits)
+        keep = np.ones(len(ray), bool)
+        keep[int(np.argmax(ray == ray[len(ray) // 2]))] = False   # unpair one column
+        return loc[keep], ray[keep], tri[keep]
+    monkeypatch.setattr(mesh.ray, "intersects_location", drop_one_hit)
+    got = sp._inside_grid(mesh, xs, ys, zs)
+    ref = _contains_grid(mesh, xs, ys, zs)
+    assert (got != ref).sum() <= 1
+
+
+def test_build_spec_large_part_never_tests_every_voxel(tmp_path, monkeypatch):
+    """A 60 mm part at 0.5 mm is ~2.6 M canvas voxels. Per-voxel containment took
+    minutes and ~GBs; the column fill must touch mesh.contains only for the few
+    columns it cannot pair (here: none)."""
+    mesh = _pyramid_mesh(b=60.0, h=40.0)
+    stl = tmp_path / "big.stl"
+    mesh.export(stl)
+    m = _save_map(tmp_path, _map_from_mesh(mesh, cell_mm=2.0))
+    calls = []
+    real_contains = trimesh.Trimesh.contains
+
+    def counting(self, points):
+        calls.append(len(points))
+        return real_contains(self, points)
+    monkeypatch.setattr(trimesh.Trimesh, "contains", counting)
+    spec = sp.build_spec(m, stl, voxel_mm=0.5)
+    sol, part = spec["SOLVE_cont"], spec["part_mask"]
+    assert part.shape == (80, 150, 150)
+    assert sum(calls) < 0.1 * part.size, calls       # register() samples 40^3 itself
+    vol = part.sum() * np.prod(spec["voxel_mm"])
+    assert vol == pytest.approx(abs(mesh.volume), rel=0.03)
+    assert np.all(sol[~part] == 0) and sol[part].max() <= 1.0
+
+
+# --------------------------------------------------------------------------- #
+# portability: interpreter, UTF-8 pipes, cross-volume delivery
+# --------------------------------------------------------------------------- #
+def test_meteor_python_flag_runs_both_tools(tmp_path, monkeypatch):
+    seen = []
+    _fake_stager(tmp_path, monkeypatch, seen=seen)
+    argv = _cli_setup(tmp_path)
+    argv[argv.index("--meteor-python") + 1] = "/opt/meteor/python"
+    assert sp.main(argv) == 0
+    assert [c[0] for c, _ in seen] == [str(Path("/opt/meteor/python"))] * 2
+
+
+def test_meteor_python_env_then_venv_then_self(tmp_path, monkeypatch):
+    monkeypatch.setenv("RFAM_METEOR_PYTHON", "/x/py")
+    assert sp._default_meteor_python() == "/x/py"
+    monkeypatch.delenv("RFAM_METEOR_PYTHON")
+    monkeypatch.setattr(sp.Path, "home", classmethod(lambda cls: tmp_path))
+    assert sp._default_meteor_python() == sys.executable      # no venv: this python
+    venv = tmp_path / ".venvs" / "meteor-tools"
+    exe = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    assert Path(sp._default_meteor_python()) == exe
+
+
+def test_venv_python_finds_either_layout(tmp_path):
+    win = tmp_path / "w" / "Scripts" / "python.exe"
+    win.parent.mkdir(parents=True)
+    win.write_text("")
+    assert sp._venv_python(tmp_path / "w") == win               # a Windows-made venv
+    posix = tmp_path / "p" / "bin" / "python"
+    posix.parent.mkdir(parents=True)
+    posix.write_text("")
+    assert sp._venv_python(tmp_path / "p") == posix
+
+
+def test_tools_run_with_utf8_pipes(tmp_path, monkeypatch):
+    seen = []
+    _fake_stager(tmp_path, monkeypatch, seen=seen)
+    assert sp.main(_cli_setup(tmp_path)) == 0
+    for _, kw in seen:
+        assert kw["encoding"] == "utf-8" and kw["errors"] == "replace"
+        assert kw["env"]["PYTHONIOENCODING"] == "utf-8"
+        assert kw["cwd"] == str(tmp_path / "tools")
+
+
+_FAKE_STAGE_JOB = r"""
+import argparse, json, os, sys
+ap = argparse.ArgumentParser()
+ap.add_argument("spec"); ap.add_argument("--3d", action="store_true")
+for f in ("--stl", "--chamber-mm", "--layer-height", "--hot-folder", "--job-name",
+          "--report-json", "--densify-summary", "--z-densification"):
+    ap.add_argument(f)
+a = ap.parse_args()
+assert os.path.isfile(a.spec) and os.path.isfile(a.stl)
+job = os.path.join(a.hot_folder, "20260101_000000_FGM_" + a.job_name)
+os.makedirs(os.path.join(job, "print_job"))
+for k in range(3):
+    open(os.path.join(job, "print_job", f"layer_{k:04d}.tif"), "wb").write(b"II*\0")
+with open(os.path.join(job, "job_info.json"), "w", encoding="utf-8") as fh:
+    json.dump({"layer_count": 3, "chamber_mm": float(a.chamber_mm)}, fh)
+print(f"staged {a.job_name}: canvas {a.chamber_mm} mm ≥ part → 3 pages ±0.1 mm")
+with open(a.report_json, "w", encoding="utf-8") as fh:
+    json.dump({"out_dir": job, "all_pass": True, "print_layers": 3}, fh)
+"""
+_FAKE_PREFLIGHT = r"""
+import json, os, sys
+job = sys.argv[1]
+ok = os.path.isfile(os.path.join(job, "job_info.json"))
+print(json.dumps([{"ready": ok, "errors": [], "warnings": ["dose ≤ 7 ✓"]}],
+                 ensure_ascii=False))
+"""
+
+
+def _real_tools(tmp_path):
+    tools = tmp_path / "tools"
+    tools.mkdir(exist_ok=True)
+    (tools / "stage_job.py").write_text(_FAKE_STAGE_JOB, encoding="utf-8")
+    (tools / "preflight.py").write_text(_FAKE_PREFLIGHT, encoding="utf-8")
+    return tools
+
+
+def test_real_child_processes_on_this_platform(tmp_path, monkeypatch, capsys):
+    """No subprocess mock: the stand-in tools run as real child interpreters with
+    cwd = the tools dir, print non-ASCII (which kills a cp1252 pipe on Windows
+    without the UTF-8 env), and the job is moved into the hot folder whole."""
+    import json
+    argv = _cli_setup(tmp_path)
+    _real_tools(tmp_path)
+    monkeypatch.delenv("PYTHONIOENCODING", raising=False)
+    monkeypatch.delenv("PYTHONUTF8", raising=False)
+    assert sp.main(argv) == 0, capsys.readouterr().err
+    out = json.loads(capsys.readouterr().out)
+    job = tmp_path / "hot" / "20260101_000000_FGM_j"
+    assert out["preflight_ready"] is True and Path(out["out_dir"]) == job.resolve()
+    assert out["preflight_warnings"] == ["dose ≤ 7 ✓"]
+    assert len(list((job / "print_job").iterdir())) == 3
+    assert out["chamber_mm"] == json.loads((job / "job_info.json").read_text())[
+        "chamber_mm"]
+
+
+def _cross_volume_rename(monkeypatch, hot, err):
+    """os.rename that refuses any move from outside `hot`'s volume stand-in: a
+    rename INTO the hot folder only works from a sibling of it."""
+    real = os.rename
+    moves = []
+
+    def rename(src, dst):
+        src, dst = Path(src), Path(dst)
+        moves.append((src, dst))
+        if dst.parent == hot and src.parent.parent != hot.parent:
+            raise err
+        return real(src, dst)
+    monkeypatch.setattr(sp.os, "rename", rename)
+    return moves
+
+
+@pytest.mark.parametrize("kind", ["posix", "windows"])
+def test_cross_volume_delivery_never_exposes_a_partial_job(tmp_path, monkeypatch,
+                                                           capsys, kind):
+    """Work dir on one drive, hot folder on another (Windows C: vs a share, Linux
+    /tmp vs /home): the rename is refused, and the job must be assembled beside
+    the hot folder and renamed in, never copied file by file into it."""
+    import errno
+    import json
+    hot = tmp_path / "hot"
+    if kind == "posix":
+        err = OSError(errno.EXDEV, "Invalid cross-device link")
+    else:
+        err = OSError(0, "The system cannot move the file to a different disk drive")
+        err.winerror = 17
+    _fake_stager(tmp_path, monkeypatch)
+    copied_into = []
+    real_copytree = sp.shutil.copytree
+
+    def copytree(src, dst, *a, **k):
+        copied_into.append(Path(dst))
+        return real_copytree(src, dst, *a, **k)
+    monkeypatch.setattr(sp.shutil, "copytree", copytree)
+    moves = _cross_volume_rename(monkeypatch, hot, err)
+    assert sp.main(_cli_setup(tmp_path)) == 0, capsys.readouterr().err
+    assert all(hot not in d.parents for d in copied_into), copied_into
+    final = [m for m in moves if m[1] == hot / _JOB]
+    assert final[-1][0].parent.name == ".hot.incoming"
+    assert (hot / _JOB / "job_info.json").is_file()
+    assert not (tmp_path / ".hot.incoming").exists()
+    assert not (tmp_path / "w" / "staging" / _JOB).exists()
+    assert json.loads(capsys.readouterr().out)["out_dir"] == str(hot / _JOB)
+
+
+def test_failed_move_keeps_the_job_and_says_so(tmp_path, monkeypatch, capsys):
+    _fake_stager(tmp_path, monkeypatch)
+
+    def rename(src, dst):
+        raise PermissionError(13, "Access is denied")
+    monkeypatch.setattr(sp.os, "rename", rename)
+    assert sp.main(_cli_setup(tmp_path)) == 1
+    assert (tmp_path / "w" / "staging" / _JOB / "job_info.json").is_file()
+    assert "could not move the job" in capsys.readouterr().err
+
+
+def test_same_path_is_case_and_link_tolerant(tmp_path):
+    a = tmp_path / "Staging"
+    a.mkdir()
+    assert sp._same_path(a, tmp_path / "x" / ".." / "Staging")
+    assert not sp._same_path(a, tmp_path)
