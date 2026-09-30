@@ -622,7 +622,7 @@ def test_meteor_python_flag_runs_both_tools(tmp_path, monkeypatch):
     argv = _cli_setup(tmp_path)
     argv[argv.index("--meteor-python") + 1] = "/opt/meteor/python"
     assert sp.main(argv) == 0
-    assert [c[0] for c, _ in seen] == ["/opt/meteor/python"] * 2
+    assert [c[0] for c, _ in seen] == [str(Path("/opt/meteor/python"))] * 2
 
 
 def test_meteor_python_env_then_venv_then_self(tmp_path, monkeypatch):
